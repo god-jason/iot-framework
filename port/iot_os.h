@@ -2,9 +2,12 @@
 #define IOT_OS_H
 
 /*
- * OS 抽象接口。
+ * OS 抽象接口（优化版）。
  * 支持三种运行模式：Baremetal / FreeRTOS / 其他 RTOS。
- * 裸机模式下可不提供线程、信号量等能力，由主循环调用 iot_process()。
+ * 裸机模式下可不提供线程、信号量、事件组等能力，由主循环调用 iot_process()。
+ *
+ * 约定：所有操作返回 int，0 = 成功（IOT_OK），负值 = iot_err_t 错误码；
+ * 句柄统一用 void * 表示（底层指向具体 RTOS 对象），超时参数为 tick/ms（由层实现约定）。
  */
 
 #include "iot_types.h"
@@ -15,7 +18,7 @@ extern "C" {
 
 typedef void (*iot_task_fn)(void *arg);
 
-/* ---- 任务 ---- */
+/* ---- 任务 / 线程 ---- */
 typedef struct {
     void *(*create)(iot_task_fn fn, void *arg, const char *name,
                     uint32_t stack_size, uint8_t priority);
@@ -48,12 +51,23 @@ typedef struct {
     int (*destroy)(void *queue);
 } iot_os_queue_ops_t;
 
+/* ---- 事件组 ---- */
+typedef struct {
+    void *(*create)(void);
+    int (*set_bits)(void *group, uint32_t bits);
+    /* wait_all = true 时等待 bits 全部置位，false 时任一置位 */
+    int (*wait_bits)(void *group, uint32_t bits, bool wait_all, uint32_t timeout);
+    int (*clear_bits)(void *group, uint32_t bits);
+    int (*destroy)(void *group);
+} iot_os_event_ops_t;
+
 /* ---- 统一 OS 操作集 ---- */
 typedef struct {
     iot_os_task_ops_t  task;
     iot_os_mutex_ops_t mutex;
     iot_os_sem_ops_t   semaphore;
     iot_os_queue_ops_t queue;
+    iot_os_event_ops_t event;
 } iot_os_ops_t;
 
 int iot_os_init(const iot_os_ops_t *ops);
