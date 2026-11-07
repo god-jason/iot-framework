@@ -1,5 +1,5 @@
 #include "partition.h"
-#include "iot_memory.h"
+#include <string.h>
 
 #define PARTITION_MAX        8
 #define PARTITION_FLASH_SIZE 0x10000   /* 64KB 模拟 Flash */
@@ -48,7 +48,7 @@ int partition_read(partition_type_t type, uint32_t offset,
         p->address + offset + len > PARTITION_FLASH_SIZE) {
         return -1;
     }
-    iot_memory_copy(buffer, &s_flash[p->address + offset], len);
+    memcpy(buffer, &s_flash[p->address + offset], len);
     return IOT_OK;
 }
 
@@ -66,7 +66,7 @@ int partition_write(partition_type_t type, uint32_t offset,
         p->address + offset + len > PARTITION_FLASH_SIZE) {
         return -1;
     }
-    iot_memory_copy(&s_flash[p->address + offset], buffer, len);
+    memcpy(&s_flash[p->address + offset], buffer, len);
     return IOT_OK;
 }
 
@@ -80,6 +80,6 @@ int partition_erase(partition_type_t type, uint32_t offset, uint32_t len)
         p->address + offset + len > PARTITION_FLASH_SIZE) {
         return -1;
     }
-    iot_memory_set(&s_flash[p->address + offset], 0xFF, len);
+    memset(&s_flash[p->address + offset], 0xFF, len);
     return IOT_OK;
 }

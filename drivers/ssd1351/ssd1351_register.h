@@ -1,0 +1,66 @@
+#ifndef SSD1351_REGISTER_H
+#define SSD1351_REGISTER_H
+
+/*
+ * SSD1351 命令定义（SPI，128x128 RGB OLED，16 位 RGB565）。
+ * 初始化序列为通用值，预充电 / VSL / VCOMH / 对比度需按面板调整。
+ */
+
+#define SSD1351_WIDTH               128U
+#define SSD1351_HEIGHT              128U
+#define SSD1351_GRAM_SIZE           (SSD1351_WIDTH * SSD1351_HEIGHT * 2U)
+
+/* 命令 */
+#define SSD1351_CMD_SET_COLUMN      0x15U
+#define SSD1351_CMD_SET_ROW         0x75U
+#define SSD1351_CMD_WRITE_RAM       0x5CU
+#define SSD1351_CMD_READ_RAM        0x5DU
+#define SSD1351_CMD_SEG_REMAP       0xA0U
+#define SSD1351_CMD_SET_START_LINE  0xA1U
+#define SSD1351_CMD_SET_OFFSET      0xA2U
+#define SSD1351_CMD_DISPLAY_OFF     0xAEU
+#define SSD1351_CMD_DISPLAY_ON      0xAFU
+#define SSD1351_CMD_FUNC_SELECT     0xABU
+#define SSD1351_CMD_SET_PRECHARGE   0xB1U
+#define SSD1351_CMD_DISPLAY_ENHANCE 0xB2U
+#define SSD1351_CMD_SET_CLOCK       0xB3U
+#define SSD1351_CMD_SET_VSL         0xB4U
+#define SSD1351_CMD_SET_GPIO        0xB5U
+#define SSD1351_CMD_SET_GRAYSCALE   0xB8U
+#define SSD1351_CMD_DEFAULT_GRAY    0xB9U
+#define SSD1351_CMD_PRECHARGE_VOLT  0xBBU
+#define SSD1351_CMD_SET_VCOMH       0xBEU
+#define SSD1351_CMD_CONTRAST_MASTER 0xC1U
+#define SSD1351_CMD_CONTRAST_ABC    0xC7U
+#define SSD1351_CMD_SET_MUX         0xCAU
+#define SSD1351_CMD_COMMAND_LOCK    0xFDU
+
+/* 参数：需按面板调整 */
+#define SSD1351_LOCK_UNLOCK         0x12U
+#define SSD1351_LOCK_ACCESS         0xB1U
+#define SSD1351_CLOCK_DIV           0xF1U
+#define SSD1351_MUX_128             0x7FU
+#define SSD1351_REMAP_65K           0x74U
+#define SSD1351_PRECHARGE_PERIOD    0x32U
+#define SSD1351_VSL_A               0xA0U
+#define SSD1351_VSL_B               0xB5U
+#define SSD1351_VSL_C               0x55U
+#define SSD1351_VCOMH_VOLT          0x05U
+#define SSD1351_CONTRAST_MASTER_VAL 0x8FU
+#define SSD1351_CONTRAST_ABC_VAL    0x8FU
+#define SSD1351_FUNC_SELECT_VAL     0x01U
+#define SSD1351_ENHANCE_A           0xA4U
+#define SSD1351_PRECHARGE_VOLT_VAL  0x1AU
+
+/* 常用颜色 */
+#define SSD1351_COLOR_BLACK         0x0000U
+#define SSD1351_COLOR_WHITE         0xFFFFU
+#define SSD1351_COLOR_RED           0xF800U
+#define SSD1351_COLOR_GREEN         0x07E0U
+#define SSD1351_COLOR_BLUE          0x001FU
+
+#define SSD1351_RESET_LOW_MS        10U
+#define SSD1351_RESET_WAIT_MS       10U
+#define SSD1351_DISPON_MS           10U
+
+#endif /* SSD1351_REGISTER_H */

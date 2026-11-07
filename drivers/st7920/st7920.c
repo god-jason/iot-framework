@@ -1,87 +1,218 @@
 #include "st7920.h"
+#include "st7920_register.h"
 #include "iot_logger.h"
 
-// 引脚号在 init 时记录到静态变量，后续 write 复用（单实例使用）。
-static uint8_t s_rs, s_rw, s_en, s_d4, s_d5, s_d6, s_d7;
+/* 单帧缓存：2 条命令 + 16 组（2 个数据字节） */
+#define ST7920_ROW_FRAME_MAX  (2U * 3U + 32U * 3U)
 
-static void st7920_delay(const gpio_bus_t *gpio)
+static int st7920_send(st7920_handle_t *handle, const uint8_t *buf, size_t len)
 {
-    gpio_udelay(gpio, 50);
+    int ret;
+
+    driver_spi_select(&handle->config.spi);
+    ret = driver_spi_write(&handle->config.spi, buf, len);
+    driver_spi_deselect(&handle->config.spi);
+    return ret;
 }
 
-static void st7920_set_data(const gpio_bus_t *gpio, uint8_t nib)
+/* 写一个字节：帧头 + 高半字节 + 低半字节 */
+static int st7920_write_byte(st7920_handle_t *handle, bool is_data, uint8_t value)
 {
-    gpio_set(gpio, s_d4, (nib >> 0) & 1);
-    gpio_set(gpio, s_d5, (nib >> 1) & 1);
-    gpio_set(gpio, s_d6, (nib >> 2) & 1);
-    gpio_set(gpio, s_d7, (nib >> 3) & 1);
+    uint8_t buf[3];
+
+    buf[0] = is_data ? ST7920_SYNC_DATA : ST7920_SYNC_CMD;
+    buf[1] = (uint8_t)(value & 0xF0U);
+    buf[2] = (uint8_t)((value << 4) & 0xF0U);
+    return st7920_send(handle, is_data, buf, sizeof(buf));
 }
 
-static void st7920_pulse(const gpio_bus_t *gpio)
+static void st7920_frame_byte(uint8_t *buf, size_t *pos, bool is_data, uint8_t value)
 {
-    gpio_set(gpio, s_en, 1);
-    st7920_delay(gpio);
-    gpio_set(gpio, s_en, 0);
+    buf[(*pos)++] = is_data ? ST7920_SYNC_DATA : ST7920_SYNC_CMD;
+    buf[(*pos)++] = (uint8_t)(value & 0xF0U);
+    buf[(*pos)++] = (uint8_t)((value << 4) & 0xF0U);
 }
 
-static void st7920_write_nibble(const gpio_bus_t *gpio, uint8_t rs, uint8_t nib)
+/* 写一整行 GDRAM：垂直地址 v 与 v+32 共 16 个单元 */
+static int st7920_write_row(st7920_handle_t *handle, uint8_t v)
 {
-    gpio_set(gpio, s_rs, rs);
-    gpio_set(gpio, s_rw, 0);
-    st7920_set_data(gpio, nib);
-    st7920_pulse(gpio);
-}
+    uint8_t buf[ST7920_ROW_FRAME_MAX];
+    size_t pos = 0U;
+    uint8_t h;
 
-static void st7920_write_byte(const gpio_bus_t *gpio, uint8_t rs, uint8_t b)
-{
-    st7920_write_nibble(gpio, rs, (b >> 4) & 0x0F);
-    st7920_write_nibble(gpio, rs, b & 0x0F);
-}
+    st7920_frame_byte(buf, &pos, false, (uint8_t)(ST7920_CMD_SET_GDRAM_ADDR | (v & 0x1FU)));
+    st7920_frame_byte(buf, &pos, false, ST7920_CMD_SET_GDRAM_ADDR);
 
-static void st7920_cmd(const gpio_bus_t *gpio, uint8_t cmd)
-{
-    st7920_write_byte(gpio, 0, cmd);
-}
+    for (h = 0U; h < ST7920_WIDTH_BYTES; h++) {
+        uint8_t upper = handle->config.gram[(size_t)v * ST7920_WIDTH_BYTES + h];
+        uint8_t lower = handle->config.gram[(size_t)(v + 32U) * ST7920_WIDTH_BYTES + h];
 
-static void st7920_data(const gpio_bus_t *gpio, uint8_t d)
-{
-    st7920_write_byte(gpio, 1, d);
-}
-
-int st7920_init(const gpio_bus_t *gpio, uint8_t rs, uint8_t rw, uint8_t en,
-                    uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7)
-{
-    if (gpio == NULL || gpio->set_level == NULL || gpio->udelay == NULL) {
-        return -1;
+        st7920_frame_byte(buf, &pos, true, upper);
+        st7920_frame_byte(buf, &pos, true, lower);
     }
-    s_rs = rs; s_rw = rw; s_en = en;
-    s_d4 = d4; s_d5 = d5; s_d6 = d6; s_d7 = d7;
-
-    // 数据手册标准流程：先强制进入 8 位模式，再切换为 4 位模式。
-    st7920_write_nibble(gpio, 0, 0x03);
-    gpio_udelay(gpio, 4500);
-    st7920_write_nibble(gpio, 0, 0x03);
-    gpio_udelay(gpio, 150);
-    st7920_write_nibble(gpio, 0, 0x03);
-    st7920_write_nibble(gpio, 0, 0x02);
-
-    st7920_cmd(gpio, 0x28);  // 功能设置：4 位、2 行、5x8
-    st7920_cmd(gpio, 0x08);  // 显示关
-    st7920_cmd(gpio, 0x01);  // 清屏
-    gpio_udelay(gpio, 2000);
-    st7920_cmd(gpio, 0x06);  // 入口模式：光标右移
-    st7920_cmd(gpio, 0x0C);  // 显示开、光标关
-    LOG_I("st7920", "init ok");
-    return 0;
+    return st7920_send(handle, true, buf, pos);
 }
 
-int st7920_write(const gpio_bus_t *gpio, const char *str)
+/* 整屏推送 */
+static int st7920_push(st7920_handle_t *handle)
 {
-    if (gpio == NULL || gpio->set_level == NULL || str == NULL) {
-        return -1;
+    uint8_t v;
+
+    for (v = 0U; v < 32U; v++) {
+        if (st7920_write_row(handle, v) != DRIVER_OK) {
+            return (int)PORT_IO_ERROR;
+        }
     }
-    while (*str) {
-        st7920_data(gpio, (uint8_t)*str++);
+    return DRIVER_OK;
+}
+
+int st7920_init(st7920_handle_t *handle, const st7920_config_t *config)
+{
+    size_t i;
+
+    if (handle == NULL || config == NULL || config->gram == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    return 0;
+    if (config->gram_len < ST7920_GRAM_SIZE) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (config->spi.handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    handle->config = *config;
+    handle->width = (uint8_t)ST7920_WIDTH;
+    handle->height = (uint8_t)ST7920_HEIGHT;
+    handle->initialized = false;
+
+    if (config->res != 0U) {
+        (void)driver_gpio_output(config->res, PORT_GPIO_LOW);
+        driver_delay_ms(ST7920_RESET_WAIT_MS);
+        (void)driver_gpio_write(config->res, PORT_GPIO_HIGH);
+    }
+    driver_delay_ms(ST7920_POWER_ON_MS);
+
+    /* 上电后连发两次 FUNCTION_BASIC，确保接口模式同步 */
+    if (st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_BASIC) != DRIVER_OK ||
+        st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_BASIC) != DRIVER_OK) {
+        LOG_E("st7920", "sync sequence failed");
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_ms(ST7920_RESET_WAIT_MS);
+
+    if (st7920_write_byte(handle, false, ST7920_CMD_DISPLAY_ON) != DRIVER_OK ||
+        st7920_write_byte(handle, false, ST7920_CMD_CLEAR) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_ms(ST7920_CLEAR_MS);
+
+    if (st7920_write_byte(handle, false, ST7920_CMD_ENTRY_MODE) != DRIVER_OK ||
+        st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_EXT) != DRIVER_OK ||
+        st7920_write_byte(handle, false, ST7920_CMD_GRAPHIC_ON) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    for (i = 0U; i < ST7920_GRAM_SIZE; i++) {
+        handle->config.gram[i] = 0x00U;
+    }
+    if (st7920_push(handle) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->initialized = true;
+    LOG_I("st7920", "init ok (serial mode)");
+    return DRIVER_OK;
+}
+
+int st7920_deinit(st7920_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)st7920_set_display(handle, false);
+        (void)st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_BASIC);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int st7920_write_cmd(st7920_handle_t *handle, uint8_t cmd)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return st7920_write_byte(handle, false, cmd);
+}
+
+int st7920_write_data(st7920_handle_t *handle, uint8_t data)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return st7920_write_byte(handle, true, data);
+}
+
+int st7920_fill(st7920_handle_t *handle, uint8_t pattern)
+{
+    size_t i;
+
+    if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    for (i = 0U; i < ST7920_GRAM_SIZE; i++) {
+        handle->config.gram[i] = pattern;
+    }
+    return st7920_push(handle);
+}
+
+int st7920_clear(st7920_handle_t *handle)
+{
+    return st7920_fill(handle, 0x00U);
+}
+
+int st7920_draw_pixel(st7920_handle_t *handle, uint8_t x, uint8_t y, bool on)
+{
+    size_t index;
+    uint8_t mask;
+
+    if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (x >= handle->width || y >= handle->height) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->config.mirror_x) {
+        x = (uint8_t)(handle->width - 1U - x);
+    }
+    if (handle->config.mirror_y) {
+        y = (uint8_t)(handle->height - 1U - y);
+    }
+
+    index = (size_t)y * ST7920_WIDTH_BYTES + (size_t)(x / 8U);
+    mask = (uint8_t)DRIVER_BIT(x % 8U);     /* LSB 为最左像素 */
+
+    if (on) {
+        handle->config.gram[index] |= mask;
+    } else {
+        handle->config.gram[index] &= (uint8_t)~mask;
+    }
+    return DRIVER_OK;
+}
+
+int st7920_show(st7920_handle_t *handle)
+{
+    if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return st7920_push(handle);
+}
+
+int st7920_set_display(st7920_handle_t *handle, bool on)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return st7920_write_byte(handle, false,
+                             on ? ST7920_CMD_DISPLAY_ON : ST7920_CMD_DISPLAY_OFF);
 }

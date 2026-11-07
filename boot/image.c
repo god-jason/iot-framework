@@ -1,5 +1,5 @@
 #include "image.h"
-#include "iot_memory.h"
+#include <string.h>
 
 static image_state_t s_state = IMAGE_INVALID;
 
@@ -8,7 +8,7 @@ int image_parse(const void *data, uint32_t len, image_header_t *header)
     if (data == NULL || header == NULL || len < sizeof(image_header_t)) {
         return -1;
     }
-    iot_memory_copy(header, data, sizeof(image_header_t));
+    memcpy(header, data, sizeof(image_header_t));
     return IOT_OK;
 }
 

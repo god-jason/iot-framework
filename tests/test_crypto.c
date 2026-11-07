@@ -1,8 +1,8 @@
 /* 加密/校验模块测试：CRC、MD5、SHA-256。 */
 #include "test_framework.h"
 #include "crc.h"
-#include "md5.h"
-#include "sha256.h"
+#include "hash_md5.h"
+#include "hash_sha256.h"
 
 #include <stdint.h>
 
@@ -47,21 +47,21 @@ static void test_md5(void)
     };
 
     tf_begin("crypto/md5 已知摘要");
-    md5_compute("abc", 3, digest);
+    hash_md5_compute("abc", 3, digest);
     TF_CHECK_MEM(digest, expect_abc, 16);
 
-    md5_compute("", 0, digest);
+    hash_md5_compute("", 0, digest);
     TF_CHECK_MEM(digest, expect_empty, 16);
     tf_end();
 
     tf_begin("crypto/md5 分块更新");
     {
-        md5_t ctx;
-        md5_init(&ctx);
-        md5_update(&ctx, "a", 1);
-        md5_update(&ctx, "b", 1);
-        md5_update(&ctx, "c", 1);
-        md5_final(&ctx, digest);
+        hash_md5_t ctx;
+        hash_md5_init(&ctx);
+        hash_md5_update(&ctx, "a", 1);
+        hash_md5_update(&ctx, "b", 1);
+        hash_md5_update(&ctx, "c", 1);
+        hash_md5_final(&ctx, digest);
         TF_CHECK_MEM(digest, expect_abc, 16);
     }
     tf_end();
@@ -84,20 +84,20 @@ static void test_sha256(void)
     };
 
     tf_begin("crypto/sha256 已知摘要");
-    sha256_compute("abc", 3, digest);
+    hash_sha256_compute("abc", 3, digest);
     TF_CHECK_MEM(digest, expect_abc, 32);
 
-    sha256_compute("", 0, digest);
+    hash_sha256_compute("", 0, digest);
     TF_CHECK_MEM(digest, expect_empty, 32);
     tf_end();
 
     tf_begin("crypto/sha256 分块更新");
     {
-        sha256_t ctx;
-        sha256_init(&ctx);
-        sha256_update(&ctx, "ab", 2);
-        sha256_update(&ctx, "c", 1);
-        sha256_final(&ctx, digest);
+        hash_sha256_t ctx;
+        hash_sha256_init(&ctx);
+        hash_sha256_update(&ctx, "ab", 2);
+        hash_sha256_update(&ctx, "c", 1);
+        hash_sha256_final(&ctx, digest);
         TF_CHECK_MEM(digest, expect_abc, 32);
     }
     tf_end();

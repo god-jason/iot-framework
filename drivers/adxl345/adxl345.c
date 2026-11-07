@@ -1,54 +1,109 @@
 #include "adxl345.h"
+#include "adxl345_register.h"
 #include "iot_logger.h"
 
-#define ADXL345_ADDR         0x53
-#define ADXL345_REG_DEVID    0x00
-#define ADXL345_REG_POWER_CTL 0x2D
-#define ADXL345_REG_DATA_FORMAT 0x31
-#define ADXL345_REG_DATAX0   0x32
-
-#define ADXL345_DEVID_VAL    0xE5
-
-int adxl345_init(const i2c_bus_t *bus)
+int adxl345_init(adxl345_handle_t *handle, port_i2c_handle_t *i2c,
+                 uint16_t address, adxl345_range_t range)
 {
-    uint8_t id = 0;
+    uint8_t devid = 0U;
+    uint8_t value;
 
-    if (bus == NULL) {
-        LOG_E("adxl345", "bus null");
-        return -1;
+    if (handle == NULL || i2c == NULL || (uint8_t)range > ADXL345_RANGE_16G) {
+        return (int)PORT_INVALID_PARAM;
     }
-    /* DEVID 应读回 0xE5 */
-    if (i2c_read_reg(bus, ADXL345_ADDR, ADXL345_REG_DEVID, &id) != 0) {
-        LOG_E("adxl345", "read DEVID fail");
-        return -1;
-    }
-    if (id != ADXL345_DEVID_VAL) {
-        LOG_E("adxl345", "bad id 0x%02X", id);
-        return -1;
-    }
-    /* 进入测量模式：POWER_CTL 的 MEASURE 位 = 1 */
-    i2c_write_reg(bus, ADXL345_ADDR, ADXL345_REG_POWER_CTL, 0x08);
-    /* 数据格式：默认 ±2g、右对齐、4 线 SPI */
-    i2c_write_reg(bus, ADXL345_ADDR, ADXL345_REG_DATA_FORMAT, 0x00);
 
-    LOG_I("adxl345", "init ok");
-    return 0;
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : ADXL345_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->range = range;
+    handle->initialized = false;
+
+    if (driver_i2c_read_reg(&handle->i2c, ADXL345_REG_DEVID, &devid, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (devid != ADXL345_DEVID_VALUE) {
+        LOG_E("adxl345", "devid mismatch: 0x%02X", devid);
+        return (int)PORT_NOT_FOUND;
+    }
+
+    /* 全分辨率 + 量程 */
+    value = (uint8_t)(ADXL345_FORMAT_FULL_RES | (uint8_t)range);
+    if (driver_i2c_write_reg(&handle->i2c, ADXL345_REG_DATA_FORMAT, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 100Hz 输出率 */
+    value = ADXL345_BW_RATE_100HZ;
+    if (driver_i2c_write_reg(&handle->i2c, ADXL345_REG_BW_RATE, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    if (adxl345_set_measure(handle, true) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->initialized = true;
+    LOG_I("adxl345", "init ok at 0x%02X, range=%d", handle->i2c.address, (int)range);
+    return DRIVER_OK;
 }
 
-int adxl345_read(const i2c_bus_t *bus, int16_t acc[3])
+int adxl345_deinit(adxl345_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)adxl345_set_measure(handle, false);
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
+
+int adxl345_set_measure(adxl345_handle_t *handle, bool enable)
+{
+    uint8_t value = enable ? ADXL345_POWER_MEASURE : ADXL345_POWER_STANDBY;
+
+    if (handle == NULL || handle->i2c.handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return driver_i2c_write_reg(&handle->i2c, ADXL345_REG_POWER_CTL, &value, 1U);
+}
+
+int adxl345_read_raw(adxl345_handle_t *handle, int16_t xyz[3])
 {
     uint8_t d[6];
 
-    if (bus == NULL || acc == NULL) {
-        return -1;
+    if (handle == NULL || xyz == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    if (i2c_read_regs(bus, ADXL345_ADDR, ADXL345_REG_DATAX0, d, 6) != 0) {
-        LOG_E("adxl345", "read fail");
-        return -1;
+
+    if (driver_i2c_read_reg(&handle->i2c, ADXL345_REG_DATAX0, d, sizeof(d)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
     }
-    /* 小端解析：低字节在前 */
-    acc[0] = (int16_t)(d[0] | (d[1] << 8));
-    acc[1] = (int16_t)(d[2] | (d[3] << 8));
-    acc[2] = (int16_t)(d[4] | (d[5] << 8));
-    return 0;
+
+    xyz[0] = (int16_t)((uint16_t)d[0] | ((uint16_t)d[1] << 8));
+    xyz[1] = (int16_t)((uint16_t)d[2] | ((uint16_t)d[3] << 8));
+    xyz[2] = (int16_t)((uint16_t)d[4] | ((uint16_t)d[5] << 8));
+    return DRIVER_OK;
+}
+
+int adxl345_read(adxl345_handle_t *handle, adxl345_accel_t *accel)
+{
+    int16_t xyz[3];
+    int ret;
+
+    if (accel == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = adxl345_read_raw(handle, xyz);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    accel->x = (float)xyz[0] * ADXL345_SCALE_G_PER_LSB;
+    accel->y = (float)xyz[1] * ADXL345_SCALE_G_PER_LSB;
+    accel->z = (float)xyz[2] * ADXL345_SCALE_G_PER_LSB;
+    return DRIVER_OK;
 }

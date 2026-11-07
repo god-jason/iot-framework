@@ -1,0 +1,41 @@
+#ifndef W25QXX_REGISTER_H
+#define W25QXX_REGISTER_H
+
+/* W25Q 系列 SPI NOR Flash 命令定义 */
+
+#define W25QXX_CMD_WRITE_ENABLE     0x06U
+#define W25QXX_CMD_WRITE_DISABLE    0x04U
+#define W25QXX_CMD_READ_STATUS1     0x05U
+#define W25QXX_CMD_READ_STATUS2     0x35U
+#define W25QXX_CMD_WRITE_STATUS     0x01U
+#define W25QXX_CMD_PAGE_PROGRAM     0x02U
+#define W25QXX_CMD_QUAD_PROGRAM     0x32U
+#define W25QXX_CMD_READ_DATA        0x03U
+#define W25QXX_CMD_FAST_READ        0x0BU
+#define W25QXX_CMD_READ_ID          0x9FU
+#define W25QXX_CMD_READ_UID         0x4BU
+#define W25QXX_CMD_SECTOR_ERASE     0x20U
+#define W25QXX_CMD_BLOCK_ERASE_32K  0x52U
+#define W25QXX_CMD_BLOCK_ERASE_64K  0xD8U
+#define W25QXX_CMD_CHIP_ERASE       0xC7U
+#define W25QXX_CMD_POWER_DOWN       0xB9U
+#define W25QXX_CMD_RELEASE_PD       0xABU
+#define W25QXX_CMD_ENABLE_RESET     0x66U
+#define W25QXX_CMD_RESET_DEVICE     0x99U
+
+/* 状态寄存器位 */
+#define W25QXX_STATUS_BUSY          0x01U
+#define W25QXX_STATUS_WEL           0x02U
+
+/* 容量与粒度 */
+#define W25QXX_PAGE_SIZE            256U
+#define W25QXX_SECTOR_SIZE          4096U
+#define W25QXX_BLOCK_SIZE           65536U
+
+/* 超时（ms） */
+#define W25QXX_PAGE_PROGRAM_MS      10U
+#define W25QXX_SECTOR_ERASE_MS      500U
+#define W25QXX_BLOCK_ERASE_MS       2000U
+#define W25QXX_CHIP_ERASE_MS        60000U
+
+#endif /* W25QXX_REGISTER_H */

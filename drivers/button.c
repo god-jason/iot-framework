@@ -1,11 +1,13 @@
 #include "button.h"
-#include "iot_mcu.h"
+#include "port.h"
 #include "iot_logger.h"
 
 int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
                     uint32_t debounce_ms, uint32_t long_press_ms,
                     button_callback_fn cb, void *user)
 {
+    port_gpio_config_t cfg;
+
     if (btn == NULL || cb == NULL) {
         return -1;
     }
@@ -19,21 +21,30 @@ int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
     btn->last_state = 0;
     btn->press_start = 0;
     btn->press_reported = 0;
-    return iot_mcu_gpio_set_mode(pin, 0);   /* 输入 */
+
+    /* 输入上拉 */
+    cfg.mode = PORT_GPIO_MODE_INPUT;
+    cfg.output = PORT_GPIO_OUTPUT_PP;
+    cfg.pull = PORT_GPIO_PULLUP;
+    cfg.speed = PORT_GPIO_SPEED_LOW;
+    cfg.alternate = 0;
+    cfg.initial_level = PORT_GPIO_HIGH;
+    return (port_gpio_init(PORT_PIN(0, pin), &cfg) == PORT_OK) ? 0 : -1;
 }
 
 int button_process(button_t *btn, uint32_t tick_ms)
 {
-    uint8_t level, pressed;
+    port_gpio_level_t level;
+    uint8_t pressed;
     button_event_t ev = BUTTON_RELEASED;
 
     if (btn == NULL) {
         return -1;
     }
-    if (iot_mcu_gpio_read(btn->pin, &level) != IOT_OK) {
+    if (port_gpio_read(PORT_PIN(0, btn->pin), &level) != PORT_OK) {
         return -1;
     }
-    pressed = (level == btn->active_level) ? 1 : 0;
+    pressed = ((uint8_t)level == btn->active_level) ? 1 : 0;
 
     /* 状态变化时记录时间戳（简单去抖） */
     if (pressed != btn->stable_state) {
@@ -63,5 +74,5 @@ int button_process(button_t *btn, uint32_t tick_ms)
     if (ev != BUTTON_RELEASED) {
         btn->callback(ev, btn->user);
     }
-    return IOT_OK;
+    return PORT_OK;
 }

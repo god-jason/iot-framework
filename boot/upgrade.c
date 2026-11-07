@@ -1,6 +1,6 @@
 #include "upgrade.h"
 #include "partition.h"
-#include "iot_memory.h"
+#include <string.h>
 
 static upgrade_state_t s_state = UPGRADE_IDLE;
 static uint32_t s_total_size = 0;

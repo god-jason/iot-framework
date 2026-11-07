@@ -1,10 +1,9 @@
 /* iot-os 模拟运行入口：模拟一块硬件，初始化平台与日志控制台，运行功能自检并打印结果。 */
-#include "iot_port.h"
-#include "iot_port_sim.h"
+#include "port.h"
 #include "iot_logger.h"
 #include "iot_console.h"
-#include "md5.h"
-#include "sha256.h"
+#include "hash_md5.h"
+#include "hash_sha256.h"
 #include "iot_hex.h"
 #include "iot_cron.h"
 #include "iot_datetime.h"
@@ -22,12 +21,12 @@ static void sim_test_hash(void)
     uint8_t d[32];
     char hex[65];
 
-    md5_compute("abc", 3, d);
+    hash_md5_compute("abc", 3, d);
     iot_hex_encode(d, 16, hex, sizeof(hex), false);
     LOG_I("sim", "md5(abc)=%s", hex);
     CHECK(strcmp(hex, "900150983cd24fb0d6963f7d28e17f72") == 0);
 
-    sha256_compute("abc", 3, d);
+    hash_sha256_compute("abc", 3, d);
     iot_hex_encode(d, 32, hex, sizeof(hex), false);
     LOG_I("sim", "sha256(abc)=%s", hex);
     CHECK(strcmp(hex,
@@ -56,20 +55,37 @@ static void sim_test_cron(void)
 int main(void)
 {
     uint8_t rx[64];
+    port_uart_handle_t uart;
+    port_uart_config_t uart_cfg;
     iot_console_config_t cfg;
 
     /* 初始化模拟平台 */
-    iot_port_init(iot_sim_port_get());
+    if (port_init() != PORT_OK) {
+        printf("port_init failed\n");
+        return 1;
+    }
 
     /* 日志 -> 控制台 -> 模拟 UART(stdout) */
     iot_log_init();
-    cfg.uart = iot_sim_uart_get();
+    memset(&uart, 0, sizeof(uart));
+    memset(&uart_cfg, 0, sizeof(uart_cfg));
+    uart.base.instance = (void *)1;
+    uart_cfg.baudrate = 115200;
+    uart_cfg.word_length = PORT_UART_WORD_8BIT;
+    uart_cfg.parity = PORT_UART_PARITY_NONE;
+    uart_cfg.stop_bits = PORT_UART_STOP_1;
+    uart_cfg.flow_control = PORT_UART_FLOW_NONE;
+    uart_cfg.mode = PORT_UART_MODE_TX_RX;
+    uart_cfg.oversampling = false;
+    (void)port_uart_init(&uart, &uart_cfg);
+
+    cfg.uart = &uart;
     cfg.rx_buffer = rx;
     cfg.rx_buffer_size = sizeof(rx);
     iot_console_init(&cfg);
     iot_console_start();
 
-    LOG_I("sim", "simulator boot, tick=%u", (unsigned)iot_port_get()->system.tick_get());
+    LOG_I("sim", "simulator boot, tick=%u", (unsigned)port_tick_get());
 
     sim_test_hash();
     sim_test_cron();

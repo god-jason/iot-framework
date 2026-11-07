@@ -3,7 +3,7 @@
 #include "pid.h"
 #include "filter.h"
 #include "statistics.h"
-#include "interp.h"
+#include "interpolation.h"
 
 static void test_pid(void)
 {
@@ -153,29 +153,29 @@ static void test_interp(void)
     float out = 0.0f;
 
     tf_begin("algorithm/interp 线性");
-    TF_CHECK_NEAR(interp_linear(5.0f, 0.0f, 0.0f, 10.0f, 100.0f), 50.0f, 1e-4);
-    TF_CHECK_NEAR(interp_linear(7.0f, 5.0f, 1.0f, 5.0f, 9.0f), 1.0f, 1e-4);
+    TF_CHECK_NEAR(interpolation_linear(5.0f, 0.0f, 0.0f, 10.0f, 100.0f), 50.0f, 1e-4);
+    TF_CHECK_NEAR(interpolation_linear(7.0f, 5.0f, 1.0f, 5.0f, 9.0f), 1.0f, 1e-4);
     tf_end();
 
     tf_begin("algorithm/interp 查表");
-    TF_CHECK_INT(interp_lookup(5.0f, xs, ys, 3, &out), 0);
+    TF_CHECK_INT(interpolation_lookup(5.0f, xs, ys, 3, &out), 0);
     TF_CHECK_NEAR(out, 50.0f, 1e-4);
-    TF_CHECK_INT(interp_lookup(-5.0f, xs, ys, 3, &out), 0);
+    TF_CHECK_INT(interpolation_lookup(-5.0f, xs, ys, 3, &out), 0);
     TF_CHECK_NEAR(out, 0.0f, 1e-4);
-    TF_CHECK_INT(interp_lookup(25.0f, xs, ys, 3, &out), 0);
+    TF_CHECK_INT(interpolation_lookup(25.0f, xs, ys, 3, &out), 0);
     TF_CHECK_NEAR(out, 200.0f, 1e-4);
-    TF_CHECK_INT(interp_lookup(10.0f, xs, ys, 3, &out), 0);
+    TF_CHECK_INT(interpolation_lookup(10.0f, xs, ys, 3, &out), 0);
     TF_CHECK_NEAR(out, 100.0f, 1e-4);
-    TF_CHECK_INT(interp_lookup(5.0f, xs, ys, 1, &out), -1);
+    TF_CHECK_INT(interpolation_lookup(5.0f, xs, ys, 1, &out), -1);
     tf_end();
 
     tf_begin("algorithm/interp Catmull-Rom");
     {
         static const float pts[] = { 0.0f, 1.0f, 2.0f, 3.0f };
-        TF_CHECK_NEAR(interp_cubic(0.0f, pts, 4), 0.0f, 1e-4);
-        TF_CHECK_NEAR(interp_cubic(1.0f, pts, 4), 1.0f, 1e-4);
-        TF_CHECK_NEAR(interp_cubic(2.0f, pts, 4), 2.0f, 1e-4);
-        TF_CHECK_NEAR(interp_cubic(5.0f, pts, 2), 0.0f, 1e-4);
+        TF_CHECK_NEAR(interpolation_cubic(0.0f, pts, 4), 0.0f, 1e-4);
+        TF_CHECK_NEAR(interpolation_cubic(1.0f, pts, 4), 1.0f, 1e-4);
+        TF_CHECK_NEAR(interpolation_cubic(2.0f, pts, 4), 2.0f, 1e-4);
+        TF_CHECK_NEAR(interpolation_cubic(5.0f, pts, 2), 0.0f, 1e-4);
     }
     tf_end();
 }

@@ -1,52 +1,164 @@
 #include "max7219.h"
+#include "max7219_register.h"
 #include "iot_logger.h"
 
-// 向指定寄存器地址写一字节数据：CS 拉低 -> 发地址与数据 -> CS 拉高。
-int max7219_write(const spi_bus_t *spi, uint8_t addr, uint8_t data)
+static int max7219_send_frame(max7219_handle_t *handle, const uint8_t *frame, size_t len)
 {
-    uint8_t d[2] = { addr, data };
-    int r;
+    int ret;
 
-    if (spi == NULL || spi->transfer == NULL) {
-        return -1;
-    }
-    spi_cs(spi, true);
-    r = spi_transfer(spi, d, NULL, 2);
-    spi_cs(spi, false);
-    return r;
+    driver_spi_select(&handle->spi);
+    ret = driver_spi_write(&handle->spi, frame, len);
+    driver_spi_deselect(&handle->spi);
+    return ret;
 }
 
-int max7219_init(const spi_bus_t *spi)
+int max7219_write_index(max7219_handle_t *handle, uint8_t index,
+                        uint8_t reg, uint8_t data)
 {
-    if (spi == NULL || spi->transfer == NULL) {
-        return -1;
-    }
-
-    // 关解码 0x09、亮度 0x0A、扫描限制 0x0B、关测试 0x0F、正常工作 0x0C。
-    if (max7219_write(spi, 0x09, 0x00) != 0 ||
-        max7219_write(spi, 0x0A, 0x03) != 0 ||
-        max7219_write(spi, 0x0B, 0x07) != 0 ||
-        max7219_write(spi, 0x0F, 0x00) != 0 ||
-        max7219_write(spi, 0x0C, 0x01) != 0) {
-        LOG_E("max7219", "init fail");
-        return -1;
-    }
-    LOG_I("max7219", "init ok");
-    return 0;
-}
-
-int max7219_clear(const spi_bus_t *spi)
-{
+    uint8_t frame[MAX7219_DIGIT_COUNT * 2U];
+    size_t len;
     uint8_t i;
 
-    if (spi == NULL || spi->transfer == NULL) {
-        return -1;
+    if (handle == NULL || !handle->initialized || index >= handle->chain_length) {
+        return (int)PORT_INVALID_PARAM;
     }
-    // 8 位数字寄存器 0x01..0x08 全部清零。
-    for (i = 0x01; i <= 0x08; i++) {
-        if (max7219_write(spi, i, 0x00) != 0) {
-            return -1;
+
+    len = (size_t)handle->chain_length * 2U;
+    for (i = 0U; i < handle->chain_length; i++) {
+        uint8_t target = (uint8_t)(handle->chain_length - 1U - i);
+
+        if (target == index) {
+            frame[i * 2U] = reg;
+            frame[i * 2U + 1U] = data;
+        } else {
+            frame[i * 2U] = MAX7219_REG_NOOP;
+            frame[i * 2U + 1U] = 0x00U;
         }
     }
-    return 0;
+    return max7219_send_frame(handle, frame, len);
+}
+
+int max7219_write(max7219_handle_t *handle, uint8_t reg, uint8_t data)
+{
+    uint8_t i;
+    int ret;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    for (i = 0U; i < handle->chain_length; i++) {
+        ret = max7219_write_index(handle, i, reg, data);
+        if (ret != DRIVER_OK) {
+            return ret;
+        }
+    }
+    return DRIVER_OK;
+}
+
+int max7219_init(max7219_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
+                 uint8_t chain_length)
+{
+    if (handle == NULL || spi == NULL || chain_length == 0U ||
+        chain_length > MAX7219_DIGIT_COUNT) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    handle->spi.handle = spi;
+    handle->spi.cs = cs;
+    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->chain_length = chain_length;
+    handle->initialized = false;
+
+    if (cs != 0U) {
+        if (driver_gpio_output(cs, PORT_GPIO_HIGH) != DRIVER_OK) {
+            return (int)PORT_IO_ERROR;
+        }
+    }
+
+    handle->initialized = true;
+
+    if (max7219_set_shutdown(handle, false) != DRIVER_OK ||
+        max7219_set_decode_mode(handle, MAX7219_DECODE_NONE) != DRIVER_OK ||
+        max7219_set_intensity(handle, MAX7219_INTENSITY_DEFAULT) != DRIVER_OK ||
+        max7219_set_scan_limit(handle, MAX7219_SCAN_ALL) != DRIVER_OK ||
+        max7219_display_test(handle, false) != DRIVER_OK ||
+        max7219_clear(handle) != DRIVER_OK) {
+        handle->initialized = false;
+        LOG_E("max7219", "init sequence failed");
+        return (int)PORT_IO_ERROR;
+    }
+
+    LOG_I("max7219", "init ok, chain=%u", (unsigned)chain_length);
+    return DRIVER_OK;
+}
+
+int max7219_deinit(max7219_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)max7219_set_shutdown(handle, true);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int max7219_set_intensity(max7219_handle_t *handle, uint8_t intensity)
+{
+    if (intensity > MAX7219_INTENSITY_MAX) {
+        intensity = MAX7219_INTENSITY_MAX;
+    }
+    return max7219_write(handle, MAX7219_REG_INTENSITY, intensity);
+}
+
+int max7219_set_decode_mode(max7219_handle_t *handle, uint8_t mode)
+{
+    return max7219_write(handle, MAX7219_REG_DECODE_MODE, mode);
+}
+
+int max7219_set_scan_limit(max7219_handle_t *handle, uint8_t limit)
+{
+    if (limit > MAX7219_SCAN_ALL) {
+        limit = MAX7219_SCAN_ALL;
+    }
+    return max7219_write(handle, MAX7219_REG_SCAN_LIMIT, limit);
+}
+
+int max7219_set_shutdown(max7219_handle_t *handle, bool shutdown)
+{
+    return max7219_write(handle, MAX7219_REG_SHUTDOWN,
+                         shutdown ? MAX7219_SHUTDOWN_MODE : MAX7219_NORMAL_OPERATION);
+}
+
+int max7219_display_test(max7219_handle_t *handle, bool enable)
+{
+    return max7219_write(handle, MAX7219_REG_DISPLAY_TEST,
+                         enable ? 0x01U : MAX7219_TEST_OFF);
+}
+
+int max7219_set_digit(max7219_handle_t *handle, uint8_t digit, uint8_t value)
+{
+    if (digit >= MAX7219_DIGIT_COUNT) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return max7219_write(handle, (uint8_t)(MAX7219_REG_DIGIT0 + digit), value);
+}
+
+int max7219_clear(max7219_handle_t *handle)
+{
+    uint8_t digit;
+    int ret;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    for (digit = 0U; digit < MAX7219_DIGIT_COUNT; digit++) {
+        ret = max7219_set_digit(handle, digit, 0x00U);
+        if (ret != DRIVER_OK) {
+            return ret;
+        }
+    }
+    return DRIVER_OK;
 }

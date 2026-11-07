@@ -1,18 +1,41 @@
 #ifndef MAX6675_H
 #define MAX6675_H
 
-/* MAX6675 K 型热电偶数字转换器（SPI，0.25℃ 分辨率）。 */
-#include "bus/spi.h"
+/*
+ * MAX6675 K 型热电偶数字转换器驱动（SPI，只读）。
+ *
+ * 冷端补偿在片内完成，分辨率 0.25 ℃，量程 0 - 1024 ℃。
+ * 参考 libdriver 风格：max6675_init / max6675_read。
+ */
+
+#include "common/driver_io.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 初始化（芯片无片上配置，仅校验总线） */
-int max6675_init(const spi_bus_t *spi);
+typedef struct {
+    driver_spi_t spi;
+    bool initialized;
+} max6675_handle_t;
 
-/* 读取温度(℃)；热电偶开路时返回负错误码 */
-int max6675_read(const spi_bus_t *spi, float *temp);
+/**
+ * @brief  初始化（器件无配置寄存器，仅保存总线并拉高片选）
+ * @param  cs  片选引脚，PORT_PIN(0,0) 表示由外部控制
+ */
+int max6675_init(max6675_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs);
+
+/** @brief  反初始化 */
+int max6675_deinit(max6675_handle_t *handle);
+
+/** @brief  读取原始 16 位数据 */
+int max6675_read_raw(max6675_handle_t *handle, uint16_t *raw);
+
+/**
+ * @brief  读取温度（℃）
+ * @return 0 成功；热电偶开路返回 PORT_HW_ERROR
+ */
+int max6675_read(max6675_handle_t *handle, float *celsius);
 
 #ifdef __cplusplus
 }

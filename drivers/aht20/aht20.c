@@ -1,62 +1,138 @@
 #include "aht20.h"
+#include "aht20_register.h"
 #include "iot_logger.h"
 
-#define AHT20_ADDR 0x38
-
-int aht20_init(const i2c_bus_t *bus)
+static int aht20_wait_ready(aht20_handle_t *handle)
 {
-    uint8_t cal[2] = { 0x08, 0x00 };
-    uint8_t st = 0;
+    uint32_t start = driver_tick_ms();
+    uint8_t status = 0U;
 
-    if (bus == NULL || bus->write == NULL || bus->read == NULL) {
-        return -1;
+    for (;;) {
+        if (driver_i2c_read_reg(&handle->i2c, AHT20_CMD_STATUS, &status, 1U) != DRIVER_OK) {
+            return (int)PORT_IO_ERROR;
+        }
+        if ((status & AHT20_STATUS_BUSY) == 0U) {
+            return DRIVER_OK;
+        }
+        if ((uint32_t)(driver_tick_ms() - start) > AHT20_MEASURE_DELAY_MS * 3U) {
+            return (int)PORT_TIMEOUT;
+        }
+        driver_delay_ms(1U);
     }
-    /* 软复位命令 0xBA */
-    const uint8_t soft_reset = 0xBA;
-    bus->write(bus->ctx, AHT20_ADDR, &soft_reset, 1);
-
-    /* 读状态寄存器 0x71 */
-    bus->write(bus->ctx, AHT20_ADDR, (const uint8_t[]){0x71}, 1);
-    bus->read(bus->ctx, AHT20_ADDR, &st, 1);
-
-    /* 未校准（bit3=0）则发起校准 */
-    if (!(st & 0x08)) {
-        bus->write(bus->ctx, AHT20_ADDR, (const uint8_t[]){0xBE}, 1);
-        bus->write(bus->ctx, AHT20_ADDR, cal, 2);
-    }
-    LOG_I("aht20", "init ok");
-    return 0;
 }
 
-int aht20_trigger(const i2c_bus_t *bus)
+int aht20_init(aht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 {
-    uint8_t cmd[2] = { 0x33, 0x00 };
+    uint8_t status = 0U;
+    uint8_t calibrate[2] = { 0x08U, 0x00U };
+    uint8_t reset = AHT20_CMD_SOFT_RESET;
+    int ret;
 
-    if (bus == NULL || bus->write == NULL) {
-        return -1;
+    if (handle == NULL || i2c == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    /* 测量命令 0xAC 0x33 0x00 */
-    bus->write(bus->ctx, AHT20_ADDR, (const uint8_t[]){0xAC}, 1);
-    return bus->write(bus->ctx, AHT20_ADDR, cmd, 2);
+
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : AHT20_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->initialized = false;
+
+    driver_delay_ms(AHT20_POWER_ON_DELAY_MS);
+
+    /* 软复位，部分模组不支持，失败不视为致命 */
+    ret = driver_i2c_write(&handle->i2c, &reset, 1U);
+    if (ret != DRIVER_OK) {
+        LOG_W("aht20", "soft reset failed: %d", ret);
+    }
+    driver_delay_ms(AHT20_RESET_DELAY_MS);
+
+    if (aht20_wait_ready(handle) != DRIVER_OK) {
+        LOG_E("aht20", "device not ready");
+        return (int)PORT_NOT_READY;
+    }
+
+    /* 读取状态并检查是否已校准 */
+    if (driver_i2c_read_reg(&handle->i2c, AHT20_CMD_STATUS, &status, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if ((status & AHT20_STATUS_CALIBRATED) == 0U) {
+        uint8_t cmd = AHT20_CMD_CALIBRATE;
+
+        if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK ||
+            driver_i2c_write(&handle->i2c, calibrate, sizeof(calibrate)) != DRIVER_OK) {
+            LOG_E("aht20", "calibrate failed");
+            return (int)PORT_IO_ERROR;
+        }
+        driver_delay_ms(AHT20_CALIBRATE_DELAY_MS);
+    }
+
+    handle->initialized = true;
+    LOG_I("aht20", "init ok, status=0x%02X", status);
+    return DRIVER_OK;
 }
 
-int aht20_read(const i2c_bus_t *bus, float *temp, float *humidity)
+int aht20_deinit(aht20_handle_t *handle)
 {
-    uint8_t d[7];
-    uint32_t h, t;
-
-    if (bus == NULL || bus->read == NULL || temp == NULL || humidity == NULL) {
-        return -1;
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    if (bus->read(bus->ctx, AHT20_ADDR, d, 7) != 0) {
-        return -1;
-    }
-    /* 20 位湿度：d[1..3] */
-    h = ((uint32_t)d[1] << 12) | ((uint32_t)d[2] << 4) | (d[3] >> 4);
-    /* 20 位温度：d[3..5] */
-    t = ((uint32_t)(d[3] & 0x0F) << 16) | ((uint32_t)d[4] << 8) | d[5];
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
 
-    *humidity = (float)h / 1048576.0f * 100.0f;
-    *temp = (float)t / 1048576.0f * 200.0f - 50.0f;
-    return 0;
+int aht20_get_status(aht20_handle_t *handle, uint8_t *status)
+{
+    if (handle == NULL || status == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return driver_i2c_read_reg(&handle->i2c, AHT20_CMD_STATUS, status, 1U);
+}
+
+int aht20_read(aht20_handle_t *handle, float *temperature, float *humidity)
+{
+    uint8_t cmd[3] = { AHT20_CMD_TRIGGER, 0x33U, 0x00U };
+    uint8_t data[7];
+    uint32_t raw_humidity;
+    uint32_t raw_temperature;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (temperature == NULL && humidity == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    if (driver_i2c_write(&handle->i2c, cmd, sizeof(cmd)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_ms(AHT20_MEASURE_DELAY_MS);
+
+    if (aht20_wait_ready(handle) != DRIVER_OK) {
+        return (int)PORT_TIMEOUT;
+    }
+
+    if (driver_i2c_read(&handle->i2c, data, sizeof(data)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* data[0] 为状态，data[1..6] 为湿度/温度原始值 */
+    if ((data[0] & AHT20_STATUS_BUSY) != 0U) {
+        return (int)PORT_BUSY;
+    }
+
+    raw_humidity = ((uint32_t)data[1] << 12) |
+                   ((uint32_t)data[2] << 4) |
+                   ((uint32_t)data[3] >> 4);
+    raw_temperature = ((uint32_t)(data[3] & 0x0FU) << 16) |
+                      ((uint32_t)data[4] << 8) |
+                      (uint32_t)data[5];
+
+    if (humidity != NULL) {
+        *humidity = (float)raw_humidity * 100.0f / AHT20_DATA_SCALE;
+    }
+    if (temperature != NULL) {
+        *temperature = (float)raw_temperature * 200.0f / AHT20_DATA_SCALE - 50.0f;
+    }
+    return DRIVER_OK;
 }

@@ -1,0 +1,66 @@
+#ifndef SSD1309_REGISTER_H
+#define SSD1309_REGISTER_H
+
+/*
+ * SSD1309 命令定义（与 SSD1306 命令集基本兼容）。
+ * 面板玻璃不同厂商差异主要在对比度 / 预充电 / VCOMH 三项，
+ * 参数需按面板调整（见下方 _DEFAULT 宏）。
+ */
+
+#define SSD1309_DEFAULT_I2C_ADDRESS 0x3CU
+#define SSD1309_I2C_ADDRESS_ALT     0x3DU
+
+#define SSD1309_WIDTH               128U
+#define SSD1309_HEIGHT              64U
+#define SSD1309_PAGES               (SSD1309_HEIGHT / 8U)
+#define SSD1309_GRAM_SIZE           (SSD1309_WIDTH * SSD1309_PAGES)
+
+/* I2C 控制字节 */
+#define SSD1309_CTRL_CMD            0x00U
+#define SSD1309_CTRL_DATA           0x40U
+
+/* 基础命令 */
+#define SSD1309_CMD_DISPLAY_OFF     0xAEU
+#define SSD1309_CMD_DISPLAY_ON      0xAFU
+#define SSD1309_CMD_SET_CONTRAST    0x81U
+#define SSD1309_CMD_ENTIRE_ON       0xA4U
+#define SSD1309_CMD_ENTIRE_OFF      0xA5U
+#define SSD1309_CMD_NORMAL_DISPLAY  0xA6U
+#define SSD1309_CMD_INVERT_DISPLAY  0xA7U
+
+#define SSD1309_CMD_SET_MUX         0xA8U
+#define SSD1309_CMD_SET_OFFSET      0xD3U
+#define SSD1309_CMD_SET_START_LINE  0x40U
+#define SSD1309_CMD_SEG_REMAP       0xA1U
+#define SSD1309_CMD_COM_SCAN_DEC    0xC8U
+#define SSD1309_CMD_COM_SCAN_INC    0xC0U
+#define SSD1309_CMD_COM_PINS        0xDAU
+#define SSD1309_CMD_SET_CLOCK       0xD5U
+#define SSD1309_CMD_SET_PRECHARGE   0xD9U
+#define SSD1309_CMD_SET_VCOM        0xDBU
+#define SSD1309_CMD_CHARGE_PUMP     0x8DU
+#define SSD1309_CMD_ADDR_MODE       0x20U
+#define SSD1309_CMD_DEACT_SCROLL    0x2EU
+
+/* 页寻址 */
+#define SSD1309_CMD_PAGE_START      0xB0U
+#define SSD1309_CMD_COL_LOW         0x00U
+#define SSD1309_CMD_COL_HIGH        0x10U
+
+#define SSD1309_ADDR_MODE_PAGE      0x02U
+#define SSD1309_ADDR_MODE_HORIZ     0x00U
+
+/* 初始化参数：参数需按面板调整 */
+#define SSD1309_MUX_RATIO_64        0x3FU
+#define SSD1309_COM_PINS_64         0x12U
+#define SSD1309_CLOCK_DIV           0x80U
+#define SSD1309_PRECHARGE           0xF1U
+#define SSD1309_VCOM_DESELECT       0x40U
+#define SSD1309_CHARGE_PUMP_ON      0x14U
+#define SSD1309_CONTRAST_DEFAULT    0x9FU
+
+/* 复位脉冲宽度 */
+#define SSD1309_RESET_LOW_MS        10U
+#define SSD1309_RESET_WAIT_MS       10U
+
+#endif /* SSD1309_REGISTER_H */

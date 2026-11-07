@@ -1,53 +1,141 @@
 #include "ina219.h"
+#include "ina219_register.h"
 #include "iot_logger.h"
 
-#define INA219_ADDR         0x40
-#define INA219_REG_CONFIG   0x00    /* 配置寄存器 */
-#define INA219_REG_SHUNT    0x01    /* 分流电压寄存器 */
-#define INA219_REG_BUS      0x02    /* 总线电压寄存器 */
-
-/* 分流电阻阻值(Ω)，可按实际硬件调整 */
-#define INA219_SHUNT_OHM    0.1f
-
-int ina219_init(const i2c_bus_t *bus)
-{
-    /* 配置：BRNG=0 总线量程 16V，PG=0b11 分流量程 320mV，12 位 ADC */
-    uint8_t conf[2] = { 0x39, 0x9F };
-
-    if (bus == NULL) {
-        return -1;
-    }
-    if (i2c_write_regs(bus, INA219_ADDR, INA219_REG_CONFIG, conf, 2) != 0) {
-        LOG_E("ina219", "init fail");
-        return -1;
-    }
-    LOG_I("ina219", "init ok");
-    return 0;
-}
-
-int ina219_read(const i2c_bus_t *bus, float *bus_voltage, float *current)
+static int ina219_read_reg16(ina219_handle_t *handle, uint8_t reg, uint16_t *value)
 {
     uint8_t d[2];
-    uint16_t bus_raw;
-    int16_t shunt_raw;
 
-    if (bus == NULL || bus_voltage == NULL || current == NULL) {
-        return -1;
+    if (driver_i2c_read_reg(&handle->i2c, reg, d, sizeof(d)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    *value = (uint16_t)(((uint16_t)d[0] << 8) | d[1]);
+    return DRIVER_OK;
+}
+
+static int ina219_write_reg16(ina219_handle_t *handle, uint8_t reg, uint16_t value)
+{
+    uint8_t d[2];
+
+    d[0] = (uint8_t)(value >> 8);
+    d[1] = (uint8_t)(value & 0xFFU);
+    return driver_i2c_write_reg(&handle->i2c, reg, d, sizeof(d));
+}
+
+int ina219_init(ina219_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+                float shunt_ohm, float max_current_a)
+{
+    if (handle == NULL || i2c == NULL || shunt_ohm <= 0.0f || max_current_a <= 0.0f) {
+        return (int)PORT_INVALID_PARAM;
     }
 
-    /* 总线电压：bit15~3 有效，1 LSB = 4mV */
-    if (i2c_read_regs(bus, INA219_ADDR, INA219_REG_BUS, d, 2) != 0) {
-        return -1;
-    }
-    bus_raw = (uint16_t)((d[0] << 8) | d[1]);
-    *bus_voltage = (float)(bus_raw >> 3) * 0.004f;
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : INA219_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->shunt_ohm = shunt_ohm;
+    handle->current_lsb_a = max_current_a / 32768.0f;
+    handle->power_lsb_w = handle->current_lsb_a * INA219_POWER_LSB_FACTOR;
+    handle->initialized = false;
 
-    /* 分流电压：有符号 16 位，1 LSB = 10µV；电流 = 分流电压 / 分流电阻 */
-    if (i2c_read_regs(bus, INA219_ADDR, INA219_REG_SHUNT, d, 2) != 0) {
-        return -1;
+    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+        LOG_E("ina219", "probe failed at 0x%02X", handle->i2c.address);
+        return (int)PORT_NOT_FOUND;
     }
-    shunt_raw = (int16_t)(((uint16_t)d[0] << 8) | d[1]);
-    *current = (float)shunt_raw * 1e-5f / INA219_SHUNT_OHM;
 
-    return 0;
+    if (ina219_write_reg16(handle, INA219_REG_CONFIG,
+                           INA219_CONFIG_16V_320MV_12BIT_CONT) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    {
+        float cal = INA219_CAL_FACTOR / (handle->current_lsb_a * handle->shunt_ohm);
+
+        if (cal < 1.0f) {
+            cal = 1.0f;
+        }
+        if (cal > 65535.0f) {
+            cal = 65535.0f;
+        }
+        handle->calibration = (uint16_t)cal;
+    }
+
+    if (ina219_write_reg16(handle, INA219_REG_CALIBRATION, handle->calibration) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->initialized = true;
+    LOG_I("ina219", "init ok, cal=%u", (unsigned)handle->calibration);
+    return DRIVER_OK;
+}
+
+int ina219_deinit(ina219_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
+
+int ina219_read_bus_voltage(ina219_handle_t *handle, float *voltage)
+{
+    uint16_t raw = 0U;
+
+    if (handle == NULL || voltage == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (ina219_read_reg16(handle, INA219_REG_BUS_VOLTAGE, &raw) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 总线电压为 bit15:3，LSB 4mV */
+    *voltage = (float)(raw & INA219_BUS_VOLTAGE_MASK) * INA219_BUS_LSB_V / 8.0f;
+    return DRIVER_OK;
+}
+
+int ina219_read_current(ina219_handle_t *handle, float *current)
+{
+    uint16_t raw = 0U;
+
+    if (handle == NULL || current == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (ina219_read_reg16(handle, INA219_REG_CURRENT, &raw) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    *current = (float)(int16_t)raw * handle->current_lsb_a;
+    return DRIVER_OK;
+}
+
+int ina219_read_power(ina219_handle_t *handle, float *power)
+{
+    uint16_t raw = 0U;
+
+    if (handle == NULL || power == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (ina219_read_reg16(handle, INA219_REG_POWER, &raw) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    *power = (float)raw * handle->power_lsb_w;
+    return DRIVER_OK;
+}
+
+int ina219_read(ina219_handle_t *handle, ina219_data_t *data)
+{
+    int ret;
+
+    if (data == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = ina219_read_bus_voltage(handle, &data->bus_voltage);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    ret = ina219_read_current(handle, &data->current);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    return ina219_read_power(handle, &data->power);
 }

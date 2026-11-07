@@ -3,7 +3,7 @@
 #include "boot.h"
 #include "image.h"
 #include "partition.h"
-#include "iot_memory.h"
+#include <string.h>
 
 static boot_mode_t s_mode = BOOT_NORMAL;
 static bool s_upgrade_requested = false;

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "msg-1794026733138-al2b5c",
+    "from": "drv-humidity",
+    "to": "team-lead",
+    "type": "message",
+    "content": "开工前发现一个会导致链接冲突的问题，需要你确认处理方式（我会先按计划写其余 13 个驱动）：\n\n1) 仓库已有遗留文件 d:/WORK/iot-frame/drivers/ntc.c 与 drivers/ntc.h（旧版，使用 port_adc_* + iot_types.h，未被任何代码引用）。你的清单要求我新建 drivers/ntc/{ntc.c,ntc.h,ntc_register.h}，其 API 必然是 ntc_init/ntc_deinit/ntc_read —— 与遗留 drivers/ntc.c 中的 ntc_init/ntc_read 重名，xmake 的 drivers/**.c 会把两者都编进来，直接 duplicate symbol 链接失败。\n   建议：由你（或授权我）删除 drivers/ntc.c 与 drivers/ntc.h。我暂不删除，因为超出「写入范围仅限 drivers/<chip>/」。\n   另外注意：drivers 在 includedirs 里，所以 #include \"ntc.h\" 在其它目录会命中遗留的 drivers/ntc.h 而非 drivers/ntc/ntc.h，遗留头必须一起删。\n\n2) 同理已存在旧版 drivers/sht31/*、drivers/dht11/*、drivers/dht20/*，它们 include 了 bus/i2c.h、bus/gpio.h（本次禁止）。测试与 src 均未引用这三个驱动，因此我会原地重写这三个目录（含新增 <chip>_register.h），不会破坏其它代码。\n\n3) drivers/common/driver_io.h 没有 ADC 接口（只有 I2C/SPI/GPIO/time/CRC）。ntc 属于 ADC 器件，我按 DA267/lm35 一类既有做法直接使用 port_adc_init/port_adc_read（port.h 通过 driver_types.h 间接可见），不使用 HAL、不使用 bus/*.h。如你要求严格只走 driver_io.h，需要允许我在 drivers/common 增加 driver_adc_*，否则请接受该例外。",
+    "timestamp": "2026-11-07T04:45:33.138Z",
+    "read": true
+  }
+]

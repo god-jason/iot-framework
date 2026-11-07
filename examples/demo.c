@@ -1,28 +1,13 @@
 /* iot-os 综合示例：串口控制台日志 + shell 命令 + LED 闪烁 + 传感器读取。
- * host 下 UART1 输出到 stdout 演示；真实 MCU 替换 iot_port_uart_t 即可。 */
+ * host 下 UART1 输出到 stdout 演示；真实 MCU 替换 port_uart_handle_t 即可。 */
 #include "iot_logger.h"
 #include "iot_console.h"
-#include "iot_shell.h"
-#include "iot_mcu.h"
+#include "port.h"
 #include "led.h"
 #include "voltage.h"
 
 #include <stdio.h>
 #include <string.h>
-
-/* ---- 模拟 UART1：输出到 stdout ---- */
-static int uart_send(void *ctx, const uint8_t *data, uint32_t len)
-{
-    uint32_t i;
-    (void)ctx;
-    for (i = 0; i < len; i++) {
-        putchar(data[i]);
-    }
-    return (int)len;
-}
-static uint32_t uart_avail(void *ctx) { (void)ctx; return 0; }
-static int uart_recv(void *ctx, uint8_t *data, uint32_t len)
-{ (void)ctx; (void)data; (void)len; return 0; }
 
 /* ---- shell 命令 ---- */
 static int cmd_hello(int argc, char **argv)
@@ -30,7 +15,8 @@ static int cmd_hello(int argc, char **argv)
 
 int main(void)
 {
-    iot_port_uart_t uart;
+    port_uart_handle_t uart;
+    port_uart_config_t uart_cfg;
     iot_console_config_t cfg;
     iot_shell_command_t cmd;
     led_t led;
@@ -40,9 +26,17 @@ int main(void)
     /* 日志 -> 控制台 -> UART1 */
     iot_log_init();
     memset(&uart, 0, sizeof(uart));
-    uart.send = uart_send;
-    uart.receive = uart_recv;
-    uart.available = uart_avail;
+    memset(&uart_cfg, 0, sizeof(uart_cfg));
+    uart.base.instance = (void *)1;   /* USART1 */
+    uart_cfg.baudrate = 115200;
+    uart_cfg.word_length = PORT_UART_WORD_8BIT;
+    uart_cfg.parity = PORT_UART_PARITY_NONE;
+    uart_cfg.stop_bits = PORT_UART_STOP_1;
+    uart_cfg.flow_control = PORT_UART_FLOW_NONE;
+    uart_cfg.mode = PORT_UART_MODE_TX_RX;
+    uart_cfg.oversampling = false;
+    port_uart_init(&uart, &uart_cfg);
+
     cfg.uart = &uart;
     cfg.rx_buffer = rx;
     cfg.rx_buffer_size = sizeof(rx);

@@ -10,36 +10,28 @@ target("iot-sim")
 
     -- 平台模拟实现（含模拟入口 main）
     add_files("ports/simulator/**.c")
-    add_files("ports/iot_mcu.c")
 
     -- 框架源码（纯 C，与平台无关）
-    add_files("core/**.c")
-    add_files("port/**.c")
-    add_files("crypto/**.c")
-    add_files("container/**.c")
+    add_files("src/**.c")
+    add_files("vendor/**.c")
     add_files("boot/**.c")
-    add_files("protocol/**.c")
-    add_files("robot/**.c")
-    add_files("algorithm/**.c")
-    add_files("components/**.c")
+    add_files("modules/**.c")
 
     -- 外设驱动（含传感器/总线）
     add_files("drivers/**.c")
 
     -- 头文件搜索路径
     add_includedirs(
-        "core", "port",
-        "crypto/crc", "crypto/hash",
-        "container/list", "container/queue", "container/ringbuf", "container/pool",
+        "src", "src/port", "vendor", "vendor/cjson",
+        "src/crc", "src/hash",
         "boot",
-        "protocol/at", "protocol/modbus", "protocol/mqtt", "protocol/http",
-        "robot/action", "robot/behavior", "robot/planner", "robot/executor",
-        "robot/navigation", "robot/mapping",
-        "algorithm/filter", "algorithm/statistics",
-        "algorithm/interpolation", "algorithm/control", "algorithm/motion",
-        "components/modem/ml307", "components/storage",
-        "components/motor", "components/encoder", "components/servo", "components/stepper",
-        "components/fan", "components/breath_led", "components/fota",
+        "src/action", "src/behavior", "src/planner", "src/executor",
+        "src/navigation", "src/mapping",
+        "src/filter", "src/statistics",
+        "src/interpolation", "src/pid", "src/motion",
+        "modules/ml307", "src/at", "src/modbus", "src/storage",
+        "src/motor", "src/encoder", "src/servo", "src/stepper",
+        "src/fan", "src/breath_led", "src/fota",
         "drivers", "ports", "ports/simulator"
     )
 
@@ -57,37 +49,29 @@ target("iot-test")
     set_toolchains("gcc")
 
     -- 模拟平台实现（不包含带 main 的 sim_main.c）
-    add_files("ports/simulator/iot_port_sim.c")
-    add_files("ports/iot_mcu.c")
+    add_files("ports/simulator/port_sim.c")
 
     -- 框架源码
-    add_files("core/**.c")
-    add_files("port/**.c")
-    add_files("crypto/**.c")
-    add_files("container/**.c")
+    add_files("src/**.c")
+    add_files("vendor/**.c")
     add_files("boot/**.c")
-    add_files("protocol/**.c")
-    add_files("robot/**.c")
-    add_files("algorithm/**.c")
-    add_files("components/**.c")
+    add_files("modules/**.c")
     add_files("drivers/**.c")
 
     -- 测试用例
     add_files("tests/**.c")
 
     add_includedirs(
-        "core", "port",
-        "crypto/crc", "crypto/hash",
-        "container/list", "container/queue", "container/ringbuf", "container/pool",
+        "src", "src/port", "vendor", "vendor/cjson",
+        "src/crc", "src/hash",
         "boot",
-        "protocol/at", "protocol/modbus", "protocol/mqtt", "protocol/http",
-        "robot/action", "robot/behavior", "robot/planner", "robot/executor",
-        "robot/navigation", "robot/mapping",
-        "algorithm/filter", "algorithm/statistics",
-        "algorithm/interpolation", "algorithm/control", "algorithm/motion",
-        "components/modem/ml307", "components/storage",
-        "components/motor", "components/encoder", "components/servo", "components/stepper",
-        "components/fan", "components/breath_led", "components/fota",
+        "src/action", "src/behavior", "src/planner", "src/executor",
+        "src/navigation", "src/mapping",
+        "src/filter", "src/statistics",
+        "src/interpolation", "src/pid", "src/motion",
+        "modules/ml307", "src/at", "src/modbus", "src/storage",
+        "src/motor", "src/encoder", "src/servo", "src/stepper",
+        "src/fan", "src/breath_led", "src/fota",
         "drivers", "ports", "ports/simulator",
         "tests"
     )

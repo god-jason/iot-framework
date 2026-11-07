@@ -1,46 +1,148 @@
 #include "sht30.h"
+#include "sht30_register.h"
 #include "iot_logger.h"
 
-#define SHT30_ADDR 0x44
-
-/* 单次测量、时钟展宽、中重复率：0x2C 0x06 */
-static const uint8_t SHT30_MEAS_CMD[2] = { 0x2C, 0x06 };
-/* 软复位命令：0x30 0xA2 */
-static const uint8_t SHT30_RESET_CMD[2] = { 0x30, 0xA2 };
-
-int sht30_init(const i2c_bus_t *bus)
+static int sht30_write_cmd(sht30_handle_t *handle, uint16_t command)
 {
-    if (bus == NULL || bus->write == NULL) {
-        return -1;
-    }
-    if (bus->write(bus->ctx, SHT30_ADDR, SHT30_RESET_CMD, 2) != 0) {
-        LOG_E("sht30", "reset fail");
-        return -1;
-    }
-    LOG_I("sht30", "init ok");
-    return 0;
+    uint8_t buf[2];
+
+    buf[0] = (uint8_t)(command >> 8);
+    buf[1] = (uint8_t)(command & 0xFFU);
+    return driver_i2c_write(&handle->i2c, buf, sizeof(buf));
 }
 
-int sht30_read(const i2c_bus_t *bus, float *temp, float *humidity)
+static uint16_t sht30_measure_command(sht30_handle_t *handle)
 {
-    uint8_t d[6];
-    uint16_t raw_t, raw_h;
+    switch (handle->repeatability) {
+    case SHT30_REPEAT_MEDIUM:
+        return SHT30_CMD_MEASURE_MEDIUM;
+    case SHT30_REPEAT_LOW:
+        return SHT30_CMD_MEASURE_LOW;
+    case SHT30_REPEAT_HIGH:
+    default:
+        return SHT30_CMD_MEASURE_HIGH;
+    }
+}
 
-    if (bus == NULL || bus->write == NULL || bus->read == NULL ||
-        temp == NULL || humidity == NULL) {
-        return -1;
-    }
-    if (bus->write(bus->ctx, SHT30_ADDR, SHT30_MEAS_CMD, 2) != 0) {
-        return -1;
-    }
-    if (bus->read(bus->ctx, SHT30_ADDR, d, 6) != 0) {
-        return -1;
-    }
-    /* 忽略温度 CRC（d[2]）与湿度 CRC（d[5]） */
-    raw_t = (uint16_t)((d[0] << 8) | d[1]);
-    raw_h = (uint16_t)((d[3] << 8) | d[4]);
+static int sht30_check_crc(const uint8_t *data, uint8_t crc)
+{
+    return (driver_crc8(data, 2U, SHT30_CRC_POLY, SHT30_CRC_INIT) == crc) ? DRIVER_OK
+                                                                          : (int)PORT_CRC_ERROR;
+}
 
-    *temp = -45.0f + 175.0f * (float)raw_t / 65535.0f;
-    *humidity = 100.0f * (float)raw_h / 65535.0f;
-    return 0;
+int sht30_init(sht30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+{
+    if (handle == NULL || i2c == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : SHT30_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->repeatability = SHT30_REPEAT_HIGH;
+    handle->crc_enabled = true;
+    handle->initialized = false;
+
+    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+        LOG_E("sht30", "probe failed at 0x%02X", handle->i2c.address);
+        return (int)PORT_NOT_FOUND;
+    }
+
+    (void)sht30_soft_reset(handle);
+    handle->initialized = true;
+    LOG_I("sht30", "init ok at 0x%02X", handle->i2c.address);
+    return DRIVER_OK;
+}
+
+int sht30_deinit(sht30_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
+
+int sht30_soft_reset(sht30_handle_t *handle)
+{
+    int ret;
+
+    if (handle == NULL || handle->i2c.handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = sht30_write_cmd(handle, SHT30_CMD_SOFT_RESET);
+    driver_delay_ms(SHT30_RESET_DELAY_MS);
+    return ret;
+}
+
+int sht30_set_heater(sht30_handle_t *handle, bool enable)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return sht30_write_cmd(handle,
+                           enable ? SHT30_CMD_HEATER_ENABLE : SHT30_CMD_HEATER_DISABLE);
+}
+
+int sht30_read_raw(sht30_handle_t *handle, uint16_t *raw_temperature, uint16_t *raw_humidity)
+{
+    uint8_t data[6];
+    int ret;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = sht30_write_cmd(handle, sht30_measure_command(handle));
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    driver_delay_ms(SHT30_MEASURE_DELAY_MS);
+
+    ret = driver_i2c_read(&handle->i2c, data, sizeof(data));
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    if (handle->crc_enabled) {
+        if (sht30_check_crc(&data[0], data[2]) != DRIVER_OK ||
+            sht30_check_crc(&data[3], data[5]) != DRIVER_OK) {
+            LOG_E("sht30", "crc error");
+            return (int)PORT_CRC_ERROR;
+        }
+    }
+
+    if (raw_temperature != NULL) {
+        *raw_temperature = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
+    }
+    if (raw_humidity != NULL) {
+        *raw_humidity = (uint16_t)(((uint16_t)data[3] << 8) | data[4]);
+    }
+    return DRIVER_OK;
+}
+
+int sht30_read(sht30_handle_t *handle, sht30_data_t *data)
+{
+    uint16_t raw_t = 0U;
+    uint16_t raw_h = 0U;
+    int ret;
+
+    if (data == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = sht30_read_raw(handle, &raw_t, &raw_h);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    data->temperature = SHT30_TEMP_OFFSET +
+                        SHT30_TEMP_SCALE * (float)raw_t / SHT30_RAW_MAX;
+    data->humidity = SHT30_HUMIDITY_SCALE * (float)raw_h / SHT30_RAW_MAX;
+    if (data->humidity > 100.0f) {
+        data->humidity = 100.0f;
+    }
+    return DRIVER_OK;
 }

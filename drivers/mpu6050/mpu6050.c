@@ -1,63 +1,243 @@
 #include "mpu6050.h"
+#include "mpu6050_register.h"
 #include "iot_logger.h"
 
-#define MPU6050_ADDR          0x68
-#define MPU6050_REG_WHO_AM_I  0x75
-#define MPU6050_REG_PWR_MGMT  0x6B
-#define MPU6050_REG_SMPLRT    0x19
-#define MPU6050_REG_GYRO_CFG  0x1B
-#define MPU6050_REG_ACCEL_CFG 0x1C
-#define MPU6050_REG_ACCEL_XOUT 0x3B
+static const float s_accel_lsb_per_g[MPU6050_ACCEL_RANGE_COUNT] = {
+    MPU6050_ACCEL_LSB_PER_G_2G,
+    MPU6050_ACCEL_LSB_PER_G_4G,
+    MPU6050_ACCEL_LSB_PER_G_8G,
+    MPU6050_ACCEL_LSB_PER_G_16G
+};
 
-#define MPU6050_WHO_AM_I_VAL  0x68
+static const float s_gyro_lsb_per_dps[MPU6050_GYRO_RANGE_COUNT] = {
+    MPU6050_GYRO_LSB_PER_DPS_250,
+    MPU6050_GYRO_LSB_PER_DPS_500,
+    MPU6050_GYRO_LSB_PER_DPS_1000,
+    MPU6050_GYRO_LSB_PER_DPS_2000
+};
 
-int mpu6050_init(const i2c_bus_t *bus)
+static int mpu6050_write_reg(mpu6050_handle_t *handle, uint8_t reg, uint8_t value)
 {
-    uint8_t id = 0;
-
-    if (bus == NULL) {
-        LOG_E("mpu6050", "bus null");
-        return -1;
+    if (driver_i2c_write_reg(&handle->i2c, reg, &value, 1U) != DRIVER_OK) {
+        LOG_E("mpu6050", "write reg 0x%02X failed", reg);
+        return (int)PORT_IO_ERROR;
     }
-    /* WHO_AM_I 应读回 0x68 */
-    if (i2c_read_reg(bus, MPU6050_ADDR, MPU6050_REG_WHO_AM_I, &id) != 0) {
-        LOG_E("mpu6050", "read WHO_AM_I fail");
-        return -1;
-    }
-    if (id != MPU6050_WHO_AM_I_VAL) {
-        LOG_E("mpu6050", "bad id 0x%02X", id);
-        return -1;
-    }
-    /* 唤醒设备：PWR_MGMT_1 = 0 */
-    i2c_write_reg(bus, MPU6050_ADDR, MPU6050_REG_PWR_MGMT, 0x00);
-    /* 样本率分频 = 7 */
-    i2c_write_reg(bus, MPU6050_ADDR, MPU6050_REG_SMPLRT, 0x07);
-    /* 加速度计满量程 ±2g（FS_SEL=0） */
-    i2c_write_reg(bus, MPU6050_ADDR, MPU6050_REG_ACCEL_CFG, 0x00);
-    /* 陀螺仪满量程 ±250 dps（FS_SEL=0） */
-    i2c_write_reg(bus, MPU6050_ADDR, MPU6050_REG_GYRO_CFG, 0x00);
-
-    LOG_I("mpu6050", "init ok");
-    return 0;
+    return DRIVER_OK;
 }
 
-int mpu6050_read(const i2c_bus_t *bus, int16_t acc[3], int16_t gyro[3])
+static int mpu6050_read_reg(mpu6050_handle_t *handle, uint8_t reg, uint8_t *value)
 {
-    uint8_t d[14];
+    if (driver_i2c_read_reg(&handle->i2c, reg, value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    return DRIVER_OK;
+}
 
-    if (bus == NULL || acc == NULL || gyro == NULL) {
-        return -1;
+/* 写入量程并回读校验，作为写通路自检 */
+static int mpu6050_apply_range(mpu6050_handle_t *handle)
+{
+    uint8_t gyro_cfg = (uint8_t)((uint8_t)handle->gyro_range << MPU6050_GYRO_FS_SHIFT);
+    uint8_t accel_cfg = (uint8_t)((uint8_t)handle->accel_range << MPU6050_ACCEL_FS_SHIFT);
+    uint8_t check = 0U;
+
+    if (mpu6050_write_reg(handle, MPU6050_REG_GYRO_CONFIG, gyro_cfg) != DRIVER_OK ||
+        mpu6050_write_reg(handle, MPU6050_REG_ACCEL_CONFIG, accel_cfg) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
     }
-    if (i2c_read_regs(bus, MPU6050_ADDR, MPU6050_REG_ACCEL_XOUT, d, 14) != 0) {
-        LOG_E("mpu6050", "read fail");
-        return -1;
+    if (mpu6050_read_reg(handle, MPU6050_REG_GYRO_CONFIG, &check) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
     }
-    /* 大端解析：高字节在前。0x3B 起 14 字节为 ax,ay,az,temp,gx,gy,gz */
-    acc[0] = (int16_t)((d[0] << 8) | d[1]);
-    acc[1] = (int16_t)((d[2] << 8) | d[3]);
-    acc[2] = (int16_t)((d[4] << 8) | d[5]);
-    gyro[0] = (int16_t)((d[8] << 8) | d[9]);
-    gyro[1] = (int16_t)((d[10] << 8) | d[11]);
-    gyro[2] = (int16_t)((d[12] << 8) | d[13]);
-    return 0;
+    if ((check & MPU6050_GYRO_FS_MASK) != (gyro_cfg & MPU6050_GYRO_FS_MASK)) {
+        LOG_E("mpu6050", "gyro range readback 0x%02X mismatch", check);
+        return (int)PORT_HW_ERROR;
+    }
+    if (mpu6050_read_reg(handle, MPU6050_REG_ACCEL_CONFIG, &check) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if ((check & MPU6050_ACCEL_FS_MASK) != (accel_cfg & MPU6050_ACCEL_FS_MASK)) {
+        LOG_E("mpu6050", "accel range readback 0x%02X mismatch", check);
+        return (int)PORT_HW_ERROR;
+    }
+
+    handle->accel_lsb_per_g = s_accel_lsb_per_g[handle->accel_range];
+    handle->gyro_lsb_per_dps = s_gyro_lsb_per_dps[handle->gyro_range];
+    return DRIVER_OK;
+}
+
+int mpu6050_set_dlpf(mpu6050_handle_t *handle, mpu6050_dlpf_t dlpf)
+{
+    if (handle == NULL || handle->i2c.handle == NULL ||
+        (unsigned)dlpf > (unsigned)MPU6050_DLPF_BW_5HZ) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (mpu6050_write_reg(handle, MPU6050_REG_CONFIG, (uint8_t)dlpf) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    handle->dlpf = dlpf;
+    return DRIVER_OK;
+}
+
+int mpu6050_set_sample_rate(mpu6050_handle_t *handle, uint16_t rate_hz)
+{
+    uint32_t div;
+
+    if (handle == NULL || handle->i2c.handle == NULL ||
+        rate_hz < 4U || rate_hz > MPU6050_SAMPLE_RATE_BASE_HZ) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    /* DLPF 使能时陀螺仪采样基准为 1kHz：rate = 1kHz / (1 + div) */
+    div = MPU6050_SAMPLE_RATE_BASE_HZ / rate_hz;
+    if (div == 0U) {
+        div = 1U;
+    }
+    div -= 1U;
+    if (div > MPU6050_SMPLRT_DIV_MAX) {
+        div = MPU6050_SMPLRT_DIV_MAX;
+    }
+    return mpu6050_write_reg(handle, MPU6050_REG_SMPLRT_DIV, (uint8_t)div);
+}
+
+int mpu6050_init(mpu6050_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+                 mpu6050_accel_range_t accel_range, mpu6050_gyro_range_t gyro_range)
+{
+    uint8_t id = 0U;
+
+    if (handle == NULL || i2c == NULL ||
+        (unsigned)accel_range >= (unsigned)MPU6050_ACCEL_RANGE_COUNT ||
+        (unsigned)gyro_range >= (unsigned)MPU6050_GYRO_RANGE_COUNT) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : MPU6050_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->accel_range = accel_range;
+    handle->gyro_range = gyro_range;
+    handle->accel_lsb_per_g = s_accel_lsb_per_g[accel_range];
+    handle->gyro_lsb_per_dps = s_gyro_lsb_per_dps[gyro_range];
+    handle->dlpf = MPU6050_DLPF_BW_44HZ;
+    handle->initialized = false;
+
+    /* 软复位，恢复默认配置 */
+    if (mpu6050_write_reg(handle, MPU6050_REG_PWR_MGMT_1, MPU6050_PWR1_DEVICE_RESET) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_ms(MPU6050_RESET_DELAY_MS);
+
+    /* WHO_AM_I 在位校验 */
+    if (mpu6050_read_reg(handle, MPU6050_REG_WHO_AM_I, &id) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if ((id & MPU6050_WHO_AM_I_MASK) != MPU6050_WHO_AM_I_VALUE) {
+        LOG_E("mpu6050", "who_am_i mismatch 0x%02X", id);
+        return (int)PORT_NOT_FOUND;
+    }
+
+    /* 唤醒，时钟源选 X 轴陀螺 PLL（比内部 RC 稳定） */
+    if (mpu6050_write_reg(handle, MPU6050_REG_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_PLL_X) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_ms(MPU6050_WAKE_DELAY_MS);
+
+    if (mpu6050_set_dlpf(handle, MPU6050_DLPF_BW_44HZ) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (mpu6050_apply_range(handle) != DRIVER_OK) {
+        return (int)PORT_HW_ERROR;
+    }
+    if (mpu6050_set_sample_rate(handle, 100U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    /* 使能数据就绪中断，read 前可先 poll INT_STATUS */
+    if (mpu6050_write_reg(handle, MPU6050_REG_INT_ENABLE, MPU6050_INT_DATA_RDY) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->initialized = true;
+    LOG_I("mpu6050", "init ok addr=0x%02X accel_range=%d gyro_range=%d",
+          (int)handle->i2c.address, (int)accel_range, (int)gyro_range);
+    return DRIVER_OK;
+}
+
+int mpu6050_deinit(mpu6050_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)mpu6050_write_reg(handle, MPU6050_REG_PWR_MGMT_1, MPU6050_PWR1_SLEEP);
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
+
+int mpu6050_get_status(mpu6050_handle_t *handle, uint8_t *int_status)
+{
+    if (handle == NULL || int_status == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return mpu6050_read_reg(handle, MPU6050_REG_INT_STATUS, int_status);
+}
+
+int mpu6050_read_raw(mpu6050_handle_t *handle, int16_t accel[3], int16_t gyro[3],
+                     int16_t *temperature_raw)
+{
+    uint8_t d[MPU6050_DATA_BURST_LEN];
+    int16_t temp;
+
+    if (handle == NULL || accel == NULL || gyro == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (driver_i2c_read_reg(&handle->i2c, MPU6050_REG_ACCEL_XOUT_H, d, sizeof(d)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 大端：高字节在前，0x3B 起依次 ax, ay, az, temp, gx, gy, gz */
+    accel[0] = driver_be16(&d[0]);
+    accel[1] = driver_be16(&d[2]);
+    accel[2] = driver_be16(&d[4]);
+    temp = driver_be16(&d[6]);
+    gyro[0] = driver_be16(&d[8]);
+    gyro[1] = driver_be16(&d[10]);
+    gyro[2] = driver_be16(&d[12]);
+
+    /* 全 0 / 全 1 说明总线读回无效数据（器件掉电或悬空） */
+    if ((accel[0] == 0 && accel[1] == 0 && accel[2] == 0 &&
+         gyro[0] == 0 && gyro[1] == 0 && gyro[2] == 0) ||
+        (accel[0] == -1 && accel[1] == -1 && accel[2] == -1)) {
+        LOG_W("mpu6050", "invalid data pattern");
+        return (int)PORT_HW_ERROR;
+    }
+
+    if (temperature_raw != NULL) {
+        *temperature_raw = temp;
+    }
+    return DRIVER_OK;
+}
+
+int mpu6050_read(mpu6050_handle_t *handle, mpu6050_data_t *data)
+{
+    int16_t accel[3];
+    int16_t gyro[3];
+    int16_t temp = 0;
+    int ret;
+
+    if (handle == NULL || data == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = mpu6050_read_raw(handle, accel, gyro, &temp);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    data->accel_g.x = (float)accel[0] / handle->accel_lsb_per_g;
+    data->accel_g.y = (float)accel[1] / handle->accel_lsb_per_g;
+    data->accel_g.z = (float)accel[2] / handle->accel_lsb_per_g;
+    data->gyro_dps.x = (float)gyro[0] / handle->gyro_lsb_per_dps;
+    data->gyro_dps.y = (float)gyro[1] / handle->gyro_lsb_per_dps;
+    data->gyro_dps.z = (float)gyro[2] / handle->gyro_lsb_per_dps;
+    data->temperature_c = (float)temp / MPU6050_TEMP_LSB_PER_DEGC + MPU6050_TEMP_OFFSET_DEGC;
+    return DRIVER_OK;
 }
