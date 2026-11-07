@@ -31,6 +31,7 @@ void ut_datetime(void);
 void ut_endian(void);
 void ut_hex(void);
 void ut_log(void);
+void ut_json(void);
 void ut_shell(void);
 void ut_fsm(void);
 
@@ -136,6 +137,7 @@ int main(void)
     ut_endian();
     ut_hex();
     ut_log();
+    ut_json();
     ut_shell();
     ut_fsm();
 
