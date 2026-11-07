@@ -11,6 +11,7 @@
  */
 
 #include "common/driver_io.h"
+#include "tm1638_register.h"
 
 #ifdef __cplusplus
 extern "C" {

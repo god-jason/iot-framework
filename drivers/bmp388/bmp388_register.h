@@ -42,7 +42,6 @@
 #define BMP388_CONFIG_DEFAULT       0x00U
 
 #define BMP388_RESET_DELAY_MS       3U
-#define BMP388_MEASURE_DELAY_MS     40U
 
 #define BMP388_CALIB_DATA_SIZE      20U
 #define BMP388_DATA_SIZE            6U

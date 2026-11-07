@@ -14,7 +14,7 @@ static boot_jump_fn s_jump = NULL;
 int boot_set_jump(boot_jump_fn jump)
 {
     s_jump = jump;
-    return IOT_OK;
+    return 0;
 }
 
 int boot_init(void)
@@ -23,7 +23,7 @@ int boot_init(void)
     s_upgrade_requested = false;
     s_rollback_requested = false;
     s_app_confirmed = true;
-    return IOT_OK;
+    return 0;
 }
 
 boot_mode_t boot_get_mode(void)
@@ -40,7 +40,7 @@ int boot_select_image(void)
     } else {
         s_mode = BOOT_NORMAL;
     }
-    return IOT_OK;   /* log: boot image selected */
+    return 0;   /* log: boot image selected */
 }
 
 int boot_verify_image(void)
@@ -49,10 +49,10 @@ int boot_verify_image(void)
     uint8_t buf[sizeof(image_header_t)];
 
     /* 读取 OTA 分区头部并校验 */
-    if (partition_read(PART_OTA, 0, buf, sizeof(buf)) != IOT_OK) {
+    if (partition_read(PART_OTA, 0, buf, sizeof(buf)) != 0) {
         return -1;
     }
-    if (image_parse(buf, sizeof(buf), &header) != IOT_OK) {
+    if (image_parse(buf, sizeof(buf), &header) != 0) {
         return -1;
     }
     return image_verify(&header);   /* log: boot image verified */
@@ -74,12 +74,12 @@ int boot_install_image(void)
     /* 分块拷贝 OTA -> APP（真实平台为 Flash 擦写） */
     for (off = 0; off < ota->size; off += sizeof(block)) {
         uint32_t n = (ota->size - off > sizeof(block)) ? sizeof(block) : (ota->size - off);
-        if (partition_read(PART_OTA, off, block, n) != IOT_OK ||
-            partition_write(PART_APP, off, block, n) != IOT_OK) {
+        if (partition_read(PART_OTA, off, block, n) != 0 ||
+            partition_write(PART_APP, off, block, n) != 0) {
             return -1;
         }
     }
-    return IOT_OK;   /* log: boot image installed */
+    return 0;   /* log: boot image installed */
 }
 
 int boot_start_application(void)
@@ -88,19 +88,19 @@ int boot_start_application(void)
         return -1;   /* no platform jump hook */
     }
     s_jump();   /* log: boot jumping to app */
-    return IOT_OK;
+    return 0;
 }
 
 int boot_request_upgrade(void)
 {
     s_upgrade_requested = true;
-    return IOT_OK;
+    return 0;
 }
 
 int boot_request_rollback(void)
 {
     s_rollback_requested = true;
-    return IOT_OK;
+    return 0;
 }
 
 int boot_confirm_application(void)
@@ -108,5 +108,5 @@ int boot_confirm_application(void)
     s_app_confirmed = true;
     s_upgrade_requested = false;
     s_rollback_requested = false;
-    return IOT_OK;
+    return 0;
 }

@@ -1,6 +1,6 @@
 #include "amg8833.h"
 #include "amg8833_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #define AMG8833_TAG "amg8833"
 

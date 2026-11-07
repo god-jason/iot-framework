@@ -1,7 +1,7 @@
 /* iot-os 综合示例：串口控制台日志 + shell 命令 + LED 闪烁 + 传感器读取。
  * host 下 UART1 输出到 stdout 演示；真实 MCU 替换 port_uart_handle_t 即可。 */
-#include "iot_logger.h"
-#include "iot_console.h"
+#include "log.h"
+#include "console.h"
 #include "port.h"
 #include "led.h"
 #include "voltage.h"
@@ -11,20 +11,19 @@
 
 /* ---- shell 命令 ---- */
 static int cmd_hello(int argc, char **argv)
-{ (void)argc; (void)argv; iot_console_puts("hello from iot-os"); return IOT_OK; }
+{ (void)argc; (void)argv; console_puts("hello from iot-os"); return 0; }
 
 int main(void)
 {
     port_uart_handle_t uart;
     port_uart_config_t uart_cfg;
-    iot_console_config_t cfg;
-    iot_shell_command_t cmd;
+    console_config_t cfg;
+    shell_command_t cmd;
     led_t led;
     uint8_t rx[64];
     int i;
 
-    /* 日志 -> 控制台 -> UART1 */
-    iot_log_init();
+    /* 日志宏的 printf 由平台重定向到 UART1 */
     memset(&uart, 0, sizeof(uart));
     memset(&uart_cfg, 0, sizeof(uart_cfg));
     uart.base.instance = (void *)1;   /* USART1 */
@@ -40,14 +39,14 @@ int main(void)
     cfg.uart = &uart;
     cfg.rx_buffer = rx;
     cfg.rx_buffer_size = sizeof(rx);
-    iot_console_init(&cfg);
-    iot_console_start();   /* log: console ready */
+    console_init(&cfg);
+    console_start();   /* log: console ready */
 
     /* 注册命令 */
     cmd.name = "hello";
     cmd.description = "say hello";
     cmd.callback = cmd_hello;
-    iot_shell_register(&cmd);
+    shell_register(&cmd);
 
     /* LED 闪烁 */
     led_init(&led, 0, 1);
@@ -55,10 +54,10 @@ int main(void)
     for (i = 0; i < 5; i++) {
         led_toggle(&led);
         LOG_I("demo", "tick %d", i);   /* blink tick */
-        iot_console_process();
+        console_process();
     }
 
-    iot_shell_execute("hello");
+    shell_execute("hello");
 
     printf("\ndemo finished\n");
     return 0;

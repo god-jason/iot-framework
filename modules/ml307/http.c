@@ -115,7 +115,7 @@ int http_parse_url(const char *url, char *host, uint32_t host_size,
         memcpy(path, path_start, len);
         path[len] = '\0';
     }
-    return IOT_OK;
+    return 0;
 }
 
 /* 在缓冲中查找 "\r\n\r\n"，返回其结束位置，未找到返回 -1 */
@@ -170,7 +170,7 @@ int http_execute(const http_transport_t *transport,
     memset(response, 0, sizeof(*response));
 
     if (http_parse_url(request->url, host, sizeof(host), &port,
-                       path, sizeof(path)) != IOT_OK) {
+                       path, sizeof(path)) != 0) {
         return -1;
     }
 
@@ -276,5 +276,5 @@ int http_execute(const http_transport_t *transport,
         response->body = &s_body[header_end];
         response->body_len = have;
     }
-    return IOT_OK;
+    return 0;
 }

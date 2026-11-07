@@ -1,6 +1,6 @@
 #include "bmp180.h"
 #include "bmp180_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 压力转换时间，下标为 oss（0..3） */
 static const uint32_t bmp180_press_delay_ms[BMP180_OSS_COUNT] = { 5U, 8U, 14U, 26U };

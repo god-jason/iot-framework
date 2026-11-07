@@ -1,164 +1,275 @@
 #include "bme280.h"
-#include "iot_logger.h"
+#include "bme280_register.h"
+#include "log.h"
 
-#define BME280_ADDR      0x76
-#define BME280_CHIP_ID   0x60
-
-#define BME280_REG_ID    0xD0   /* chip id */
-#define BME280_REG_CTRL  0xF4   /* 温压测量控制 */
-#define BME280_REG_HUM   0xF2   /* 湿度测量控制 */
-#define BME280_REG_CAL   0x88   /* 温压校准系数起始，24 字节 */
-#define BME280_REG_HCAL  0xA1   /* 湿度校准系数段（0xA1 及 0xE1-0xE7） */
-#define BME280_REG_DATA  0xF7   /* 压力 3 字节 + 温度 3 字节 + 湿度 2 字节 */
-
-/* 温压校准系数（与 BMP280 相同布局） */
-static uint16_t bme280_t1, bme280_p1;
-static int16_t  bme280_t2, bme280_t3;
-static int16_t  bme280_p2, bme280_p3, bme280_p4, bme280_p5;
-static int16_t  bme280_p6, bme280_p7, bme280_p8, bme280_p9;
-
-/* 湿度校准系数 */
-static uint8_t  bme280_h1, bme280_h3;
-static int16_t  bme280_h2, bme280_h4, bme280_h5;
-static int8_t   bme280_h6;
-
-static int      bme280_calib = 0;
-static int32_t  bme280_t_fine = 0;
-
-int bme280_init(const i2c_bus_t *bus)
+/* 12 位补码符号扩展（H4 / H5 在寄存器中只占 12 位） */
+static int16_t bme280_sign12(uint16_t value)
 {
-    uint8_t cal[24];
-    uint8_t h[8];
-    uint8_t chip = 0;
-
-    if (bus == NULL) {
-        return -1;
+    if ((value & BME280_SIGN12_MASK) != 0U) {
+        return (int16_t)(value | BME280_SIGN12_EXT);
     }
-    if (i2c_read_reg(bus, BME280_ADDR, BME280_REG_ID, &chip) != 0 ||
-        chip != BME280_CHIP_ID) {
-        LOG_E("bme280", "chip id fail 0x%02x", chip);
-        return -1;
-    }
-    /* 温度 x1 + 压力 x1 + normal 模式 */
-    if (i2c_write_reg(bus, BME280_ADDR, BME280_REG_CTRL, 0x27) != 0) {
-        LOG_E("bme280", "ctrl write fail");
-        return -1;
-    }
-    /* 湿度过采样 x1 */
-    if (i2c_write_reg(bus, BME280_ADDR, BME280_REG_HUM, 0x01) != 0) {
-        LOG_E("bme280", "hum ctrl write fail");
-        return -1;
-    }
-
-    if (i2c_read_regs(bus, BME280_ADDR, BME280_REG_CAL, cal, 24) != 0) {
-        LOG_E("bme280", "cal read fail");
-        return -1;
-    }
-    bme280_t1 = (uint16_t)(cal[0] | (cal[1] << 8));
-    bme280_t2 = (int16_t)(cal[2] | (cal[3] << 8));
-    bme280_t3 = (int16_t)(cal[4] | (cal[5] << 8));
-    bme280_p1 = (uint16_t)(cal[6] | (cal[7] << 8));
-    bme280_p2 = (int16_t)(cal[8] | (cal[9] << 8));
-    bme280_p3 = (int16_t)(cal[10] | (cal[11] << 8));
-    bme280_p4 = (int16_t)(cal[12] | (cal[13] << 8));
-    bme280_p5 = (int16_t)(cal[14] | (cal[15] << 8));
-    bme280_p6 = (int16_t)(cal[16] | (cal[17] << 8));
-    bme280_p7 = (int16_t)(cal[18] | (cal[19] << 8));
-    bme280_p8 = (int16_t)(cal[20] | (cal[21] << 8));
-    bme280_p9 = (int16_t)(cal[22] | (cal[23] << 8));
-
-    /* 湿度校准：0xA1(1B) 与 0xE1-0xE7(7B)，分开读取 */
-    if (i2c_read_reg(bus, BME280_ADDR, BME280_REG_HCAL, &h[0]) != 0) {
-        LOG_E("bme280", "hum cal h1 fail");
-        return -1;
-    }
-    if (i2c_read_regs(bus, BME280_ADDR, 0xE1, &h[1], 7) != 0) {
-        LOG_E("bme280", "hum cal h2-h6 fail");
-        return -1;
-    }
-    bme280_h1 = h[0];
-    bme280_h2 = (int16_t)(h[1] | (h[2] << 8));
-    bme280_h3 = h[3];
-    bme280_h4 = (int16_t)((h[4] << 4) | (h[5] & 0x0F));
-    bme280_h5 = (int16_t)((h[6] << 4) | (h[5] >> 4));
-    bme280_h6 = (int8_t)h[7];
-
-    bme280_calib = 1;
-    LOG_I("bme280", "init ok");
-    return 0;
+    return (int16_t)value;
 }
 
-static int32_t bme280_compensate_temp(int32_t adc_t)
+static int bme280_read_calib(bme280_handle_t *handle)
 {
-    int32_t v1, v2;
+    uint8_t tp[BME280_CALIB_DATA_SIZE];
+    uint8_t h[BME280_CALIB_HUM_SIZE];
+    bme280_calib_t *c = &handle->calib;
 
-    v1 = ((((adc_t >> 3) - ((int32_t)bme280_t1 << 1))) * (int32_t)bme280_t2) >> 11;
-    v2 = (((((adc_t >> 4) - (int32_t)bme280_t1) *
-            ((adc_t >> 4) - (int32_t)bme280_t1)) >> 12) * (int32_t)bme280_t3) >> 14;
-    bme280_t_fine = v1 + v2;
-    return (bme280_t_fine * 5 + 128) >> 8;
+    if (driver_i2c_read_reg(&handle->i2c, BME280_REG_CALIB_00, tp, sizeof(tp)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (driver_i2c_read_reg(&handle->i2c, BME280_REG_CALIB_HUM, h, sizeof(h)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 0x88..0xA1：T1(u16) T2(i16) T3(i16) P1(u16) P2..P9(i16)，小端 */
+    c->t1 = (uint16_t)driver_le16(&tp[0]);
+    c->t2 = driver_le16(&tp[2]);
+    c->t3 = driver_le16(&tp[4]);
+    c->p1 = (uint16_t)driver_le16(&tp[6]);
+    c->p2 = driver_le16(&tp[8]);
+    c->p3 = driver_le16(&tp[10]);
+    c->p4 = driver_le16(&tp[12]);
+    c->p5 = driver_le16(&tp[14]);
+    c->p6 = driver_le16(&tp[16]);
+    c->p7 = driver_le16(&tp[18]);
+    c->p8 = driver_le16(&tp[20]);
+    c->p9 = driver_le16(&tp[22]);
+    c->h1 = tp[24];
+
+    /* 0xE1..0xE7：H2(12 位) H3(u8) H4(12 位) H5(12 位) H6(i8) */
+    c->h2 = bme280_sign12((uint16_t)(((uint16_t)h[0] << 4) | ((uint16_t)h[1] >> 4)));
+    c->h3 = h[2];
+    c->h4 = bme280_sign12((uint16_t)(((uint16_t)h[3] << 4) | ((uint16_t)h[4] & 0x0FU)));
+    c->h5 = bme280_sign12((uint16_t)(((uint16_t)h[5] << 4) | ((uint16_t)h[4] >> 4)));
+    c->h6 = (int8_t)h[6];
+
+    return DRIVER_OK;
 }
 
-static uint32_t bme280_compensate_press(int32_t adc_p)
+/* 温度补偿：返回 0.01 ℃，同时保存 t_fine */
+static int32_t bme280_compensate_temperature(bme280_handle_t *handle, int32_t adc_t)
 {
-    int64_t v1, v2, p;
+    const bme280_calib_t *c = &handle->calib;
+    int32_t var1;
+    int32_t var2;
+    int32_t t1 = (int32_t)c->t1;
+    int32_t t2 = (int32_t)c->t2;
+    int32_t t3 = (int32_t)c->t3;
 
-    v1 = (int64_t)bme280_t_fine - 128000;
-    v2 = v1 * v1 * (int64_t)bme280_p6;
-    v2 = v2 + ((v1 * (int64_t)bme280_p5) << 17);
-    v2 = v2 + (((int64_t)bme280_p4) << 35);
-    v1 = ((v1 * v1 * (int64_t)bme280_p3) >> 8) + ((v1 * (int64_t)bme280_p2) << 12);
-    v1 = (((((int64_t)1) << 47) + v1) * (int64_t)bme280_p1) >> 33;
+    var1 = ((((adc_t >> 3) - (t1 << 1))) * t2) >> 11;
+    var2 = (((((adc_t >> 4) - t1) * ((adc_t >> 4) - t1)) >> 12) * t3) >> 14;
+    handle->t_fine = var1 + var2;
+
+    return (handle->t_fine * 5 + 128) >> 8;
+}
+
+/* 压力补偿：返回 Pa，0 表示补偿失败 */
+static uint32_t bme280_compensate_pressure(bme280_handle_t *handle, int32_t adc_p)
+{
+    const bme280_calib_t *c = &handle->calib;
+    int32_t v1;
+    int32_t v2;
+    int64_t p;
+    int64_t fine;
+
+    v1 = ((int32_t)handle->t_fine >> 1) - 64000;
+    v2 = (((v1 >> 2) * (v1 >> 2)) >> 11) * (int32_t)c->p6;
+    v2 = v2 + ((v1 * (int32_t)c->p5) << 1);
+    v2 = (v2 >> 2) + (((int32_t)c->p4) << 16);
+    v1 = ((((int32_t)c->p3 * (((v1 >> 2) * (v1 >> 2)) >> 13)) >> 3) +
+          ((((int32_t)c->p2) * v1) >> 1)) >> 18;
+    v1 = (int32_t)((((int64_t)32768 + (int64_t)v1) * (int64_t)c->p1) >> 15);
     if (v1 == 0) {
-        return 0;
+        return 0U;
     }
-    p = 1048576 - adc_p;
-    p = (((p << 31) - v2) * 3125) / v1;
-    v1 = (((int64_t)bme280_p9) * (p >> 13) * (p >> 13)) >> 25;
-    v2 = (((int64_t)bme280_p8) * p) >> 19;
-    p = ((p + v1 + v2) >> 8) + (((int64_t)bme280_p7) << 4);
+
+    /* 一阶结果：p = ((2^20 - adc_p) - var2/2^12) * 6250 / var1，单位 Pa */
+    p = (((int64_t)1048576 - (int64_t)adc_p) - ((int64_t)v2 >> 12));
+    if (p <= 0) {
+        return 0U;
+    }
+    p = (p * 6250) / (int64_t)v1;
+
+    /* 二阶修正：p9*p^2/2^31 + p8*p/2^15 + p7，整体再除以 16 */
+    fine = ((int64_t)c->p9 * p * p) / 2147483648LL;
+    fine += ((int64_t)c->p8 * p) / 32768LL;
+    fine += (int64_t)c->p7;
+    p = p + (fine / 16);
+
+    if (p <= 0) {
+        return 0U;
+    }
     return (uint32_t)p;
 }
 
-/* 湿度补偿，返回 %RH 的 1024 倍 */
-static uint32_t bme280_compensate_hum(int32_t adc_h)
+/* 湿度补偿：datasheet 双精度参考算法，返回 %RH */
+static double bme280_compensate_humidity(bme280_handle_t *handle, int32_t adc_h)
 {
-    int32_t v;
+    const bme280_calib_t *c = &handle->calib;
+    double var_h;
 
-    v = bme280_t_fine - (int32_t)76800;
-    v = (((((int32_t)adc_h << 14) - ((int32_t)bme280_h4 << 20) -
-           ((int32_t)bme280_h5 * v)) + (int32_t)16384) >> 15) *
-        (((((((v * (int32_t)bme280_h6) >> 10) *
-             (((v * (int32_t)bme280_h3) >> 11) + (int32_t)32768)) >> 10) +
-           (int32_t)2097152) * (int32_t)bme280_h2 + 8192) >> 14);
-    v = v - (((((v >> 15) * (v >> 15)) >> 7) * (int32_t)bme280_h1) >> 4);
-    if (v < 0) {
-        v = 0;
+    var_h = (double)handle->t_fine - 76800.0;
+    var_h = ((double)adc_h - ((double)c->h4 * 64.0 + (double)c->h5 / 16384.0 * var_h)) *
+            ((double)c->h2 / 65536.0 *
+             (1.0 + (double)c->h6 / 67108864.0 * var_h *
+              (1.0 + (double)c->h3 / 67108864.0 * var_h)));
+    var_h = var_h * (1.0 - (double)c->h1 * var_h / 524288.0);
+
+    if (var_h > 100.0) {
+        var_h = 100.0;
+    } else if (var_h < 0.0) {
+        var_h = 0.0;
     }
-    if (v > 419430400) {
-        v = 419430400;
-    }
-    return (uint32_t)(v >> 12);
+    return var_h;
 }
 
-int bme280_read(const i2c_bus_t *bus, float *temp, float *pressure, float *humidity)
+int bme280_init(bme280_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 {
-    uint8_t d[8];
-    int32_t adc_p, adc_t, adc_h;
+    uint8_t chip_id = 0U;
+    uint8_t value;
 
-    if (bus == NULL || temp == NULL || pressure == NULL || humidity == NULL ||
-        bme280_calib == 0) {
-        return -1;
+    if (handle == NULL || i2c == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    if (i2c_read_regs(bus, BME280_ADDR, BME280_REG_DATA, d, 8) != 0) {
-        return -1;
+
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : BME280_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->t_fine = 0;
+    handle->initialized = false;
+
+    if (bme280_get_chip_id(handle, &chip_id) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
     }
+    if (chip_id != BME280_CHIP_ID) {
+        LOG_E("bme280", "chip id mismatch: 0x%02X", chip_id);
+        return (int)PORT_NOT_FOUND;
+    }
+
+    value = BME280_RESET_VALUE;
+    (void)driver_i2c_write_reg(&handle->i2c, BME280_REG_RESET, &value, 1U);
+    driver_delay_ms(BME280_RESET_DELAY_MS);
+
+    if (bme280_read_calib(handle) != DRIVER_OK) {
+        LOG_E("bme280", "read calibration failed");
+        return (int)PORT_IO_ERROR;
+    }
+    if (handle->calib.t1 == 0U || handle->calib.p1 == 0U) {
+        LOG_E("bme280", "invalid calibration data");
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    /* ctrl_hum 必须先写，再写 ctrl_meas 才生效 */
+    value = BME280_CTRL_HUM_DEFAULT;
+    if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_HUM, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    value = BME280_CONFIG_DEFAULT;
+    if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CONFIG, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    value = BME280_CTRL_MEAS_DEFAULT;
+    if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->initialized = true;
+    LOG_I("bme280", "init ok at 0x%02X", handle->i2c.address);
+    return DRIVER_OK;
+}
+
+int bme280_deinit(bme280_handle_t *handle)
+{
+    uint8_t value = BME280_MODE_SLEEP;
+
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->i2c.handle != NULL) {
+        (void)driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U);
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
+
+int bme280_get_chip_id(bme280_handle_t *handle, uint8_t *chip_id)
+{
+    if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return driver_i2c_read_reg(&handle->i2c, BME280_REG_CHIP_ID, chip_id, 1U);
+}
+
+int bme280_read_raw(bme280_handle_t *handle, int32_t *raw_temperature,
+                    int32_t *raw_pressure, int32_t *raw_humidity)
+{
+    uint8_t d[BME280_DATA_SIZE];
+    int32_t adc_p;
+    int32_t adc_t;
+    int32_t adc_h;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (raw_temperature == NULL && raw_pressure == NULL && raw_humidity == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    if (driver_i2c_read_reg(&handle->i2c, BME280_REG_DATA, d, sizeof(d)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
     adc_p = ((int32_t)d[0] << 12) | ((int32_t)d[1] << 4) | ((int32_t)d[2] >> 4);
     adc_t = ((int32_t)d[3] << 12) | ((int32_t)d[4] << 4) | ((int32_t)d[5] >> 4);
     adc_h = ((int32_t)d[6] << 8) | (int32_t)d[7];
 
-    *temp = (float)bme280_compensate_temp(adc_t) / 100.0f;
-    *pressure = (float)bme280_compensate_press(adc_p);
-    *humidity = (float)bme280_compensate_hum(adc_h) / 1024.0f;
-    return 0;
+    if (raw_pressure != NULL) {
+        *raw_pressure = adc_p;
+    }
+    if (raw_temperature != NULL) {
+        *raw_temperature = adc_t;
+    }
+    if (raw_humidity != NULL) {
+        *raw_humidity = adc_h;
+    }
+    return DRIVER_OK;
+}
+
+int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
+{
+    int32_t adc_t = 0;
+    int32_t adc_p = 0;
+    int32_t adc_h = 0;
+    int32_t temp01;
+    uint32_t pressure;
+    double humidity;
+    int ret;
+
+    if (handle == NULL || data == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = bme280_read_raw(handle, &adc_t, &adc_p, &adc_h);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    /* 温度先算（得到 t_fine），压力与湿度都依赖它 */
+    temp01 = bme280_compensate_temperature(handle, adc_t);
+    pressure = bme280_compensate_pressure(handle, adc_p);
+    humidity = bme280_compensate_humidity(handle, adc_h);
+
+    if (pressure < BME280_PRESSURE_MIN_PA || pressure > BME280_PRESSURE_MAX_PA) {
+        LOG_W("bme280", "pressure out of range: %lu Pa", (unsigned long)pressure);
+        return (int)PORT_ERROR;
+    }
+
+    data->temperature = (float)temp01 / 100.0f;
+    data->pressure = (float)pressure;
+    data->humidity = (float)humidity;
+    return DRIVER_OK;
 }

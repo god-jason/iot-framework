@@ -29,7 +29,7 @@ int partition_register(const partition_t *partition)
         return -1;
     }
     s_parts[s_part_count++] = *partition;
-    return IOT_OK;
+    return 0;
 }
 
 const partition_t *partition_get(partition_type_t type)
@@ -49,7 +49,7 @@ int partition_read(partition_type_t type, uint32_t offset,
         return -1;
     }
     memcpy(buffer, &s_flash[p->address + offset], len);
-    return IOT_OK;
+    return 0;
 }
 
 int partition_write(partition_type_t type, uint32_t offset,
@@ -67,7 +67,7 @@ int partition_write(partition_type_t type, uint32_t offset,
         return -1;
     }
     memcpy(&s_flash[p->address + offset], buffer, len);
-    return IOT_OK;
+    return 0;
 }
 
 int partition_erase(partition_type_t type, uint32_t offset, uint32_t len)
@@ -81,5 +81,5 @@ int partition_erase(partition_type_t type, uint32_t offset, uint32_t len)
         return -1;
     }
     memset(&s_flash[p->address + offset], 0xFF, len);
-    return IOT_OK;
+    return 0;
 }

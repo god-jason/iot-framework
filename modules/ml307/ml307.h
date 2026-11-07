@@ -7,7 +7,9 @@
  * MQTT / HTTP 原语见 ml307_mqtt.h / ml307_http.h。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include "at.h"
 
 #ifdef __cplusplus
@@ -48,6 +50,14 @@ typedef struct {
     uint8_t auth_type;
 } pdp_config_t;
 
+/* WiFi 扫描到的一个热点 */
+typedef struct {
+    char ssid[33];      /* 热点名称 */
+    char bssid[18];     /* MAC 地址，形如 aa:bb:cc:dd:ee:ff */
+    int16_t rssi;       /* 信号强度（dBm） */
+    uint8_t channel;    /* 信道号 */
+} ml307_wifi_ap_t;
+
 int ml307_init(const at_config_t *config);
 int ml307_start(void);
 int ml307_stop(void);
@@ -59,6 +69,27 @@ int ml307_get_iccid(char *buffer, uint32_t size);
 int ml307_get_imsi(char *buffer, uint32_t size);
 
 int ml307_get_signal(ml307_info_t *info);
+
+/*
+ * 获取 CSQ 原始信号质量。
+ * 参数：csq - 0..31（99 表示未知）；ber - 误码率 0..99，可为 NULL。
+ * 返回：0 成功；-1 AT 失败或响应格式错误。
+ */
+int ml307_get_csq(int16_t *csq, int16_t *ber);
+
+/*
+ * 设置 PDP APN。
+ * 参数：apn - 接入点名称；username/password - 可选鉴权信息（可为 NULL）。
+ * 返回：0 成功；-1 参数非法（含引号或超长）或 AT 执行失败。
+ */
+int ml307_set_apn(const char *apn, const char *username, const char *password);
+
+/*
+ * 获取周边 WiFi 列表（需模组固件支持 AT+WIFISCAN）。
+ * 参数：aps - 输出数组；max_count - 数组容量；count - 返回实际条数。
+ * 返回：0 成功；-1 参数非法或 AT 执行失败。
+ */
+int ml307_get_wifi_list(ml307_wifi_ap_t *aps, uint8_t max_count, uint8_t *count);
 
 ml307_state_t ml307_get_state(void);
 

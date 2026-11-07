@@ -1,5 +1,5 @@
 #include "ws2812b.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #define WS2812B_BYTES_PER_LED       3U
 #define WS2812B_SPI_BYTES_PER_LED   9U

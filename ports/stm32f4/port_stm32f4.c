@@ -5098,75 +5098,6 @@ static port_status_t f4_platform_get_info(port_mcu_info_t *info)
     return PORT_OK;
 }
 
-static port_status_t f4_os_mutex_create(port_mutex_t *mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_NOT_SUPPORTED;
-}
-
-static port_status_t f4_os_mutex_delete(port_mutex_t mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_NOT_SUPPORTED;
-}
-
-static port_status_t f4_os_mutex_lock(port_mutex_t mutex, uint32_t timeout)
-{
-    PORT_UNUSED(mutex);
-    PORT_UNUSED(timeout);
-    return PORT_NOT_SUPPORTED;
-}
-
-static port_status_t f4_os_mutex_unlock(port_mutex_t mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_NOT_SUPPORTED;
-}
-
-static port_status_t f4_os_semaphore_create(port_semaphore_t *sem,
-                                            uint32_t max_count,
-                                            uint32_t initial_count)
-{
-    PORT_UNUSED(sem);
-    PORT_UNUSED(max_count);
-    PORT_UNUSED(initial_count);
-    return PORT_NOT_SUPPORTED;
-}
-
-static port_status_t f4_os_semaphore_wait(port_semaphore_t sem,
-                                          uint32_t timeout)
-{
-    PORT_UNUSED(sem);
-    PORT_UNUSED(timeout);
-    return PORT_NOT_SUPPORTED;
-}
-
-static port_status_t f4_os_semaphore_post(port_semaphore_t sem)
-{
-    PORT_UNUSED(sem);
-    return PORT_NOT_SUPPORTED;
-}
-
-static uint32_t f4_os_tick_get(void)
-{
-    return HAL_GetTick();
-}
-
-static void f4_os_delay_ms(uint32_t ms)
-{
-    HAL_Delay(ms);
-}
-
-static void f4_os_critical_enter(void)
-{
-    __disable_irq();
-}
-
-static void f4_os_critical_exit(void)
-{
-    __enable_irq();
-}
-
 static const port_platform_ops_t s_f4_platform_ops = {
     .name = "stm32f4",
     .family = PORT_MCU_STM32F4,
@@ -5175,30 +5106,7 @@ static const port_platform_ops_t s_f4_platform_ops = {
     .get_info = f4_platform_get_info,
 };
 
-static const port_os_ops_t s_f4_os_ops = {
-    .mutex_create = f4_os_mutex_create,
-    .mutex_delete = f4_os_mutex_delete,
-    .mutex_lock = f4_os_mutex_lock,
-    .mutex_unlock = f4_os_mutex_unlock,
-    .semaphore_create = f4_os_semaphore_create,
-    .semaphore_wait = f4_os_semaphore_wait,
-    .semaphore_post = f4_os_semaphore_post,
-    .tick_get = f4_os_tick_get,
-    .delay_ms = f4_os_delay_ms,
-    .critical_enter = f4_os_critical_enter,
-    .critical_exit = f4_os_critical_exit,
-};
-
 port_status_t port_platform_install(void)
 {
-    port_status_t status;
-
-    if (port_platform_get() == NULL) {
-        status = port_platform_register(&s_f4_platform_ops);
-        if (status != PORT_OK) {
-            return status;
-        }
-    }
-
-    return port_os_register(&s_f4_os_ops);
+    return port_platform_register(&s_f4_platform_ops);
 }

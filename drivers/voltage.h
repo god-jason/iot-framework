@@ -5,7 +5,9 @@
  * 电压传感器：ADC 采样 -> 均值滤波 -> 换算电压(mV)。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include "filter.h"
 
 #ifdef __cplusplus

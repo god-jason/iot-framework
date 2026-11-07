@@ -1,37 +1,77 @@
 #include "pms5003.h"
-#include "iot_logger.h"
+#include "pms5003_register.h"
+#include "log.h"
 
-#define PMS5003_HEAD0  0x42   /* 帧头第一字节 */
-#define PMS5003_HEAD1  0x4D   /* 帧头第二字节 */
-#define PMS5003_FRAME  32     /* 完整帧长度 */
-#define PMS5003_CHK    30     /* 校验和偏移：帧末 2 字节，等于前 30 字节累加 */
-
-int pms_parse(const uint8_t *frame, uint16_t len,
-                  uint16_t *pm1, uint16_t *pm25, uint16_t *pm10)
+static uint16_t pms5003_u16(const uint8_t *p)
 {
-    uint16_t sum = 0;
-    uint16_t chk;
-    int i;
+    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+}
 
-    if (frame == NULL || pm1 == NULL || pm25 == NULL || pm10 == NULL ||
-        len < PMS5003_FRAME) {
-        return -1;
+int pms5003_init(pms5003_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    if (frame[0] != PMS5003_HEAD0 || frame[1] != PMS5003_HEAD1) {
+    handle->initialized = true;
+    LOG_I("pms5003", "init ok");
+    return DRIVER_OK;
+}
+
+int pms5003_deinit(pms5003_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int pms5003_parse(pms5003_handle_t *handle, const uint8_t *buffer, size_t length,
+                  pms5003_data_t *data)
+{
+    uint16_t sum = 0U;
+    uint16_t frame_len;
+    uint16_t checksum;
+    size_t i;
+
+    if (handle == NULL || !handle->initialized || buffer == NULL || data == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (length < PMS5003_FRAME_LEN) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (buffer[0] != PMS5003_HEAD0 || buffer[1] != PMS5003_HEAD1) {
         LOG_D("pms5003", "bad header");
-        return -1;
+        return (int)PORT_CRC_ERROR;
     }
-    for (i = 0; i < PMS5003_CHK; i++) {
-        sum = (uint16_t)(sum + frame[i]);
+
+    frame_len = pms5003_u16(&buffer[2]);
+    if (frame_len != PMS5003_PAYLOAD_LEN) {
+        LOG_D("pms5003", "unexpected length %u", (unsigned)frame_len);
+        return (int)PORT_INVALID_PARAM;
     }
-    chk = (uint16_t)((frame[PMS5003_CHK] << 8) | frame[PMS5003_CHK + 1]);
-    if (sum != chk) {
-        LOG_D("pms5003", "bad checksum");
-        return -1;
+
+    for (i = 0U; i < PMS5003_CHECKSUM_INDEX; i++) {
+        sum = (uint16_t)(sum + buffer[i]);
     }
-    /* PM1.0 / PM2.5 / PM10 均为大端 16 位。 */
-    *pm1  = (uint16_t)((frame[10] << 8) | frame[11]);
-    *pm25 = (uint16_t)((frame[12] << 8) | frame[13]);
-    *pm10 = (uint16_t)((frame[14] << 8) | frame[15]);
-    return 0;
+    checksum = pms5003_u16(&buffer[PMS5003_CHECKSUM_INDEX]);
+    if (sum != checksum) {
+        LOG_D("pms5003", "checksum mismatch: %u != %u", (unsigned)sum, (unsigned)checksum);
+        return (int)PORT_CRC_ERROR;
+    }
+
+    data->pm1_atm = pms5003_u16(&buffer[PMS5003_OFF_PM1_ATM]);
+    data->pm25_atm = pms5003_u16(&buffer[PMS5003_OFF_PM25_ATM]);
+    data->pm10_atm = pms5003_u16(&buffer[PMS5003_OFF_PM10_ATM]);
+    data->pm1_cf1 = pms5003_u16(&buffer[PMS5003_OFF_PM1_CF1]);
+    data->pm25_cf1 = pms5003_u16(&buffer[PMS5003_OFF_PM25_CF1]);
+    data->pm10_cf1 = pms5003_u16(&buffer[PMS5003_OFF_PM10_CF1]);
+    data->nc_03 = pms5003_u16(&buffer[PMS5003_OFF_NC_03]);
+    data->nc_05 = pms5003_u16(&buffer[PMS5003_OFF_NC_05]);
+    data->nc_10 = pms5003_u16(&buffer[PMS5003_OFF_NC_10]);
+    data->nc_25 = pms5003_u16(&buffer[PMS5003_OFF_NC_25]);
+    data->nc_50 = pms5003_u16(&buffer[PMS5003_OFF_NC_50]);
+    data->nc_100 = pms5003_u16(&buffer[PMS5003_OFF_NC_100]);
+    data->version = pms5003_u16(&buffer[PMS5003_OFF_VERSION]);
+    return DRIVER_OK;
 }

@@ -21,13 +21,13 @@ int ml307_mqtt_connect(const char *host, uint16_t port,
              user ? user : "",
              pass ? pass : "");
 
-    return (at_exec(cmd, 30000) == AT_RESULT_OK) ? IOT_OK : -1;
+    return (at_exec(cmd, 30000) == AT_RESULT_OK) ? 0 : -1;
 }
 
 int ml307_mqtt_disconnect(void)
 {
     return (at_exec("AT+MQTTDISC=0", 3000) == AT_RESULT_OK)
-           ? IOT_OK : -1;
+           ? 0 : -1;
 }
 
 int ml307_mqtt_subscribe(const char *topic, uint8_t qos)
@@ -38,7 +38,7 @@ int ml307_mqtt_subscribe(const char *topic, uint8_t qos)
         return -1;
     }
     snprintf(cmd, sizeof(cmd), "AT+MQTTSUB=0,\"%s\",%u", topic, (unsigned)qos);
-    return (at_exec(cmd, 5000) == AT_RESULT_OK) ? IOT_OK : -1;
+    return (at_exec(cmd, 5000) == AT_RESULT_OK) ? 0 : -1;
 }
 
 int ml307_mqtt_unsubscribe(const char *topic)
@@ -49,7 +49,7 @@ int ml307_mqtt_unsubscribe(const char *topic)
         return -1;
     }
     snprintf(cmd, sizeof(cmd), "AT+MQTTUNSUB=0,\"%s\"", topic);
-    return (at_exec(cmd, 5000) == AT_RESULT_OK) ? IOT_OK : -1;
+    return (at_exec(cmd, 5000) == AT_RESULT_OK) ? 0 : -1;
 }
 
 int ml307_mqtt_publish(const char *topic,
@@ -89,5 +89,5 @@ int ml307_mqtt_publish(const char *topic,
     if (at_transact(&phase) != AT_RESULT_OK) {
         return -1;
     }
-    return IOT_OK;
+    return 0;
 }

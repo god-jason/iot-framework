@@ -1,6 +1,6 @@
 #include "max7219.h"
 #include "max7219_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int max7219_send_frame(max7219_handle_t *handle, const uint8_t *frame, size_t len)
 {

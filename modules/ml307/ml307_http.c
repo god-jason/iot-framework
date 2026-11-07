@@ -28,7 +28,7 @@ static int http_read(const char **resp, uint32_t *resp_len)
     if (resp_len != NULL) {
         *resp_len = (uint32_t)strlen(s_http_resp);
     }
-    return IOT_OK;
+    return 0;
 }
 
 int ml307_http_get(const char *url, const char **resp, uint32_t *resp_len)

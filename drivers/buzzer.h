@@ -5,7 +5,9 @@
  * 蜂鸣器驱动（GPIO 高电平触发，或 PWM 做音量）。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

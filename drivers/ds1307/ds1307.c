@@ -1,6 +1,6 @@
 #include "ds1307.h"
 #include "ds1307_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static uint8_t ds1307_bin_to_bcd(uint8_t value)
 {

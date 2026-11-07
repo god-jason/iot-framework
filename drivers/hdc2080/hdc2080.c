@@ -1,6 +1,6 @@
 #include "hdc2080.h"
 #include "hdc2080_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int hdc2080_read_le16(hdc2080_handle_t *handle, uint8_t reg_lsb, uint16_t *value)
 {

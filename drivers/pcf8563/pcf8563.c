@@ -1,6 +1,6 @@
 #include "pcf8563.h"
 #include "pcf8563_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static uint8_t pcf8563_bin_to_bcd(uint8_t value)
 {

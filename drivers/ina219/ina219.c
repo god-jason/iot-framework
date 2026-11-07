@@ -1,6 +1,6 @@
 #include "ina219.h"
 #include "ina219_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int ina219_read_reg16(ina219_handle_t *handle, uint8_t reg, uint16_t *value)
 {

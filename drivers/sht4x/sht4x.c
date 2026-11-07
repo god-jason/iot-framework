@@ -1,6 +1,6 @@
 #include "sht4x.h"
 #include "sht4x_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int sht4x_crc_ok(const uint8_t *data, uint8_t crc)
 {

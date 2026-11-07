@@ -1,6 +1,6 @@
 #include "mpu6050.h"
 #include "mpu6050_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static const float s_accel_lsb_per_g[MPU6050_ACCEL_RANGE_COUNT] = {
     MPU6050_ACCEL_LSB_PER_G_2G,

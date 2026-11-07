@@ -7,7 +7,9 @@
  * 本文件仅定义统一接口，供 Bootloader 工程实现，APP 侧调用 request/confirm。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

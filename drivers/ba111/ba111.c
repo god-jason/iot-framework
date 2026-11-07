@@ -1,6 +1,6 @@
 #include "ba111.h"
 #include "ba111_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int ba111_init(ba111_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 {

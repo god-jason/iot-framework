@@ -1,6 +1,6 @@
 #include "mq2.h"
 #include "mq2_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 电压 -> Rs：Rs = RL * (Vc - Vout) / Vout */
 static float mq2_rs_from_mv(uint16_t adc_mv, uint16_t vc_mv, uint16_t rl_ohm)

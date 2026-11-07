@@ -1,6 +1,6 @@
 #include "lm75b.h"
 #include "lm75b_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 温度码 -> 摄氏度：右侧 5 位为小数（已左对齐），高 11 位为有符号整数 */
 static float lm75b_decode(uint16_t raw)

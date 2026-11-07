@@ -1,6 +1,6 @@
 #include "buzzer.h"
 #include "port.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int buzzer_init(buzzer_t *buzzer, uint8_t pin, uint8_t active_level)
 {

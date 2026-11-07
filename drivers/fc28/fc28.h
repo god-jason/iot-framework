@@ -1,16 +1,70 @@
 #ifndef FC28_H
 #define FC28_H
 
-/* FC-28 土壤湿度传感器（YL-69 同类，模拟输出），返回原始电压。 */
-#include <stdint.h>
-#include "bus/adc.h"
+/*
+ * FC-28 土壤湿度传感器驱动（模拟量输入，输出湿度百分比）。
+ *
+ * 参考 libdriver 设计：
+ *   fc28_init / fc28_deinit / fc28_read / fc28_read_raw
+ *
+ * 旧实现只回传原始电压（mV），且没有 init 之外的任何状态；新实现把
+ * ADC 句柄、通道与干/湿标定端点放进句柄，read 直接给 0~100%。
+ *
+ * 硬件访问：直接调用 port_adc_*，不包含 bus 目录头文件，不依赖任何 HAL。
+ *
+ * 用法：
+ *   fc28_handle_t fc28;
+ *   fc28_init(&fc28, &adc1, 3);
+ *   float percent;
+ *   fc28_read(&fc28, &percent);
+ *
+ * 注意：电阻式探头长期通电会电解腐蚀，建议只在采样时供电。
+ */
+
+#include "common/driver_io.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int fc28_init(const adc_bus_t *bus);
-int fc28_read(const adc_bus_t *bus, uint16_t *raw);
+typedef struct {
+    port_adc_handle_t *adc;      /* 已初始化的 ADC 句柄 */
+    uint8_t channel;             /* ADC 通道号 */
+    float vref_mv;               /* ADC 参考电压 mV */
+    uint32_t adc_max;            /* ADC 满量程码值 */
+    float dry_mv;                /* 干燥端电压 mV（标定参数） */
+    float wet_mv;                /* 饱和端电压 mV（标定参数） */
+    bool initialized;
+} fc28_handle_t;
+
+/**
+ * @brief  初始化驱动并配置 ADC 通道
+ * @param  adc      已初始化的 ADC 句柄（不可为 NULL）
+ * @param  channel  ADC 通道号
+ * @return 0 成功；PORT_INVALID_PARAM 参数非法；PORT_IO_ERROR 通道配置失败
+ */
+int fc28_init(fc28_handle_t *handle, port_adc_handle_t *adc, uint8_t channel);
+
+/** @brief 反初始化（不关闭 ADC） */
+int fc28_deinit(fc28_handle_t *handle);
+
+/**
+ * @brief  读取土壤湿度
+ * @param  percent  相对湿度 0~100%
+ * @return 0 成功；PORT_NOT_READY 未初始化；PORT_IO_ERROR ADC 读取失败
+ */
+int fc28_read(fc28_handle_t *handle, float *percent);
+
+/** @brief 读取 ADC 原始码值 */
+int fc28_read_raw(fc28_handle_t *handle, uint32_t *raw);
+
+/**
+ * @brief  写入干/湿标定端点（mV），dry_mv 必须大于 wet_mv
+ */
+int fc28_set_calibration(fc28_handle_t *handle, float dry_mv, float wet_mv);
+
+/** @brief 覆盖 ADC 参考电压与满量程码值 */
+int fc28_set_reference(fc28_handle_t *handle, float vref_mv, uint32_t adc_max);
 
 #ifdef __cplusplus
 }

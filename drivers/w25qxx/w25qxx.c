@@ -1,6 +1,6 @@
 #include "w25qxx.h"
 #include "w25qxx_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int w25qxx_send_cmd_addr(w25qxx_handle_t *handle, uint8_t cmd, uint32_t address)
 {

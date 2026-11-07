@@ -1,10 +1,19 @@
 #include "cs1237.h"
 #include "cs1237_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static void cs1237_sclk(cs1237_handle_t *handle, port_gpio_level_t level)
 {
     (void)driver_gpio_write(handle->sclk, level);
+}
+
+/* 一个完整的 SCLK 时钟脉冲 */
+static void cs1237_pulse(cs1237_handle_t *handle)
+{
+    cs1237_sclk(handle, PORT_GPIO_HIGH);
+    driver_delay_us(CS1237_SCLK_HIGH_US);
+    cs1237_sclk(handle, PORT_GPIO_LOW);
+    driver_delay_us(CS1237_SCLK_LOW_US);
 }
 
 static int cs1237_wait_ready(cs1237_handle_t *handle, uint32_t timeout_ms)
@@ -32,7 +41,6 @@ int cs1237_init(cs1237_handle_t *handle, port_pin_t sclk, port_pin_t dout)
     if (handle == NULL || sclk == 0U || dout == 0U || sclk == dout) {
         return (int)PORT_INVALID_PARAM;
     }
-
     handle->sclk = sclk;
     handle->dout = dout;
     handle->gain = CS1237_GAIN_1;
@@ -41,14 +49,12 @@ int cs1237_init(cs1237_handle_t *handle, port_pin_t sclk, port_pin_t dout)
     handle->scale = CS1237_DEFAULT_SCALE;
     handle->initialized = false;
 
-    if (driver_gpio_output(sclk, PORT_GPIO_LOW) != DRIVER_OK) {
+    if (driver_gpio_output(sclk, PORT_GPIO_LOW) != DRIVER_OK ||
+        driver_gpio_input(dout, PORT_GPIO_PULLUP) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
-    if (driver_gpio_input(dout, PORT_GPIO_PULLUP) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-
     driver_delay_ms(CS1237_POWER_ON_MS);
+
     handle->initialized = true;
     LOG_I("cs1237", "init ok: sclk=%u dout=%u",
           (unsigned)PORT_PIN_GET_INDEX(sclk), (unsigned)PORT_PIN_GET_INDEX(dout));
@@ -92,7 +98,6 @@ int cs1237_read_raw(cs1237_handle_t *handle, int32_t *raw)
     if (handle == NULL || raw == NULL || !handle->initialized) {
         return (int)PORT_INVALID_PARAM;
     }
-
     ret = cs1237_wait_ready(handle, CS1237_READY_TIMEOUT_MS);
     if (ret != DRIVER_OK) {
         return ret;
@@ -114,7 +119,6 @@ int cs1237_read_raw(cs1237_handle_t *handle, int32_t *raw)
         driver_delay_us(CS1237_SCLK_LOW_US);
     }
 
-    /* 24 位补码扩展为 int32 */
     if ((value & CS1237_DATA_SIGN_BIT) != 0U) {
         value |= CS1237_DATA_SIGN_EXT;
     }
@@ -130,7 +134,6 @@ int cs1237_read_average(cs1237_handle_t *handle, uint8_t times, int32_t *raw)
     if (handle == NULL || raw == NULL || !handle->initialized || times == 0U) {
         return (int)PORT_INVALID_PARAM;
     }
-
     for (i = 0U; i < times; i++) {
         int32_t value = 0;
         int ret = cs1237_read_raw(handle, &value);
@@ -162,13 +165,8 @@ int cs1237_set_rate(cs1237_handle_t *handle, cs1237_rate_t rate)
     return DRIVER_OK;
 }
 
-/*
- * 配置帧：先发 24 个时钟把当前数据读走（内容丢弃），
- * 再送出 4 位配置（增益 2 位 + 速率 2 位），最后 1 个时钟锁存。
- *
- * 需按 datasheet 补充：CS1237 配置寄存器的实际时钟数量、位序与锁存时序
- * 各版本 datasheet 描述不同，使用前请对照所用型号的时序图核对。
- */
+/* 配置帧：24 个时钟读走当前数据后，DOUT 反转为输出，送 4 位配置并锁存。
+ * 需按 datasheet 补充：配置帧时钟数量、位序与锁存时刻各版本描述不一致。 */
 int cs1237_write_config(cs1237_handle_t *handle)
 {
     uint8_t config;
@@ -177,26 +175,27 @@ int cs1237_write_config(cs1237_handle_t *handle)
     if (handle == NULL || !handle->initialized) {
         return (int)PORT_INVALID_PARAM;
     }
-
     config = (uint8_t)(((uint8_t)handle->gain << CS1237_CFG_GAIN_SHIFT) |
                        ((uint8_t)handle->rate << CS1237_CFG_RATE_SHIFT));
 
     for (i = 0U; i < CS1237_DATA_BITS; i++) {
-        cs1237_sclk(handle, PORT_GPIO_HIGH);
-        driver_delay_us(CS1237_SCLK_HIGH_US);
-        cs1237_sclk(handle, PORT_GPIO_LOW);
-        driver_delay_us(CS1237_SCLK_LOW_US);
+        cs1237_pulse(handle);
+    }
+    if (driver_gpio_output(handle->dout, PORT_GPIO_LOW) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
     }
 
-    /* 4 位配置，高位先出 */
     for (i = 0U; i < 4U; i++) {
-        cs1237_sclk(handle, PORT_GPIO_HIGH);
-        driver_delay_us(CS1237_SCLK_HIGH_US);
-        cs1237_sclk(handle, PORT_GPIO_LOW);
-        driver_delay_us(CS1237_SCLK_LOW_US);
-    }
-    DRIVER_UNUSED(config);
+        uint8_t bit = (uint8_t)((config >> (3U - i)) & 0x01U);
 
+        (void)driver_gpio_write(handle->dout,
+                               (bit != 0U) ? PORT_GPIO_HIGH : PORT_GPIO_LOW);
+        cs1237_pulse(handle);
+    }
+    (void)driver_gpio_write(handle->dout, PORT_GPIO_LOW);
+    cs1237_pulse(handle);
+
+    (void)driver_gpio_input(handle->dout, PORT_GPIO_PULLUP);
     return DRIVER_OK;
 }
 
@@ -226,7 +225,6 @@ int cs1237_tare(cs1237_handle_t *handle, uint8_t times)
     if (handle == NULL || !handle->initialized || times == 0U) {
         return (int)PORT_INVALID_PARAM;
     }
-
     ret = cs1237_read_average(handle, times, &raw);
     if (ret != DRIVER_OK) {
         return ret;
@@ -243,7 +241,6 @@ int cs1237_read(cs1237_handle_t *handle, float *weight)
     if (handle == NULL || weight == NULL || !handle->initialized) {
         return (int)PORT_INVALID_PARAM;
     }
-
     ret = cs1237_read_raw(handle, &raw);
     if (ret != DRIVER_OK) {
         return ret;

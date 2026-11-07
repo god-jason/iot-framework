@@ -1,6 +1,6 @@
 #include "ssd1309.h"
 #include "ssd1309_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 单次 I2C 传输携带的数据字节数（另加 1 字节控制字节） */
 #define SSD1309_I2C_CHUNK 16U

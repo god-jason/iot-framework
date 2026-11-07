@@ -1,6 +1,6 @@
 #include "tsl2561.h"
 #include "tsl2561_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #include <math.h>
 

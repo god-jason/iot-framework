@@ -1,70 +1,199 @@
-/*
- * HC-SR04 超声波测距模块驱动。
- * 引脚：TRIG 触发（推挽输出）、ECHO 回响（输入）。
- * 测量原理：TRIG 拉高 10us 触发一次测距，模块在 ECHO 上输出
- * 与距离成正比的高电平；声速 340m/s，声波往返双程，
- * distance_cm = 高电平时间(us) / 58。
- *
- * 说明：本驱动用 GPIO 轮询 + 微秒延时近似测量高电平时长，
- * 实际应用建议改用硬件定时器输入捕获或中断计时，精度更高。
- */
 #include "hc_sr04.h"
-#include "iot_logger.h"
-#include <stddef.h>
+#include "log.h"
 
-#define HC_SR04_TRIG_US       10u    /* 触发脉冲宽度 */
-#define HC_SR04_ECHO_TIMEOUT  30000u /* 等待与测量超时（us） */
+#define HC_SR04_TAG "hc_sr04"
 
-int ultrasonic_init(gpio_bus_t *bus, uint8_t trig, uint8_t echo)
+static int hc_sr04_check(const hc_sr04_handle_t *handle)
 {
-    if (bus == NULL) {
-        LOG_E("hc_sr04", "bus null");
-        return -1;
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    (void)echo;
-    gpio_set(bus, trig, 0);
-    LOG_I("hc_sr04", "init ok");
-    return 0;
+    return DRIVER_OK;
 }
 
-int ultrasonic_measure(gpio_bus_t *bus, uint8_t trig, uint8_t echo, float *distance)
+/* 等待 ECHO 到达指定电平，超时返回 PORT_TIMEOUT；等待期间按 1us 递增计时 */
+static int hc_sr04_wait_level(const hc_sr04_handle_t *handle, int level,
+                             uint32_t timeout_us, uint32_t *waited_us)
 {
-    uint32_t us_count = 0;
-    uint32_t wait = 0;
+    uint32_t waited = 0U;
 
-    if (bus == NULL || distance == NULL) {
-        LOG_E("hc_sr04", "bad arg");
-        return -1;
+    for (;;) {
+        int value = driver_gpio_read(handle->echo);
+
+        if (value < 0) {
+            return (int)PORT_IO_ERROR;
+        }
+        if (value == level) {
+            if (waited_us != NULL) {
+                *waited_us = waited;
+            }
+            return DRIVER_OK;
+        }
+        if (waited >= timeout_us) {
+            return (int)PORT_TIMEOUT;
+        }
+        driver_delay_us(1U);
+        waited++;
+    }
+}
+
+int hc_sr04_init(hc_sr04_handle_t *handle, port_pin_t trig, port_pin_t echo)
+{
+    if (handle == NULL || trig == 0U || echo == 0U || trig == echo) {
+        return (int)PORT_INVALID_PARAM;
     }
 
-    /* 确保 TRIG 空闲为低 */
-    gpio_set(bus, trig, 0);
-    gpio_udelay(bus, 2);
+    handle->trig = trig;
+    handle->echo = echo;
+    handle->timeout_us = HC_SR04_TIMEOUT_DEFAULT_US;
+    handle->initialized = false;
 
-    /* 发送触发脉冲：拉高 10us 后拉低 */
-    gpio_set(bus, trig, 1);
-    gpio_udelay(bus, HC_SR04_TRIG_US);
-    gpio_set(bus, trig, 0);
+    if (driver_gpio_output(trig, PORT_GPIO_LOW) != DRIVER_OK) {
+        LOG_E(HC_SR04_TAG, "trig gpio init failed");
+        return (int)PORT_IO_ERROR;
+    }
+    if (driver_gpio_input(echo, PORT_GPIO_PULLDOWN) != DRIVER_OK) {
+        LOG_E(HC_SR04_TAG, "echo gpio init failed");
+        return (int)PORT_IO_ERROR;
+    }
 
-    /* 等待 ECHO 上升沿 */
-    while (gpio_get(bus, echo) == 0) {
-        if (++wait > HC_SR04_ECHO_TIMEOUT) {
-            LOG_E("hc_sr04", "echo no rising edge");
-            return -2;
-        }
-        gpio_udelay(bus, 1);
+    handle->initialized = true;
+    LOG_I(HC_SR04_TAG, "init ok");
+    return DRIVER_OK;
+}
+
+int hc_sr04_deinit(hc_sr04_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->trig != 0U) {
+        (void)driver_gpio_write(handle->trig, PORT_GPIO_LOW);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int hc_sr04_set_timeout(hc_sr04_handle_t *handle, uint32_t timeout_us)
+{
+    int ret = hc_sr04_check(handle);
+
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    if (timeout_us < 100U) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->timeout_us = timeout_us;
+    return DRIVER_OK;
+}
+
+int hc_sr04_read_us(hc_sr04_handle_t *handle, uint32_t *echo_us)
+{
+    uint32_t high_us = 0U;
+    int ret;
+
+    if (echo_us == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = hc_sr04_check(handle);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    /* 上一次回响未结束，直接返回忙 */
+    ret = driver_gpio_read(handle->echo);
+    if (ret < 0) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (ret != 0) {
+        return (int)PORT_BUSY;
+    }
+
+    /* 触发脉冲 */
+    if (driver_gpio_write(handle->trig, PORT_GPIO_LOW) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_us(HC_SR04_TRIG_IDLE_US);
+    if (driver_gpio_write(handle->trig, PORT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_us(HC_SR04_TRIG_PULSE_US);
+    if (driver_gpio_write(handle->trig, PORT_GPIO_LOW) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 等待回响上升沿 */
+    ret = hc_sr04_wait_level(handle, 1, handle->timeout_us, NULL);
+    if (ret != DRIVER_OK) {
+        LOG_D(HC_SR04_TAG, "no rising edge");
+        return ret;
     }
 
     /* 测量高电平持续时间 */
-    while (gpio_get(bus, echo) != 0) {
-        gpio_udelay(bus, 1);
-        if (++us_count > HC_SR04_ECHO_TIMEOUT) {
-            LOG_E("hc_sr04", "echo timeout");
-            break;
-        }
+    ret = hc_sr04_wait_level(handle, 0, handle->timeout_us, &high_us);
+    if (ret != DRIVER_OK) {
+        LOG_W(HC_SR04_TAG, "echo stuck high");
+        return ret;
     }
 
-    /* distance_cm = us / 58（声速 340m/s 往返，1cm 约 58us） */
-    *distance = (float)us_count / 58.0f;
-    return 0;
+    *echo_us = high_us;
+    return DRIVER_OK;
+}
+
+int hc_sr04_read(hc_sr04_handle_t *handle, float *distance_cm)
+{
+    uint32_t echo_us = 0U;
+    int ret;
+
+    if (distance_cm == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = hc_sr04_read_us(handle, &echo_us);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    *distance_cm = (float)echo_us / HC_SR04_US_PER_CM;
+    if (*distance_cm > HC_SR04_MAX_RANGE_CM) {
+        return (int)PORT_OVERFLOW;
+    }
+    return DRIVER_OK;
+}
+
+int hc_sr04_read_average(hc_sr04_handle_t *handle, uint8_t samples, float *distance_cm)
+{
+    float sum = 0.0f;
+    uint8_t valid = 0U;
+    uint8_t i;
+    int ret;
+
+    if (distance_cm == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = hc_sr04_check(handle);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    if (samples == 0U || samples > HC_SR04_AVG_MAX_SAMPLES) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    for (i = 0U; i < samples; i++) {
+        float value = 0.0f;
+
+        if (hc_sr04_read(handle, &value) == DRIVER_OK) {
+            sum += value;
+            valid++;
+        }
+        /* 相邻测量的回响余波需要间隔（datasheet 建议 >60ms） */
+        driver_delay_ms(60U);
+    }
+
+    if (valid == 0U) {
+        return (int)PORT_TIMEOUT;
+    }
+    *distance_cm = sum / (float)valid;
+    return DRIVER_OK;
 }

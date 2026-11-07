@@ -169,7 +169,7 @@ int mqtt_client_init(mqtt_client_t *client, const mqtt_transport_t *transport,
     client->on_message = on_message;
     client->user = user;
     client->next_packet_id = 1;
-    return IOT_OK;
+    return 0;
 }
 
 static uint32_t mqtt_now(const mqtt_client_t *c)
@@ -228,7 +228,7 @@ int mqtt_client_connect(mqtt_client_t *client)
     }
     client->connected = true;
     client->last_io_ms = mqtt_now(client);
-    return IOT_OK;
+    return 0;
 }
 
 int mqtt_client_disconnect(mqtt_client_t *client)
@@ -238,7 +238,7 @@ int mqtt_client_disconnect(mqtt_client_t *client)
         client->transport.write(client->transport.ctx, pkt, 2);
     }
     client->connected = false;
-    return IOT_OK;
+    return 0;
 }
 
 int mqtt_client_subscribe(mqtt_client_t *client, const char *topic, uint8_t qos)
@@ -271,7 +271,7 @@ int mqtt_client_subscribe(mqtt_client_t *client, const char *topic, uint8_t qos)
         return -1;
     }
     client->last_io_ms = mqtt_now(client);
-    return IOT_OK;
+    return 0;
 }
 
 int mqtt_client_unsubscribe(mqtt_client_t *client, const char *topic)
@@ -303,7 +303,7 @@ int mqtt_client_unsubscribe(mqtt_client_t *client, const char *topic)
         return -1;
     }
     client->last_io_ms = mqtt_now(client);
-    return IOT_OK;
+    return 0;
 }
 
 int mqtt_client_publish(mqtt_client_t *client, const mqtt_message_t *message)
@@ -348,7 +348,7 @@ int mqtt_client_publish(mqtt_client_t *client, const mqtt_message_t *message)
         }
     }
     client->last_io_ms = mqtt_now(client);
-    return IOT_OK;
+    return 0;
 }
 
 int mqtt_client_process(mqtt_client_t *client)
@@ -357,7 +357,7 @@ int mqtt_client_process(mqtt_client_t *client)
     uint32_t plen;
 
     if (!client->connected) {
-        return IOT_OK;
+        return 0;
     }
 
     /* 泵取并分发到达的完整报文（超时 0，无数据即返回） */
@@ -374,7 +374,7 @@ int mqtt_client_process(mqtt_client_t *client)
             client->last_io_ms = now;
         }
     }
-    return IOT_OK;
+    return 0;
 }
 
 bool mqtt_client_is_connected(const mqtt_client_t *client)

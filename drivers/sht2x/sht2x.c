@@ -1,6 +1,6 @@
 #include "sht2x.h"
 #include "sht2x_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int sht2x_measure(sht2x_handle_t *handle, uint8_t command,
                          uint32_t delay_ms, uint16_t *raw)

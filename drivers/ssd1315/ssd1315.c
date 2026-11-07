@@ -1,6 +1,6 @@
 #include "ssd1315.h"
 #include "ssd1315_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #define SSD1315_I2C_CHUNK 16U
 

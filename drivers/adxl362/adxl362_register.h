@@ -1,0 +1,92 @@
+#ifndef ADXL362_REGISTER_H
+#define ADXL362_REGISTER_H
+
+/* ADXL362 低功耗三轴加速度计寄存器与常量（SPI 接口） */
+
+#define ADXL362_REG_DEVID_AD        0x00U
+#define ADXL362_REG_DEVID_MST       0x01U
+#define ADXL362_REG_PARTID          0x02U
+#define ADXL362_REG_REVID           0x03U
+#define ADXL362_REG_XDATA           0x04U
+#define ADXL362_REG_YDATA           0x05U
+#define ADXL362_REG_ZDATA           0x06U
+#define ADXL362_REG_STATUS          0x07U
+#define ADXL362_REG_FIFO_ENTRIES_L  0x08U
+#define ADXL362_REG_FIFO_ENTRIES_H  0x09U
+#define ADXL362_REG_XDATA_L         0x0AU
+#define ADXL362_REG_XDATA_H         0x0BU
+#define ADXL362_REG_YDATA_L         0x0CU
+#define ADXL362_REG_YDATA_H         0x0DU
+#define ADXL362_REG_ZDATA_L         0x0EU
+#define ADXL362_REG_ZDATA_H         0x0FU
+#define ADXL362_REG_TEMP_L          0x10U
+#define ADXL362_REG_TEMP_H          0x11U
+#define ADXL362_REG_THRESH_ACT_L    0x14U
+#define ADXL362_REG_THRESH_ACT_H    0x15U
+#define ADXL362_REG_TIME_ACT_L      0x16U
+#define ADXL362_REG_THRESH_INACT_L  0x18U
+#define ADXL362_REG_TIME_INACT_L    0x1AU
+#define ADXL362_REG_ACT_INACT_CTL   0x1CU
+#define ADXL362_REG_FIFO_CONTROL    0x1DU
+#define ADXL362_REG_FIFO_SAMPLES    0x1EU
+#define ADXL362_REG_INTMAP1         0x1FU
+#define ADXL362_REG_INTMAP2         0x20U
+#define ADXL362_REG_FILTER_CTL      0x21U
+#define ADXL362_REG_POWER_CTL       0x22U
+#define ADXL362_REG_SELF_TEST       0x23U
+#define ADXL362_REG_SOFT_RESET      0x28U
+
+/* 身份寄存器值：ADXL362 无 WHO_AM_I，用 DEVID_AD/DEVID_MST/PARTID 校验 */
+#define ADXL362_DEVID_AD_VALUE      0xADU
+#define ADXL362_DEVID_MST_VALUE     0x1DU
+#define ADXL362_PARTID_VALUE        0xF2U
+#define ADXL362_ID_LEN              3U
+
+/* SPI 命令 */
+#define ADXL362_CMD_READ            0x0AU
+#define ADXL362_CMD_WRITE           0x0BU
+
+/* SOFT_RESET 写入值 */
+#define ADXL362_RESET_VALUE         0x52U
+
+/* STATUS 位 */
+#define ADXL362_STATUS_DATA_RDY     0x01U
+#define ADXL362_STATUS_INACT        0x02U
+#define ADXL362_STATUS_ACT          0x04U
+#define ADXL362_STATUS_OVR          0x08U
+#define ADXL362_STATUS_IN_INACT     0x10U
+#define ADXL362_STATUS_IN_ACT       0x20U
+#define ADXL362_STATUS_AWAKE        0x40U
+#define ADXL362_STATUS_ERR_USER_REGS 0x80U
+
+/* FILTER_CTL：量程位 [7:6]，输出率位 [3:0] */
+#define ADXL362_FILTER_RANGE_SHIFT  6U
+#define ADXL362_FILTER_RANGE_MASK   0xC0U
+#define ADXL362_FILTER_ODR_MASK     0x0FU
+
+#define ADXL362_FILTER_RANGE_2G     0x00U
+#define ADXL362_FILTER_RANGE_4G     0x01U
+#define ADXL362_FILTER_RANGE_8G     0x02U
+
+#define ADXL362_FILTER_ODR_12HZ5    0x01U
+#define ADXL362_FILTER_ODR_25HZ     0x02U
+#define ADXL362_FILTER_ODR_50HZ     0x03U
+#define ADXL362_FILTER_ODR_100HZ    0x04U
+#define ADXL362_FILTER_ODR_200HZ    0x05U
+#define ADXL362_FILTER_ODR_400HZ    0x06U
+
+/* POWER_CTL：bit1 MEASURE 进入测量模式 */
+#define ADXL362_POWER_MEASURE       0x02U
+#define ADXL362_POWER_STANDBY       0x00U
+
+/* 灵敏度：三种量程均为 1 mg/LSB（12 位输出） */
+#define ADXL362_G_PER_LSB           0.001f
+/* 温度：12 位有符号，0.065 °C/LSB，0 对应 0 °C（精度 ±0.5 °C） */
+#define ADXL362_DEGC_PER_LSB        0.065f
+
+/* 延时与突发长度 */
+#define ADXL362_RESET_DELAY_MS      10U
+#define ADXL362_START_DELAY_MS      5U
+#define ADXL362_BURST_MAX           8U
+
+#endif /* ADXL362_REGISTER_H */

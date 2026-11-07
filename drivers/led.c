@@ -1,6 +1,6 @@
 #include "led.h"
 #include "port.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int led_init(led_t *led, uint8_t pin, uint8_t active_level)
 {

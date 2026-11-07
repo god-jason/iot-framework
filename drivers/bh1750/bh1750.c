@@ -1,6 +1,6 @@
 #include "bh1750.h"
 #include "bh1750_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static uint8_t bh1750_mode_command(bh1750_mode_t mode)
 {

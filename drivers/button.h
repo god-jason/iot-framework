@@ -5,7 +5,9 @@
  * 按键（GPIO 输入 + 软件去抖）。支持按下/释放沿与长按检测。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

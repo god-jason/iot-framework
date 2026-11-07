@@ -1,6 +1,6 @@
 #include "st7789.h"
 #include "st7789_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int st7789_send(st7789_handle_t *handle, bool is_data,
                        const uint8_t *data, size_t len)
@@ -18,39 +18,45 @@ static int st7789_send(st7789_handle_t *handle, bool is_data,
     return ret;
 }
 
-static int st7789_write_cmd_byte(st7789_handle_t *handle, uint8_t cmd)
+static int st7789_cmd(st7789_handle_t *handle, uint8_t cmd)
 {
     return st7789_send(handle, false, &cmd, 1U);
+}
+
+static int st7789_cmd_arg(st7789_handle_t *handle, uint8_t cmd,
+                          const uint8_t *arg, size_t len)
+{
+    if (st7789_cmd(handle, cmd) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (st7789_send(handle, true, arg, len) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    return DRIVER_OK;
 }
 
 static int st7789_set_window(st7789_handle_t *handle, uint16_t x0, uint16_t y0,
                              uint16_t x1, uint16_t y1)
 {
-    uint8_t cmd[4];
     uint16_t xs = (uint16_t)(x0 + handle->config.x_offset);
     uint16_t xe = (uint16_t)(x1 + handle->config.x_offset);
     uint16_t ys = (uint16_t)(y0 + handle->config.y_offset);
     uint16_t ye = (uint16_t)(y1 + handle->config.y_offset);
+    uint8_t buf[4];
 
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_CASET) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-    cmd[0] = (uint8_t)(xs >> 8);
-    cmd[1] = (uint8_t)(xs & 0xFFU);
-    cmd[2] = (uint8_t)(xe >> 8);
-    cmd[3] = (uint8_t)(xe & 0xFFU);
-    if (st7789_send(handle, true, cmd, sizeof(cmd)) != DRIVER_OK) {
+    buf[0] = (uint8_t)(xs >> 8);
+    buf[1] = (uint8_t)(xs & 0xFFU);
+    buf[2] = (uint8_t)(xe >> 8);
+    buf[3] = (uint8_t)(xe & 0xFFU);
+    if (st7789_cmd_arg(handle, ST7789_CMD_CASET, buf, sizeof(buf)) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
 
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_RASET) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-    cmd[0] = (uint8_t)(ys >> 8);
-    cmd[1] = (uint8_t)(ys & 0xFFU);
-    cmd[2] = (uint8_t)(ye >> 8);
-    cmd[3] = (uint8_t)(ye & 0xFFU);
-    if (st7789_send(handle, true, cmd, sizeof(cmd)) != DRIVER_OK) {
+    buf[0] = (uint8_t)(ys >> 8);
+    buf[1] = (uint8_t)(ys & 0xFFU);
+    buf[2] = (uint8_t)(ye >> 8);
+    buf[3] = (uint8_t)(ye & 0xFFU);
+    if (st7789_cmd_arg(handle, ST7789_CMD_RASET, buf, sizeof(buf)) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     return DRIVER_OK;
@@ -68,7 +74,7 @@ static int st7789_push(st7789_handle_t *handle)
                           (uint16_t)(handle->height - 1U)) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_RAMWR) != DRIVER_OK) {
+    if (st7789_cmd(handle, ST7789_CMD_RAMWR) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
 
@@ -101,19 +107,23 @@ static void st7789_gram_fill(st7789_handle_t *handle, uint16_t color)
 
 int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
 {
-    /* 通用初始化序列，PORCTRL / GAMMA 参数需按面板调整 */
-    static const uint8_t porctrl[] = { 0x0CU, 0x0CU, 0x00U, 0x33U, 0x33U };
-    static const uint8_t pwctrl1[] = { 0xA4U, 0xA1U };
-    static const uint8_t pgamma[] = {
-        0xD0U, 0x08U, 0x11U, 0x08U, 0x0CU, 0x15U, 0x39U,
-        0x33U, 0x50U, 0x36U, 0x13U, 0x14U, 0x29U, 0x2DU
+    /* 通用初始化序列，PORCTRL / GAMMA / VCOM 参数需按面板调整 */
+    static const uint8_t single_regs[][2] = {
+        { ST7789_CMD_GCTRL,    0x35U },
+        { ST7789_CMD_VCOMS,    0x19U },
+        { ST7789_CMD_LCMCTRL,  0x2CU },
+        { ST7789_CMD_VDVVRHEN, 0x01U },
+        { ST7789_CMD_VRHS,     0x12U },
+        { ST7789_CMD_VDVS,     0x20U },
+        { ST7789_CMD_FRCTRL2,  0x0FU }
     };
-    static const uint8_t ngamma[] = {
-        0xD0U, 0x08U, 0x10U, 0x08U, 0x06U, 0x06U, 0x39U,
-        0x44U, 0x51U, 0x0BU, 0x16U, 0x14U, 0x2FU, 0x31U
-    };
-    uint8_t madctl;
+    static const uint8_t porctrl[] = ST7789_PORCTRL_INIT;
+    static const uint8_t pwctrl1[] = ST7789_PWCTRL1_INIT;
+    static const uint8_t pgamma[] = ST7789_PGAMMA_INIT;
+    static const uint8_t ngamma[] = ST7789_NGAMMA_INIT;
     uint8_t colmod = ST7789_COLMOD_RGB565;
+    uint8_t madctl = 0x00U;
+    size_t i;
 
     if (handle == NULL || config == NULL || config->gram == NULL) {
         return (int)PORT_INVALID_PARAM;
@@ -136,10 +146,8 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
     if (driver_gpio_output(config->dc, PORT_GPIO_LOW) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
-    if (config->bl != 0U) {
-        if (driver_gpio_output(config->bl, PORT_GPIO_HIGH) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
-        }
+    if (config->bl != 0U && driver_gpio_output(config->bl, PORT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
     }
     if (config->res != 0U) {
         (void)driver_gpio_output(config->res, PORT_GPIO_LOW);
@@ -148,17 +156,15 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
         driver_delay_ms(ST7789_RESET_WAIT_MS);
     }
 
-    /* SWRESET -> SLPOUT */
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_SWRESET) != DRIVER_OK) {
+    if (st7789_cmd(handle, ST7789_CMD_SWRESET) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     driver_delay_ms(ST7789_RESET_WAIT_MS);
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_SLPOUT) != DRIVER_OK) {
+    if (st7789_cmd(handle, ST7789_CMD_SLPOUT) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     driver_delay_ms(ST7789_SLPOUT_MS);
 
-    madctl = 0x00U;
     if (config->mirror_x) {
         madctl |= ST7789_MADCTL_MX;
     }
@@ -169,60 +175,25 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
         madctl |= ST7789_MADCTL_BGR;
     }
 
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_COLMOD) != DRIVER_OK ||
-        st7789_send(handle, true, &colmod, 1U) != DRIVER_OK ||
-        st7789_write_cmd_byte(handle, ST7789_CMD_MADCTL) != DRIVER_OK ||
-        st7789_send(handle, true, &madctl, 1U) != DRIVER_OK) {
+    if (st7789_cmd_arg(handle, ST7789_CMD_COLMOD, &colmod, 1U) != DRIVER_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_MADCTL, &madctl, 1U) != DRIVER_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_PORCTRL, porctrl, sizeof(porctrl)) != DRIVER_OK) {
+        LOG_E("st7789", "init sequence failed");
         return (int)PORT_IO_ERROR;
     }
 
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_PORCTRL) != DRIVER_OK ||
-        st7789_send(handle, true, porctrl, sizeof(porctrl)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-
-    {
-        uint8_t v = 0x35U;      /* GCTRL */
-        uint8_t vcoms = 0x19U;
-        uint8_t lcm = 0x2CU;
-        uint8_t vdvvrhen = 0x01U;
-        uint8_t vrhs = 0x12U;
-        uint8_t vdvs = 0x20U;
-        uint8_t frctrl = 0x0FU;
-
-        if (st7789_write_cmd_byte(handle, ST7789_CMD_GCTRL) != DRIVER_OK ||
-            st7789_send(handle, true, &v, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_VCOMS) != DRIVER_OK ||
-            st7789_send(handle, true, &vcoms, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_LCMCTRL) != DRIVER_OK ||
-            st7789_send(handle, true, &lcm, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_VDVVRHEN) != DRIVER_OK ||
-            st7789_send(handle, true, &vdvvrhen, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_VRHS) != DRIVER_OK ||
-            st7789_send(handle, true, &vrhs, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_VDVS) != DRIVER_OK ||
-            st7789_send(handle, true, &vdvs, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_FRCTRL2) != DRIVER_OK ||
-            st7789_send(handle, true, &frctrl, 1U) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_PWCTRL1) != DRIVER_OK ||
-            st7789_send(handle, true, pwctrl1, sizeof(pwctrl1)) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_PVGAMCTRL) != DRIVER_OK ||
-            st7789_send(handle, true, pgamma, sizeof(pgamma)) != DRIVER_OK ||
-            st7789_write_cmd_byte(handle, ST7789_CMD_NVGAMCTRL) != DRIVER_OK ||
-            st7789_send(handle, true, ngamma, sizeof(ngamma)) != DRIVER_OK) {
+    for (i = 0U; i < DRIVER_ARRAY_SIZE(single_regs); i++) {
+        if (st7789_cmd_arg(handle, single_regs[i][0], &single_regs[i][1], 1U) != DRIVER_OK) {
             return (int)PORT_IO_ERROR;
         }
     }
 
-    if (config->invert) {
-        if (st7789_write_cmd_byte(handle, ST7789_CMD_INVON) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
-        }
-    } else if (st7789_write_cmd_byte(handle, ST7789_CMD_INVOFF) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_NORON) != DRIVER_OK ||
-        st7789_write_cmd_byte(handle, ST7789_CMD_DISPON) != DRIVER_OK) {
+    if (st7789_cmd_arg(handle, ST7789_CMD_PWCTRL1, pwctrl1, sizeof(pwctrl1)) != DRIVER_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_PVGAMCTRL, pgamma, sizeof(pgamma)) != DRIVER_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_NVGAMCTRL, ngamma, sizeof(ngamma)) != DRIVER_OK ||
+        st7789_cmd(handle, config->invert ? ST7789_CMD_INVON : ST7789_CMD_INVOFF) != DRIVER_OK ||
+        st7789_cmd(handle, ST7789_CMD_NORON) != DRIVER_OK ||
+        st7789_cmd(handle, ST7789_CMD_DISPON) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     driver_delay_ms(ST7789_DISPON_MS);
@@ -243,8 +214,8 @@ int st7789_deinit(st7789_handle_t *handle)
         return (int)PORT_INVALID_PARAM;
     }
     if (handle->initialized) {
-        (void)st7789_write_cmd_byte(handle, ST7789_CMD_DISPOFF);
-        (void)st7789_write_cmd_byte(handle, ST7789_CMD_SLPIN);
+        (void)st7789_cmd(handle, ST7789_CMD_DISPOFF);
+        (void)st7789_cmd(handle, ST7789_CMD_SLPIN);
         if (handle->config.bl != 0U) {
             (void)driver_gpio_write(handle->config.bl, PORT_GPIO_LOW);
         }
@@ -306,36 +277,6 @@ int st7789_draw_pixel(st7789_handle_t *handle, uint16_t x, uint16_t y, uint16_t 
     return DRIVER_OK;
 }
 
-int st7789_fill_rect(st7789_handle_t *handle, uint16_t x, uint16_t y,
-                     uint16_t w, uint16_t h, uint16_t color)
-{
-    uint16_t i;
-    uint16_t j;
-
-    if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
-    }
-    if (x >= handle->width || y >= handle->height) {
-        return (int)PORT_INVALID_PARAM;
-    }
-    if ((uint32_t)x + w > handle->width) {
-        w = (uint16_t)(handle->width - x);
-    }
-    if ((uint32_t)y + h > handle->height) {
-        h = (uint16_t)(handle->height - y);
-    }
-
-    for (j = 0U; j < h; j++) {
-        for (i = 0U; i < w; i++) {
-            size_t index = (((size_t)(y + j) * handle->width) + x + i) * 2U;
-
-            handle->config.gram[index] = (uint8_t)(color >> 8);
-            handle->config.gram[index + 1U] = (uint8_t)(color & 0xFFU);
-        }
-    }
-    return DRIVER_OK;
-}
-
 int st7789_show(st7789_handle_t *handle)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
@@ -357,25 +298,3 @@ int st7789_set_backlight(st7789_handle_t *handle, bool on)
            ? DRIVER_OK : (int)PORT_IO_ERROR;
 }
 
-int st7789_set_invert(st7789_handle_t *handle, bool invert)
-{
-    if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
-    }
-    return st7789_write_cmd_byte(handle, invert ? ST7789_CMD_INVON : ST7789_CMD_INVOFF);
-}
-
-int st7789_set_sleep(st7789_handle_t *handle, bool sleep)
-{
-    if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
-    }
-    if (sleep) {
-        return st7789_write_cmd_byte(handle, ST7789_CMD_SLPIN);
-    }
-    if (st7789_write_cmd_byte(handle, ST7789_CMD_SLPOUT) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-    driver_delay_ms(ST7789_SLPOUT_MS);
-    return DRIVER_OK;
-}

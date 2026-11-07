@@ -1,6 +1,6 @@
 #include "hx711.h"
 #include "hx711_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 通道/增益对应的总时钟数（24 数据位 + 选择脉冲） */
 static uint8_t hx711_gain_pulses(hx711_gain_t gain)

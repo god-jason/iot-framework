@@ -1,6 +1,6 @@
 #include "aht20.h"
 #include "aht20_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int aht20_wait_ready(aht20_handle_t *handle)
 {

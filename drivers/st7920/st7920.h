@@ -37,7 +37,7 @@ int st7920_init(st7920_handle_t *handle, const st7920_config_t *config);
 int st7920_deinit(st7920_handle_t *handle);
 
 int st7920_write_cmd(st7920_handle_t *handle, uint8_t cmd);
-int st7920_write_data( st7920_handle_t *handle, uint8_t data);
+int st7920_write_data(st7920_handle_t *handle, uint8_t data);
 
 int st7920_clear(st7920_handle_t *handle);
 int st7920_fill(st7920_handle_t *handle, uint8_t pattern);

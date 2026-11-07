@@ -51,15 +51,11 @@ int st7789_write_data(st7789_handle_t *handle, const uint8_t *data, size_t len);
 int st7789_clear(st7789_handle_t *handle);
 int st7789_fill_color(st7789_handle_t *handle, uint16_t color);
 int st7789_draw_pixel(st7789_handle_t *handle, uint16_t x, uint16_t y, uint16_t color);
-int st7789_fill_rect(st7789_handle_t *handle, uint16_t x, uint16_t y,
-                     uint16_t w, uint16_t h, uint16_t color);
 
 /** 将显存刷新到屏幕 */
 int st7789_show(st7789_handle_t *handle);
 
 int st7789_set_backlight(st7789_handle_t *handle, bool on);
-int st7789_set_invert(st7789_handle_t *handle, bool invert);
-int st7789_set_sleep(st7789_handle_t *handle, bool sleep);
 
 #ifdef __cplusplus
 }

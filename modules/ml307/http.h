@@ -6,7 +6,9 @@
  * 通过 http_transport_t 抽象底层连接（TCP / AT 模组 / TLS 均可）。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,106 +1,213 @@
 #include "dht11.h"
-#include "iot_logger.h"
+#include "dht11_register.h"
+#include "log.h"
 
-/* DHT11 时序参数（单位 us） */
-#define DHT_START_LOW_US   18000  /* 主机拉低 18ms 唤醒 */
-#define DHT_START_HIGH_US  30     /* 释放总线等待 20~40us */
-#define DHT_TIMEOUT_US     100    /* 等待电平超时 */
-#define DHT_BIT_1_US       40     /* 高电平超过 40us 判为 1 */
-
-/* 等待数据线达到目标电平，超时返回 -1 */
-static int dht_wait_level(const gpio_bus_t *bus, uint8_t pin,
-                          uint8_t level, uint32_t timeout_us)
+/* 释放总线：切换为输入 + 上拉，由上拉电阻拉高 */
+static void dht11_release(dht11_handle_t *handle)
 {
-    uint32_t t = 0;
-
-    while (t < timeout_us) {
-        uint8_t cur = gpio_get(bus, pin);
-        if (level ? (cur != 0) : (cur == 0)) {
-            return 0;
-        }
-        gpio_udelay(bus, 1);
-        t++;
-    }
-    return -1;
+    (void)driver_gpio_input(handle->pin, PORT_GPIO_PULLUP);
 }
 
-/* 读取一个字节：按每位高电平脉宽判 0/1 */
-static int dht_read_byte(const gpio_bus_t *bus, uint8_t pin, uint8_t *out)
+/* 主机拉低总线 */
+static void dht11_drive_low(dht11_handle_t *handle)
 {
-    uint8_t b = 0;
-    int i;
-
-    for (i = 0; i < 8; i++) {
-        uint32_t high = 0;
-        /* 每一位：低电平约 50us 起始，随后高电平 */
-        if (dht_wait_level(bus, pin, 0, DHT_TIMEOUT_US) != 0) {
-            return -1;
-        }
-        if (dht_wait_level(bus, pin, 1, DHT_TIMEOUT_US) != 0) {
-            return -1;
-        }
-        while (high < DHT_TIMEOUT_US && gpio_get(bus, pin) != 0) {
-            gpio_udelay(bus, 1);
-            high++;
-        }
-        b = (uint8_t)((b << 1) | (high > DHT_BIT_1_US ? 1u : 0u));
-    }
-    *out = b;
-    return 0;
+    (void)driver_gpio_output(handle->pin, PORT_GPIO_LOW);
+    (void)driver_gpio_write(handle->pin, PORT_GPIO_LOW);
 }
 
-/* 完成一次完整通信，读回 40 位（5 字节） */
-static int dht_read_raw(const gpio_bus_t *bus, uint8_t pin, uint8_t d[5])
+static int dht11_line(dht11_handle_t *handle)
 {
-    int i;
+    int level = driver_gpio_read(handle->pin);
 
-    gpio_set(bus, pin, 0);
-    gpio_udelay(bus, DHT_START_LOW_US);
-    gpio_set(bus, pin, 1);
-    gpio_udelay(bus, DHT_START_HIGH_US);
+    return (level < 0) ? level : (level != 0) ? 1 : 0;
+}
 
-    /* 从机响应：先低约 80us 再高约 80us */
-    if (dht_wait_level(bus, pin, 0, DHT_TIMEOUT_US) != 0) {
-        return -1;
+/* 等待总线到达指定电平，超时返回 PORT_TIMEOUT */
+static int dht11_wait_level(dht11_handle_t *handle, int level, uint32_t timeout_us)
+{
+    uint32_t elapsed = 0U;
+    int cur;
+
+    while (elapsed < timeout_us) {
+        cur = dht11_line(handle);
+        if (cur < 0) {
+            return cur;
+        }
+        if (cur == level) {
+            return DRIVER_OK;
+        }
+        driver_delay_us(1U);
+        elapsed++;
     }
-    if (dht_wait_level(bus, pin, 1, DHT_TIMEOUT_US) != 0) {
-        return -1;
-    }
-    for (i = 0; i < 5; i++) {
-        if (dht_read_byte(bus, pin, &d[i]) != 0) {
-            return -1;
+    return (int)PORT_TIMEOUT;
+}
+
+/* 读取一个字节：以高电平持续时间区分 0 / 1 */
+static int dht11_read_byte(dht11_handle_t *handle, uint8_t *value)
+{
+    uint8_t data = 0U;
+    uint32_t high_us;
+    uint8_t i;
+    int ret;
+
+    for (i = 0U; i < 8U; i++) {
+        /* 每位以约 50us 低电平开始 */
+        ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);
+        if (ret == DRIVER_OK) {
+            ret = dht11_wait_level(handle, 1, DHT11_TIMEOUT_US);
+        }
+        if (ret != DRIVER_OK) {
+            return ret;
+        }
+
+        high_us = 0U;
+        while (high_us < DHT11_BIT_TIMEOUT_US) {
+            if (dht11_line(handle) != 1) {
+                break;
+            }
+            driver_delay_us(1U);
+            high_us++;
+        }
+
+        data = (uint8_t)(data << 1);
+        if (high_us > DHT11_BIT1_HIGH_US) {
+            data = (uint8_t)(data | 0x01U);
         }
     }
-    return 0;
+
+    *value = data;
+    return DRIVER_OK;
 }
 
-int dht11_init(const gpio_bus_t *bus, uint8_t pin)
+int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
 {
-    if (bus == NULL) {
-        LOG_E("dht11", "init fail: null bus");
-        return -1;
+    uint8_t i;
+    int ret;
+
+    if (handle == NULL || frame == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    LOG_I("dht11", "init ok pin %u", (unsigned int)pin);
-    return 0;
+
+    /* 起始信号 + 40 位数据：全程关闭中断，避免位时序被拉长 */
+    port_irq_disable();
+
+    dht11_drive_low(handle);
+    driver_delay_ms(DHT11_START_LOW_MS);
+    dht11_release(handle);
+    driver_delay_us(DHT11_RELEASE_US);
+
+    /* 从机响应：低约 80us 再高约 80us */
+    ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);
+    if (ret == DRIVER_OK) {
+        ret = dht11_wait_level(handle, 1, DHT11_TIMEOUT_US);
+    }
+    if (ret == DRIVER_OK) {
+        ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);
+    }
+
+    for (i = 0U; (i < DHT11_FRAME_BYTES) && (ret == DRIVER_OK); i++) {
+        ret = dht11_read_byte(handle, &frame[i]);
+    }
+
+    port_irq_enable();
+    dht11_release(handle);
+
+    if (ret != DRIVER_OK) {
+        LOG_E("dht11", "bus timeout");
+        return (int)PORT_TIMEOUT;
+    }
+    return DRIVER_OK;
 }
 
-int dht11_read(const gpio_bus_t *bus, uint8_t pin, float *temp, float *humidity)
+int dht11_init(dht11_handle_t *handle, port_pin_t pin)
 {
-    uint8_t d[5];
+    int ret;
 
-    if (bus == NULL || temp == NULL || humidity == NULL) {
-        return -1;
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    if (dht_read_raw(bus, pin, d) != 0) {
-        LOG_E("dht11", "read timeout");
-        return -1;
+
+    handle->pin = pin;
+    handle->last_read_ms = 0U;
+    handle->initialized = false;
+
+    ret = driver_gpio_input(pin, PORT_GPIO_PULLUP);
+    if (ret != DRIVER_OK) {
+        LOG_E("dht11", "gpio init failed: %d", ret);
+        return ret;
     }
-    /* 校验：前 4 字节累加低 8 位等于第 5 字节 */
-    if ((uint8_t)(d[0] + d[1] + d[2] + d[3]) != d[4]) {
-        LOG_E("dht11", "checksum fail");
-        return -2;
+
+    /* 上电后总线应保持高电平（空闲态） */
+    if (dht11_line(handle) != 1) {
+        LOG_W("dht11", "bus idle low, check pull-up");
     }
-    *humidity = (float)d[0];  /* 湿度整数，小数通常为 0 */
-    *temp = (float)d[2];      /* 温度整数，小数通常为 0 */
-    return 0;
+
+    handle->initialized = true;
+    LOG_I("dht11", "init ok, pin %u", (unsigned int)pin);
+    return DRIVER_OK;
+}
+
+int dht11_deinit(dht11_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)driver_gpio_input(handle->pin, PORT_GPIO_PULLUP);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity)
+{
+    uint8_t frame[DHT11_FRAME_BYTES];
+    uint8_t sum;
+    uint32_t now;
+    float t;
+    int ret;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (temperature == NULL && humidity == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    /* DHT11 采样间隔不得小于 1s */
+    now = driver_tick_ms();
+    if (handle->last_read_ms != 0U &&
+        (uint32_t)(now - handle->last_read_ms) < DHT11_MIN_INTERVAL_MS) {
+        return (int)PORT_BUSY;
+    }
+
+    ret = dht11_read_raw(handle, frame);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    sum = (uint8_t)(frame[DHT11_IDX_HUMI_INT] + frame[DHT11_IDX_HUMI_DEC] +
+                    frame[DHT11_IDX_TEMP_INT] + frame[DHT11_IDX_TEMP_DEC]);
+    if (sum != frame[DHT11_IDX_CHECKSUM]) {
+        LOG_E("dht11", "checksum fail 0x%02X != 0x%02X", sum, frame[DHT11_IDX_CHECKSUM]);
+        return (int)PORT_CRC_ERROR;
+    }
+
+    handle->last_read_ms = now;
+
+    if (humidity != NULL) {
+        /* 湿度 = 整数部分 + 小数部分（DHT11 小数恒为 0） */
+        *humidity = (float)frame[DHT11_IDX_HUMI_INT] +
+                    (float)(frame[DHT11_IDX_HUMI_DEC] & DHT11_DEC_MASK) * DHT11_DEC_SCALE;
+    }
+    if (temperature != NULL) {
+        t = (float)frame[DHT11_IDX_TEMP_INT] +
+            (float)(frame[DHT11_IDX_TEMP_DEC] & DHT11_DEC_MASK) * DHT11_DEC_SCALE;
+        if ((frame[DHT11_IDX_TEMP_DEC] & DHT11_TEMP_SIGN) != 0U) {
+            t = -t;   /* 兼容器件用小数位 bit7 表示负温 */
+        }
+        *temperature = t;
+    }
+
+    return DRIVER_OK;
 }

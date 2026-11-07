@@ -1,6 +1,6 @@
 #include "sht30.h"
 #include "sht30_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int sht30_write_cmd(sht30_handle_t *handle, uint16_t command)
 {

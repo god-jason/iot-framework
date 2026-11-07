@@ -7,7 +7,9 @@
  * 保留 mqtt_ops_t 作为后端适配接口（可对接模组内置 MQTT）。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,6 +1,6 @@
 #include "opt3001.h"
 #include "opt3001_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static uint32_t opt3001_conv_delay_ms(opt3001_conv_time_t conv_time)
 {

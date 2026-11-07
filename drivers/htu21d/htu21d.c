@@ -1,6 +1,6 @@
 #include "htu21d.h"
 #include "htu21d_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int htu21d_send_cmd(htu21d_handle_t *handle, uint8_t command)
 {

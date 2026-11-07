@@ -6,7 +6,9 @@
  * host 环境下用内置 RAM 模拟 Flash；真实平台应委托给 port_flash_handle_t。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

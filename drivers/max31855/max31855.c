@@ -1,6 +1,6 @@
 #include "max31855.h"
 #include "max31855_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 14 位有符号热电偶温度码 -> 摄氏度 */
 static float max31855_decode_tc(uint32_t raw)

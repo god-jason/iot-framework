@@ -1,6 +1,6 @@
 #include "ssd1351.h"
 #include "ssd1351_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int ssd1351_send(ssd1351_handle_t *handle, bool is_data,
                         const uint8_t *data, size_t len)

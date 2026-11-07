@@ -216,77 +216,6 @@ void port_system_deepsleep(void)
     sleep_disable();
 }
 
-/* ---------------- OS Ops ---------------- */
-static port_status_t avr_os_mutex_create(port_mutex_t *mutex)
-{
-    if (mutex == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    *mutex = 1U;
-    return PORT_OK;
-}
-
-static port_status_t avr_os_mutex_delete(port_mutex_t mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_OK;
-}
-
-static port_status_t avr_os_mutex_lock(port_mutex_t mutex, uint32_t timeout)
-{
-    PORT_UNUSED(mutex);
-    PORT_UNUSED(timeout);
-    return PORT_OK;
-}
-
-static port_status_t avr_os_mutex_unlock(port_mutex_t mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_OK;
-}
-
-static port_status_t avr_os_sem_create(port_semaphore_t *sem, uint32_t max_count,
-                                       uint32_t initial_count)
-{
-    if (sem == NULL || initial_count > max_count) {
-        return PORT_INVALID_PARAM;
-    }
-    *sem = (uintptr_t)initial_count;
-    return PORT_OK;
-}
-
-static port_status_t avr_os_sem_wait(port_semaphore_t sem, uint32_t timeout)
-{
-    PORT_UNUSED(timeout);
-    return (sem == 0U) ? PORT_TIMEOUT : PORT_OK;
-}
-
-static port_status_t avr_os_sem_post(port_semaphore_t sem)
-{
-    PORT_UNUSED(sem);
-    return PORT_OK;
-}
-
-static uint32_t avr_os_tick_get(void)
-{
-    return port_tick_get();
-}
-
-static void avr_os_delay_ms(uint32_t ms)
-{
-    port_delay_ms(ms);
-}
-
-static void avr_os_critical_enter(void)
-{
-    cli();
-}
-
-static void avr_os_critical_exit(void)
-{
-    sei();
-}
-
 /* ---------------- 时钟 ---------------- */
 port_status_t port_clock_init(const port_clock_config_t *config)
 {
@@ -3495,20 +3424,6 @@ static const port_platform_ops_t s_avr_platform_ops = {
     avr_platform_get_info
 };
 
-static const port_os_ops_t s_avr_os_ops = {
-    avr_os_mutex_create,
-    avr_os_mutex_delete,
-    avr_os_mutex_lock,
-    avr_os_mutex_unlock,
-    avr_os_sem_create,
-    avr_os_sem_wait,
-    avr_os_sem_post,
-    avr_os_tick_get,
-    avr_os_delay_ms,
-    avr_os_critical_enter,
-    avr_os_critical_exit
-};
-
 port_status_t port_platform_install(void)
 {
     port_status_t status;
@@ -3517,10 +3432,6 @@ port_status_t port_platform_install(void)
         return PORT_OK;
     }
     status = port_platform_register(&s_avr_platform_ops);
-    if (status != PORT_OK) {
-        return status;
-    }
-    status = port_os_register(&s_avr_os_ops);
     if (status != PORT_OK) {
         return status;
     }

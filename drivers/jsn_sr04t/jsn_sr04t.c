@@ -1,69 +1,167 @@
-/*
- * JSN-SR04T 防水超声波测距模块驱动（IP66 防水，接口同 HC-SR04）。
- * 引脚：TRIG 触发（推挽输出）、ECHO 回响（输入）。
- * 测量原理：TRIG 拉高 10us 触发一次测距，模块在 ECHO 上输出
- * 与距离成正比的高电平；distance_cm = 高电平时间(us) / 58。
- *
- * 说明：本驱动用 GPIO 轮询 + 微秒延时近似测量高电平时长，
- * 实际应用建议改用硬件定时器输入捕获或中断计时，精度更高。
- */
 #include "jsn_sr04t.h"
-#include "iot_logger.h"
-#include <stddef.h>
+#include "log.h"
 
-#define JSN_SR04T_TRIG_US       10u    /* 触发脉冲宽度 */
-#define JSN_SR04T_ECHO_TIMEOUT  30000u /* 等待与测量超时（us） */
+#define JSN_SR04T_TAG "jsn_sr04t"
 
-int jsn_sr04t_init(gpio_bus_t *bus, uint8_t trig, uint8_t echo)
+static int jsn_sr04t_check(const jsn_sr04t_handle_t *handle)
 {
-    if (bus == NULL) {
-        LOG_E("jsn_sr04t", "bus null");
-        return -1;
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    (void)echo;
-    gpio_set(bus, trig, 0);
-    LOG_I("jsn_sr04t", "init ok");
-    return 0;
+    return DRIVER_OK;
 }
 
-int jsn_sr04t_measure(gpio_bus_t *bus, uint8_t trig, uint8_t echo, float *distance)
+/* 等待 ECHO 到达指定电平；超时返回 PORT_TIMEOUT，同时回传已等待时长 */
+static int jsn_sr04t_wait_level(const jsn_sr04t_handle_t *handle, int level,
+                                uint32_t timeout_us, uint32_t *waited_us)
 {
-    uint32_t us_count = 0;
-    uint32_t wait = 0;
+    uint32_t waited = 0U;
 
-    if (bus == NULL || distance == NULL) {
-        LOG_E("jsn_sr04t", "bad arg");
-        return -1;
+    for (;;) {
+        int value = driver_gpio_read(handle->echo);
+
+        if (value < 0) {
+            return (int)PORT_IO_ERROR;
+        }
+        if (value == level) {
+            if (waited_us != NULL) {
+                *waited_us = waited;
+            }
+            return DRIVER_OK;
+        }
+        if (waited >= timeout_us) {
+            return (int)PORT_TIMEOUT;
+        }
+        driver_delay_us(1U);
+        waited++;
+    }
+}
+
+int jsn_sr04t_init(jsn_sr04t_handle_t *handle, port_pin_t trig, port_pin_t echo)
+{
+    if (handle == NULL || trig == 0U || echo == 0U || trig == echo) {
+        return (int)PORT_INVALID_PARAM;
     }
 
-    /* 确保 TRIG 空闲为低 */
-    gpio_set(bus, trig, 0);
-    gpio_udelay(bus, 2);
+    handle->trig = trig;
+    handle->echo = echo;
+    handle->timeout_us = JSN_SR04T_TIMEOUT_US;
+    handle->initialized = false;
 
-    /* 发送触发脉冲：拉高 10us 后拉低 */
-    gpio_set(bus, trig, 1);
-    gpio_udelay(bus, JSN_SR04T_TRIG_US);
-    gpio_set(bus, trig, 0);
+    if (driver_gpio_output(trig, PORT_GPIO_LOW) != DRIVER_OK) {
+        LOG_E(JSN_SR04T_TAG, "trig gpio init failed");
+        return (int)PORT_IO_ERROR;
+    }
+    if (driver_gpio_input(echo, PORT_GPIO_PULLDOWN) != DRIVER_OK) {
+        LOG_E(JSN_SR04T_TAG, "echo gpio init failed");
+        return (int)PORT_IO_ERROR;
+    }
 
-    /* 等待 ECHO 上升沿 */
-    while (gpio_get(bus, echo) == 0) {
-        if (++wait > JSN_SR04T_ECHO_TIMEOUT) {
-            LOG_E("jsn_sr04t", "echo no rising edge");
-            return -2;
-        }
-        gpio_udelay(bus, 1);
+    handle->initialized = true;
+    LOG_I(JSN_SR04T_TAG, "init ok");
+    return DRIVER_OK;
+}
+
+int jsn_sr04t_deinit(jsn_sr04t_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->trig != 0U) {
+        (void)driver_gpio_write(handle->trig, PORT_GPIO_LOW);
+        (void)driver_gpio_deinit(handle->trig);
+    }
+    if (handle->echo != 0U) {
+        (void)driver_gpio_deinit(handle->echo);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int jsn_sr04t_set_timeout(jsn_sr04t_handle_t *handle, uint32_t timeout_us)
+{
+    int ret = jsn_sr04t_check(handle);
+
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    if (timeout_us < 100U) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->timeout_us = timeout_us;
+    return DRIVER_OK;
+}
+
+int jsn_sr04t_read_us(jsn_sr04t_handle_t *handle, uint32_t *echo_us)
+{
+    uint32_t high_us = 0U;
+    int ret;
+
+    if (echo_us == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = jsn_sr04t_check(handle);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    /* 上一次回响尚未结束，避免叠加测量 */
+    ret = driver_gpio_read(handle->echo);
+    if (ret < 0) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (ret != 0) {
+        return (int)PORT_BUSY;
+    }
+
+    /* 触发脉冲：先确保空闲低电平，再拉高 10us */
+    if (driver_gpio_write(handle->trig, PORT_GPIO_LOW) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_us(JSN_SR04T_TRIG_IDLE_US);
+    if (driver_gpio_write(handle->trig, PORT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    driver_delay_us(JSN_SR04T_TRIG_PULSE_US);
+    if (driver_gpio_write(handle->trig, PORT_GPIO_LOW) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 等待回响上升沿 */
+    ret = jsn_sr04t_wait_level(handle, 1, handle->timeout_us, NULL);
+    if (ret != DRIVER_OK) {
+        LOG_D(JSN_SR04T_TAG, "no rising edge");
+        return ret;
     }
 
     /* 测量高电平持续时间 */
-    while (gpio_get(bus, echo) != 0) {
-        gpio_udelay(bus, 1);
-        if (++us_count > JSN_SR04T_ECHO_TIMEOUT) {
-            LOG_E("jsn_sr04t", "echo timeout");
-            break;
-        }
+    ret = jsn_sr04t_wait_level(handle, 0, handle->timeout_us, &high_us);
+    if (ret != DRIVER_OK) {
+        LOG_W(JSN_SR04T_TAG, "echo stuck high");
+        return ret;
     }
 
-    /* distance_cm = us / 58 */
-    *distance = (float)us_count / 58.0f;
-    return 0;
+    *echo_us = high_us;
+    return DRIVER_OK;
+}
+
+int jsn_sr04t_read(jsn_sr04t_handle_t *handle, float *distance_m)
+{
+    uint32_t echo_us = 0U;
+    int ret;
+
+    if (distance_m == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = jsn_sr04t_read_us(handle, &echo_us);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    *distance_m = (float)echo_us / (JSN_SR04T_US_PER_CM * 100.0f);
+    if (*distance_m > JSN_SR04T_MAX_RANGE_M) {
+        return (int)PORT_OVERFLOW;
+    }
+    return DRIVER_OK;
 }

@@ -1,109 +1,220 @@
 #include "dht22.h"
-#include "iot_logger.h"
+#include "dht22_register.h"
+#include "log.h"
 
-/* DHT22 时序参数（单位 us），单总线协议与 DHT11 一致、分辨率更高 */
-#define DHT_START_LOW_US   18000  /* 主机拉低 18ms 唤醒 */
-#define DHT_START_HIGH_US  30     /* 释放总线等待 20~40us */
-#define DHT_TIMEOUT_US     100    /* 等待电平超时 */
-#define DHT_BIT_1_US       40     /* 高电平超过 40us 判为 1 */
-
-/* 等待数据线达到目标电平，超时返回 -1 */
-static int dht_wait_level(const gpio_bus_t *bus, uint8_t pin,
-                          uint8_t level, uint32_t timeout_us)
+/*
+ * 引脚方向切换：输出（推挽）主动拉低产生起始信号；
+ * 输入 + 上拉释放总线（由外部上拉拉高）并读取从机电平。
+ * 不依赖开漏输出，可移植到没有 OD 能力的端口（如 AVR）。
+ */
+static int dht22_mode(dht22_handle_t *handle, port_gpio_mode_t mode)
 {
-    uint32_t t = 0;
+    port_gpio_config_t cfg;
 
-    while (t < timeout_us) {
-        uint8_t cur = gpio_get(bus, pin);
-        if (level ? (cur != 0) : (cur == 0)) {
-            return 0;
-        }
-        gpio_udelay(bus, 1);
-        t++;
-    }
-    return -1;
+    cfg.mode = mode;
+    cfg.output = PORT_GPIO_OUTPUT_PP;
+    cfg.pull = (mode == PORT_GPIO_MODE_INPUT) ? PORT_GPIO_PULLUP : PORT_GPIO_NOPULL;
+    cfg.speed = PORT_GPIO_SPEED_HIGH;
+    cfg.alternate = 0U;
+    cfg.initial_level = PORT_GPIO_LOW;
+
+    return (port_gpio_init(handle->pin, &cfg) == PORT_OK) ? DRIVER_OK : (int)PORT_IO_ERROR;
 }
 
-/* 读取一个字节：按每位高电平脉宽判 0/1 */
-static int dht_read_byte(const gpio_bus_t *bus, uint8_t pin, uint8_t *out)
+/* 采样数据线：1 高 / 0 低，负值为错误码 */
+static int dht22_line(dht22_handle_t *handle)
 {
-    uint8_t b = 0;
-    int i;
+    port_gpio_level_t level = PORT_GPIO_LOW;
 
-    for (i = 0; i < 8; i++) {
-        uint32_t high = 0;
-        if (dht_wait_level(bus, pin, 0, DHT_TIMEOUT_US) != 0) {
-            return -1;
-        }
-        if (dht_wait_level(bus, pin, 1, DHT_TIMEOUT_US) != 0) {
-            return -1;
-        }
-        while (high < DHT_TIMEOUT_US && gpio_get(bus, pin) != 0) {
-            gpio_udelay(bus, 1);
-            high++;
-        }
-        b = (uint8_t)((b << 1) | (high > DHT_BIT_1_US ? 1u : 0u));
+    if (port_gpio_read(handle->pin, &level) != PORT_OK) {
+        return (int)PORT_IO_ERROR;
     }
-    *out = b;
-    return 0;
+    return (level == PORT_GPIO_HIGH) ? 1 : 0;
 }
 
-/* 完成一次完整通信，读回 40 位（5 字节） */
-static int dht_read_raw(const gpio_bus_t *bus, uint8_t pin, uint8_t d[5])
+/* 等待总线到达指定电平，超时返回 PORT_TIMEOUT */
+static int dht22_wait_level(dht22_handle_t *handle, int level, uint32_t timeout_us)
 {
-    int i;
+    uint32_t elapsed;
+    int cur;
 
-    gpio_set(bus, pin, 0);
-    gpio_udelay(bus, DHT_START_LOW_US);
-    gpio_set(bus, pin, 1);
-    gpio_udelay(bus, DHT_START_HIGH_US);
+    for (elapsed = 0U; elapsed < timeout_us; elapsed++) {
+        cur = dht22_line(handle);
+        if (cur < 0) {
+            return cur;
+        }
+        if (cur == level) {
+            return DRIVER_OK;
+        }
+        driver_delay_us(1U);
+    }
+    return (int)PORT_TIMEOUT;
+}
 
-    if (dht_wait_level(bus, pin, 0, DHT_TIMEOUT_US) != 0) {
-        return -1;
-    }
-    if (dht_wait_level(bus, pin, 1, DHT_TIMEOUT_US) != 0) {
-        return -1;
-    }
-    for (i = 0; i < 5; i++) {
-        if (dht_read_byte(bus, pin, &d[i]) != 0) {
-            return -1;
+/* 读一个字节：每位先 50us 低电平，再按高电平宽度判 0/1（约 27us / 70us） */
+static int dht22_read_byte(dht22_handle_t *handle, uint8_t *value)
+{
+    uint8_t data = 0U;
+    uint32_t high_us;
+    uint8_t i;
+    int ret;
+    int cur;
+
+    for (i = 0U; i < 8U; i++) {
+        ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);
+        if (ret == DRIVER_OK) {
+            ret = dht22_wait_level(handle, 1, DHT22_LEVEL_TIMEOUT_US);
+        }
+        if (ret != DRIVER_OK) {
+            return ret;
+        }
+        for (high_us = 0U; high_us < DHT22_BIT_HIGH_TIMEOUT_US; high_us++) {
+            cur = dht22_line(handle);
+            if (cur < 0) {
+                return cur;
+            }
+            if (cur == 0) {
+                break;
+            }
+            driver_delay_us(1U);
+        }
+        data = (uint8_t)(data << 1);
+        if (high_us > (uint32_t)DHT22_BIT1_MIN_HIGH_US) {
+            data = (uint8_t)(data | 0x01U);
         }
     }
-    return 0;
+    *value = data;
+    return DRIVER_OK;
 }
 
-int dht22_init(const gpio_bus_t *bus, uint8_t pin)
+int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
 {
-    if (bus == NULL) {
-        LOG_E("dht22", "init fail: null bus");
-        return -1;
+    uint8_t i;
+    uint32_t now;
+    int ret;
+
+    if (handle == NULL || frame == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    LOG_I("dht22", "init ok pin %u", (unsigned int)pin);
-    return 0;
+    /* 传感器采样周期 >=2s，过密读取会造成数据陈旧与自热累积 */
+    now = driver_tick_ms();
+    if (handle->sampled &&
+        (uint32_t)(now - handle->last_read_ms) < DHT22_MIN_INTERVAL_MS) {
+        return (int)PORT_BUSY;
+    }
+    /* 起始信号 + 40 位数据全程关中断，避免位时序被中断拉长 */
+    port_irq_disable();
+    (void)dht22_mode(handle, PORT_GPIO_MODE_OUTPUT);
+    driver_delay_us(DHT22_START_LOW_US);
+    ret = dht22_mode(handle, PORT_GPIO_MODE_INPUT);
+    driver_delay_us(DHT22_RELEASE_US);
+    /* 从机响应：低约 80us -> 高约 80us -> 低，随后即第 1 位的低电平 */
+    if (ret == DRIVER_OK) {
+        ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);
+    }
+    if (ret == DRIVER_OK) {
+        ret = dht22_wait_level(handle, 1, DHT22_LEVEL_TIMEOUT_US);
+    }
+    if (ret == DRIVER_OK) {
+        ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);
+    }
+    for (i = 0U; (i < DHT22_FRAME_BYTES) && (ret == DRIVER_OK); i++) {
+        ret = dht22_read_byte(handle, &frame[i]);
+    }
+    port_irq_enable();
+
+    if (ret != DRIVER_OK) {
+        LOG_E("dht22", "frame error: %d", ret);
+        return ret;
+    }
+    handle->last_read_ms = now;
+    handle->sampled = true;
+    return DRIVER_OK;
 }
 
-int dht22_read(const gpio_bus_t *bus, uint8_t pin, float *temp, float *humidity)
+int dht22_init(dht22_handle_t *handle, port_pin_t pin)
 {
-    uint8_t d[5];
-    uint16_t rh;
-    int16_t ts;
+    int ret;
 
-    if (bus == NULL || temp == NULL || humidity == NULL) {
-        return -1;
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    if (dht_read_raw(bus, pin, d) != 0) {
-        LOG_E("dht22", "read timeout");
-        return -1;
+    handle->pin = pin;
+    handle->last_read_ms = 0U;
+    handle->sampled = false;
+    handle->initialized = false;
+
+    /* 空闲态：输入 + 上拉，总线应由上拉电阻保持高电平 */
+    ret = dht22_mode(handle, PORT_GPIO_MODE_INPUT);
+    if (ret != DRIVER_OK) {
+        LOG_E("dht22", "gpio init failed: %d", ret);
+        return ret;
     }
-    /* 校验：前 4 字节累加低 8 位等于第 5 字节 */
-    if ((uint8_t)(d[0] + d[1] + d[2] + d[3]) != d[4]) {
-        LOG_E("dht22", "checksum fail");
-        return -2;
+    handle->initialized = true;
+
+    if (dht22_line(handle) != 1) {
+        LOG_W("dht22", "bus idle low, check pull-up");
     }
-    /* 湿度 16bit 大端/10；温度 16bit 有符号/10（bit15 为符号） */
-    rh = (uint16_t)(((uint16_t)d[0] << 8) | d[1]);
-    ts = (int16_t)(((uint16_t)d[2] << 8) | d[3]);
-    *humidity = rh / 10.0f;
-    *temp = ts / 10.0f;
-    return 0;
+    LOG_I("dht22", "init ok, pin %u", (unsigned int)pin);
+    return DRIVER_OK;
+}
+
+int dht22_deinit(dht22_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)port_gpio_deinit(handle->pin);
+    }
+    handle->initialized = false;
+    handle->sampled = false;
+    return DRIVER_OK;
+}
+
+int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity)
+{
+    uint8_t frame[DHT22_FRAME_BYTES];
+    uint8_t sum;
+    uint16_t raw_humi;
+    int16_t raw_temp;
+    float temp;
+    int ret;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (temperature == NULL && humidity == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    ret = dht22_read_raw(handle, frame);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    sum = (uint8_t)(frame[DHT22_IDX_HUMI_MSB] + frame[DHT22_IDX_HUMI_LSB] +
+                    frame[DHT22_IDX_TEMP_MSB] + frame[DHT22_IDX_TEMP_LSB]);
+    if (sum != frame[DHT22_IDX_CHECKSUM]) {
+        LOG_E("dht22", "checksum fail 0x%02X != 0x%02X",
+              (unsigned int)sum, (unsigned int)frame[DHT22_IDX_CHECKSUM]);
+        return (int)PORT_CRC_ERROR;
+    }
+
+    raw_humi = (uint16_t)(((uint16_t)frame[DHT22_IDX_HUMI_MSB] << 8) |
+                          (uint16_t)frame[DHT22_IDX_HUMI_LSB]);
+    raw_temp = (int16_t)(((uint16_t)frame[DHT22_IDX_TEMP_MSB] << 8) |
+                         (uint16_t)frame[DHT22_IDX_TEMP_LSB]);
+    /* 温度 bit15 为符号位，低 15 位为幅值（非二进制补码） */
+    temp = (float)((uint16_t)raw_temp & DHT22_TEMP_VALUE_MASK) * DHT22_TEMP_LSB;
+    if (raw_temp < 0) {
+        temp = -temp;
+    }
+
+    if (humidity != NULL) {
+        *humidity = (float)raw_humi * DHT22_HUMI_LSB;
+    }
+    if (temperature != NULL) {
+        *temperature = temp;
+    }
+    return DRIVER_OK;
 }

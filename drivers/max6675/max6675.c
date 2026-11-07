@@ -1,6 +1,6 @@
 #include "max6675.h"
 #include "max6675_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int max6675_init(max6675_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs)
 {

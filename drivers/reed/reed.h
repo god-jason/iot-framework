@@ -1,18 +1,38 @@
 #ifndef REED_H
 #define REED_H
 
-/* 磁簧开关：磁铁靠近时触点闭合，输出电平变化。 */
-#include "bus/gpio.h"
-#include <stdbool.h>
+/*
+ * 干簧管（磁簧开关）驱动。
+ *
+ * 参考 libdriver 风格：reed_init / reed_deinit / reed_read
+ * 引脚配置为上拉输入；闭合极性见 reed_register.h 的 REED_ACTIVE_LEVEL。
+ */
+
+#include "common/driver_io.h"
+#include "reed_register.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int reed_init(const gpio_bus_t *bus, uint8_t pin);
+typedef struct {
+    port_pin_t pin;
+    bool initialized;
+} reed_handle_t;
 
-/* 读取磁簧状态，closed 非空时给出是否闭合（高=1，具体极性视电路而定） */
-int reed_read(const gpio_bus_t *bus, uint8_t pin, bool *closed);
+/**
+ * @brief  初始化：引脚配置为上拉输入
+ * @param  pin  输出脚逻辑编号，0 视为无效
+ */
+int reed_init(reed_handle_t *handle, port_pin_t pin);
+
+int reed_deinit(reed_handle_t *handle);
+
+/**
+ * @brief  读取触点状态
+ * @param  closed  true 表示磁铁靠近、触点闭合
+ */
+int reed_read(reed_handle_t *handle, bool *closed);
 
 #ifdef __cplusplus
 }

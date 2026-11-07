@@ -1,6 +1,6 @@
 #include "htu31d.h"
 #include "htu31d_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int htu31d_read_frame(htu31d_handle_t *handle, uint16_t *raw)
 {
@@ -67,6 +67,7 @@ int htu31d_read_manufacturer_id(htu31d_handle_t *handle, uint16_t *id)
 int htu31d_init(htu31d_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 {
     uint16_t id = 0U;
+    int ret;
 
     if (handle == NULL || i2c == NULL) {
         return (int)PORT_INVALID_PARAM;
@@ -85,16 +86,19 @@ int htu31d_init(htu31d_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
 
     handle->initialized = true;
 
-    /* 校验厂商 ID，确认这是 HTU31D 而不是同地址的其它器件 */
-    if (htu31d_read_manufacturer_id(handle, &id) != DRIVER_OK) {
-        handle->initialized = false;
-        LOG_E("htu31d", "read manufacturer id failed");
-        return (int)PORT_IO_ERROR;
-    }
-    if (id != HTU31D_MANUFACTURER_ID) {
-        handle->initialized = false;
-        LOG_E("htu31d", "unexpected manufacturer id 0x%04X", id);
-        return (int)PORT_NOT_FOUND;
+    /*
+     * 校验厂商 ID，确认这是 HTU31D 而不是同地址的其它器件。
+     * 部分固件不支持该命令（返回 NACK），此时只告警；只要能读到 ID 就必须匹配。
+     */
+    ret = htu31d_read_manufacturer_id(handle, &id);
+    if (ret == DRIVER_OK) {
+        if (id != HTU31D_MANUFACTURER_ID) {
+            handle->initialized = false;
+            LOG_E("htu31d", "unexpected manufacturer id 0x%04X", id);
+            return (int)PORT_NOT_FOUND;
+        }
+    } else {
+        LOG_W("htu31d", "manufacturer id not readable: %d", ret);
     }
 
     LOG_I("htu31d", "init ok at 0x%02X", handle->i2c.address);

@@ -1,6 +1,6 @@
 #include "max30205.h"
 #include "max30205_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int max30205_to_raw(float celsius, int16_t *raw)
 {

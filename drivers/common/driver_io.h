@@ -46,6 +46,7 @@ int driver_spi_read_cs(driver_spi_t *bus, uint8_t *data, size_t len);
 
 /* ---------------- GPIO ---------------- */
 
+int driver_gpio_deinit(port_pin_t pin);
 int driver_gpio_output(port_pin_t pin, port_gpio_level_t initial);
 int driver_gpio_input(port_pin_t pin, port_gpio_pull_t pull);
 int driver_gpio_write(port_pin_t pin, port_gpio_level_t level);

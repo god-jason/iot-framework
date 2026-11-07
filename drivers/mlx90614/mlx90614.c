@@ -1,6 +1,6 @@
 #include "mlx90614.h"
 #include "mlx90614_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #define MLX90614_TAG "mlx90614"
 #define MLX90614_PEC_LEN 3U /* lsb + msb + pec */

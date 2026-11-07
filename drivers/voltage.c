@@ -1,6 +1,6 @@
 #include "voltage.h"
 #include "port.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #define VOLTAGE_ADC_CHANNEL_MAX 16
 

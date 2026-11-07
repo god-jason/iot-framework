@@ -51,7 +51,6 @@ int ssd1681_show(ssd1681_handle_t *handle);
 
 /** 读取 BUSY 引脚，1 表示忙 */
 int ssd1681_is_busy(ssd1681_handle_t *handle);
-int ssd1681_set_sleep(ssd1681_handle_t *handle, bool sleep);
 
 #ifdef __cplusplus
 }

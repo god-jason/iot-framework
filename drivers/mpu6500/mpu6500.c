@@ -1,6 +1,6 @@
 #include "mpu6500.h"
 #include "mpu6500_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static const float s_accel_lsb_per_g[MPU6500_ACCEL_RANGE_COUNT] = {
     MPU6500_ACCEL_LSB_PER_G_2G,
@@ -34,7 +34,7 @@ static int mpu6500_write(mpu6500_handle_t *handle, uint8_t reg, uint8_t value)
     return (ret == DRIVER_OK) ? DRIVER_OK : (int)PORT_IO_ERROR;
 }
 
-static int mpu6500_read(mpu6500_handle_t *handle, uint8_t reg, uint8_t *buf, size_t len)
+static int mpu6500_bus_read(mpu6500_handle_t *handle, uint8_t reg, uint8_t *buf, size_t len)
 {
     uint8_t tx[MPU6500_BURST_MAX + 1U];
     uint8_t rx[MPU6500_BURST_MAX + 1U];
@@ -102,28 +102,20 @@ int mpu6500_init(mpu6500_handle_t *handle, port_i2c_handle_t *i2c,
     }
 
     handle->use_spi = (spi != NULL);
-    handle->i2c.handle = i2c;
-    handle->i2c.address = (address != 0U) ? address : MPU6500_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
-    handle->spi.handle = spi;
-    handle->spi.cs = cs;
-    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
-    handle->accel_range = accel_range;
-    handle->gyro_range = gyro_range;
+    handle->i2c = (driver_i2c_t){ .handle = i2c, .timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT,
+                                  .address = (address != 0U) ? address : MPU6500_DEFAULT_ADDRESS };
+    handle->spi = (driver_spi_t){ .handle = spi, .cs = cs, .timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT };
+    handle->accel_range = accel_range; handle->gyro_range = gyro_range;
     handle->accel_lsb_per_g = s_accel_lsb_per_g[accel_range];
     handle->gyro_lsb_per_dps = s_gyro_lsb_per_dps[gyro_range];
     handle->initialized = false;
 
     /* 软复位 */
-    if (mpu6500_write(handle, MPU6500_REG_PWR_MGMT_1, MPU6500_PWR1_DEVICE_RESET) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
+    if (mpu6500_write(handle, MPU6500_REG_PWR_MGMT_1, MPU6500_PWR1_DEVICE_RESET) != DRIVER_OK) { return (int)PORT_IO_ERROR; }
     driver_delay_ms(MPU6500_RESET_DELAY_MS);
 
     /* WHO_AM_I 在位校验 */
-    if (mpu6500_read(handle, MPU6500_REG_WHO_AM_I, &id, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
+    if (mpu6500_bus_read(handle, MPU6500_REG_WHO_AM_I, &id, 1U) != DRIVER_OK) { return (int)PORT_IO_ERROR; }
     if (id != MPU6500_WHO_AM_I_VALUE) {
         LOG_E("mpu6500", "who_am_i mismatch 0x%02X", id);
         return (int)PORT_NOT_FOUND;
@@ -158,12 +150,12 @@ int mpu6500_init(mpu6500_handle_t *handle, port_i2c_handle_t *i2c,
     }
 
     /* 写通路自检：回读量程位 */
-    if (mpu6500_read(handle, MPU6500_REG_GYRO_CONFIG, &check, 1U) != DRIVER_OK ||
+    if (mpu6500_bus_read(handle, MPU6500_REG_GYRO_CONFIG, &check, 1U) != DRIVER_OK ||
         (check & MPU6500_GYRO_FS_MASK) != (uint8_t)((uint8_t)gyro_range << MPU6500_GYRO_FS_SHIFT)) {
         LOG_E("mpu6500", "gyro range readback failed");
         return (int)PORT_HW_ERROR;
     }
-    if (mpu6500_read(handle, MPU6500_REG_ACCEL_CONFIG, &check, 1U) != DRIVER_OK ||
+    if (mpu6500_bus_read(handle, MPU6500_REG_ACCEL_CONFIG, &check, 1U) != DRIVER_OK ||
         (check & MPU6500_ACCEL_FS_MASK) != (uint8_t)((uint8_t)accel_range << MPU6500_ACCEL_FS_SHIFT)) {
         LOG_E("mpu6500", "accel range readback failed");
         return (int)PORT_HW_ERROR;
@@ -199,7 +191,7 @@ int mpu6500_get_status(mpu6500_handle_t *handle, uint8_t *int_status)
     if (handle == NULL || int_status == NULL || !handle->initialized) {
         return (int)PORT_INVALID_PARAM;
     }
-    return mpu6500_read(handle, MPU6500_REG_INT_STATUS, int_status, 1U);
+    return mpu6500_bus_read(handle, MPU6500_REG_INT_STATUS, int_status, 1U);
 }
 
 int mpu6500_read_raw(mpu6500_handle_t *handle, int16_t accel[3], int16_t gyro[3],
@@ -210,7 +202,7 @@ int mpu6500_read_raw(mpu6500_handle_t *handle, int16_t accel[3], int16_t gyro[3]
     if (handle == NULL || accel == NULL || gyro == NULL || !handle->initialized) {
         return (int)PORT_INVALID_PARAM;
     }
-    if (mpu6500_read(handle, MPU6500_REG_ACCEL_XOUT_H, d, sizeof(d)) != DRIVER_OK) {
+    if (mpu6500_bus_read(handle, MPU6500_REG_ACCEL_XOUT_H, d, sizeof(d)) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
 

@@ -1,12 +1,12 @@
 /* iot-os 模拟运行入口：模拟一块硬件，初始化平台与日志控制台，运行功能自检并打印结果。 */
 #include "port.h"
-#include "iot_logger.h"
-#include "iot_console.h"
-#include "hash_md5.h"
-#include "hash_sha256.h"
-#include "iot_hex.h"
-#include "iot_cron.h"
-#include "iot_datetime.h"
+#include "log.h"
+#include "console.h"
+#include "md5.h"
+#include "sha256.h"
+#include "hex.h"
+#include "scheduler.h"
+#include "datetime.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -21,13 +21,13 @@ static void sim_test_hash(void)
     uint8_t d[32];
     char hex[65];
 
-    hash_md5_compute("abc", 3, d);
-    iot_hex_encode(d, 16, hex, sizeof(hex), false);
+    md5_compute("abc", 3, d);
+    hex_encode(d, 16, hex, sizeof(hex), false);
     LOG_I("sim", "md5(abc)=%s", hex);
     CHECK(strcmp(hex, "900150983cd24fb0d6963f7d28e17f72") == 0);
 
-    hash_sha256_compute("abc", 3, d);
-    iot_hex_encode(d, 32, hex, sizeof(hex), false);
+    sha256_compute("abc", 3, d);
+    hex_encode(d, 32, hex, sizeof(hex), false);
     LOG_I("sim", "sha256(abc)=%s", hex);
     CHECK(strcmp(hex,
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") == 0);
@@ -38,16 +38,16 @@ static void cron_cb(void *user) { (void)user; cron_hit++; }
 
 static void sim_test_cron(void)
 {
-    iot_datetime_t now;
-    iot_id_t id;
+    datetime_t now;
+    uint32_t id;
 
-    iot_cron_init();
-    iot_cron_add("08:00:00", cron_cb, NULL, &id);
+    scheduler_init();
+    scheduler_add("0 8 * * *", cron_cb, NULL, &id);
 
     memset(&now, 0, sizeof(now));
     now.year = 2024; now.month = 1; now.day = 1;
     now.hour = 8; now.minute = 0; now.second = 0;
-    iot_cron_process(&now);
+    scheduler_process(&now);
     CHECK(cron_hit == 1);
     LOG_I("sim", "cron fired");
 }
@@ -57,7 +57,7 @@ int main(void)
     uint8_t rx[64];
     port_uart_handle_t uart;
     port_uart_config_t uart_cfg;
-    iot_console_config_t cfg;
+    console_config_t cfg;
 
     /* 初始化模拟平台 */
     if (port_init() != PORT_OK) {
@@ -65,8 +65,7 @@ int main(void)
         return 1;
     }
 
-    /* 日志 -> 控制台 -> 模拟 UART(stdout) */
-    iot_log_init();
+    /* 日志宏直接输出到 stdout */
     memset(&uart, 0, sizeof(uart));
     memset(&uart_cfg, 0, sizeof(uart_cfg));
     uart.base.instance = (void *)1;
@@ -82,8 +81,8 @@ int main(void)
     cfg.uart = &uart;
     cfg.rx_buffer = rx;
     cfg.rx_buffer_size = sizeof(rx);
-    iot_console_init(&cfg);
-    iot_console_start();
+    console_init(&cfg);
+    console_start();
 
     LOG_I("sim", "simulator boot, tick=%u", (unsigned)port_tick_get());
 

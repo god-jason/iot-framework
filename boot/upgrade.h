@@ -6,7 +6,9 @@
  * 与 Bootloader（boot）分离：本模块负责下载/暂存/校验。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

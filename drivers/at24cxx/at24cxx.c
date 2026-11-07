@@ -1,5 +1,5 @@
 #include "at24cxx.h"
-#include "iot_logger.h"
+#include "log.h"
 
 typedef struct {
     uint32_t capacity;

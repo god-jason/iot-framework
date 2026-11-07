@@ -1,54 +1,139 @@
-/*
- * YF-S201 霍尔水流量传感器驱动。
- * 输出：方波脉冲，约 450 脉冲/升，即 7.5 脉冲/秒对应 1 L/min。
- * 原理：流量(L/min) = 单位时间脉冲数(Hz) / 7.5。
- *
- * 说明：本驱动用 GPIO 轮询 + 微秒延时近似实现单位时间脉冲计数；
- * 实际应用建议改用硬件定时器 + 外部中断计数，精度更高，且不会阻塞。
- */
 #include "yf_s201.h"
-#include "iot_logger.h"
-#include <stddef.h>
+#include "log.h"
 
-#define YF_S201_PULSES_PER_LITER  7.5f      /* 1 L/min 对应 7.5 脉冲/秒 */
-#define YF_S201_WINDOW_US         1000000u  /* 采样窗 1s（近似） */
-#define YF_S201_SAMPLE_US         100u      /* 轮询采样间隔 */
+#define YF_S201_TAG "yf_s201"
 
-int flow_init(gpio_bus_t *bus, uint8_t pin)
+static int yf_s201_check(const yf_s201_handle_t *handle)
 {
-    if (bus == NULL) {
-        LOG_E("yf_s201", "bus null");
-        return -1;
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    (void)pin;
-    LOG_I("yf_s201", "init ok");
-    return 0;
+    return DRIVER_OK;
 }
 
-int flow_read(gpio_bus_t *bus, uint8_t pin, float *liters_per_min)
+int yf_s201_init(yf_s201_handle_t *handle, port_pin_t pin)
 {
-    uint32_t pulses = 0;
-    uint32_t elapsed = 0;
-    uint8_t last;
-    uint8_t cur;
-
-    if (bus == NULL || liters_per_min == NULL) {
-        LOG_E("yf_s201", "bad arg");
-        return -1;
+    if (handle == NULL || pin == 0U) {
+        return (int)PORT_INVALID_PARAM;
     }
 
-    last = gpio_get(bus, pin);
-    while (elapsed < YF_S201_WINDOW_US) {
-        gpio_udelay(bus, YF_S201_SAMPLE_US);
-        elapsed += YF_S201_SAMPLE_US;
-        cur = gpio_get(bus, pin);
+    handle->pin = pin;
+    handle->pulses_per_liter = YF_S201_PULSES_PER_LITER_DEFAULT;
+    handle->window_ms = YF_S201_WINDOW_MS_DEFAULT;
+    handle->initialized = false;
+
+    /* 霍尔输出为开集结构，需上拉；无水流时读到稳定高电平（不产生上升沿） */
+    if (driver_gpio_input(pin, PORT_GPIO_PULLUP) != DRIVER_OK) {
+        LOG_E(YF_S201_TAG, "gpio init failed");
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->initialized = true;
+    LOG_I(YF_S201_TAG, "init ok, %u pulses/L",
+          (unsigned int)YF_S201_PULSES_PER_LITER_DEFAULT);
+    return DRIVER_OK;
+}
+
+int yf_s201_deinit(yf_s201_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->pin != 0U) {
+        (void)driver_gpio_deinit(handle->pin);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int yf_s201_set_pulses_per_liter(yf_s201_handle_t *handle, float pulses_per_liter)
+{
+    int ret = yf_s201_check(handle);
+
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    if (pulses_per_liter < 100.0f || pulses_per_liter > 2000.0f) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->pulses_per_liter = pulses_per_liter;
+    return DRIVER_OK;
+}
+
+int yf_s201_set_window(yf_s201_handle_t *handle, uint32_t window_ms)
+{
+    int ret = yf_s201_check(handle);
+
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    if (window_ms < YF_S201_WINDOW_MS_MIN || window_ms > YF_S201_WINDOW_MS_MAX) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    handle->window_ms = window_ms;
+    return DRIVER_OK;
+}
+
+int yf_s201_read(yf_s201_handle_t *handle, float *hz, float *liters_per_min)
+{
+    uint32_t window_us;
+    uint32_t elapsed_us = 0U;
+    uint32_t pulses = 0U;
+    int last;
+    int ret;
+
+    if (hz == NULL && liters_per_min == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = yf_s201_check(handle);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    window_us = handle->window_ms * 1000U;
+
+    last = driver_gpio_read(handle->pin);
+    if (last < 0) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    while (elapsed_us < window_us) {
+        int cur;
+
+        driver_delay_us(YF_S201_SAMPLE_US);
+        elapsed_us += YF_S201_SAMPLE_US;
+
+        cur = driver_gpio_read(handle->pin);
+        if (cur < 0) {
+            return (int)PORT_IO_ERROR;
+        }
         if (cur != 0 && last == 0) {
             pulses++; /* 上升沿计数 */
         }
         last = cur;
     }
 
-    /* 流量(L/min) = 脉冲数(1s 内) / 7.5 */
-    *liters_per_min = (float)pulses / YF_S201_PULSES_PER_LITER;
-    return 0;
+    if (pulses == 0U) {
+        /* 无脉冲：静水，频率与流量均为 0（非错误状态） */
+        if (hz != NULL) {
+            *hz = 0.0f;
+        }
+        if (liters_per_min != NULL) {
+            *liters_per_min = 0.0f;
+        }
+        return DRIVER_OK;
+    }
+
+    {
+        float freq = (float)pulses * 1000000.0f / (float)window_us;
+
+        if (hz != NULL) {
+            *hz = freq;
+        }
+        if (liters_per_min != NULL) {
+            *liters_per_min = freq * 60.0f / handle->pulses_per_liter;
+        }
+    }
+
+    return DRIVER_OK;
 }

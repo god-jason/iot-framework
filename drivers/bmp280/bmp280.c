@@ -1,6 +1,6 @@
 #include "bmp280.h"
 #include "bmp280_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int bmp280_read_calib(bmp280_handle_t *handle)
 {

@@ -1,6 +1,6 @@
 #include "mcp3421.h"
 #include "mcp3421_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 分辨率枚举 → 位数 */
 static uint8_t mcp3421_bits(mcp3421_res_t resolution)

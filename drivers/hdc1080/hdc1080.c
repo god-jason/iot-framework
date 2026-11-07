@@ -1,6 +1,6 @@
 #include "hdc1080.h"
 #include "hdc1080_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 写配置寄存器（16 位，大端） */
 static int hdc1080_write_config(hdc1080_handle_t *handle, uint16_t value)

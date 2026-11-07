@@ -1,6 +1,6 @@
 #include "tea5767.h"
 #include "tea5767_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 #define TEA5767_TAG "tea5767"
 
@@ -22,11 +22,6 @@ static uint16_t tea5767_mhz_to_pll(float mhz)
     float hz = mhz * 1000000.0f;
 
     return (uint16_t)(((hz + TEA5767_PLL_OFFSET_HZ) / TEA5767_PLL_DIVIDER) + 0.5f);
-}
-
-static int tea5767_flush(tea5767_handle_t *handle)
-{
-    return driver_i2c_write(&handle->i2c, handle->config, TEA5767_REG_COUNT);
 }
 
 int tea5767_init(tea5767_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
@@ -187,7 +182,8 @@ int tea5767_get_frequency(tea5767_handle_t *handle, float *frequency_mhz)
     return DRIVER_OK;
 }
 
-int tea5767_set_mute(tea5767_handle_t *handle, bool mute)
+/* 修改缓存配置中的某一位后整体下发 */
+static int tea5767_modify_bit(tea5767_handle_t *handle, uint8_t index, uint8_t mask, bool set)
 {
     uint8_t config[TEA5767_REG_COUNT];
     uint8_t i;
@@ -196,58 +192,31 @@ int tea5767_set_mute(tea5767_handle_t *handle, bool mute)
     if (ret != DRIVER_OK) {
         return ret;
     }
-
     for (i = 0U; i < TEA5767_REG_COUNT; i++) {
         config[i] = handle->config[i];
     }
-    if (mute) {
-        config[0] |= TEA5767_B0_MUTE;
+    if (set) {
+        config[index] |= mask;
     } else {
-        config[0] = (uint8_t)(config[0] & (uint8_t)~TEA5767_B0_MUTE);
+        config[index] = (uint8_t)(config[index] & (uint8_t)~mask);
     }
     return tea5767_write(handle, config);
+}
+
+int tea5767_set_mute(tea5767_handle_t *handle, bool mute)
+{
+    return tea5767_modify_bit(handle, 0U, TEA5767_B0_MUTE, mute);
 }
 
 int tea5767_set_stereo(tea5767_handle_t *handle, bool enable)
 {
-    uint8_t config[TEA5767_REG_COUNT];
-    uint8_t i;
-    int ret = tea5767_check(handle);
-
-    if (ret != DRIVER_OK) {
-        return ret;
-    }
-
-    for (i = 0U; i < TEA5767_REG_COUNT; i++) {
-        config[i] = handle->config[i];
-    }
-    if (enable) {
-        config[2] = (uint8_t)(config[2] & (uint8_t)~TEA5767_B2_MONO);
-    } else {
-        config[2] |= TEA5767_B2_MONO;
-    }
-    return tea5767_write(handle, config);
+    /* MONO 位为 1 表示强制单声道 */
+    return tea5767_modify_bit(handle, 2U, TEA5767_B2_MONO, !enable);
 }
 
 int tea5767_set_standby(tea5767_handle_t *handle, bool standby)
 {
-    uint8_t config[TEA5767_REG_COUNT];
-    uint8_t i;
-    int ret = tea5767_check(handle);
-
-    if (ret != DRIVER_OK) {
-        return ret;
-    }
-
-    for (i = 0U; i < TEA5767_REG_COUNT; i++) {
-        config[i] = handle->config[i];
-    }
-    if (standby) {
-        config[3] |= TEA5767_B3_STANDBY;
-    } else {
-        config[3] = (uint8_t)(config[3] & (uint8_t)~TEA5767_B3_STANDBY);
-    }
-    return tea5767_write(handle, config);
+    return tea5767_modify_bit(handle, 3U, TEA5767_B3_STANDBY, standby);
 }
 
 int tea5767_seek(tea5767_handle_t *handle, bool up, float *mhz_out)

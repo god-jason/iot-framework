@@ -9,7 +9,7 @@ int image_parse(const void *data, uint32_t len, image_header_t *header)
         return -1;
     }
     memcpy(header, data, sizeof(image_header_t));
-    return IOT_OK;
+    return 0;
 }
 
 int image_verify(const image_header_t *header)
@@ -29,7 +29,7 @@ int image_verify(const image_header_t *header)
         return -1;
     }
     s_state = IMAGE_VALID;
-    return IOT_OK;
+    return 0;
 }
 
 int image_get_state(image_state_t *state)
@@ -38,5 +38,5 @@ int image_get_state(image_state_t *state)
         return -1;
     }
     *state = s_state;
-    return IOT_OK;
+    return 0;
 }

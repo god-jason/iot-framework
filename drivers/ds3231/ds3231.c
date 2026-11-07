@@ -1,6 +1,6 @@
 #include "ds3231.h"
 #include "ds3231_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static uint8_t ds3231_bin_to_bcd(uint8_t value)
 {

@@ -30,7 +30,7 @@ int upgrade_init(void)
     s_received_size = 0;
     s_callback = NULL;
     s_callback_user = NULL;
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_begin(const upgrade_info_t *info)
@@ -52,7 +52,7 @@ int upgrade_begin(const upgrade_info_t *info)
     s_received_size = 0;
     s_state = UPGRADE_RECEIVING;
     upgrade_progress();
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_write(uint32_t offset, const void *data, uint32_t len)
@@ -69,7 +69,7 @@ int upgrade_write(uint32_t offset, const void *data, uint32_t len)
         return -1;
     }
     r = partition_write(PART_OTA, offset, data, len);
-    if (r != IOT_OK) {
+    if (r != 0) {
         s_state = UPGRADE_FAILED;
         return r;
     }
@@ -77,16 +77,16 @@ int upgrade_write(uint32_t offset, const void *data, uint32_t len)
         s_received_size = offset + len;
     }
     upgrade_progress();
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_resume(void)
 {
     if (s_state == UPGRADE_RECEIVING) {
-        return IOT_OK;
+        return 0;
     }
     s_state = UPGRADE_RECEIVING;
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_verify(void)
@@ -100,7 +100,7 @@ int upgrade_verify(void)
         return -1;
     }
     s_state = UPGRADE_READY;
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_finish(void)
@@ -110,13 +110,13 @@ int upgrade_finish(void)
     }
     s_state = UPGRADE_SUCCESS;
     upgrade_progress();
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_abort(void)
 {
     s_state = UPGRADE_IDLE;
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_get_status(upgrade_status_t *status)
@@ -129,12 +129,12 @@ int upgrade_get_status(upgrade_status_t *status)
     status->received_size = s_received_size;
     status->current_offset = s_received_size;
     status->error = 0;
-    return IOT_OK;
+    return 0;
 }
 
 int upgrade_set_callback(upgrade_progress_fn callback, void *user)
 {
     s_callback = callback;
     s_callback_user = user;
-    return IOT_OK;
+    return 0;
 }

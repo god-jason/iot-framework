@@ -1,6 +1,6 @@
 #include "ssd1681.h"
 #include "ssd1681_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static int ssd1681_send(ssd1681_handle_t *handle, bool is_data,
                         const uint8_t *data, size_t len)
@@ -288,19 +288,3 @@ int ssd1681_is_busy(ssd1681_handle_t *handle)
     return driver_gpio_read(handle->config.busy);
 }
 
-int ssd1681_set_sleep(ssd1681_handle_t *handle, bool sleep)
-{
-    if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
-    }
-    if (sleep) {
-        uint8_t mode = SSD1681_DEEP_SLEEP_MODE1;
-
-        return ssd1681_cmd_arg(handle, SSD1681_CMD_DEEP_SLEEP, &mode, 1U);
-    }
-    /* 深睡唤醒需硬件复位 */
-    if (ssd1681_reset(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
-    return DRIVER_OK;
-}

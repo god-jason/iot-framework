@@ -256,7 +256,7 @@ static void h7_dwt_init(void)
     s_dwt_ready = true;
 }
 
-/* ---------------- Platform / OS Ops ---------------- */
+/* ---------------- Platform Ops ---------------- */
 static port_status_t h7_platform_init(void)
 {
     if (!s_dwt_ready) {
@@ -342,80 +342,6 @@ void port_system_sleep(void)
 void port_system_deepsleep(void)
 {
     HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
-}
-
-/* ---------------- 裸机 OS Ops ---------------- */
-static port_status_t h7_os_mutex_create(port_mutex_t *mutex)
-{
-    if (mutex == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    *mutex = 1U;
-    return PORT_OK;
-}
-
-static port_status_t h7_os_mutex_delete(port_mutex_t mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_OK;
-}
-
-static port_status_t h7_os_mutex_lock(port_mutex_t mutex, uint32_t timeout)
-{
-    PORT_UNUSED(mutex);
-    PORT_UNUSED(timeout);
-    return PORT_OK;
-}
-
-static port_status_t h7_os_mutex_unlock(port_mutex_t mutex)
-{
-    PORT_UNUSED(mutex);
-    return PORT_OK;
-}
-
-static port_status_t h7_os_sem_create(port_semaphore_t *sem, uint32_t max_count,
-                                      uint32_t initial_count)
-{
-    if (sem == NULL || initial_count > max_count) {
-        return PORT_INVALID_PARAM;
-    }
-    *sem = (uintptr_t)initial_count;
-    return PORT_OK;
-}
-
-static port_status_t h7_os_sem_wait(port_semaphore_t sem, uint32_t timeout)
-{
-    PORT_UNUSED(timeout);
-    if (sem == 0U) {
-        return PORT_TIMEOUT;
-    }
-    return PORT_OK;
-}
-
-static port_status_t h7_os_sem_post(port_semaphore_t sem)
-{
-    PORT_UNUSED(sem);
-    return PORT_OK;
-}
-
-static uint32_t h7_os_tick_get(void)
-{
-    return (uint32_t)HAL_GetTick();
-}
-
-static void h7_os_delay_ms(uint32_t ms)
-{
-    HAL_Delay(ms);
-}
-
-static void h7_os_critical_enter(void)
-{
-    __disable_irq();
-}
-
-static void h7_os_critical_exit(void)
-{
-    __enable_irq();
 }
 
 /* ---------------- 时钟 ---------------- */
@@ -5333,20 +5259,6 @@ static const port_platform_ops_t s_h7_platform_ops = {
     h7_platform_get_info
 };
 
-static const port_os_ops_t s_h7_os_ops = {
-    h7_os_mutex_create,
-    h7_os_mutex_delete,
-    h7_os_mutex_lock,
-    h7_os_mutex_unlock,
-    h7_os_sem_create,
-    h7_os_sem_wait,
-    h7_os_sem_post,
-    h7_os_tick_get,
-    h7_os_delay_ms,
-    h7_os_critical_enter,
-    h7_os_critical_exit
-};
-
 port_status_t port_platform_install(void)
 {
     port_status_t status;
@@ -5355,10 +5267,6 @@ port_status_t port_platform_install(void)
         return PORT_OK;
     }
     status = port_platform_register(&s_h7_platform_ops);
-    if (status != PORT_OK) {
-        return status;
-    }
-    status = port_os_register(&s_h7_os_ops);
     if (status != PORT_OK) {
         return status;
     }

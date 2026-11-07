@@ -5,7 +5,9 @@
  * ML307 HTTP 原语（基于 at 引擎，模组内置 HTTP）。
  */
 
-#include "iot_types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

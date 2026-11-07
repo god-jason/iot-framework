@@ -215,17 +215,6 @@ static bool s_eth_started;
 static uint8_t s_eth_frame[SIM_ETH_FRAME_MAX];
 static size_t s_eth_len;
 
-/* ------------------------------ OS ------------------------------ */
-
-typedef struct {
-    bool used;
-    uint32_t count;
-    uint32_t max_count;
-} sim_sem_ctx_t;
-
-static sim_sem_ctx_t s_mutex[SIM_MUTEX_MAX];
-static sim_sem_ctx_t s_sem[SIM_SEM_MAX];
-
 /* ============================== 通用辅助 ============================== */
 
 static int sim_priv_index(const void *priv)
@@ -234,19 +223,6 @@ static int sim_priv_index(const void *priv)
         return -1;
     }
     return (int)((uintptr_t)priv) - 1;
-}
-
-static int sim_ctx_alloc(bool *used, int max)
-{
-    int i;
-
-    for (i = 0; i < max; i++) {
-        if (!used[i]) {
-            used[i] = true;
-            return i;
-        }
-    }
-    return -1;
 }
 
 static bool sim_gpio_valid(port_pin_t pin)
@@ -301,163 +277,6 @@ static port_status_t sim_platform_get_info(port_mcu_info_t *info)
     return PORT_OK;
 }
 
-/* ------------------------------ OS 实现 ------------------------------ */
-
-static port_status_t sim_os_mutex_create(port_mutex_t *mutex)
-{
-    bool used[SIM_MUTEX_MAX];
-    int i;
-
-    if (mutex == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    for (i = 0; i < SIM_MUTEX_MAX; i++) {
-        used[i] = s_mutex[i].used;
-    }
-    i = sim_ctx_alloc(used, SIM_MUTEX_MAX);
-    if (i < 0) {
-        return PORT_NO_MEMORY;
-    }
-    s_mutex[i].used = true;
-    s_mutex[i].count = 0;
-    s_mutex[i].max_count = 1;
-    *mutex = (port_mutex_t)(i + 1);
-    return PORT_OK;
-}
-
-static sim_sem_ctx_t *sim_mutex_get(port_mutex_t mutex)
-{
-    uintptr_t index = (uintptr_t)mutex;
-
-    if (index == 0 || index > (uintptr_t)SIM_MUTEX_MAX) {
-        return NULL;
-    }
-    if (!s_mutex[index - 1].used) {
-        return NULL;
-    }
-    return &s_mutex[index - 1];
-}
-
-static port_status_t sim_os_mutex_delete(port_mutex_t mutex)
-{
-    sim_sem_ctx_t *ctx = sim_mutex_get(mutex);
-
-    if (ctx == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    ctx->used = false;
-    ctx->count = 0;
-    return PORT_OK;
-}
-
-static port_status_t sim_os_mutex_lock(port_mutex_t mutex, uint32_t timeout)
-{
-    sim_sem_ctx_t *ctx = sim_mutex_get(mutex);
-
-    PORT_UNUSED(timeout);
-    if (ctx == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    ctx->count++;
-    return PORT_OK;
-}
-
-static port_status_t sim_os_mutex_unlock(port_mutex_t mutex)
-{
-    sim_sem_ctx_t *ctx = sim_mutex_get(mutex);
-
-    if (ctx == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    if (ctx->count > 0) {
-        ctx->count--;
-    }
-    return PORT_OK;
-}
-
-static port_status_t sim_os_semaphore_create(port_semaphore_t *sem,
-                                             uint32_t max_count,
-                                             uint32_t initial_count)
-{
-    bool used[SIM_SEM_MAX];
-    int i;
-
-    if (sem == NULL || max_count == 0 || initial_count > max_count) {
-        return PORT_INVALID_PARAM;
-    }
-    for (i = 0; i < SIM_SEM_MAX; i++) {
-        used[i] = s_sem[i].used;
-    }
-    i = sim_ctx_alloc(used, SIM_SEM_MAX);
-    if (i < 0) {
-        return PORT_NO_MEMORY;
-    }
-    s_sem[i].used = true;
-    s_sem[i].count = initial_count;
-    s_sem[i].max_count = max_count;
-    *sem = (port_semaphore_t)(i + 1);
-    return PORT_OK;
-}
-
-static sim_sem_ctx_t *sim_sem_get(port_semaphore_t sem)
-{
-    uintptr_t index = (uintptr_t)sem;
-
-    if (index == 0 || index > (uintptr_t)SIM_SEM_MAX) {
-        return NULL;
-    }
-    if (!s_sem[index - 1].used) {
-        return NULL;
-    }
-    return &s_sem[index - 1];
-}
-
-static port_status_t sim_os_semaphore_wait(port_semaphore_t sem, uint32_t timeout)
-{
-    sim_sem_ctx_t *ctx = sim_sem_get(sem);
-
-    if (ctx == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    if (ctx->count == 0) {
-        PORT_UNUSED(timeout);
-        return PORT_TIMEOUT;
-    }
-    ctx->count--;
-    return PORT_OK;
-}
-
-static port_status_t sim_os_semaphore_post(port_semaphore_t sem)
-{
-    sim_sem_ctx_t *ctx = sim_sem_get(sem);
-
-    if (ctx == NULL) {
-        return PORT_INVALID_PARAM;
-    }
-    if (ctx->count < ctx->max_count) {
-        ctx->count++;
-    }
-    return PORT_OK;
-}
-
-static uint32_t sim_os_tick_get(void)
-{
-    return s_tick;
-}
-
-static void sim_os_delay_ms(uint32_t ms)
-{
-    s_tick += ms;
-}
-
-static void sim_os_critical_enter(void)
-{
-}
-
-static void sim_os_critical_exit(void)
-{
-}
-
 port_status_t port_platform_install(void)
 {
     static const port_platform_ops_t platform_ops = {
@@ -467,26 +286,7 @@ port_status_t port_platform_install(void)
         sim_platform_deinit,
         sim_platform_get_info
     };
-    static const port_os_ops_t os_ops = {
-        sim_os_mutex_create,
-        sim_os_mutex_delete,
-        sim_os_mutex_lock,
-        sim_os_mutex_unlock,
-        sim_os_semaphore_create,
-        sim_os_semaphore_wait,
-        sim_os_semaphore_post,
-        sim_os_tick_get,
-        sim_os_delay_ms,
-        sim_os_critical_enter,
-        sim_os_critical_exit
-    };
-    port_status_t status;
-
-    status = port_platform_register(&platform_ops);
-    if (status != PORT_OK) {
-        return status;
-    }
-    return port_os_register(&os_ops);
+    return port_platform_register(&platform_ops);
 }
 
 /* ============================== 核心 ============================== */
@@ -3452,8 +3252,6 @@ void port_sim_reset_state(void)
     s_eth_len = 0U;
     memset(s_eth_frame, 0, sizeof(s_eth_frame));
 
-    memset(s_mutex, 0, sizeof(s_mutex));
-    memset(s_sem, 0, sizeof(s_sem));
 }
 
 void port_sim_tick_advance(uint32_t ms)

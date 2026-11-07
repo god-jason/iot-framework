@@ -1,6 +1,6 @@
 #include "ads1110.h"
 #include "ads1110_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 各速率对应的转换周期（ms） */
 static const uint16_t ads1110_conv_ms[4] = {

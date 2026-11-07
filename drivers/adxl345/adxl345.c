@@ -1,6 +1,6 @@
 #include "adxl345.h"
 #include "adxl345_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int adxl345_init(adxl345_handle_t *handle, port_i2c_handle_t *i2c,
                  uint16_t address, adxl345_range_t range)

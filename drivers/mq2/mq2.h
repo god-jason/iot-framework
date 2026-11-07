@@ -14,6 +14,16 @@
  * driver_io.h 未提供 ADC 封装，ADC 采样由上层完成（drivers/voltage.c 或
  * port_adc_read），本驱动只做电压 -> 电阻 -> 浓度的换算。
  *
+ * adc_mv 单位为 mV（不是 V、也不是 ADC 原始码）。uint16_t 类型可表示
+ * 0..65535mV，但这只是**类型上限**：实际可用量程由所选 ADC 的 PGA/基准决定
+ * （ads1115 默认 PGA=±2.048V、mcp3421/ads1110 固定 ±2.048V，超量程表现为
+ * 码值饱和而非数值溢出，5V 模块需先调 PGA/Vref）。典型来源：
+ *   - 板载 ADC：drivers/voltage.c 的 voltage_read(&v, &mv) 直接给出滤波后 mV；
+ *     其 vref_mv 必须与板上实际基准一致（外部 2.5V 基准却按 VDD 传参会引入
+ *     系统性偏差，使 Rs 与 Rs/R0 整体漂移）
+ *   - 外部 ADC：adc_mv = (uint16_t)(volts * 1000.0f + 0.5f)
+ * 预热时间见 MQ2_WARMUP_MS，预热期内读数不应采信（由上层判定）。
+ *
  * 真实浓度关系为 ppm = A * (Rs/R0)^B（对数坐标下为直线），A、B 随器件与
  * 标定条件变化，需按 datasheet 标定；本驱动只提供 mv / Rs / Rs/R0 及可选的
  * 线性近似 ppm，不做高次幂运算以避免引入 libm。

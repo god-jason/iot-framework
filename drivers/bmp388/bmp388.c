@@ -1,60 +1,289 @@
 #include "bmp388.h"
-#include "iot_logger.h"
+#include "bmp388_register.h"
+#include "log.h"
 
-#define BMP388_ADDR    0x76
-#define BMP388_CHIP_ID 0x50
+#define BMP388_SPI_XFER_MAX         32U
 
-#define REG_CHIP_ID  0x00
-#define REG_PWR_CTRL 0x1B
-#define REG_OSR      0x1C
-/* 数据寄存器 0x04..0x09：压力 3 字节 + 温度 3 字节（小端） */
-#define REG_DATA     0x04
+/* ---------------- 总线访问（I2C / SPI 统一） ---------------- */
 
-int bmp388_init(const i2c_bus_t *bus)
+static uint16_t bmp388_le16u(const uint8_t *p)
 {
-    uint8_t chip = 0;
-
-    if (bus == NULL) {
-        return -1;
-    }
-    if (i2c_read_reg(bus, BMP388_ADDR, REG_CHIP_ID, &chip) != 0 ||
-        chip != BMP388_CHIP_ID) {
-        LOG_E("bmp388", "chip id fail");
-        return -1;
-    }
-    /* normal 模式：PWR_CTRL 0x33（使能温度与压力） */
-    if (i2c_write_reg(bus, BMP388_ADDR, REG_PWR_CTRL, 0x33) != 0) {
-        LOG_E("bmp388", "pwr ctrl fail");
-        return -1;
-    }
-    /* 过采样 OSR 0x03 */
-    if (i2c_write_reg(bus, BMP388_ADDR, REG_OSR, 0x03) != 0) {
-        LOG_E("bmp388", "osr fail");
-        return -1;
-    }
-    LOG_I("bmp388", "init ok");
-    return 0;
+    return (uint16_t)(((uint16_t)p[1] << 8) | (uint16_t)p[0]);
 }
 
-int bmp388_read(const i2c_bus_t *bus, float *temp, float *pressure)
+static int bmp388_bus_read(bmp388_handle_t *handle, uint8_t reg, uint8_t *data, size_t len)
 {
-    uint8_t d[6];
-    uint32_t raw_p, raw_t;
+    uint8_t tx[BMP388_SPI_XFER_MAX];
+    uint8_t rx[BMP388_SPI_XFER_MAX];
+    size_t i;
+    int ret;
 
-    if (bus == NULL || temp == NULL || pressure == NULL) {
-        return -1;
+    if (!handle->use_spi) {
+        return driver_i2c_read_reg(&handle->i2c, reg, data, len);
     }
-    if (i2c_read_regs(bus, BMP388_ADDR, REG_DATA, d, 6) != 0) {
-        return -1;
+    if (data == NULL || len == 0U || (len + 1U) > BMP388_SPI_XFER_MAX) {
+        return (int)PORT_INVALID_PARAM;
     }
-    /* 压力 24bit：d[0] 最低字节 .. d[2] 最高字节（小端） */
-    raw_p = (uint32_t)d[0] | ((uint32_t)d[1] << 8) | ((uint32_t)d[2] << 16);
-    /* 温度 24bit：d[3] 最低字节 .. d[5] 最高字节（小端） */
-    raw_t = (uint32_t)d[3] | ((uint32_t)d[4] << 8) | ((uint32_t)d[5] << 16);
 
-    /* 简化：直接返回原始 24bit 值；完整补偿需读 0x31-0x54 系数后换算，
-     * 此处留待外部处理。 */
-    *pressure = (float)raw_p;
-    *temp = (float)raw_t;
-    return 0;
+    tx[0] = (uint8_t)(reg | 0x80U);              /* SPI 读：地址最高位置 1 */
+    for (i = 1U; i <= len; i++) {
+        tx[i] = 0xFFU;
+    }
+
+    driver_spi_select(&handle->spi);
+    ret = driver_spi_transfer(&handle->spi, tx, rx, len + 1U);
+    driver_spi_deselect(&handle->spi);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    for (i = 0U; i < len; i++) {
+        data[i] = rx[i + 1U];
+    }
+    return DRIVER_OK;
+}
+
+static int bmp388_bus_write(bmp388_handle_t *handle, uint8_t reg,
+                            const uint8_t *data, size_t len)
+{
+    uint8_t tx[BMP388_SPI_XFER_MAX];
+    size_t i;
+
+    if (!handle->use_spi) {
+        return driver_i2c_write_reg(&handle->i2c, reg, data, len);
+    }
+    if (data == NULL || len == 0U || (len + 1U) > BMP388_SPI_XFER_MAX) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    tx[0] = (uint8_t)(reg & 0x7FU);              /* SPI 写：地址最高位清 0 */
+    for (i = 0U; i < len; i++) {
+        tx[i + 1U] = data[i];
+    }
+    return driver_spi_write_cs(&handle->spi, tx, len + 1U);
+}
+
+/* ---------------- 校准系数 ---------------- */
+
+static int bmp388_read_calib(bmp388_handle_t *handle)
+{
+    uint8_t d[BMP388_CALIB_DATA_SIZE];
+    bmp388_calib_t *c = &handle->calib;
+
+    if (bmp388_bus_read(handle, BMP388_REG_CALIB, d, sizeof(d)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 0x31 起：T1(u16) T2(u16) T3(i8) P1(i16) P2(i16) P3(i8) P4(i8)
+     * P5(u16) P6(u16) P7(i8) P8(i8) P9(i8) P10(i8) P11(i8)，均小端 */
+    c->t1 = (double)bmp388_le16u(&d[0]) * BMP388_CAL_T1_SCALE;
+    c->t2 = (double)bmp388_le16u(&d[2]) * BMP388_CAL_T2_SCALE;
+    c->t3 = (double)(int8_t)d[4] * BMP388_CAL_T3_SCALE;
+    c->p1 = (double)driver_le16(&d[5]) * BMP388_CAL_P1_SCALE;
+    c->p2 = (double)driver_le16(&d[7]) * BMP388_CAL_P2_SCALE;
+    c->p3 = (double)(int8_t)d[9] * BMP388_CAL_P3_SCALE;
+    c->p4 = (double)(int8_t)d[10] * BMP388_CAL_P4_SCALE;
+    c->p5 = (double)bmp388_le16u(&d[11]) * BMP388_CAL_P5_SCALE;
+    c->p6 = (double)bmp388_le16u(&d[13]) * BMP388_CAL_P6_SCALE;
+    c->p7 = (double)(int8_t)d[15] * BMP388_CAL_P7_SCALE;
+    c->p8 = (double)(int8_t)d[16] * BMP388_CAL_P8_SCALE;
+    c->p9 = (double)(int8_t)d[17] * BMP388_CAL_P9_SCALE;
+    c->p10 = (double)(int8_t)d[18] * BMP388_CAL_P10_SCALE;
+    c->p11 = (double)(int8_t)d[19] * BMP388_CAL_P11_SCALE;
+    return DRIVER_OK;
+}
+
+/* ---------------- 补偿 ---------------- */
+
+/* 温度：t_lin = T2*(UT - T1) + T3*(UT - T1)^2，单位 ℃ */
+static double bmp388_compensate_temperature(bmp388_handle_t *handle, uint32_t adc_t)
+{
+    double dt = (double)adc_t - handle->calib.t1;
+
+    handle->t_lin = handle->calib.t2 * dt + handle->calib.t3 * dt * dt;
+    return handle->t_lin;
+}
+
+/* 压力：P = P5 + P6*T + P7*T^2 + P8*T^3
+ *            + UP*(P1 + P2*T + P3*T^2 + P4*T^3)
+ *            + UP^2*(P9 + P10*T) + UP^3*P11，单位 Pa */
+static double bmp388_compensate_pressure(bmp388_handle_t *handle, uint32_t adc_p)
+{
+    const bmp388_calib_t *c = &handle->calib;
+    double t = handle->t_lin;
+    double pu = (double)adc_p;
+    double t2 = t * t;
+    double out1 = c->p5 + (c->p6 * t) + (c->p7 * t2) + (c->p8 * t2 * t);
+    double out2 = pu * (c->p1 + (c->p2 * t) + (c->p3 * t2) + (c->p4 * t2 * t));
+    double out3 = (pu * pu) * (c->p9 + (c->p10 * t)) + (pu * pu * pu) * c->p11;
+
+    return out1 + out2 + out3;
+}
+
+/* ---------------- 公共流程 ---------------- */
+
+static int bmp388_setup(bmp388_handle_t *handle)
+{
+    uint8_t chip_id = 0U;
+    uint8_t value;
+
+    if (bmp388_get_chip_id(handle, &chip_id) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    if (chip_id != BMP388_CHIP_ID) {
+        LOG_E("bmp388", "chip id mismatch: 0x%02X", chip_id);
+        return (int)PORT_NOT_FOUND;
+    }
+
+    value = BMP388_CMD_SOFT_RESET;
+    (void)bmp388_bus_write(handle, BMP388_REG_CMD, &value, 1U);
+    driver_delay_ms(BMP388_RESET_DELAY_MS);
+
+    if (bmp388_read_calib(handle) != DRIVER_OK) {
+        LOG_E("bmp388", "read calibration failed");
+        return (int)PORT_IO_ERROR;
+    }
+    if (handle->calib.t1 == 0.0 || handle->calib.t2 == 0.0 || handle->calib.p1 == 0.0) {
+        LOG_E("bmp388", "invalid calibration data");
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    value = BMP388_CONFIG_DEFAULT;
+    if (bmp388_bus_write(handle, BMP388_REG_CONFIG, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    value = BMP388_OSR_DEFAULT;
+    if (bmp388_bus_write(handle, BMP388_REG_OSR, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+    value = BMP388_PWR_CTRL_NORMAL;
+    if (bmp388_bus_write(handle, BMP388_REG_PWR_CTRL, &value, 1U) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    handle->t_lin = 0.0;
+    handle->initialized = true;
+    LOG_I("bmp388", "init ok (%s)", handle->use_spi ? "spi" : "i2c");
+    return DRIVER_OK;
+}
+
+static void bmp388_reset_bus(bmp388_handle_t *handle, bool use_spi)
+{
+    handle->use_spi = use_spi;
+    handle->i2c.handle = NULL;
+    handle->i2c.address = BMP388_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->spi.handle = NULL;
+    handle->spi.cs = 0U;
+    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->initialized = false;
+}
+
+int bmp388_init(bmp388_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+{
+    if (handle == NULL || i2c == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    bmp388_reset_bus(handle, false);
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : BMP388_DEFAULT_ADDRESS;
+    return bmp388_setup(handle);
+}
+
+int bmp388_init_spi(bmp388_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs)
+{
+    if (handle == NULL || spi == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    bmp388_reset_bus(handle, true);
+    handle->spi.handle = spi;
+    handle->spi.cs = cs;
+    return bmp388_setup(handle);
+}
+
+int bmp388_deinit(bmp388_handle_t *handle)
+{
+    uint8_t value = 0x00U;   /* pwr_ctrl = sleep */
+
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)bmp388_bus_write(handle, BMP388_REG_PWR_CTRL, &value, 1U);
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    handle->spi.handle = NULL;
+    return DRIVER_OK;
+}
+
+int bmp388_get_chip_id(bmp388_handle_t *handle, uint8_t *chip_id)
+{
+    if (handle == NULL || chip_id == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->use_spi ? (handle->spi.handle == NULL) : (handle->i2c.handle == NULL)) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return bmp388_bus_read(handle, BMP388_REG_CHIP_ID, chip_id, 1U);
+}
+
+int bmp388_read_raw(bmp388_handle_t *handle, uint32_t *raw_temperature,
+                    uint32_t *raw_pressure)
+{
+    uint8_t d[BMP388_DATA_SIZE];
+    uint32_t press;
+    uint32_t temp;
+
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (raw_temperature == NULL && raw_pressure == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (bmp388_bus_read(handle, BMP388_REG_DATA_0, d, sizeof(d)) != DRIVER_OK) {
+        return (int)PORT_IO_ERROR;
+    }
+
+    /* 小端、XLSB 在前 */
+    press = ((uint32_t)d[2] << 16) | ((uint32_t)d[1] << 8) | (uint32_t)d[0];
+    temp = ((uint32_t)d[5] << 16) | ((uint32_t)d[4] << 8) | (uint32_t)d[3];
+    if (raw_pressure != NULL) {
+        *raw_pressure = press;
+    }
+    if (raw_temperature != NULL) {
+        *raw_temperature = temp;
+    }
+    return DRIVER_OK;
+}
+
+int bmp388_read(bmp388_handle_t *handle, bmp388_data_t *data)
+{
+    uint32_t raw_t = 0U;
+    uint32_t raw_p = 0U;
+    double temperature;
+    double pressure;
+    int ret;
+
+    if (handle == NULL || data == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = bmp388_read_raw(handle, &raw_t, &raw_p);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    /* 温度先算，压力补偿依赖 t_lin */
+    temperature = bmp388_compensate_temperature(handle, raw_t);
+    pressure = bmp388_compensate_pressure(handle, raw_p);
+
+    /* 用取反形式判断，可同时拦住 NaN */
+    if (!(pressure >= (double)BMP388_PRESSURE_MIN_PA &&
+          pressure <= (double)BMP388_PRESSURE_MAX_PA)) {
+        LOG_W("bmp388", "pressure out of range");
+        return (int)PORT_ERROR;
+    }
+
+    data->temperature = (float)temperature;
+    data->pressure = (float)pressure;
+    return DRIVER_OK;
 }

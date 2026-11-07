@@ -1,76 +1,234 @@
 #include "scd30.h"
-#include "iot_logger.h"
+#include "scd30_register.h"
+#include "log.h"
+
 #include <string.h>
 
-#define SCD30_ADDR 0x61
-
-/* 从 6 字节字段中取出 4 字节大端 float（字节 0,1,3,4，跳过 CRC） */
-static float scd30_float(const uint8_t *p)
+/* SCD30 数据字 CRC：poly 0x31, init 0xFF */
+static uint8_t scd30_crc(const uint8_t *data)
 {
-    uint32_t u = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-                 ((uint32_t)p[3] << 8)  | ((uint32_t)p[4]);
-    float f;
-    memcpy(&f, &u, sizeof(f));
-    return f;
+    return driver_crc8(data, 2U, SCD30_CRC_POLY, SCD30_CRC_INIT);
 }
 
-int scd30_init(const i2c_bus_t *bus)
+/* 大端 IEEE754 float -> 主机 float（假定小端主机，字节序反转后 memcpy） */
+static float scd30_be_float(const uint8_t *p)
 {
-    uint8_t cmd[4];
+    uint8_t b[4];
+    float value;
 
-    if (bus == NULL || bus->write == NULL) {
-        return -1;
-    }
-    /* 启动连续测量：命令 0x0010 + 压力参数 0x0000（使用默认值） */
-    cmd[0] = 0x00; cmd[1] = 0x10; cmd[2] = 0x00; cmd[3] = 0x00;
-    if (bus->write(bus->ctx, SCD30_ADDR, cmd, 4) != 0) {
-        LOG_E("scd30", "start fail");
-        return -1;
-    }
-    LOG_I("scd30", "init ok");
-    return 0;
+    b[0] = p[3];
+    b[1] = p[2];
+    b[2] = p[1];
+    b[3] = p[0];
+    memcpy(&value, b, sizeof(value));
+    return value;
 }
 
-int scd30_read(const i2c_bus_t *bus, float *co2, float *temp, float *humidity)
+static int scd30_send_cmd(scd30_handle_t *handle, uint16_t command)
 {
-    uint8_t cmd[2];
+    uint8_t buf[2];
+
+    buf[0] = (uint8_t)(command >> 8);
+    buf[1] = (uint8_t)(command & 0xFFU);
+    return driver_i2c_write(&handle->i2c, buf, sizeof(buf));
+}
+
+/* 命令 + 1 个 16 位参数（参数需 CRC） */
+static int scd30_send_cmd_u16(scd30_handle_t *handle, uint16_t command, uint16_t value)
+{
+    uint8_t buf[5];
+
+    buf[0] = (uint8_t)(command >> 8);
+    buf[1] = (uint8_t)(command & 0xFFU);
+    buf[2] = (uint8_t)(value >> 8);
+    buf[3] = (uint8_t)(value & 0xFFU);
+    buf[4] = scd30_crc(&buf[2]);
+    return driver_i2c_write(&handle->i2c, buf, sizeof(buf));
+}
+
+/* 读 words 个数据字并逐字校验 CRC */
+static int scd30_read_words(scd30_handle_t *handle, uint8_t *raw, uint8_t words)
+{
+    uint8_t i;
+    int ret;
+
+    ret = driver_i2c_read(&handle->i2c, raw, (size_t)words * 3U);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    for (i = 0U; i < words; i++) {
+        if (scd30_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
+            LOG_E("scd30", "crc error on word %u", (unsigned)i);
+            return (int)PORT_CRC_ERROR;
+        }
+    }
+    return DRIVER_OK;
+}
+
+int scd30_init(scd30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+{
+    uint16_t version = 0U;
+    int ret;
+
+    if (handle == NULL || i2c == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+
+    handle->i2c.handle = i2c;
+    handle->i2c.address = (address != 0U) ? address : SCD30_DEFAULT_ADDRESS;
+    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->interval_s = SCD30_DEFAULT_INTERVAL_S;
+    handle->initialized = false;
+
+    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+        LOG_E("scd30", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
+        return (int)PORT_NOT_FOUND;
+    }
+
+    ret = scd30_send_cmd(handle, SCD30_CMD_SOFT_RESET);
+    if (ret != DRIVER_OK) {
+        LOG_W("scd30", "soft reset failed: %d", ret);
+    }
+    driver_delay_ms(SCD30_RESET_DELAY_MS);
+
+    /* ID 校验：读固件版本（0 或读取失败视为器件异常） */
+    if (scd30_get_firmware_version(handle, &version) != DRIVER_OK) {
+        LOG_E("scd30", "firmware version read failed");
+        return (int)PORT_NOT_FOUND;
+    }
+
+    ret = scd30_send_cmd_u16(handle, SCD30_CMD_TRIGGER_CONTINUOUS, handle->interval_s);
+    if (ret != DRIVER_OK) {
+        LOG_E("scd30", "start continuous failed: %d", ret);
+        return ret;
+    }
+    driver_delay_ms(SCD30_START_DELAY_MS);
+
+    handle->initialized = true;
+    LOG_I("scd30", "init ok, fw=%u, interval=%us",
+          (unsigned)version, (unsigned)handle->interval_s);
+    return DRIVER_OK;
+}
+
+int scd30_deinit(scd30_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    if (handle->initialized) {
+        (void)scd30_send_cmd(handle, SCD30_CMD_STOP_CONTINUOUS);
+    }
+    handle->initialized = false;
+    handle->i2c.handle = NULL;
+    return DRIVER_OK;
+}
+
+int scd30_stop(scd30_handle_t *handle)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return scd30_send_cmd(handle, SCD30_CMD_STOP_CONTINUOUS);
+}
+
+int scd30_set_interval(scd30_handle_t *handle, uint16_t interval_s)
+{
+    int ret;
+
+    if (handle == NULL || !handle->initialized || interval_s < 2U || interval_s > 1800U) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = scd30_send_cmd(handle, SCD30_CMD_STOP_CONTINUOUS);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    ret = scd30_send_cmd_u16(handle, SCD30_CMD_TRIGGER_CONTINUOUS, interval_s);
+    if (ret == DRIVER_OK) {
+        handle->interval_s = interval_s;
+    }
+    return ret;
+}
+
+int scd30_set_temperature_offset(scd30_handle_t *handle, uint16_t offset_centi_c)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return scd30_send_cmd_u16(handle, SCD30_CMD_SET_TEMPERATURE_OFFSET, offset_centi_c);
+}
+
+int scd30_set_altitude(scd30_handle_t *handle, uint16_t altitude_m)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return scd30_send_cmd_u16(handle, SCD30_CMD_SET_ALTITUDE, altitude_m);
+}
+
+int scd30_set_forced_recalibration(scd30_handle_t *handle, uint16_t reference_ppm)
+{
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    return scd30_send_cmd_u16(handle, SCD30_CMD_SET_FORCED_RECAL, reference_ppm);
+}
+
+int scd30_get_firmware_version(scd30_handle_t *handle, uint16_t *version)
+{
+    uint8_t raw[3];
+    int ret;
+
+    if (handle == NULL || version == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = scd30_send_cmd(handle, SCD30_CMD_GET_FIRMWARE_VERSION);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    driver_delay_ms(2U);
+    ret = scd30_read_words(handle, raw, 1U);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    *version = (uint16_t)(((uint16_t)raw[0] << 8) | raw[1]);
+    return DRIVER_OK;
+}
+
+int scd30_read(scd30_handle_t *handle, scd30_data_t *data)
+{
     uint8_t ready[3];
-    uint8_t d[18];
+    uint8_t raw[SCD30_MEASUREMENT_BYTES];
+    int ret;
 
-    if (bus == NULL || bus->write == NULL || bus->read == NULL) {
-        return -1;
-    }
-    /* 查询数据就绪 0x0202，返回 3 字节：标志(2) + CRC(1) */
-    cmd[0] = 0x02; cmd[1] = 0x02;
-    if (bus->write(bus->ctx, SCD30_ADDR, cmd, 2) != 0) {
-        return -1;
-    }
-    if (bus->read(bus->ctx, SCD30_ADDR, ready, 3) != 0) {
-        return -1;
-    }
-    /* 就绪：标志为大端 0x0001 */
-    if (ready[0] != 0x00 || ready[1] != 0x01) {
-        return -1;
+    if (handle == NULL || data == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
 
-    /* 读测量结果 0x0300：18 字节，CO2/温度/湿度各为 4 字节大端 float，
-     * 每个值中间夹 2 字节 CRC */
-    cmd[0] = 0x03; cmd[1] = 0x00;
-    if (bus->write(bus->ctx, SCD30_ADDR, cmd, 2) != 0) {
-        return -1;
+    ret = scd30_send_cmd(handle, SCD30_CMD_GET_DATA_READY);
+    if (ret != DRIVER_OK) {
+        return ret;
     }
-    if (bus->read(bus->ctx, SCD30_ADDR, d, 18) != 0) {
-        return -1;
+    driver_delay_ms(2U);
+    ret = scd30_read_words(handle, ready, 1U);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+    if ((((uint16_t)ready[0] << 8) | ready[1]) == 0U) {
+        return (int)PORT_NOT_READY;
     }
 
-    if (co2 != NULL) {
-        *co2 = scd30_float(&d[0]);
+    ret = scd30_send_cmd(handle, SCD30_CMD_READ_MEASUREMENT);
+    if (ret != DRIVER_OK) {
+        return ret;
     }
-    if (temp != NULL) {
-        *temp = scd30_float(&d[6]);
+    driver_delay_ms(2U);
+    ret = scd30_read_words(handle, raw, 6U);
+    if (ret != DRIVER_OK) {
+        return ret;
     }
-    if (humidity != NULL) {
-        *humidity = scd30_float(&d[12]);
-    }
-    return 0;
+
+    data->co2_ppm = scd30_be_float(&raw[0]);
+    data->temperature = scd30_be_float(&raw[6]);
+    data->humidity = scd30_be_float(&raw[12]);
+    return DRIVER_OK;
 }

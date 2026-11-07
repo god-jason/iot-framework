@@ -1,26 +1,66 @@
 #include "hc_sr501.h"
-#include "iot_logger.h"
+#include "log.h"
 
-int pir_init(const gpio_bus_t *bus, uint8_t pin)
+#define HC_SR501_TAG "hc_sr501"
+
+static int hc_sr501_check(const hc_sr501_handle_t *handle)
 {
-    if (bus == NULL) {
-        LOG_E("pir", "init fail: null bus");
-        return -1;
+    if (handle == NULL || !handle->initialized) {
+        return (int)PORT_INVALID_PARAM;
     }
-    LOG_I("pir", "init ok pin %u", (unsigned int)pin);
-    return 0;
+    return DRIVER_OK;
 }
 
-int pir_read(const gpio_bus_t *bus, uint8_t pin, bool *motion)
+int hc_sr501_init(hc_sr501_handle_t *handle, port_pin_t pin)
 {
-    uint8_t level;
+    if (handle == NULL || pin == 0U) {
+        return (int)PORT_INVALID_PARAM;
+    }
 
-    if (bus == NULL) {
-        return -1;
+    handle->pin = pin;
+    handle->initialized = false;
+
+    if (driver_gpio_input(pin, PORT_GPIO_PULLDOWN) != DRIVER_OK) {
+        LOG_E(HC_SR501_TAG, "gpio init failed");
+        return (int)PORT_IO_ERROR;
     }
-    level = gpio_get(bus, pin);
-    if (motion != NULL) {
-        *motion = (level != 0);
+
+    handle->initialized = true;
+    LOG_I(HC_SR501_TAG, "init ok, warmup %u ms", (unsigned int)HC_SR501_WARMUP_MS);
+    return DRIVER_OK;
+}
+
+int hc_sr501_deinit(hc_sr501_handle_t *handle)
+{
+    if (handle == NULL) {
+        return (int)PORT_INVALID_PARAM;
     }
-    return (int)level;
+    if (handle->pin != 0U) {
+        (void)driver_gpio_deinit(handle->pin);
+    }
+    handle->initialized = false;
+    return DRIVER_OK;
+}
+
+int hc_sr501_read(hc_sr501_handle_t *handle, bool *motion)
+{
+    int level;
+    int ret;
+
+    if (motion == NULL) {
+        return (int)PORT_INVALID_PARAM;
+    }
+    ret = hc_sr501_check(handle);
+    if (ret != DRIVER_OK) {
+        return ret;
+    }
+
+    level = driver_gpio_read(handle->pin);
+    if (level < 0) {
+        LOG_E(HC_SR501_TAG, "gpio read failed");
+        return (int)PORT_IO_ERROR;
+    }
+
+    *motion = (level == (int)HC_SR501_ACTIVE_LEVEL);
+    return DRIVER_OK;
 }

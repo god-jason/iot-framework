@@ -1,6 +1,6 @@
 #include "button.h"
 #include "port.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
                     uint32_t debounce_ms, uint32_t long_press_ms,

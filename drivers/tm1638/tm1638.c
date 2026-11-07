@@ -1,13 +1,13 @@
 #include "tm1638.h"
 #include "tm1638_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 static void tm1638_delay(void)
 {
     driver_delay_us(TM1638_DELAY_US);
 }
 
-static int tm1638_pin_write(tm1638_handle_t *handle, port_pin_t pin, port_gpio_level_t level)
+static int tm1638_pin_write(port_pin_t pin, port_gpio_level_t level)
 {
     return driver_gpio_write(pin, level);
 }
@@ -18,16 +18,16 @@ static int tm1638_write_byte(tm1638_handle_t *handle, uint8_t value)
     uint8_t i;
 
     for (i = 0U; i < 8U; i++) {
-        if (tm1638_pin_write(handle, handle->config.clk, PORT_GPIO_LOW) != DRIVER_OK) {
+        if (tm1638_pin_write(handle->config.clk, PORT_GPIO_LOW) != DRIVER_OK) {
             return (int)PORT_IO_ERROR;
         }
         tm1638_delay();
-        if (tm1638_pin_write(handle, handle->config.dio,
+        if (tm1638_pin_write(handle->config.dio,
                              ((value >> i) & 0x01U) != 0U ? PORT_GPIO_HIGH : PORT_GPIO_LOW) != DRIVER_OK) {
             return (int)PORT_IO_ERROR;
         }
         tm1638_delay();
-        if (tm1638_pin_write(handle, handle->config.clk, PORT_GPIO_HIGH) != DRIVER_OK) {
+        if (tm1638_pin_write(handle->config.clk, PORT_GPIO_HIGH) != DRIVER_OK) {
             return (int)PORT_IO_ERROR;
         }
         tm1638_delay();
@@ -41,7 +41,7 @@ static int tm1638_read_byte(tm1638_handle_t *handle, uint8_t *value)
     uint8_t i;
     uint8_t result = 0U;
 
-    if (tm1638_pin_write(handle, handle->config.dio, PORT_GPIO_HIGH) != DRIVER_OK) {
+    if (tm1638_pin_write(handle->config.dio, PORT_GPIO_HIGH) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     if (driver_gpio_input(handle->config.dio, PORT_GPIO_PULLUP) != DRIVER_OK) {
@@ -51,7 +51,7 @@ static int tm1638_read_byte(tm1638_handle_t *handle, uint8_t *value)
     for (i = 0U; i < 8U; i++) {
         int level;
 
-        if (tm1638_pin_write(handle, handle->config.clk, PORT_GPIO_LOW) != DRIVER_OK) {
+        if (tm1638_pin_write(handle->config.clk, PORT_GPIO_LOW) != DRIVER_OK) {
             (void)driver_gpio_output(handle->config.dio, PORT_GPIO_HIGH);
             return (int)PORT_IO_ERROR;
         }
@@ -64,7 +64,7 @@ static int tm1638_read_byte(tm1638_handle_t *handle, uint8_t *value)
         if (level != 0) {
             result |= (uint8_t)DRIVER_BIT(i);
         }
-        if (tm1638_pin_write(handle, handle->config.clk, PORT_GPIO_HIGH) != DRIVER_OK) {
+        if (tm1638_pin_write(handle->config.clk, PORT_GPIO_HIGH) != DRIVER_OK) {
             (void)driver_gpio_output(handle->config.dio, PORT_GPIO_HIGH);
             return (int)PORT_IO_ERROR;
         }
@@ -84,21 +84,21 @@ static int tm1638_write_frame(tm1638_handle_t *handle, uint8_t cmd,
 {
     size_t i;
 
-    if (tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_LOW) != DRIVER_OK) {
+    if (tm1638_pin_write(handle->config.stb, PORT_GPIO_LOW) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     tm1638_delay();
     if (tm1638_write_byte(handle, cmd) != DRIVER_OK) {
-        (void)tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_HIGH);
+        (void)tm1638_pin_write(handle->config.stb, PORT_GPIO_HIGH);
         return (int)PORT_IO_ERROR;
     }
     for (i = 0U; i < len; i++) {
         if (tm1638_write_byte(handle, data[i]) != DRIVER_OK) {
-            (void)tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_HIGH);
+            (void)tm1638_pin_write(handle->config.stb, PORT_GPIO_HIGH);
             return (int)PORT_IO_ERROR;
         }
     }
-    if (tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_HIGH) != DRIVER_OK) {
+    if (tm1638_pin_write(handle->config.stb, PORT_GPIO_HIGH) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     tm1638_delay();
@@ -144,16 +144,15 @@ int tm1638_init(tm1638_handle_t *handle, const tm1638_config_t *config)
         handle->config.gram[i] = 0x00U;
     }
 
-    /* 清显示 -> 打开显示 */
-    if (tm1638_write_regs(handle, handle->config.gram, TM1638_REG_COUNT) != DRIVER_OK) {
+    /* 清显示 -> 打开显示（内部写寄存器接口要求 initialized 为 true） */
+    handle->initialized = true;
+    if (tm1638_write_regs(handle, handle->config.gram, TM1638_REG_COUNT) != DRIVER_OK ||
+        tm1638_update_display(handle, true) != DRIVER_OK) {
+        handle->initialized = false;
         LOG_E("tm1638", "init sequence failed");
         return (int)PORT_IO_ERROR;
     }
-    if (tm1638_update_display(handle, true) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
-    }
 
-    handle->initialized = true;
     LOG_I("tm1638", "init ok");
     return DRIVER_OK;
 }
@@ -233,21 +232,21 @@ int tm1638_read_keys(tm1638_handle_t *handle, uint8_t keys[TM1638_KEY_BYTES])
         return (int)PORT_INVALID_PARAM;
     }
 
-    if (tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_LOW) != DRIVER_OK) {
+    if (tm1638_pin_write(handle->config.stb, PORT_GPIO_LOW) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     tm1638_delay();
     if (tm1638_write_byte(handle, TM1638_CMD_READ_KEYS) != DRIVER_OK) {
-        (void)tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_HIGH);
+        (void)tm1638_pin_write(handle->config.stb, PORT_GPIO_HIGH);
         return (int)PORT_IO_ERROR;
     }
     for (i = 0U; i < TM1638_KEY_BYTES; i++) {
         if (tm1638_read_byte(handle, &keys[i]) != DRIVER_OK) {
-            (void)tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_HIGH);
+            (void)tm1638_pin_write(handle->config.stb, PORT_GPIO_HIGH);
             return (int)PORT_IO_ERROR;
         }
     }
-    if (tm1638_pin_write(handle, handle->config.stb, PORT_GPIO_HIGH) != DRIVER_OK) {
+    if (tm1638_pin_write(handle->config.stb, PORT_GPIO_HIGH) != DRIVER_OK) {
         return (int)PORT_IO_ERROR;
     }
     return DRIVER_OK;

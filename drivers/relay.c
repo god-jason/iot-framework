@@ -1,6 +1,6 @@
 #include "relay.h"
 #include "port.h"
-#include "iot_logger.h"
+#include "log.h"
 
 int relay_init(relay_t *relay, uint8_t pin, uint8_t active_level)
 {

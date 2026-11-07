@@ -1,6 +1,6 @@
 #include "st7920.h"
 #include "st7920_register.h"
-#include "iot_logger.h"
+#include "log.h"
 
 /* 单帧缓存：2 条命令 + 16 组（2 个数据字节） */
 #define ST7920_ROW_FRAME_MAX  (2U * 3U + 32U * 3U)
@@ -23,7 +23,7 @@ static int st7920_write_byte(st7920_handle_t *handle, bool is_data, uint8_t valu
     buf[0] = is_data ? ST7920_SYNC_DATA : ST7920_SYNC_CMD;
     buf[1] = (uint8_t)(value & 0xF0U);
     buf[2] = (uint8_t)((value << 4) & 0xF0U);
-    return st7920_send(handle, is_data, buf, sizeof(buf));
+    return st7920_send(handle, buf, sizeof(buf));
 }
 
 static void st7920_frame_byte(uint8_t *buf, size_t *pos, bool is_data, uint8_t value)
@@ -50,7 +50,7 @@ static int st7920_write_row(st7920_handle_t *handle, uint8_t v)
         st7920_frame_byte(buf, &pos, true, upper);
         st7920_frame_byte(buf, &pos, true, lower);
     }
-    return st7920_send(handle, true, buf, pos);
+    return st7920_send(handle, buf, pos);
 }
 
 /* 整屏推送 */
