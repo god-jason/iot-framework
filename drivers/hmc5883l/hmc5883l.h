@@ -84,9 +84,9 @@ typedef struct {
  * @param  gain      增益档位
  * @param  average   平均次数
  * @param  data_rate 输出率
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+int hmc5883l_init(hmc5883l_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
                   hmc5883l_gain_t gain, hmc5883l_average_t average,
                   hmc5883l_data_rate_t data_rate);
 

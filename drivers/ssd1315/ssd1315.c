@@ -33,9 +33,9 @@ static int ssd1315_send(ssd1315_handle_t *handle, uint8_t ctrl,
 
     driver_spi_select(&handle->config.spi);
     if (driver_gpio_write(handle->config.dc,
-                          (ctrl == SSD1315_CTRL_DATA) ? PORT_GPIO_HIGH : PORT_GPIO_LOW) != DRIVER_OK) {
+                          (ctrl == SSD1315_CTRL_DATA) ? IOT_GPIO_HIGH : IOT_GPIO_LOW) != DRIVER_OK) {
         driver_spi_deselect(&handle->config.spi);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     {
         int ret = driver_spi_write(&handle->config.spi, data, len);
@@ -66,10 +66,10 @@ static int ssd1315_flush(ssd1315_handle_t *handle)
         cmd[1] = SSD1315_CMD_COL_LOW;
         cmd[2] = SSD1315_CMD_COL_HIGH;
         if (ssd1315_send_cmd(handle, cmd, sizeof(cmd)) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if (ssd1315_send_data(handle, &handle->config.gram[offset], SSD1315_WIDTH) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
     return DRIVER_OK;
@@ -100,26 +100,26 @@ int ssd1315_init(ssd1315_handle_t *handle, const ssd1315_config_t *config)
     size_t i;
 
     if (handle == NULL || config == NULL || config->gram == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->gram_len < SSD1315_GRAM_SIZE) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->bus_type == SSD1315_BUS_I2C) {
         if (config->i2c.handle == NULL) {
-            return (int)PORT_INVALID_PARAM;
+            return (int)IOT_INVALID_PARAM;
         }
     } else {
         if (config->spi.handle == NULL || config->dc == 0U) {
-            return (int)PORT_INVALID_PARAM;
+            return (int)IOT_INVALID_PARAM;
         }
-        if (driver_gpio_output(config->dc, PORT_GPIO_LOW) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+        if (driver_gpio_output(config->dc, IOT_GPIO_LOW) != DRIVER_OK) {
+            return (int)IOT_IO_ERROR;
         }
         if (config->res != 0U) {
-            (void)driver_gpio_output(config->res, PORT_GPIO_LOW);
+            (void)driver_gpio_output(config->res, IOT_GPIO_LOW);
             driver_delay_ms(SSD1315_RESET_LOW_MS);
-            (void)driver_gpio_write(config->res, PORT_GPIO_HIGH);
+            (void)driver_gpio_write(config->res, IOT_GPIO_HIGH);
             driver_delay_ms(SSD1315_RESET_WAIT_MS);
         }
     }
@@ -131,14 +131,14 @@ int ssd1315_init(ssd1315_handle_t *handle, const ssd1315_config_t *config)
 
     if (ssd1315_send_cmd(handle, init_cmds, sizeof(init_cmds)) != DRIVER_OK) {
         LOG_E("ssd1315", "init sequence failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     for (i = 0U; i < SSD1315_GRAM_SIZE; i++) {
         handle->config.gram[i] = 0x00U;
     }
     if (ssd1315_flush(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -149,7 +149,7 @@ int ssd1315_init(ssd1315_handle_t *handle, const ssd1315_config_t *config)
 int ssd1315_deinit(ssd1315_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)ssd1315_set_display(handle, false);
@@ -161,7 +161,7 @@ int ssd1315_deinit(ssd1315_handle_t *handle)
 int ssd1315_write_cmd(ssd1315_handle_t *handle, const uint8_t *cmd, size_t len)
 {
     if (handle == NULL || cmd == NULL || len == 0U || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ssd1315_send_cmd(handle, cmd, len);
 }
@@ -169,7 +169,7 @@ int ssd1315_write_cmd(ssd1315_handle_t *handle, const uint8_t *cmd, size_t len)
 int ssd1315_write_data(ssd1315_handle_t *handle, const uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ssd1315_send_data(handle, data, len);
 }
@@ -184,7 +184,7 @@ int ssd1315_fill(ssd1315_handle_t *handle, uint8_t pattern)
     size_t i;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (i = 0U; i < SSD1315_GRAM_SIZE; i++) {
         handle->config.gram[i] = pattern;
@@ -198,10 +198,10 @@ int ssd1315_draw_pixel(ssd1315_handle_t *handle, uint8_t x, uint8_t y, bool on)
     uint8_t mask;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (x >= handle->width || y >= handle->height) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (handle->config.mirror_x) {
@@ -225,7 +225,7 @@ int ssd1315_draw_pixel(ssd1315_handle_t *handle, uint8_t x, uint8_t y, bool on)
 int ssd1315_show(ssd1315_handle_t *handle)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ssd1315_flush(handle);
 }
@@ -235,7 +235,7 @@ int ssd1315_set_contrast(ssd1315_handle_t *handle, uint8_t contrast)
     uint8_t cmd[2] = { SSD1315_CMD_SET_CONTRAST, contrast };
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ssd1315_send_cmd(handle, cmd, sizeof(cmd));
 }
@@ -245,7 +245,7 @@ int ssd1315_set_display(ssd1315_handle_t *handle, bool on)
     uint8_t cmd = on ? SSD1315_CMD_DISPLAY_ON : SSD1315_CMD_DISPLAY_OFF;
 
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ssd1315_send_cmd(handle, &cmd, 1U);
 }
@@ -255,7 +255,7 @@ int ssd1315_set_invert(ssd1315_handle_t *handle, bool invert)
     uint8_t cmd = invert ? SSD1315_CMD_INVERT_DISPLAY : SSD1315_CMD_NORMAL_DISPLAY;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ssd1315_send_cmd(handle, &cmd, 1U);
 }

@@ -6,24 +6,24 @@
 static int a3144_check(const a3144_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-int a3144_init(a3144_handle_t *handle, port_pin_t pin)
+int a3144_init(a3144_handle_t *handle, iot_pin_t pin)
 {
     if (handle == NULL || pin == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->pin = pin;
     handle->initialized = false;
 
     /* 开漏输出需要上拉，否则悬空时读到随机电平 */
-    if (driver_gpio_input(pin, PORT_GPIO_PULLUP) != DRIVER_OK) {
+    if (driver_gpio_input(pin, IOT_GPIO_PULLUP) != DRIVER_OK) {
         LOG_E(A3144_TAG, "gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_us(A3144_SETTLE_US);
 
@@ -35,7 +35,7 @@ int a3144_init(a3144_handle_t *handle, port_pin_t pin)
 int a3144_deinit(a3144_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->pin != 0U) {
         (void)driver_gpio_deinit(handle->pin);
@@ -50,7 +50,7 @@ int a3144_read(a3144_handle_t *handle, bool *detected)
     int ret;
 
     if (detected == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = a3144_check(handle);
     if (ret != DRIVER_OK) {
@@ -60,7 +60,7 @@ int a3144_read(a3144_handle_t *handle, bool *detected)
     level = driver_gpio_read(handle->pin);
     if (level < 0) {
         LOG_E(A3144_TAG, "gpio read failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     *detected = (level == (int)A3144_ACTIVE_LEVEL);

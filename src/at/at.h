@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "port.h"
+#include "iot.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +68,7 @@ typedef struct {
 
 /* AT 引擎配置（at_init 时整体拷贝，缓冲区仍由调用者持有） */
 typedef struct {
-    port_uart_handle_t *uart;   /* 绑定的 UART 句柄，必须非 NULL */
+    iot_uart_t *uart;   /* 绑定的 UART 句柄，必须非 NULL */
     uint8_t *rx_buffer;         /* 接收泵取缓冲，可为 NULL（不主动收） */
     uint32_t rx_buffer_size;    /* 接收缓冲字节数 */
     char *line_buffer;          /* 行解析缓冲，可为 NULL（不初始化解析器） */

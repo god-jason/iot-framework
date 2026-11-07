@@ -16,7 +16,7 @@ static uint8_t hx711_gain_pulses(hx711_gain_t gain)
     }
 }
 
-static void hx711_sck(hx711_handle_t *handle, port_gpio_level_t level)
+static void hx711_sck(hx711_handle_t *handle, iot_gpio_level_t level)
 {
     (void)driver_gpio_write(handle->sck, level);
 }
@@ -29,22 +29,22 @@ static int hx711_wait_ready(hx711_handle_t *handle, uint32_t timeout_ms)
         int level = driver_gpio_read(handle->dout);
 
         if (level < 0) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if (level == 0) {
             return DRIVER_OK;   /* DOUT 拉低表示转换完成 */
         }
         if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_us(100U);
     }
 }
 
-int hx711_init(hx711_handle_t *handle, port_pin_t sck, port_pin_t dout)
+int hx711_init(hx711_handle_t *handle, iot_pin_t sck, iot_pin_t dout)
 {
     if (handle == NULL || sck == 0U || dout == 0U || sck == dout) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->sck = sck;
@@ -54,29 +54,29 @@ int hx711_init(hx711_handle_t *handle, port_pin_t sck, port_pin_t dout)
     handle->scale = HX711_DEFAULT_SCALE;
     handle->initialized = false;
 
-    if (driver_gpio_output(sck, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_output(sck, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
-    if (driver_gpio_input(dout, PORT_GPIO_PULLUP) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_input(dout, IOT_GPIO_PULLUP) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
 
     driver_delay_ms(HX711_POWER_ON_MS);
     handle->initialized = true;
     LOG_I("hx711", "init ok: sck=%u dout=%u",
-          (unsigned)PORT_PIN_GET_INDEX(sck), (unsigned)PORT_PIN_GET_INDEX(dout));
+          (unsigned)IOT_PIN_GET_INDEX(sck), (unsigned)IOT_PIN_GET_INDEX(dout));
     return DRIVER_OK;
 }
 
 int hx711_deinit(hx711_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
-        hx711_sck(handle, PORT_GPIO_LOW);
-        (void)port_pin_deinit(handle->sck);
-        (void)port_pin_deinit(handle->dout);
+        hx711_sck(handle, IOT_GPIO_LOW);
+        (void)iot_pin_deinit(handle->sck);
+        (void)iot_pin_deinit(handle->dout);
     }
     handle->initialized = false;
     return DRIVER_OK;
@@ -87,11 +87,11 @@ int hx711_is_ready(hx711_handle_t *handle)
     int level;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     level = driver_gpio_read(handle->dout);
     if (level < 0) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return (level == 0) ? 1 : 0;
 }
@@ -99,10 +99,10 @@ int hx711_is_ready(hx711_handle_t *handle)
 int hx711_set_gain(hx711_handle_t *handle, hx711_gain_t gain)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (gain != HX711_GAIN_A_128 && gain != HX711_GAIN_A_64 && gain != HX711_GAIN_B_32) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     /* 增益在本次读取的尾部脉冲中生效 */
     handle->gain = gain;
@@ -117,7 +117,7 @@ int hx711_read_raw(hx711_handle_t *handle, int32_t *raw)
     int ret;
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = hx711_wait_ready(handle, HX711_READY_TIMEOUT_MS);
@@ -129,24 +129,24 @@ int hx711_read_raw(hx711_handle_t *handle, int32_t *raw)
     for (i = 0U; i < HX711_DATA_BITS; i++) {
         int level;
 
-        hx711_sck(handle, PORT_GPIO_HIGH);
+        hx711_sck(handle, IOT_GPIO_HIGH);
         driver_delay_us(HX711_SCK_HIGH_US);
         level = driver_gpio_read(handle->dout);
         if (level < 0) {
-            hx711_sck(handle, PORT_GPIO_LOW);
-            return (int)PORT_IO_ERROR;
+            hx711_sck(handle, IOT_GPIO_LOW);
+            return (int)IOT_IO_ERROR;
         }
         value = (value << 1) | ((level != 0) ? 1UL : 0UL);
-        hx711_sck(handle, PORT_GPIO_LOW);
+        hx711_sck(handle, IOT_GPIO_LOW);
         driver_delay_us(HX711_SCK_LOW_US);
     }
 
     /* 附加 1~3 个脉冲，选择下一次转换的通道与增益 */
     pulses = (uint8_t)(hx711_gain_pulses(handle->gain) - HX711_DATA_BITS);
     for (i = 0U; i < pulses; i++) {
-        hx711_sck(handle, PORT_GPIO_HIGH);
+        hx711_sck(handle, IOT_GPIO_HIGH);
         driver_delay_us(HX711_SCK_HIGH_US);
-        hx711_sck(handle, PORT_GPIO_LOW);
+        hx711_sck(handle, IOT_GPIO_LOW);
         driver_delay_us(HX711_SCK_LOW_US);
     }
 
@@ -164,7 +164,7 @@ int hx711_read_average(hx711_handle_t *handle, uint8_t times, int32_t *raw)
     uint8_t i;
 
     if (handle == NULL || raw == NULL || !handle->initialized || times == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     for (i = 0U; i < times; i++) {
@@ -183,7 +183,7 @@ int hx711_read_average(hx711_handle_t *handle, uint8_t times, int32_t *raw)
 int hx711_set_offset(hx711_handle_t *handle, int32_t offset)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->offset = offset;
     return DRIVER_OK;
@@ -192,7 +192,7 @@ int hx711_set_offset(hx711_handle_t *handle, int32_t offset)
 int hx711_set_scale(hx711_handle_t *handle, float scale)
 {
     if (handle == NULL || !handle->initialized || scale == 0.0f) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->scale = scale;
     return DRIVER_OK;
@@ -204,7 +204,7 @@ int hx711_tare(hx711_handle_t *handle, uint8_t times)
     int ret;
 
     if (handle == NULL || !handle->initialized || times == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = hx711_read_average(handle, times, &raw);
@@ -221,7 +221,7 @@ int hx711_read(hx711_handle_t *handle, float *weight)
     int ret;
 
     if (handle == NULL || weight == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = hx711_read_raw(handle, &raw);

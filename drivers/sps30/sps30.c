@@ -46,7 +46,7 @@ static int sps30_read_words(sps30_handle_t *handle, uint8_t *raw, uint16_t words
     for (i = 0U; i < words; i++) {
         if (sps30_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
             LOG_E("sps30", "crc error on word %u", (unsigned)i);
-            return (int)PORT_CRC_ERROR;
+            return (int)IOT_CRC_ERROR;
         }
     }
     return DRIVER_OK;
@@ -66,13 +66,13 @@ static float sps30_be_float(const uint8_t *p)
     return value;
 }
 
-int sps30_init(sps30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int sps30_init(sps30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t major = 0U;
     uint8_t minor = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -83,13 +83,13 @@ int sps30_init(sps30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sps30", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* ID 校验：读固件版本（带 CRC） */
     if (sps30_get_version(handle, &major, &minor) != DRIVER_OK) {
         LOG_E("sps30", "version read failed");
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -100,7 +100,7 @@ int sps30_init(sps30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int sps30_deinit(sps30_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized && handle->measuring) {
         (void)sps30_send_cmd(handle, SPS30_CMD_STOP_MEASUREMENT);
@@ -117,7 +117,7 @@ int sps30_start(sps30_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sps30_send_cmd_u16(handle, SPS30_CMD_START_MEASUREMENT, format);
     if (ret == DRIVER_OK) {
@@ -132,7 +132,7 @@ int sps30_stop(sps30_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sps30_send_cmd(handle, SPS30_CMD_STOP_MEASUREMENT);
     if (ret == DRIVER_OK) {
@@ -144,7 +144,7 @@ int sps30_stop(sps30_handle_t *handle)
 int sps30_start_fan_cleaning(sps30_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return sps30_send_cmd(handle, SPS30_CMD_START_FAN_CLEAN);
 }
@@ -155,7 +155,7 @@ int sps30_get_version(sps30_handle_t *handle, uint8_t *major, uint8_t *minor)
     int ret;
 
     if (handle == NULL || major == NULL || minor == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sps30_send_cmd(handle, SPS30_CMD_READ_VERSION);
     if (ret != DRIVER_OK) {
@@ -179,7 +179,7 @@ int sps30_get_serial(sps30_handle_t *handle, char *buf, size_t buf_len)
     int ret;
 
     if (handle == NULL || buf == NULL || buf_len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sps30_send_cmd(handle, SPS30_CMD_READ_SERIAL);
     if (ret != DRIVER_OK) {
@@ -208,7 +208,7 @@ int sps30_read(sps30_handle_t *handle, sps30_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->measuring) {
         ret = sps30_start(handle);
@@ -233,7 +233,7 @@ int sps30_read(sps30_handle_t *handle, sps30_data_t *data)
             break;
         }
         if ((uint32_t)(driver_tick_ms() - start) > SPS30_READ_TIMEOUT_MS) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(SPS30_POLL_DELAY_MS);
     }

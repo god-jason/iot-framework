@@ -6,15 +6,15 @@
 static int ch9121_check(const ch9121_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized || handle->uart == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-int ch9121_init(ch9121_handle_t *handle, port_uart_handle_t *uart, uint32_t timeout_ms)
+int ch9121_init(ch9121_handle_t *handle, iot_uart_t *uart, uint32_t timeout_ms)
 {
     if (handle == NULL || uart == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->uart = uart;
@@ -29,7 +29,7 @@ int ch9121_init(ch9121_handle_t *handle, port_uart_handle_t *uart, uint32_t time
 int ch9121_deinit(ch9121_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->uart = NULL;
     handle->initialized = false;
@@ -44,9 +44,9 @@ int ch9121_write(ch9121_handle_t *handle, const uint8_t *data, size_t len)
         return ret;
     }
     if (data == NULL || len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
-    return (int)port_uart_transmit(handle->uart, data, len, handle->timeout_ms);
+    return (int)iot_uart_transmit(handle->uart, data, len, handle->timeout_ms);
 }
 
 int ch9121_read(ch9121_handle_t *handle, uint8_t *data, size_t len, uint32_t timeout_ms)
@@ -57,9 +57,9 @@ int ch9121_read(ch9121_handle_t *handle, uint8_t *data, size_t len, uint32_t tim
         return ret;
     }
     if (data == NULL || len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
-    return (int)port_uart_receive(handle->uart, data, len,
+    return (int)iot_uart_receive(handle->uart, data, len,
                                   (timeout_ms != 0U) ? timeout_ms : handle->timeout_ms);
 }
 
@@ -76,7 +76,7 @@ int ch9121_send_command(ch9121_handle_t *handle, uint8_t cmd,
         return ret;
     }
     if (len > CH9121_CMD_DATA_MAX || (data == NULL && len > 0U)) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     frame[n++] = CH9121_FRAME_HEAD0;
@@ -92,7 +92,7 @@ int ch9121_send_command(ch9121_handle_t *handle, uint8_t cmd,
     }
     frame[n++] = sum;
 
-    return (int)port_uart_transmit(handle->uart, frame, n, handle->timeout_ms);
+    return (int)iot_uart_transmit(handle->uart, frame, n, handle->timeout_ms);
 }
 
 int ch9121_read_response(ch9121_handle_t *handle, uint8_t *cmd, uint8_t *data,
@@ -108,23 +108,23 @@ int ch9121_read_response(ch9121_handle_t *handle, uint8_t *cmd, uint8_t *data,
         return ret;
     }
     if (cmd == NULL || data == NULL || out_len == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     *out_len = 0U;
 
-    ret = (int)port_uart_receive(handle->uart, head, sizeof(head),
+    ret = (int)iot_uart_receive(handle->uart, head, sizeof(head),
                                  CH9121_RESPONSE_TIMEOUT_MS);
     if (ret != DRIVER_OK) {
         return ret;
     }
     if (head[0] != CH9121_FRAME_HEAD0 || head[1] != CH9121_FRAME_HEAD1) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (head[3] > capacity || head[3] > CH9121_CMD_DATA_MAX) {
-        return (int)PORT_OVERFLOW;
+        return (int)IOT_OVERFLOW;
     }
 
-    ret = (int)port_uart_receive(handle->uart, buf, (size_t)head[3] + 1U,
+    ret = (int)iot_uart_receive(handle->uart, buf, (size_t)head[3] + 1U,
                                  CH9121_RESPONSE_TIMEOUT_MS);
     if (ret != DRIVER_OK) {
         return ret;
@@ -135,7 +135,7 @@ int ch9121_read_response(ch9121_handle_t *handle, uint8_t *cmd, uint8_t *data,
         sum = (uint8_t)(sum + buf[i]);
     }
     if (sum != buf[head[3]]) {
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
 
     *cmd = head[2];
@@ -149,7 +149,7 @@ int ch9121_read_response(ch9121_handle_t *handle, uint8_t *cmd, uint8_t *data,
 int ch9121_set_ip(ch9121_handle_t *handle, const uint8_t ip[4])
 {
     if (ip == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     /* CH9121 按字节顺序写入 IPv4 地址（192,168,1,200） */
     return ch9121_send_command(handle, CH9121_CMD_SET_IP, ip, 4U);
@@ -158,7 +158,7 @@ int ch9121_set_ip(ch9121_handle_t *handle, const uint8_t ip[4])
 int ch9121_set_subnet(ch9121_handle_t *handle, const uint8_t mask[4])
 {
     if (mask == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ch9121_send_command(handle, CH9121_CMD_SET_SUBNET, mask, 4U);
 }
@@ -166,7 +166,7 @@ int ch9121_set_subnet(ch9121_handle_t *handle, const uint8_t mask[4])
 int ch9121_set_gateway(ch9121_handle_t *handle, const uint8_t gateway[4])
 {
     if (gateway == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ch9121_send_command(handle, CH9121_CMD_SET_GATEWAY, gateway, 4U);
 }
@@ -184,7 +184,7 @@ int ch9121_set_local_port(ch9121_handle_t *handle, uint16_t port)
 int ch9121_set_dest_ip(ch9121_handle_t *handle, const uint8_t ip[4])
 {
     if (ip == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ch9121_send_command(handle, CH9121_CMD_SET_DEST_IP, ip, 4U);
 }
@@ -205,7 +205,7 @@ int ch9121_set_mode(ch9121_handle_t *handle, ch9121_net_mode_t mode)
 
     if (mode != CH9121_NET_TCP_SERVER && mode != CH9121_NET_TCP_CLIENT &&
         mode != CH9121_NET_UDP_SERVER && mode != CH9121_NET_UDP_CLIENT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     switch (mode) {
@@ -236,7 +236,7 @@ int ch9121_set_baudrate(ch9121_handle_t *handle, uint32_t baudrate)
     uint8_t buf[4];
 
     if (baudrate == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     /* 波特率按 4 字节大端发送（需按 datasheet/固件确认） */
     buf[0] = (uint8_t)((baudrate >> 24) & 0xFFU);

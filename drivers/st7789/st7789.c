@@ -9,9 +9,9 @@ static int st7789_send(st7789_handle_t *handle, bool is_data,
 
     driver_spi_select(&handle->config.spi);
     if (driver_gpio_write(handle->config.dc,
-                          is_data ? PORT_GPIO_HIGH : PORT_GPIO_LOW) != DRIVER_OK) {
+                          is_data ? IOT_GPIO_HIGH : IOT_GPIO_LOW) != DRIVER_OK) {
         driver_spi_deselect(&handle->config.spi);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     ret = driver_spi_write(&handle->config.spi, data, len);
     driver_spi_deselect(&handle->config.spi);
@@ -27,10 +27,10 @@ static int st7789_cmd_arg(st7789_handle_t *handle, uint8_t cmd,
                           const uint8_t *arg, size_t len)
 {
     if (st7789_cmd(handle, cmd) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (st7789_send(handle, true, arg, len) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -49,7 +49,7 @@ static int st7789_set_window(st7789_handle_t *handle, uint16_t x0, uint16_t y0,
     buf[2] = (uint8_t)(xe >> 8);
     buf[3] = (uint8_t)(xe & 0xFFU);
     if (st7789_cmd_arg(handle, ST7789_CMD_CASET, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     buf[0] = (uint8_t)(ys >> 8);
@@ -57,7 +57,7 @@ static int st7789_set_window(st7789_handle_t *handle, uint16_t x0, uint16_t y0,
     buf[2] = (uint8_t)(ye >> 8);
     buf[3] = (uint8_t)(ye & 0xFFU);
     if (st7789_cmd_arg(handle, ST7789_CMD_RASET, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -72,16 +72,16 @@ static int st7789_push(st7789_handle_t *handle)
     if (st7789_set_window(handle, 0U, 0U,
                           (uint16_t)(handle->width - 1U),
                           (uint16_t)(handle->height - 1U)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (st7789_cmd(handle, ST7789_CMD_RAMWR) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     driver_spi_select(&handle->config.spi);
-    if (driver_gpio_write(handle->config.dc, PORT_GPIO_HIGH) != DRIVER_OK) {
+    if (driver_gpio_write(handle->config.dc, IOT_GPIO_HIGH) != DRIVER_OK) {
         driver_spi_deselect(&handle->config.spi);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     for (row = 0U; row < handle->height; row++) {
         ret = driver_spi_write(&handle->config.spi,
@@ -91,7 +91,7 @@ static int st7789_push(st7789_handle_t *handle)
         }
     }
     driver_spi_deselect(&handle->config.spi);
-    return (ret == DRIVER_OK) ? DRIVER_OK : (int)PORT_IO_ERROR;
+    return (ret == DRIVER_OK) ? DRIVER_OK : (int)IOT_IO_ERROR;
 }
 
 static void st7789_gram_fill(st7789_handle_t *handle, uint16_t color)
@@ -126,16 +126,16 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
     size_t i;
 
     if (handle == NULL || config == NULL || config->gram == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->spi.handle == NULL || config->dc == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->width = (config->width != 0U) ? config->width : (uint16_t)ST7789_WIDTH;
     handle->height = (config->height != 0U) ? config->height : (uint16_t)ST7789_HEIGHT;
     if (config->gram_len < ((size_t)handle->width * handle->height * 2U)) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->config = *config;
@@ -143,25 +143,25 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
     handle->config.height = handle->height;
     handle->initialized = false;
 
-    if (driver_gpio_output(config->dc, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_output(config->dc, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
-    if (config->bl != 0U && driver_gpio_output(config->bl, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (config->bl != 0U && driver_gpio_output(config->bl, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     if (config->res != 0U) {
-        (void)driver_gpio_output(config->res, PORT_GPIO_LOW);
+        (void)driver_gpio_output(config->res, IOT_GPIO_LOW);
         driver_delay_ms(ST7789_RESET_LOW_MS);
-        (void)driver_gpio_write(config->res, PORT_GPIO_HIGH);
+        (void)driver_gpio_write(config->res, IOT_GPIO_HIGH);
         driver_delay_ms(ST7789_RESET_WAIT_MS);
     }
 
     if (st7789_cmd(handle, ST7789_CMD_SWRESET) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ST7789_RESET_WAIT_MS);
     if (st7789_cmd(handle, ST7789_CMD_SLPOUT) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ST7789_SLPOUT_MS);
 
@@ -179,12 +179,12 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
         st7789_cmd_arg(handle, ST7789_CMD_MADCTL, &madctl, 1U) != DRIVER_OK ||
         st7789_cmd_arg(handle, ST7789_CMD_PORCTRL, porctrl, sizeof(porctrl)) != DRIVER_OK) {
         LOG_E("st7789", "init sequence failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     for (i = 0U; i < DRIVER_ARRAY_SIZE(single_regs); i++) {
         if (st7789_cmd_arg(handle, single_regs[i][0], &single_regs[i][1], 1U) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
 
@@ -194,13 +194,13 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
         st7789_cmd(handle, config->invert ? ST7789_CMD_INVON : ST7789_CMD_INVOFF) != DRIVER_OK ||
         st7789_cmd(handle, ST7789_CMD_NORON) != DRIVER_OK ||
         st7789_cmd(handle, ST7789_CMD_DISPON) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ST7789_DISPON_MS);
 
     st7789_gram_fill(handle, ST7789_COLOR_BLACK);
     if (st7789_push(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -211,13 +211,13 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
 int st7789_deinit(st7789_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)st7789_cmd(handle, ST7789_CMD_DISPOFF);
         (void)st7789_cmd(handle, ST7789_CMD_SLPIN);
         if (handle->config.bl != 0U) {
-            (void)driver_gpio_write(handle->config.bl, PORT_GPIO_LOW);
+            (void)driver_gpio_write(handle->config.bl, IOT_GPIO_LOW);
         }
     }
     handle->initialized = false;
@@ -227,7 +227,7 @@ int st7789_deinit(st7789_handle_t *handle)
 int st7789_write_cmd(st7789_handle_t *handle, const uint8_t *cmd, size_t len)
 {
     if (handle == NULL || cmd == NULL || len == 0U || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7789_send(handle, false, cmd, len);
 }
@@ -235,7 +235,7 @@ int st7789_write_cmd(st7789_handle_t *handle, const uint8_t *cmd, size_t len)
 int st7789_write_data(st7789_handle_t *handle, const uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7789_send(handle, true, data, len);
 }
@@ -243,7 +243,7 @@ int st7789_write_data(st7789_handle_t *handle, const uint8_t *data, size_t len)
 int st7789_fill_color(st7789_handle_t *handle, uint16_t color)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     st7789_gram_fill(handle, color);
     return st7789_push(handle);
@@ -259,10 +259,10 @@ int st7789_draw_pixel(st7789_handle_t *handle, uint16_t x, uint16_t y, uint16_t 
     size_t index;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (x >= handle->width || y >= handle->height) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->config.mirror_x) {
         x = (uint16_t)(handle->width - 1U - x);
@@ -280,7 +280,7 @@ int st7789_draw_pixel(st7789_handle_t *handle, uint16_t x, uint16_t y, uint16_t 
 int st7789_show(st7789_handle_t *handle)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7789_push(handle);
 }
@@ -288,13 +288,13 @@ int st7789_show(st7789_handle_t *handle)
 int st7789_set_backlight(st7789_handle_t *handle, bool on)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->config.bl == 0U) {
-        return (int)PORT_NOT_SUPPORTED;
+        return (int)IOT_NOT_SUPPORTED;
     }
     return (driver_gpio_write(handle->config.bl,
-                              on ? PORT_GPIO_HIGH : PORT_GPIO_LOW) == DRIVER_OK)
-           ? DRIVER_OK : (int)PORT_IO_ERROR;
+                              on ? IOT_GPIO_HIGH : IOT_GPIO_LOW) == DRIVER_OK)
+           ? DRIVER_OK : (int)IOT_IO_ERROR;
 }
 

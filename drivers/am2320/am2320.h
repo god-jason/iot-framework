@@ -24,7 +24,7 @@ typedef struct {
  * @brief  初始化 AM2320（唤醒 + 试读一帧确认器件在位）
  * @param  address  7 位从机地址，0 表示使用默认 0x5C
  */
-int am2320_init(am2320_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int am2320_init(am2320_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int am2320_deinit(am2320_handle_t *handle);

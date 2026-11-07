@@ -4,7 +4,7 @@
 #include "motion_flow.h"
 #include "motion_task.h"
 
-#include "port.h"
+#include "iot.h"
 
 #include <string.h>
 
@@ -248,7 +248,7 @@ static void begin_wait(motion_vm_t *vm, motion_wait_type_t type)
     memset(&vm->wait, 0, sizeof(vm->wait));
     vm->wait.type = type;
     vm->wait.active = true;
-    vm->wait.start_tick = port_tick_get();
+    vm->wait.start_tick = iot_tick_get();
 }
 
 /* ------------------------------------------------------------------ */

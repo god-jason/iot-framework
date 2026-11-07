@@ -16,16 +16,16 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_pin_t shd;         /* 高电平关断 */
-    port_pin_t mod;         /* 场调制输出 */
-    port_pin_t rdy_clk;     /* 位时钟输入 */
-    port_pin_t dout;        /* 解调数据输入 */
+    iot_pin_t shd;         /* 高电平关断 */
+    iot_pin_t mod;         /* 场调制输出 */
+    iot_pin_t rdy_clk;     /* 位时钟输入 */
+    iot_pin_t dout;        /* 解调数据输入 */
     uint32_t timeout_ms;
     bool initialized;
 } em4095_handle_t;
 
-int em4095_init(em4095_handle_t *handle, port_pin_t shd, port_pin_t mod,
-                port_pin_t rdy_clk, port_pin_t dout);
+int em4095_init(em4095_handle_t *handle, iot_pin_t shd, iot_pin_t mod,
+                iot_pin_t rdy_clk, iot_pin_t dout);
 int em4095_deinit(em4095_handle_t *handle);
 
 /* 使能/关断读头（SHD 引脚） */

@@ -6,7 +6,7 @@
 #include "motion_parser.h"
 #include "motion_task.h"
 
-#include "port.h"
+#include "iot.h"
 
 #include <string.h>
 
@@ -341,7 +341,7 @@ int motion_vm_check_wait(motion_vm_t *vm)
         return 1;
     }
 
-    elapsed = (uint32_t)(port_tick_get() - wait->start_tick);
+    elapsed = (uint32_t)(iot_tick_get() - wait->start_tick);
 
     /* 按等待类型检查条件；各分支失败时写入错误并返回 -1 */
     switch (wait->type) {

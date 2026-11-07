@@ -19,11 +19,11 @@ static const at24cxx_model_info_t s_model_info[] = {
     { 65536U,  128U }    /* 512 */
 };
 
-int at24cxx_init(at24cxx_handle_t *handle, port_i2c_handle_t *i2c,
+int at24cxx_init(at24cxx_handle_t *handle, iot_i2c_t *i2c,
                  uint16_t address, at24cxx_model_t model)
 {
     if (handle == NULL || i2c == NULL || (uint32_t)model >= DRIVER_ARRAY_SIZE(s_model_info)) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -37,7 +37,7 @@ int at24cxx_init(at24cxx_handle_t *handle, port_i2c_handle_t *i2c,
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("at24cxx", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -49,7 +49,7 @@ int at24cxx_init(at24cxx_handle_t *handle, port_i2c_handle_t *i2c,
 int at24cxx_deinit(at24cxx_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -59,7 +59,7 @@ int at24cxx_deinit(at24cxx_handle_t *handle)
 int at24cxx_is_ready(at24cxx_handle_t *handle)
 {
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return (driver_i2c_probe(&handle->i2c) == DRIVER_OK) ? 1 : 0;
 }
@@ -73,7 +73,7 @@ static int at24cxx_wait_ready(at24cxx_handle_t *handle)
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > handle->write_delay_ms * 4U + 20U) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
@@ -82,10 +82,10 @@ static int at24cxx_wait_ready(at24cxx_handle_t *handle)
 int at24cxx_read(at24cxx_handle_t *handle, uint32_t address, uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (address >= handle->capacity || len > handle->capacity - address) {
-        return (int)PORT_OVERFLOW;
+        return (int)IOT_OVERFLOW;
     }
     return driver_i2c_read_reg16(&handle->i2c, (uint16_t)address, data, len);
 }
@@ -96,10 +96,10 @@ int at24cxx_write(at24cxx_handle_t *handle, uint32_t address,
     size_t written = 0U;
 
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (address >= handle->capacity || len > handle->capacity - address) {
-        return (int)PORT_OVERFLOW;
+        return (int)IOT_OVERFLOW;
     }
 
     while (written < len) {
@@ -118,7 +118,7 @@ int at24cxx_write(at24cxx_handle_t *handle, uint32_t address,
         }
 
         if (at24cxx_wait_ready(handle) != DRIVER_OK) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         written += chunk;
     }

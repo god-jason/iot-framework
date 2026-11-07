@@ -5,7 +5,7 @@
 int aht40_get_status(aht40_handle_t *handle, uint8_t *status)
 {
     if (handle == NULL || status == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, AHT40_CMD_STATUS, status, 1U);
 }
@@ -17,19 +17,19 @@ static int aht40_wait_ready(aht40_handle_t *handle)
 
     for (;;) {
         if (driver_i2c_read_reg(&handle->i2c, AHT40_CMD_STATUS, &status, 1U) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if ((status & AHT40_STATUS_BUSY) == 0U) {
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > AHT40_MEASURE_DELAY_MS * 3U) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
 }
 
-int aht40_init(aht40_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int aht40_init(aht40_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t status = 0U;
     uint8_t calibrate[2] = { 0x08U, 0x00U };
@@ -37,7 +37,7 @@ int aht40_init(aht40_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -49,7 +49,7 @@ int aht40_init(aht40_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("aht40", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = driver_i2c_write(&handle->i2c, &reset, 1U);
@@ -60,11 +60,11 @@ int aht40_init(aht40_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (aht40_wait_ready(handle) != DRIVER_OK) {
         LOG_E("aht40", "device not ready");
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, AHT40_CMD_STATUS, &status, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if ((status & AHT40_STATUS_CALIBRATED) == 0U) {
         uint8_t cmd = AHT40_CMD_CALIBRATE;
@@ -72,7 +72,7 @@ int aht40_init(aht40_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
         if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK ||
             driver_i2c_write(&handle->i2c, calibrate, sizeof(calibrate)) != DRIVER_OK) {
             LOG_E("aht40", "calibrate failed");
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         driver_delay_ms(AHT40_CALIBRATE_DELAY_MS);
     }
@@ -85,7 +85,7 @@ int aht40_init(aht40_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int aht40_deinit(aht40_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -102,10 +102,10 @@ int aht40_read(aht40_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, cmd, sizeof(cmd));
@@ -116,7 +116,7 @@ int aht40_read(aht40_handle_t *handle, float *temperature, float *humidity)
     driver_delay_ms(AHT40_MEASURE_DELAY_MS);
 
     if (aht40_wait_ready(handle) != DRIVER_OK) {
-        return (int)PORT_TIMEOUT;
+        return (int)IOT_TIMEOUT;
     }
 
     driver_delay_ms(AHT40_READ_DELAY_MS);
@@ -126,7 +126,7 @@ int aht40_read(aht40_handle_t *handle, float *temperature, float *humidity)
     }
 
     if ((data[0] & AHT40_STATUS_BUSY) != 0U) {
-        return (int)PORT_BUSY;
+        return (int)IOT_BUSY;
     }
 
     raw_h = ((uint32_t)data[1] << 12) |

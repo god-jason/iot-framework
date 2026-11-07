@@ -9,7 +9,7 @@
  *   lan8720_link_status
  *
  * 说明：
- *   - 数据通路（RMII）由 MAC/port_eth 负责，本驱动只管理 PHY 的 MDIO 寄存器。
+ *   - 数据通路（RMII）由 MAC/iot_eth 负责，本驱动只管理 PHY 的 MDIO 寄存器。
  *   - MDIO 采用 GPIO 位操作（MDC + 双向 MDIO），符合 IEEE 802.3 Clause 22 帧格式；
  *     MDC 频率约 250kHz（远低于 2.5MHz 上限），无需专用 MAC 的 MDIO 外设。
  *   - 部分扩展功能（中断引脚、WOL、节能模式）需按 datasheet/固件补充。
@@ -30,8 +30,8 @@ typedef struct {
 } lan8720_link_t;
 
 typedef struct {
-    port_pin_t mdc;
-    port_pin_t mdio;
+    iot_pin_t mdc;
+    iot_pin_t mdio;
     uint8_t phy_address;
     bool initialized;
 } lan8720_handle_t;
@@ -42,7 +42,7 @@ typedef struct {
  * @param  mdio        MDIO 数据引脚（双向，需要上拉）
  * @param  phy_address PHY 地址 0..31，常用 0x00 / 0x01
  */
-int lan8720_init(lan8720_handle_t *handle, port_pin_t mdc, port_pin_t mdio,
+int lan8720_init(lan8720_handle_t *handle, iot_pin_t mdc, iot_pin_t mdio,
                  uint8_t phy_address);
 
 int lan8720_deinit(lan8720_handle_t *handle);

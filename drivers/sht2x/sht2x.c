@@ -25,7 +25,7 @@ static int sht2x_measure(sht2x_handle_t *handle, uint8_t command,
     if (handle->crc_enabled &&
         driver_crc8(data, 2U, SHT2X_CRC_POLY, SHT2X_CRC_INIT) != data[2]) {
         LOG_E("sht2x", "crc error");
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
 
     value = (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
@@ -42,7 +42,7 @@ int sht2x_read_user_register(sht2x_handle_t *handle, uint8_t *value)
     int ret;
 
     if (handle == NULL || value == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &command, 1U);
@@ -58,7 +58,7 @@ int sht2x_soft_reset(sht2x_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &command, 1U);
@@ -66,12 +66,12 @@ int sht2x_soft_reset(sht2x_handle_t *handle)
     return ret;
 }
 
-int sht2x_init(sht2x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int sht2x_init(sht2x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t user = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -82,7 +82,7 @@ int sht2x_init(sht2x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sht2x", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     (void)sht2x_soft_reset(handle);
@@ -92,7 +92,7 @@ int sht2x_init(sht2x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
     if (sht2x_read_user_register(handle, &user) != DRIVER_OK) {
         handle->initialized = false;
         LOG_E("sht2x", "read user register failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (user != SHT2X_USER_REG_DEFAULT) {
         LOG_W("sht2x", "unexpected user reg 0x%02X", user);
@@ -105,7 +105,7 @@ int sht2x_init(sht2x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int sht2x_deinit(sht2x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -120,10 +120,10 @@ int sht2x_read(sht2x_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (temperature != NULL) {

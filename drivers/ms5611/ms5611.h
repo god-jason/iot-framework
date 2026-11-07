@@ -34,10 +34,10 @@ typedef struct {
 } ms5611_data_t;
 
 /** 初始化（I2C）：复位、读 PROM、校验 CRC4 */
-int ms5611_init(ms5611_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int ms5611_init(ms5611_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** 初始化（SPI，cs 为片选引脚） */
-int ms5611_init_spi(ms5611_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs);
+int ms5611_init_spi(ms5611_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
 
 /** 反初始化（复位器件，不关闭总线） */
 int ms5611_deinit(ms5611_handle_t *handle);

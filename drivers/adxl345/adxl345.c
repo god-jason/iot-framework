@@ -2,14 +2,14 @@
 #include "adxl345_register.h"
 #include "log.h"
 
-int adxl345_init(adxl345_handle_t *handle, port_i2c_handle_t *i2c,
+int adxl345_init(adxl345_handle_t *handle, iot_i2c_t *i2c,
                  uint16_t address, adxl345_range_t range)
 {
     uint8_t devid = 0U;
     uint8_t value;
 
     if (handle == NULL || i2c == NULL || (uint8_t)range > ADXL345_RANGE_16G) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -19,27 +19,27 @@ int adxl345_init(adxl345_handle_t *handle, port_i2c_handle_t *i2c,
     handle->initialized = false;
 
     if (driver_i2c_read_reg(&handle->i2c, ADXL345_REG_DEVID, &devid, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (devid != ADXL345_DEVID_VALUE) {
         LOG_E("adxl345", "devid mismatch: 0x%02X", devid);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* 全分辨率 + 量程 */
     value = (uint8_t)(ADXL345_FORMAT_FULL_RES | (uint8_t)range);
     if (driver_i2c_write_reg(&handle->i2c, ADXL345_REG_DATA_FORMAT, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     /* 100Hz 输出率 */
     value = ADXL345_BW_RATE_100HZ;
     if (driver_i2c_write_reg(&handle->i2c, ADXL345_REG_BW_RATE, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     if (adxl345_set_measure(handle, true) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -50,7 +50,7 @@ int adxl345_init(adxl345_handle_t *handle, port_i2c_handle_t *i2c,
 int adxl345_deinit(adxl345_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)adxl345_set_measure(handle, false);
@@ -65,7 +65,7 @@ int adxl345_set_measure(adxl345_handle_t *handle, bool enable)
     uint8_t value = enable ? ADXL345_POWER_MEASURE : ADXL345_POWER_STANDBY;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return driver_i2c_write_reg(&handle->i2c, ADXL345_REG_POWER_CTL, &value, 1U);
 }
@@ -75,11 +75,11 @@ int adxl345_read_raw(adxl345_handle_t *handle, int16_t xyz[3])
     uint8_t d[6];
 
     if (handle == NULL || xyz == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, ADXL345_REG_DATAX0, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     xyz[0] = (int16_t)((uint16_t)d[0] | ((uint16_t)d[1] << 8));
@@ -94,7 +94,7 @@ int adxl345_read(adxl345_handle_t *handle, adxl345_accel_t *accel)
     int ret;
 
     if (accel == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = adxl345_read_raw(handle, xyz);

@@ -6,15 +6,15 @@
 static int yf_s201_check(const yf_s201_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-int yf_s201_init(yf_s201_handle_t *handle, port_pin_t pin)
+int yf_s201_init(yf_s201_handle_t *handle, iot_pin_t pin)
 {
     if (handle == NULL || pin == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->pin = pin;
@@ -23,9 +23,9 @@ int yf_s201_init(yf_s201_handle_t *handle, port_pin_t pin)
     handle->initialized = false;
 
     /* 霍尔输出为开集结构，需上拉；无水流时读到稳定高电平（不产生上升沿） */
-    if (driver_gpio_input(pin, PORT_GPIO_PULLUP) != DRIVER_OK) {
+    if (driver_gpio_input(pin, IOT_GPIO_PULLUP) != DRIVER_OK) {
         LOG_E(YF_S201_TAG, "gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -37,7 +37,7 @@ int yf_s201_init(yf_s201_handle_t *handle, port_pin_t pin)
 int yf_s201_deinit(yf_s201_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->pin != 0U) {
         (void)driver_gpio_deinit(handle->pin);
@@ -54,7 +54,7 @@ int yf_s201_set_pulses_per_liter(yf_s201_handle_t *handle, float pulses_per_lite
         return ret;
     }
     if (pulses_per_liter < 100.0f || pulses_per_liter > 2000.0f) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->pulses_per_liter = pulses_per_liter;
     return DRIVER_OK;
@@ -68,7 +68,7 @@ int yf_s201_set_window(yf_s201_handle_t *handle, uint32_t window_ms)
         return ret;
     }
     if (window_ms < YF_S201_WINDOW_MS_MIN || window_ms > YF_S201_WINDOW_MS_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->window_ms = window_ms;
     return DRIVER_OK;
@@ -83,7 +83,7 @@ int yf_s201_read(yf_s201_handle_t *handle, float *hz, float *liters_per_min)
     int ret;
 
     if (hz == NULL && liters_per_min == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = yf_s201_check(handle);
     if (ret != DRIVER_OK) {
@@ -94,7 +94,7 @@ int yf_s201_read(yf_s201_handle_t *handle, float *hz, float *liters_per_min)
 
     last = driver_gpio_read(handle->pin);
     if (last < 0) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     while (elapsed_us < window_us) {
@@ -105,7 +105,7 @@ int yf_s201_read(yf_s201_handle_t *handle, float *hz, float *liters_per_min)
 
         cur = driver_gpio_read(handle->pin);
         if (cur < 0) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if (cur != 0 && last == 0) {
             pulses++; /* 上升沿计数 */

@@ -55,7 +55,7 @@ typedef struct {
 } bme280_data_t;
 
 /** 初始化：校验 chip id 0x60，读两组校准系数并配置为 normal 模式 */
-int bme280_init(bme280_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int bme280_init(bme280_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** 反初始化（进入 sleep，不关闭总线） */
 int bme280_deinit(bme280_handle_t *handle);

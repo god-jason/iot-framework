@@ -11,7 +11,7 @@
  * 说明：
  *   - 控制接口的每一帧为 16 位（7 位地址 + 9 位数据），线上 2 字节大端。
  *   - WM8978 控制口只写不可读，wm8978_read 返回驱动内部的影子寄存器值。
- *   - PCM 数据由调用方通过 port_i2s 提供，本驱动只负责打开/关闭芯片内
+ *   - PCM 数据由调用方通过 iot_i2s 提供，本驱动只负责打开/关闭芯片内
  *     的 DAC 与输出通路（播放基础路径）。
  *   - 具体寄存器组合（尤其是采样率、PLL、混音）需按 datasheet/固件补充确认。
  */
@@ -35,7 +35,7 @@ typedef struct {
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址，0 表示默认 0x1A
  */
-int wm8978_init(wm8978_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int wm8978_init(wm8978_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int wm8978_deinit(wm8978_handle_t *handle);
 

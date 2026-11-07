@@ -38,7 +38,7 @@ typedef struct {
     bool initialized;
 } at24cxx_handle_t;
 
-int at24cxx_init(at24cxx_handle_t *handle, port_i2c_handle_t *i2c,
+int at24cxx_init(at24cxx_handle_t *handle, iot_i2c_t *i2c,
                  uint16_t address, at24cxx_model_t model);
 int at24cxx_deinit(at24cxx_handle_t *handle);
 

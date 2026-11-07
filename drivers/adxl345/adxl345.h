@@ -33,7 +33,7 @@ typedef struct {
     float z;
 } adxl345_accel_t;
 
-int adxl345_init(adxl345_handle_t *handle, port_i2c_handle_t *i2c,
+int adxl345_init(adxl345_handle_t *handle, iot_i2c_t *i2c,
                  uint16_t address, adxl345_range_t range);
 int adxl345_deinit(adxl345_handle_t *handle);
 

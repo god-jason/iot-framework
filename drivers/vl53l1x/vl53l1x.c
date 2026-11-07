@@ -66,7 +66,7 @@ static int vl53l1x_wait_boot(vl53l1x_handle_t *handle)
         }
         if ((driver_tick_ms() - start) >= VL53L1X_RANGE_TIMEOUT_MS) {
             LOG_E("vl53l1x", "firmware boot timeout, status=0x%02X", (unsigned)status);
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(VL53L1X_POLL_INTERVAL_MS);
     }
@@ -89,19 +89,19 @@ static int vl53l1x_wait_range_ready(vl53l1x_handle_t *handle)
         }
         if ((driver_tick_ms() - start) >= VL53L1X_RANGE_TIMEOUT_MS) {
             LOG_W("vl53l1x", "range timeout, int status=0x%02X", (unsigned)status);
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(VL53L1X_POLL_INTERVAL_MS);
     }
 }
 
-int vl53l1x_init(vl53l1x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int vl53l1x_init(vl53l1x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -111,7 +111,7 @@ int vl53l1x_init(vl53l1x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("vl53l1x", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = vl53l1x_soft_reset(handle);
@@ -132,7 +132,7 @@ int vl53l1x_init(vl53l1x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
     }
     if (id != VL53L1X_MODEL_ID_VALUE) {
         LOG_E("vl53l1x", "unexpected model id 0x%02X", (unsigned)id);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* 待补：私有初始化块 / timing budget / ROI / 相位校准（需按 datasheet 与 ST API 移植） */
@@ -145,7 +145,7 @@ int vl53l1x_init(vl53l1x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int vl53l1x_deinit(vl53l1x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -159,7 +159,7 @@ int vl53l1x_read(vl53l1x_handle_t *handle, vl53l1x_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = vl53l1x_write_u8(handle, VL53L1X_REG_SYSTEM_START, VL53L1X_SYSTEM_START_DSS);
@@ -203,7 +203,7 @@ int vl53l1x_read_distance(vl53l1x_handle_t *handle, uint16_t *distance_mm)
     int ret;
 
     if (distance_mm == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = vl53l1x_read(handle, &data);
@@ -212,5 +212,5 @@ int vl53l1x_read_distance(vl53l1x_handle_t *handle, uint16_t *distance_mm)
     }
 
     *distance_mm = data.distance_mm;
-    return (data.range_status == 0U) ? DRIVER_OK : (int)PORT_NOT_READY;
+    return (data.range_status == 0U) ? DRIVER_OK : (int)IOT_NOT_READY;
 }

@@ -12,7 +12,7 @@
  *
  * 注意：MQ 系列为模拟量器件，硬件访问通过 driver_io.h 完成；由于
  * driver_io.h 未提供 ADC 封装，ADC 采样由上层完成（drivers/voltage.c 或
- * port_adc_read），本驱动只做电压 -> 电阻 -> 浓度的换算。
+ * iot_adc_read），本驱动只做电压 -> 电阻 -> 浓度的换算。
  *
  * adc_mv 单位为 mV（不是 V、也不是 ADC 原始码）。uint16_t 类型可表示
  * 0..65535mV，但这只是**类型上限**：实际可用量程由所选 ADC 的 PGA/基准决定
@@ -76,7 +76,7 @@ int mq2_set_ppm_scale(mq2_handle_t *handle, float ppm_scale);
  * @brief  由 ADC 电压换算气体浓度
  * @param  adc_mv 上层采样得到的电压 mV
  * @param  data   输出结果（不可为 NULL）
- * @retval PORT_INVALID_PARAM 句柄未初始化 / data 为 NULL / 电压越界
+ * @retval IOT_INVALID_PARAM 句柄未初始化 / data 为 NULL / 电压越界
  */
 int mq2_read(mq2_handle_t *handle, uint16_t adc_mv, mq2_data_t *data);
 

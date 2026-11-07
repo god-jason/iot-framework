@@ -92,24 +92,14 @@ void ut_storage(void);
 void ut_at(void);
 void ut_at_parser(void);
 void ut_at_urc(void);
-void ut_http(void);
 void ut_ml307(void);
-void ut_ml307_http(void);
 void ut_ml307_mqtt(void);
 void ut_modbus(void);
 void ut_modbus_master(void);
 void ut_modbus_slave(void);
 void ut_tlv(void);
-void ut_mqtt(void);
 
 /* ---------------- port ---------------- */
-void ut_port_mem(void);
-void ut_port_os(void);
-void ut_port_sim_bus(void);
-void ut_port_sim_analog(void);
-void ut_port_sim_timer(void);
-void ut_port_sim_sys(void);
-void ut_port_sim_optional(void);
 
 /* ---------------- drivers ---------------- */
 void ut_drivers(void);
@@ -119,8 +109,6 @@ void ut_tlsf(void);
 void ut_arena(void);
 
 /* ---------------- 历史聚合测试 ---------------- */
-void test_mqtt(void);
-void test_http(void);
 
 int main(void)
 {
@@ -199,24 +187,14 @@ int main(void)
     ut_at();
     ut_at_parser();
     ut_at_urc();
-    ut_http();
     ut_ml307();
-    ut_ml307_http();
     ut_ml307_mqtt();
     ut_modbus();
     ut_modbus_master();
     ut_modbus_slave();
     ut_tlv();
-    ut_mqtt();
 
     printf("\n--- port ---\n");
-    ut_port_mem();
-    ut_port_os();
-    ut_port_sim_bus();
-    ut_port_sim_analog();
-    ut_port_sim_timer();
-    ut_port_sim_sys();
-    ut_port_sim_optional();
 
     printf("\n--- drivers ---\n");
     ut_drivers();
@@ -224,10 +202,6 @@ int main(void)
     printf("\n--- vendor ---\n");
     ut_tlsf();
     ut_arena();
-
-    printf("\n--- 历史聚合测试 ---\n");
-    test_mqtt();
-    test_http();
 
     printf("\n=== 结果：%d 项检查，%d 项失败 ===\n", tf_checks, tf_failures);
     return (tf_failures == 0) ? 0 : 1;

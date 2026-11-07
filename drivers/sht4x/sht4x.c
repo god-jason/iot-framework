@@ -5,7 +5,7 @@
 static int sht4x_crc_ok(const uint8_t *data, uint8_t crc)
 {
     return (driver_crc8(data, 2U, SHT4X_CRC_POLY, SHT4X_CRC_INIT) == crc) ? DRIVER_OK
-                                                                          : (int)PORT_CRC_ERROR;
+                                                                          : (int)IOT_CRC_ERROR;
 }
 
 static uint8_t sht4x_measure_command(sht4x_handle_t *handle)
@@ -40,7 +40,7 @@ int sht4x_soft_reset(sht4x_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &command, 1U);
@@ -55,7 +55,7 @@ int sht4x_read_serial(sht4x_handle_t *handle, uint16_t *serial)
     int ret;
 
     if (handle == NULL || serial == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &command, 1U);
@@ -70,7 +70,7 @@ int sht4x_read_serial(sht4x_handle_t *handle, uint16_t *serial)
     }
     if (handle->crc_enabled && sht4x_crc_ok(&data[0], data[2]) != DRIVER_OK) {
         LOG_E("sht4x", "serial crc error");
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
 
     *serial = (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
@@ -80,23 +80,23 @@ int sht4x_read_serial(sht4x_handle_t *handle, uint16_t *serial)
 int sht4x_set_repeatability(sht4x_handle_t *handle, sht4x_repeatability_t repeatability)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (repeatability != SHT4X_REPEAT_HIGH &&
         repeatability != SHT4X_REPEAT_MEDIUM &&
         repeatability != SHT4X_REPEAT_LOW) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->repeatability = repeatability;
     return DRIVER_OK;
 }
 
-int sht4x_init(sht4x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int sht4x_init(sht4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint16_t serial = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -108,7 +108,7 @@ int sht4x_init(sht4x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sht4x", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     (void)sht4x_soft_reset(handle);
@@ -118,7 +118,7 @@ int sht4x_init(sht4x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
     if (sht4x_read_serial(handle, &serial) != DRIVER_OK) {
         handle->initialized = false;
         LOG_E("sht4x", "read serial failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     LOG_I("sht4x", "init ok at 0x%02X, sn=0x%04X", handle->i2c.address, serial);
@@ -128,7 +128,7 @@ int sht4x_init(sht4x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int sht4x_deinit(sht4x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -145,10 +145,10 @@ int sht4x_read(sht4x_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     command = sht4x_measure_command(handle);
@@ -169,7 +169,7 @@ int sht4x_read(sht4x_handle_t *handle, float *temperature, float *humidity)
         if (sht4x_crc_ok(&data[0], data[2]) != DRIVER_OK ||
             sht4x_crc_ok(&data[3], data[5]) != DRIVER_OK) {
             LOG_E("sht4x", "crc error");
-            return (int)PORT_CRC_ERROR;
+            return (int)IOT_CRC_ERROR;
         }
     }
 

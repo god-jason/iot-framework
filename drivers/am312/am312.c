@@ -6,24 +6,24 @@
 static int am312_check(const am312_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-int am312_init(am312_handle_t *handle, port_pin_t pin)
+int am312_init(am312_handle_t *handle, iot_pin_t pin)
 {
     if (handle == NULL || pin == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->pin = pin;
     handle->initialized = false;
 
     /* 下拉：模块未接或掉电时读到低电平（无移动），避免悬空误报 */
-    if (driver_gpio_input(pin, PORT_GPIO_PULLDOWN) != DRIVER_OK) {
+    if (driver_gpio_input(pin, IOT_GPIO_PULLDOWN) != DRIVER_OK) {
         LOG_E(AM312_TAG, "gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -34,7 +34,7 @@ int am312_init(am312_handle_t *handle, port_pin_t pin)
 int am312_deinit(am312_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->pin != 0U) {
         (void)driver_gpio_deinit(handle->pin);
@@ -49,7 +49,7 @@ int am312_read(am312_handle_t *handle, bool *motion)
     int ret;
 
     if (motion == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = am312_check(handle);
     if (ret != DRIVER_OK) {
@@ -59,7 +59,7 @@ int am312_read(am312_handle_t *handle, bool *motion)
     level = driver_gpio_read(handle->pin);
     if (level < 0) {
         LOG_E(AM312_TAG, "gpio read failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     *motion = (level == (int)AM312_ACTIVE_LEVEL);

@@ -60,9 +60,9 @@ typedef struct {
  * @param  i2c          已初始化的 I2C 主机句柄
  * @param  address      7 位从机地址，0 表示默认 0x4C
  * @param  sample_rate  自动唤醒采样率
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int mma7660fc_init(mma7660fc_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+int mma7660fc_init(mma7660fc_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
                    mma7660fc_sample_rate_t sample_rate);
 
 /** @brief 反初始化：进入待机模式 */

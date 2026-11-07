@@ -59,19 +59,19 @@ static int scd30_read_words(scd30_handle_t *handle, uint8_t *raw, uint8_t words)
     for (i = 0U; i < words; i++) {
         if (scd30_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
             LOG_E("scd30", "crc error on word %u", (unsigned)i);
-            return (int)PORT_CRC_ERROR;
+            return (int)IOT_CRC_ERROR;
         }
     }
     return DRIVER_OK;
 }
 
-int scd30_init(scd30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int scd30_init(scd30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint16_t version = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -82,7 +82,7 @@ int scd30_init(scd30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("scd30", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = scd30_send_cmd(handle, SCD30_CMD_SOFT_RESET);
@@ -94,7 +94,7 @@ int scd30_init(scd30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
     /* ID 校验：读固件版本（0 或读取失败视为器件异常） */
     if (scd30_get_firmware_version(handle, &version) != DRIVER_OK) {
         LOG_E("scd30", "firmware version read failed");
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = scd30_send_cmd_u16(handle, SCD30_CMD_TRIGGER_CONTINUOUS, handle->interval_s);
@@ -113,7 +113,7 @@ int scd30_init(scd30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int scd30_deinit(scd30_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)scd30_send_cmd(handle, SCD30_CMD_STOP_CONTINUOUS);
@@ -126,7 +126,7 @@ int scd30_deinit(scd30_handle_t *handle)
 int scd30_stop(scd30_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return scd30_send_cmd(handle, SCD30_CMD_STOP_CONTINUOUS);
 }
@@ -136,7 +136,7 @@ int scd30_set_interval(scd30_handle_t *handle, uint16_t interval_s)
     int ret;
 
     if (handle == NULL || !handle->initialized || interval_s < 2U || interval_s > 1800U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = scd30_send_cmd(handle, SCD30_CMD_STOP_CONTINUOUS);
     if (ret != DRIVER_OK) {
@@ -152,7 +152,7 @@ int scd30_set_interval(scd30_handle_t *handle, uint16_t interval_s)
 int scd30_set_temperature_offset(scd30_handle_t *handle, uint16_t offset_centi_c)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return scd30_send_cmd_u16(handle, SCD30_CMD_SET_TEMPERATURE_OFFSET, offset_centi_c);
 }
@@ -160,7 +160,7 @@ int scd30_set_temperature_offset(scd30_handle_t *handle, uint16_t offset_centi_c
 int scd30_set_altitude(scd30_handle_t *handle, uint16_t altitude_m)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return scd30_send_cmd_u16(handle, SCD30_CMD_SET_ALTITUDE, altitude_m);
 }
@@ -168,7 +168,7 @@ int scd30_set_altitude(scd30_handle_t *handle, uint16_t altitude_m)
 int scd30_set_forced_recalibration(scd30_handle_t *handle, uint16_t reference_ppm)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return scd30_send_cmd_u16(handle, SCD30_CMD_SET_FORCED_RECAL, reference_ppm);
 }
@@ -179,7 +179,7 @@ int scd30_get_firmware_version(scd30_handle_t *handle, uint16_t *version)
     int ret;
 
     if (handle == NULL || version == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = scd30_send_cmd(handle, SCD30_CMD_GET_FIRMWARE_VERSION);
     if (ret != DRIVER_OK) {
@@ -201,7 +201,7 @@ int scd30_read(scd30_handle_t *handle, scd30_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = scd30_send_cmd(handle, SCD30_CMD_GET_DATA_READY);
@@ -214,7 +214,7 @@ int scd30_read(scd30_handle_t *handle, scd30_data_t *data)
         return ret;
     }
     if ((((uint16_t)ready[0] << 8) | ready[1]) == 0U) {
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
 
     ret = scd30_send_cmd(handle, SCD30_CMD_READ_MEASUREMENT);

@@ -33,7 +33,7 @@ typedef struct {
  * @param  spi  已初始化的 SPI 主机句柄
  * @param  cs   片选引脚，0 表示由 SPI 外设内部管理
  */
-int isd17xx_init(isd17xx_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs);
+int isd17xx_init(isd17xx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
 
 int isd17xx_deinit(isd17xx_handle_t *handle);
 

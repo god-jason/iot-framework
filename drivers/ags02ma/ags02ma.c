@@ -34,7 +34,7 @@ static int ags02ma_read_reg(ags02ma_handle_t *handle, uint8_t reg,
     }
     if (ags02ma_crc(data, data_len) != data[data_len]) {
         LOG_E("ags02ma", "crc error on reg 0x%02X", (unsigned)reg);
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
     return DRIVER_OK;
 }
@@ -45,7 +45,7 @@ int ags02ma_get_version(ags02ma_handle_t *handle, uint16_t *version)
     int ret;
 
     if (handle == NULL || version == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = ags02ma_read_reg(handle, AGS02MA_REG_VERSION, raw, 2U);
     if (ret != DRIVER_OK) {
@@ -55,13 +55,13 @@ int ags02ma_get_version(ags02ma_handle_t *handle, uint16_t *version)
     return DRIVER_OK;
 }
 
-int ags02ma_init(ags02ma_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int ags02ma_init(ags02ma_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint16_t version = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -73,14 +73,14 @@ int ags02ma_init(ags02ma_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("ags02ma", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* ID 校验：读版本号（CRC 必须通过） */
     ret = ags02ma_get_version(handle, &version);
     if (ret != DRIVER_OK) {
         LOG_E("ags02ma", "version read failed: %d", ret);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->version = version;
@@ -92,7 +92,7 @@ int ags02ma_init(ags02ma_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int ags02ma_deinit(ags02ma_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -102,7 +102,7 @@ int ags02ma_deinit(ags02ma_handle_t *handle)
 int ags02ma_set_eco2_scale(ags02ma_handle_t *handle, float scale)
 {
     if (handle == NULL || !handle->initialized || scale < 0.0f) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->eco2_scale = scale;
     return DRIVER_OK;
@@ -115,7 +115,7 @@ int ags02ma_read(ags02ma_handle_t *handle, ags02ma_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = ags02ma_read_reg(handle, AGS02MA_REG_TVOC, raw, 4U);
@@ -128,7 +128,7 @@ int ags02ma_read(ags02ma_handle_t *handle, ags02ma_data_t *data)
            ((uint32_t)raw[2] << 8) | (uint32_t)raw[3];
     if (tvoc > AGS02MA_TVOC_MAX_PPB) {
         LOG_W("ags02ma", "tvoc %luppb out of range", (unsigned long)tvoc);
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     data->tvoc_ppb = tvoc;

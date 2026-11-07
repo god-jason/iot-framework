@@ -41,13 +41,13 @@ static int opt3001_read_u16(opt3001_handle_t *handle, uint8_t reg, uint16_t *val
     return DRIVER_OK;
 }
 
-int opt3001_init(opt3001_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int opt3001_init(opt3001_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint16_t device_id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -59,7 +59,7 @@ int opt3001_init(opt3001_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("opt3001", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = opt3001_read_u16(handle, OPT3001_REG_DEVICE_ID, &device_id);
@@ -68,13 +68,13 @@ int opt3001_init(opt3001_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
     }
     if (device_id != OPT3001_DEVICE_ID) {
         LOG_E("opt3001", "unexpected device id 0x%04X", device_id);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     driver_delay_ms(OPT3001_POWER_ON_DELAY_MS);
     ret = opt3001_write_config(handle, opt3001_build_config(handle));
     if (ret != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(opt3001_conv_delay_ms(handle->conv_time));
 
@@ -86,7 +86,7 @@ int opt3001_init(opt3001_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int opt3001_deinit(opt3001_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)opt3001_write_config(handle, OPT3001_CONFIG_M_SHUTDOWN);
@@ -101,16 +101,16 @@ int opt3001_set_conversion_time(opt3001_handle_t *handle, opt3001_conv_time_t co
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (conv_time != OPT3001_CONV_100MS && conv_time != OPT3001_CONV_800MS) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->conv_time = conv_time;
     ret = opt3001_write_config(handle, opt3001_build_config(handle));
     if (ret != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(opt3001_conv_delay_ms(handle->conv_time));
     return DRIVER_OK;
@@ -121,11 +121,11 @@ int opt3001_set_continuous(opt3001_handle_t *handle, bool enable)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->continuous = enable;
     ret = opt3001_write_config(handle, opt3001_build_config(handle));
-    return (ret == DRIVER_OK) ? DRIVER_OK : (int)PORT_IO_ERROR;
+    return (ret == DRIVER_OK) ? DRIVER_OK : (int)IOT_IO_ERROR;
 }
 
 int opt3001_read_raw(opt3001_handle_t *handle, uint16_t *raw, float *lux)
@@ -138,14 +138,14 @@ int opt3001_read_raw(opt3001_handle_t *handle, uint16_t *raw, float *lux)
     int ret;
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* 单次模式需重新触发一次转换；连续模式直接等待新数据 */
     if (!handle->continuous) {
         ret = opt3001_write_config(handle, opt3001_build_config(handle));
         if (ret != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
     driver_delay_ms(opt3001_conv_delay_ms(handle->conv_time));
@@ -173,7 +173,7 @@ int opt3001_read(opt3001_handle_t *handle, float *lux)
     uint16_t raw = 0U;
 
     if (lux == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return opt3001_read_raw(handle, &raw, lux);
 }
@@ -181,7 +181,7 @@ int opt3001_read(opt3001_handle_t *handle, float *lux)
 int opt3001_get_device_id(opt3001_handle_t *handle, uint16_t *device_id)
 {
     if (handle == NULL || device_id == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return opt3001_read_u16(handle, OPT3001_REG_DEVICE_ID, device_id);
 }

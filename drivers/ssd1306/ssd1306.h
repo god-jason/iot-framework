@@ -28,8 +28,8 @@ typedef struct {
 
     /* SPI 模式 */
     driver_spi_t spi;
-    port_pin_t dc;      /* 数据/命令选择 */
-    port_pin_t res;     /* 复位，可为 0 */
+    iot_pin_t dc;      /* 数据/命令选择 */
+    iot_pin_t res;     /* 复位，可为 0 */
 
     uint8_t *gram;      /* 显存，长度必须 >= SSD1306_GRAM_SIZE */
     bool mirror_x;

@@ -6,7 +6,7 @@
 static int ld3320_check(const ld3320_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -17,7 +17,7 @@ int ld3320_write(ld3320_handle_t *handle, uint8_t reg, uint8_t value)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     frame[0] = LD3320_SPI_CMD_WRITE;
@@ -41,10 +41,10 @@ int ld3320_read(ld3320_handle_t *handle, uint8_t reg, uint8_t *value)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (value == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     frame[0] = LD3320_SPI_CMD_READ;
@@ -70,7 +70,7 @@ int ld3320_write_regs(ld3320_handle_t *handle, const uint8_t *pairs, size_t coun
     int ret;
 
     if (pairs == NULL || count == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = ld3320_check(handle);
     if (ret != DRIVER_OK) {
@@ -86,14 +86,14 @@ int ld3320_write_regs(ld3320_handle_t *handle, const uint8_t *pairs, size_t coun
     return DRIVER_OK;
 }
 
-int ld3320_init(ld3320_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
-                port_pin_t reset_pin)
+int ld3320_init(ld3320_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
+                iot_pin_t reset_pin)
 {
     uint8_t id = 0U;
     int ret;
 
     if (handle == NULL || spi == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -104,20 +104,20 @@ int ld3320_init(ld3320_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, PORT_GPIO_HIGH) != DRIVER_OK) {
+        if (driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) {
             LOG_E(LD3320_TAG, "cs gpio init failed");
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
 
     if (reset_pin != 0U) {
-        if (driver_gpio_output(reset_pin, PORT_GPIO_LOW) != DRIVER_OK) {
+        if (driver_gpio_output(reset_pin, IOT_GPIO_LOW) != DRIVER_OK) {
             LOG_E(LD3320_TAG, "reset gpio init failed");
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         driver_delay_ms(LD3320_RESET_LOW_MS);
-        if (driver_gpio_write(reset_pin, PORT_GPIO_HIGH) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+        if (driver_gpio_write(reset_pin, IOT_GPIO_HIGH) != DRIVER_OK) {
+            return (int)IOT_IO_ERROR;
         }
         driver_delay_ms(LD3320_RESET_WAIT_MS);
     }
@@ -140,12 +140,12 @@ int ld3320_init(ld3320_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
 int ld3320_deinit(ld3320_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)ld3320_stop(handle);
         if (handle->reset_pin != 0U) {
-            (void)driver_gpio_write(handle->reset_pin, PORT_GPIO_LOW);
+            (void)driver_gpio_write(handle->reset_pin, IOT_GPIO_LOW);
         }
     }
     handle->initialized = false;
@@ -191,7 +191,7 @@ int ld3320_get_result(ld3320_handle_t *handle, uint8_t *index)
     int ret;
 
     if (index == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     *index = 0U;
     ret = ld3320_check(handle);

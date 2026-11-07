@@ -5,10 +5,10 @@
 static int gp2y_check(const gp2y1010au0f_handle_t *handle)
 {
     if (handle == NULL || handle->adc == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
     return DRIVER_OK;
 }
@@ -19,9 +19,9 @@ static int gp2y_led_on(const gp2y1010au0f_handle_t *handle)
     if (!handle->led_enabled) {
         return DRIVER_OK;
     }
-    if (driver_gpio_write(handle->led_pin, PORT_GPIO_LOW) != DRIVER_OK) {
+    if (driver_gpio_write(handle->led_pin, IOT_GPIO_LOW) != DRIVER_OK) {
         LOG_E("gp2y1010", "led on failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_us(GP2Y1010AU0F_LED_ON_DELAY_US);
     return DRIVER_OK;
@@ -33,35 +33,35 @@ static void gp2y_led_off(const gp2y1010au0f_handle_t *handle)
         return;
     }
     driver_delay_us(GP2Y1010AU0F_LED_TAIL_DELAY_US);
-    (void)driver_gpio_write(handle->led_pin, PORT_GPIO_HIGH);
+    (void)driver_gpio_write(handle->led_pin, IOT_GPIO_HIGH);
     driver_delay_us(GP2Y1010AU0F_SAMPLE_PERIOD_US);
 }
 
-int gp2y1010au0f_init(gp2y1010au0f_handle_t *handle, port_adc_handle_t *adc, uint8_t channel)
+int gp2y1010au0f_init(gp2y1010au0f_handle_t *handle, iot_adc_t *adc, uint8_t channel)
 {
-    port_adc_channel_config_t cfg;
+    iot_adc_channel_config_t cfg;
     uint32_t adc_max;
 
     if (handle == NULL || adc == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     cfg.channel = channel;
     cfg.rank = 1U;
     cfg.sample_time = 0U;   /* 0：由平台选择默认采样时间 */
-    if (port_adc_config_channel(adc, &cfg) != PORT_OK) {
+    if (iot_adc_config_channel(adc, &cfg) != IOT_OK) {
         LOG_E("gp2y1010", "adc channel %u config failed", (unsigned)channel);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
-    adc_max = port_adc_get_max_value(adc);
+    adc_max = iot_adc_get_max_value(adc);
 
     handle->adc = adc;
     handle->channel = channel;
     handle->vref_mv = GP2Y1010AU0F_DEFAULT_VREF_MV;
     handle->adc_max = (adc_max != 0U) ? adc_max : GP2Y1010AU0F_DEFAULT_ADC_MAX;
     handle->voff_mv = GP2Y1010AU0F_DEFAULT_VOFF_MV;
-    handle->led_pin = PORT_PIN(0U, 0U);
+    handle->led_pin = IOT_PIN(0U, 0U);
     handle->led_enabled = false;
     handle->initialized = true;
 
@@ -73,10 +73,10 @@ int gp2y1010au0f_init(gp2y1010au0f_handle_t *handle, port_adc_handle_t *adc, uin
 int gp2y1010au0f_deinit(gp2y1010au0f_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->led_enabled) {
-        (void)driver_gpio_write(handle->led_pin, PORT_GPIO_HIGH);
+        (void)driver_gpio_write(handle->led_pin, IOT_GPIO_HIGH);
     }
     handle->led_enabled = false;
     handle->adc = NULL;
@@ -92,11 +92,11 @@ int gp2y1010au0f_read_raw(gp2y1010au0f_handle_t *handle, uint32_t *raw)
         return ret;
     }
     if (raw == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
-    if (port_adc_read(handle->adc, handle->channel, raw, GP2Y1010AU0F_ADC_TIMEOUT_MS) != PORT_OK) {
+    if (iot_adc_read(handle->adc, handle->channel, raw, GP2Y1010AU0F_ADC_TIMEOUT_MS) != IOT_OK) {
         LOG_E("gp2y1010", "adc read failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -109,7 +109,7 @@ int gp2y1010au0f_read(gp2y1010au0f_handle_t *handle, float *density_ug_m3)
     int ret;
 
     if (density_ug_m3 == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = gp2y_check(handle);
     if (ret != DRIVER_OK) {
@@ -141,15 +141,15 @@ int gp2y1010au0f_read(gp2y1010au0f_handle_t *handle, float *density_ug_m3)
     return DRIVER_OK;
 }
 
-int gp2y1010au0f_set_led(gp2y1010au0f_handle_t *handle, port_pin_t pin)
+int gp2y1010au0f_set_led(gp2y1010au0f_handle_t *handle, iot_pin_t pin)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     /* 先置高（熄灭）再切输出，避免上电瞬间 LED 常亮 */
-    if (driver_gpio_output(pin, PORT_GPIO_HIGH) != DRIVER_OK) {
+    if (driver_gpio_output(pin, IOT_GPIO_HIGH) != DRIVER_OK) {
         LOG_E("gp2y1010", "led gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     handle->led_pin = pin;
     handle->led_enabled = true;
@@ -159,7 +159,7 @@ int gp2y1010au0f_set_led(gp2y1010au0f_handle_t *handle, port_pin_t pin)
 int gp2y1010au0f_set_voffset(gp2y1010au0f_handle_t *handle, float voff_mv)
 {
     if (handle == NULL || voff_mv < 0.0f) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->voff_mv = voff_mv;
     return DRIVER_OK;
@@ -168,7 +168,7 @@ int gp2y1010au0f_set_voffset(gp2y1010au0f_handle_t *handle, float voff_mv)
 int gp2y1010au0f_set_reference(gp2y1010au0f_handle_t *handle, float vref_mv, uint32_t adc_max)
 {
     if (handle == NULL || vref_mv <= 0.0f || adc_max == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->vref_mv = vref_mv;
     handle->adc_max = adc_max;

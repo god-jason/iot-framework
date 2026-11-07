@@ -63,9 +63,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x18
- * @return 0 成功，负值为 port_status_t（-11 表示 WHO_AM_I 不匹配）
+ * @return 0 成功，负值为 iot_status_t（-11 表示 WHO_AM_I 不匹配）
  */
-int lis2dh12_init(lis2dh12_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int lis2dh12_init(lis2dh12_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化：关闭三轴，复位句柄状态（不关闭总线） */
 int lis2dh12_deinit(lis2dh12_handle_t *handle);

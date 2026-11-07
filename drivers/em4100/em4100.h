@@ -26,13 +26,13 @@ typedef struct {
 } em4100_tag_t;
 
 typedef struct {
-    port_pin_t pin;
+    iot_pin_t pin;
     uint32_t half_bit_us;
     uint32_t timeout_ms;
     bool initialized;
 } em4100_handle_t;
 
-int em4100_init(em4100_handle_t *handle, port_pin_t pin, uint32_t half_bit_us);
+int em4100_init(em4100_handle_t *handle, iot_pin_t pin, uint32_t half_bit_us);
 int em4100_deinit(em4100_handle_t *handle);
 int em4100_set_timing(em4100_handle_t *handle, uint32_t half_bit_us);
 

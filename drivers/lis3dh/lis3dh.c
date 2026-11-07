@@ -49,7 +49,7 @@ static uint8_t lis3dh_ctrl4_value(lis3dh_handle_t *handle)
 static int lis3dh_write_ctrl1(lis3dh_handle_t *handle)
 {
     if (lis3dh_write_reg(handle, LIS3DH_REG_CTRL_REG1, lis3dh_ctrl1_value(handle)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -57,17 +57,17 @@ static int lis3dh_write_ctrl1(lis3dh_handle_t *handle)
 static int lis3dh_write_ctrl4(lis3dh_handle_t *handle)
 {
     if (lis3dh_write_reg(handle, LIS3DH_REG_CTRL_REG4, lis3dh_ctrl4_value(handle)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
 
-int lis3dh_init(lis3dh_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int lis3dh_init(lis3dh_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -80,15 +80,15 @@ int lis3dh_init(lis3dh_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
 
     if (driver_i2c_read_reg(&handle->i2c, LIS3DH_REG_WHO_AM_I, &id, 1U) != DRIVER_OK) {
         LOG_E(LIS3DH_TAG, "read who_am_i failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (id != LIS3DH_WHO_AM_I_VALUE) {
         LOG_E(LIS3DH_TAG, "who_am_i mismatch: 0x%02X", id);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     if (lis3dh_write_ctrl4(handle) != DRIVER_OK || lis3dh_write_ctrl1(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(5U);
 
@@ -100,7 +100,7 @@ int lis3dh_init(lis3dh_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
 int lis3dh_deinit(lis3dh_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         (void)lis3dh_write_reg(handle, LIS3DH_REG_CTRL_REG1, LIS3DH_CTRL1_LPEN_NORMAL);
@@ -115,10 +115,10 @@ int lis3dh_read_raw(lis3dh_handle_t *handle, int16_t accel[3])
     uint8_t d[6];
 
     if (handle == NULL || accel == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (driver_i2c_read_reg(&handle->i2c, LIS3DH_REG_OUT_X_L, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     accel[0] = driver_le16(&d[0]);
@@ -133,7 +133,7 @@ int lis3dh_read(lis3dh_handle_t *handle, lis3dh_accel_t *accel)
     int ret;
 
     if (accel == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = lis3dh_read_raw(handle, raw);
@@ -152,14 +152,14 @@ int lis3dh_set_range(lis3dh_handle_t *handle, lis3dh_range_t range)
     lis3dh_range_t old;
 
     if (handle == NULL || !handle->initialized || (unsigned)range >= (unsigned)LIS3DH_RANGE_COUNT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     old = handle->range;
     handle->range = range;
     if (lis3dh_write_ctrl4(handle) != DRIVER_OK) {
         handle->range = old;
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     handle->g_per_lsb = s_g_per_lsb[range];
     return DRIVER_OK;
@@ -170,14 +170,14 @@ int lis3dh_set_output_rate(lis3dh_handle_t *handle, lis3dh_odr_t odr)
     lis3dh_odr_t old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)LIS3DH_ODR_COUNT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     old = handle->odr;
     handle->odr = odr;
     if (lis3dh_write_ctrl1(handle) != DRIVER_OK) {
         handle->odr = old;
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }

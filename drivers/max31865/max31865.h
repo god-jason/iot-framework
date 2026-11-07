@@ -10,7 +10,7 @@
  *
  * 用法：
  *   max31865_handle_t rtd;
- *   max31865_init(&rtd, &spi1, PORT_PIN(1, 4));
+ *   max31865_init(&rtd, &spi1, IOT_PIN(1, 4));
  *   max31865_set_rref(&rtd, 430.0f);
  *   max31865_set_wire_mode(&rtd, 3);
  *   float t;
@@ -33,9 +33,9 @@ typedef struct {
 
 /**
  * @brief  初始化并校验 SPI 通信
- * @param  cs  片选引脚，PORT_PIN(0,0) 表示由外部控制
+ * @param  cs  片选引脚，IOT_PIN(0,0) 表示由外部控制
  */
-int max31865_init(max31865_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs);
+int max31865_init(max31865_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
 
 /** @brief  反初始化 */
 int max31865_deinit(max31865_handle_t *handle);

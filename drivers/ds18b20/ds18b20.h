@@ -15,14 +15,14 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_pin_t pin;
+    iot_pin_t pin;
     bool initialized;
 } ds18b20_handle_t;
 
 /**
  * @brief  初始化（引脚配置为开漏输出 + 上拉）
  */
-int ds18b20_init(ds18b20_handle_t *handle, port_pin_t pin);
+int ds18b20_init(ds18b20_handle_t *handle, iot_pin_t pin);
 int ds18b20_deinit(ds18b20_handle_t *handle);
 
 /**

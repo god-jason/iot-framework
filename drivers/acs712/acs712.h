@@ -8,7 +8,7 @@
  *   acs712_init / acs712_deinit / acs712_read / acs712_read_raw
  *
  * 硬件访问：drivers/common/driver_io.h 未封装 ADC，本驱动与 ntc 一致，
- * 直接调用 port_adc_*（不包含 bus 目录头文件，不依赖任何 HAL）。
+ * 直接调用 iot_adc_*（不包含 bus 目录头文件，不依赖任何 HAL）。
  *
  * 句柄保存灵敏度与零流点两项标定参数：
  *   - 5A 版换灵敏度 185mV/A、20A 版 100mV/A、30A 版 66mV/A
@@ -32,7 +32,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_adc_handle_t *adc;      /* 已初始化的 ADC 句柄 */
+    iot_adc_t *adc;      /* 已初始化的 ADC 句柄 */
     uint8_t channel;             /* ADC 通道号 */
     float vref_mv;               /* ADC 参考电压 mV */
     uint32_t adc_max;            /* ADC 满量程码值 */
@@ -45,9 +45,9 @@ typedef struct {
  * @brief  初始化驱动并配置 ADC 通道
  * @param  adc      已初始化的 ADC 句柄（不可为 NULL）
  * @param  channel  ADC 通道号
- * @return 0 成功；PORT_INVALID_PARAM 参数非法；PORT_IO_ERROR 通道配置失败
+ * @return 0 成功；IOT_INVALID_PARAM 参数非法；IOT_IO_ERROR 通道配置失败
  */
-int acs712_init(acs712_handle_t *handle, port_adc_handle_t *adc, uint8_t channel);
+int acs712_init(acs712_handle_t *handle, iot_adc_t *adc, uint8_t channel);
 
 /** @brief 反初始化（不关闭 ADC） */
 int acs712_deinit(acs712_handle_t *handle);
@@ -55,7 +55,7 @@ int acs712_deinit(acs712_handle_t *handle);
 /**
  * @brief  读取电流
  * @param  amps  电流，单位 A，正负表示方向
- * @return 0 成功；PORT_NOT_READY 未初始化；PORT_IO_ERROR ADC 读取失败
+ * @return 0 成功；IOT_NOT_READY 未初始化；IOT_IO_ERROR ADC 读取失败
  */
 int acs712_read(acs712_handle_t *handle, float *amps);
 
@@ -70,7 +70,7 @@ int acs712_read_raw(acs712_handle_t *handle, uint32_t *raw);
 int acs712_set_calibration(acs712_handle_t *handle, float sens_mv_per_a, float zero_mv);
 
 /**
- * @brief  覆盖 ADC 参考电压与满量程码值（默认取 port_adc_get_max_value）
+ * @brief  覆盖 ADC 参考电压与满量程码值（默认取 iot_adc_get_max_value）
  */
 int acs712_set_reference(acs712_handle_t *handle, float vref_mv, uint32_t adc_max);
 

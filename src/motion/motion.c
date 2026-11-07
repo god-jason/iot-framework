@@ -5,7 +5,7 @@
 #include "motion_source.h"
 #include "motion_task.h"
 #include "motion_vm.h"
-#include "port_mem.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -25,7 +25,7 @@
  *
  * 静态缓冲与边界：
  *   - 脚本长度必须 < MOTION_MAX_PROGRAM，否则返回 MOTION_ERR_MEMORY；
- *   - s_program 在首次初始化/加载时通过 port_mem 分配，容量固定为
+ *   - s_program 在首次初始化/加载时通过 iot_mem 分配，容量固定为
  *     MOTION_MAX_PROGRAM，之后重复初始化复用同一块内存。
  */
 
@@ -38,7 +38,7 @@ static bool s_loaded;                      /* 是否已成功加载脚本 */
 static int ensure_program(void)
 {
     if (s_program == NULL) {
-        s_program = (char *)port_malloc(MOTION_MAX_PROGRAM);
+        s_program = (char *)iot_malloc(MOTION_MAX_PROGRAM);
         if (s_program == NULL) {
             return MOTION_ERR_MEMORY;
         }

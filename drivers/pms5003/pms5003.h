@@ -46,8 +46,8 @@ int pms5003_deinit(pms5003_handle_t *handle);
  * @param  buffer 帧数据
  * @param  length 可用字节数，需 ≥ 32
  * @param  data   输出结果，不可为 NULL
- * @retval PORT_INVALID_PARAM 参数非法/长度不足
- * @retval PORT_CRC_ERROR     帧头或校验和错误
+ * @retval IOT_INVALID_PARAM 参数非法/长度不足
+ * @retval IOT_CRC_ERROR     帧头或校验和错误
  */
 int pms5003_parse(pms5003_handle_t *handle, const uint8_t *buffer, size_t length,
                   pms5003_data_t *data);

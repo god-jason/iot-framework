@@ -18,9 +18,9 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_pin_t stb;
-    port_pin_t clk;
-    port_pin_t dio;
+    iot_pin_t stb;
+    iot_pin_t clk;
+    iot_pin_t dio;
 
     uint8_t *gram;
     size_t gram_len;

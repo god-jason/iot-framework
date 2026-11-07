@@ -2,10 +2,10 @@
 #include "max6675_register.h"
 #include "log.h"
 
-int max6675_init(max6675_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs)
+int max6675_init(max6675_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 {
     if (handle == NULL || spi == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -28,10 +28,10 @@ int max6675_init(max6675_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs
 int max6675_deinit(max6675_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
     if (handle->spi.cs != 0U) {
         driver_spi_deselect(&handle->spi);
@@ -48,7 +48,7 @@ int max6675_read_raw(max6675_handle_t *handle, uint16_t *raw)
     int ret;
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     driver_spi_select(&handle->spi);
@@ -56,7 +56,7 @@ int max6675_read_raw(max6675_handle_t *handle, uint16_t *raw)
     driver_spi_deselect(&handle->spi);
     if (ret != DRIVER_OK) {
         LOG_E("max6675", "spi transfer failed: %d", ret);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     *raw = (uint16_t)(((uint16_t)rx[0] << 8) | (uint16_t)rx[1]);
@@ -69,7 +69,7 @@ int max6675_read(max6675_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = max6675_read_raw(handle, &raw);
@@ -80,7 +80,7 @@ int max6675_read(max6675_handle_t *handle, float *celsius)
     /* bit2 = 1 表示热电偶开路（未接或断线） */
     if ((raw & MAX6675_DATA_MASK) != 0U) {
         LOG_E("max6675", "thermocouple open");
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
 
     *celsius = (float)(raw >> MAX6675_TEMP_SHIFT) * MAX6675_LSB_CELSIUS;

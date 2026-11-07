@@ -30,7 +30,7 @@ typedef struct {
 } pcf8563_handle_t;
 
 /** @brief  初始化并探测从机，address 为 0 时使用 0x51 */
-int pcf8563_init(pcf8563_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int pcf8563_init(pcf8563_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief  反初始化（不关闭总线） */
 int pcf8563_deinit(pcf8563_handle_t *handle);
@@ -38,7 +38,7 @@ int pcf8563_deinit(pcf8563_handle_t *handle);
 /** @brief  写入日期时间（清除 STOP 位，启动计数） */
 int pcf8563_set_time(pcf8563_handle_t *handle, const pcf8563_time_t *time);
 
-/** @brief  读取日期时间；VL 置位时返回 PORT_NOT_READY 提示时间可能不可信 */
+/** @brief  读取日期时间；VL 置位时返回 IOT_NOT_READY 提示时间可能不可信 */
 int pcf8563_get_time(pcf8563_handle_t *handle, pcf8563_time_t *time);
 
 /**

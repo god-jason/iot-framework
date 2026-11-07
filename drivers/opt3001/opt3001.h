@@ -27,7 +27,7 @@ typedef struct {
 } opt3001_handle_t;
 
 /** 初始化：probe + 校验 DEVICE_ID(0x3001) + 配置为连续转换 */
-int opt3001_init(opt3001_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int opt3001_init(opt3001_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 int opt3001_deinit(opt3001_handle_t *handle);
 
 int opt3001_set_conversion_time(opt3001_handle_t *handle, opt3001_conv_time_t conv_time);

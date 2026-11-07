@@ -29,7 +29,7 @@ typedef struct {
     float power;         /* W */
 } ina219_data_t;
 
-int ina219_init(ina219_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+int ina219_init(ina219_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
                 float shunt_ohm, float max_current_a);
 int ina219_deinit(ina219_handle_t *handle);
 

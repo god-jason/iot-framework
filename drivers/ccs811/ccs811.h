@@ -31,11 +31,11 @@ typedef struct {
 } ccs811_data_t;
 
 /** @param address 7 位地址，传 0 取 0x5A */
-int ccs811_init(ccs811_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int ccs811_init(ccs811_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int ccs811_deinit(ccs811_handle_t *handle);
 
-/** 轮询数据就绪后读取结果；超时返回 PORT_TIMEOUT */
+/** 轮询数据就绪后读取结果；超时返回 IOT_TIMEOUT */
 int ccs811_read(ccs811_handle_t *handle, ccs811_data_t *data);
 
 /** 温湿度补偿（ENV_DATA 0x05），建议每次测量前用环境值更新 */

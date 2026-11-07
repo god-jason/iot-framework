@@ -6,14 +6,14 @@
 static int tcs3200_check(const tcs3200_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
 static int tcs3200_pins_valid(const tcs3200_handle_t *handle)
 {
-    port_pin_t pins[5];
+    iot_pin_t pins[5];
     uint8_t i;
     uint8_t j;
 
@@ -39,14 +39,14 @@ static int tcs3200_pins_valid(const tcs3200_handle_t *handle)
 /* filter 编码：bit1 = S2，bit0 = S3 */
 static int tcs3200_select(const tcs3200_handle_t *handle, uint8_t filter)
 {
-    port_gpio_level_t s2 = ((filter & 0x02U) != 0U) ? PORT_GPIO_HIGH : PORT_GPIO_LOW;
-    port_gpio_level_t s3 = ((filter & 0x01U) != 0U) ? PORT_GPIO_HIGH : PORT_GPIO_LOW;
+    iot_gpio_level_t s2 = ((filter & 0x02U) != 0U) ? IOT_GPIO_HIGH : IOT_GPIO_LOW;
+    iot_gpio_level_t s3 = ((filter & 0x01U) != 0U) ? IOT_GPIO_HIGH : IOT_GPIO_LOW;
 
     if (driver_gpio_write(handle->s2, s2) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (driver_gpio_write(handle->s3, s3) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_us(TCS3200_SETTLE_US);
     return DRIVER_OK;
@@ -61,7 +61,7 @@ static int tcs3200_count(const tcs3200_handle_t *handle, uint32_t *pulses)
 
     last = driver_gpio_read(handle->out);
     if (last < 0) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     while (elapsed_us < handle->window_us) {
@@ -72,7 +72,7 @@ static int tcs3200_count(const tcs3200_handle_t *handle, uint32_t *pulses)
 
         cur = driver_gpio_read(handle->out);
         if (cur < 0) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if (cur != 0 && last == 0) {
             count++;
@@ -103,11 +103,11 @@ static int tcs3200_measure(const tcs3200_handle_t *handle, uint8_t filter, uint3
     return DRIVER_OK;
 }
 
-int tcs3200_init(tcs3200_handle_t *handle, port_pin_t s0, port_pin_t s1,
-                 port_pin_t s2, port_pin_t s3, port_pin_t out)
+int tcs3200_init(tcs3200_handle_t *handle, iot_pin_t s0, iot_pin_t s1,
+                 iot_pin_t s2, iot_pin_t s3, iot_pin_t out)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->s0 = s0;
@@ -119,24 +119,24 @@ int tcs3200_init(tcs3200_handle_t *handle, port_pin_t s0, port_pin_t s1,
     handle->initialized = false;
 
     if (!tcs3200_pins_valid(handle)) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
-    if (driver_gpio_output(s0, (TCS3200_SCALE_S0 != 0U) ? PORT_GPIO_HIGH : PORT_GPIO_LOW) != DRIVER_OK ||
-        driver_gpio_output(s1, (TCS3200_SCALE_S1 != 0U) ? PORT_GPIO_HIGH : PORT_GPIO_LOW) != DRIVER_OK ||
-        driver_gpio_output(s2, PORT_GPIO_LOW) != DRIVER_OK ||
-        driver_gpio_output(s3, PORT_GPIO_LOW) != DRIVER_OK) {
+    if (driver_gpio_output(s0, (TCS3200_SCALE_S0 != 0U) ? IOT_GPIO_HIGH : IOT_GPIO_LOW) != DRIVER_OK ||
+        driver_gpio_output(s1, (TCS3200_SCALE_S1 != 0U) ? IOT_GPIO_HIGH : IOT_GPIO_LOW) != DRIVER_OK ||
+        driver_gpio_output(s2, IOT_GPIO_LOW) != DRIVER_OK ||
+        driver_gpio_output(s3, IOT_GPIO_LOW) != DRIVER_OK) {
         LOG_E(TCS3200_TAG, "gpio output init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
-    if (driver_gpio_input(out, PORT_GPIO_PULLDOWN) != DRIVER_OK) {
+    if (driver_gpio_input(out, IOT_GPIO_PULLDOWN) != DRIVER_OK) {
         LOG_E(TCS3200_TAG, "gpio input init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     /* 默认选择红色通道并等待滤波稳定 */
     if (tcs3200_select(handle, TCS3200_FILTER_RED) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -147,14 +147,14 @@ int tcs3200_init(tcs3200_handle_t *handle, port_pin_t s0, port_pin_t s1,
 int tcs3200_deinit(tcs3200_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         /* S0=S1=0：输出掉电，降低功耗 */
-        (void)driver_gpio_write(handle->s0, PORT_GPIO_LOW);
-        (void)driver_gpio_write(handle->s1, PORT_GPIO_LOW);
-        (void)driver_gpio_write(handle->s2, PORT_GPIO_LOW);
-        (void)driver_gpio_write(handle->s3, PORT_GPIO_LOW);
+        (void)driver_gpio_write(handle->s0, IOT_GPIO_LOW);
+        (void)driver_gpio_write(handle->s1, IOT_GPIO_LOW);
+        (void)driver_gpio_write(handle->s2, IOT_GPIO_LOW);
+        (void)driver_gpio_write(handle->s3, IOT_GPIO_LOW);
     }
     (void)driver_gpio_deinit(handle->s0);
     (void)driver_gpio_deinit(handle->s1);
@@ -174,7 +174,7 @@ int tcs3200_read(tcs3200_handle_t *handle, tcs3200_color_t *color)
     int ret;
 
     if (color == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = tcs3200_check(handle);
     if (ret != DRIVER_OK) {

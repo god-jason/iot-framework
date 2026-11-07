@@ -4,7 +4,7 @@
 #define NRF_REG_MASK   0x1FU
 #define NRF_IRQ_CLEAR  0x70U
 #define NRF_CHECK(h) \
-    do { if ((h) == NULL || !(h)->initialized) { return (int)PORT_INVALID_PARAM; } } while (0)
+    do { if ((h) == NULL || !(h)->initialized) { return (int)IOT_INVALID_PARAM; } } while (0)
 
 static int nrf24l01_write_reg(nrf24l01_handle_t *h, uint8_t reg,
                               const uint8_t *data, size_t len)
@@ -17,7 +17,7 @@ static int nrf24l01_write_reg(nrf24l01_handle_t *h, uint8_t reg,
         ret = driver_spi_write(&h->spi, data, len);
     }
     driver_spi_deselect(&h->spi);
-    return (ret == DRIVER_OK) ? DRIVER_OK : (int)PORT_IO_ERROR;
+    return (ret == DRIVER_OK) ? DRIVER_OK : (int)IOT_IO_ERROR;
 }
 
 static int nrf24l01_write_reg8(nrf24l01_handle_t *h, uint8_t reg, uint8_t value)
@@ -32,7 +32,7 @@ static int nrf24l01_read_reg(nrf24l01_handle_t *h, uint8_t reg, uint8_t *data, s
     if (driver_spi_write(&h->spi, &cmd, 1U) != DRIVER_OK ||
         driver_spi_read(&h->spi, data, len) != DRIVER_OK) {
         driver_spi_deselect(&h->spi);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_spi_deselect(&h->spi);
     return DRIVER_OK;
@@ -45,7 +45,7 @@ static int nrf24l01_cmd(nrf24l01_handle_t *h, uint8_t cmd, uint8_t *status)
     if (driver_spi_transfer(&h->spi, &cmd, &rx, 1U) != DRIVER_OK) {
         driver_spi_deselect(&h->spi);
         LOG_E("nrf24l01", "spi cmd 0x%02X failed", cmd);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_spi_deselect(&h->spi);
     if (status != NULL) {
@@ -59,25 +59,25 @@ int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_t mode)
     uint8_t config = 0U;
     NRF_CHECK(handle);
     if (nrf24l01_read_reg(handle, NRF24L01_REG_CONFIG, &config, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (mode == NRF24L01_MODE_POWER_DOWN) {
         config = (uint8_t)(config & ~NRF24L01_CONFIG_PWR_UP);
-        (void)driver_gpio_write(handle->ce, PORT_GPIO_LOW);
+        (void)driver_gpio_write(handle->ce, IOT_GPIO_LOW);
     } else if (mode == NRF24L01_MODE_RX) {
         config |= (uint8_t)(NRF24L01_CONFIG_PWR_UP | NRF24L01_CONFIG_PRIM_RX);
     } else if (mode == NRF24L01_MODE_STANDBY || mode == NRF24L01_MODE_TX) {
         config = (uint8_t)((config & ~NRF24L01_CONFIG_PRIM_RX) | NRF24L01_CONFIG_PWR_UP);
-        (void)driver_gpio_write(handle->ce, PORT_GPIO_LOW);
+        (void)driver_gpio_write(handle->ce, IOT_GPIO_LOW);
     } else {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (nrf24l01_write_reg8(handle, NRF24L01_REG_CONFIG, config) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (mode == NRF24L01_MODE_RX) {
         driver_delay_us(NRF24L01_RX_SETTLE_US);
-        (void)driver_gpio_write(handle->ce, PORT_GPIO_HIGH);
+        (void)driver_gpio_write(handle->ce, IOT_GPIO_HIGH);
     }
     return DRIVER_OK;
 }
@@ -87,12 +87,12 @@ int nrf24l01_set_frequency(nrf24l01_handle_t *handle, uint32_t frequency_khz)
     uint8_t channel;
     NRF_CHECK(handle);
     if (frequency_khz < NRF24L01_FREQ_BASE_KHZ || frequency_khz > NRF24L01_FREQ_MAX_KHZ) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     channel = (uint8_t)((frequency_khz - NRF24L01_FREQ_BASE_KHZ) / NRF24L01_FREQ_STEP_KHZ);
     if (channel > NRF24L01_CHANNEL_MAX ||
         nrf24l01_write_reg8(handle, NRF24L01_REG_RF_CH, channel) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     handle->channel = channel;
     return DRIVER_OK;
@@ -102,12 +102,12 @@ int nrf24l01_set_address(nrf24l01_handle_t *handle, const uint8_t *address, uint
 {
     NRF_CHECK(handle);
     if (address == NULL || width < NRF24L01_ADDR_WIDTH_MIN || width > NRF24L01_ADDR_WIDTH_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, (uint8_t)(width - 2U)) != DRIVER_OK ||
         nrf24l01_write_reg(handle, NRF24L01_REG_TX_ADDR, address, width) != DRIVER_OK ||
         nrf24l01_write_reg(handle, NRF24L01_REG_RX_ADDR_P0, address, width) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     handle->address_width = width;
     return DRIVER_OK;
@@ -122,10 +122,10 @@ int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
 
     NRF_CHECK(handle);
     if (data == NULL || len == 0U || len > handle->payload_size) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (nrf24l01_set_mode(handle, NRF24L01_MODE_STANDBY) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
     (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF_IRQ_CLEAR);
@@ -136,16 +136,16 @@ int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
     }
     driver_spi_deselect(&handle->spi);
     if (ret != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     /* CE 高电平脉冲触发发射 */
-    (void)driver_gpio_write(handle->ce, PORT_GPIO_HIGH);
+    (void)driver_gpio_write(handle->ce, IOT_GPIO_HIGH);
     driver_delay_us(NRF24L01_CE_PULSE_US);
-    (void)driver_gpio_write(handle->ce, PORT_GPIO_LOW);
+    (void)driver_gpio_write(handle->ce, IOT_GPIO_LOW);
     start = driver_tick_ms();
     for (;;) {
         if (nrf24l01_cmd(handle, NRF24L01_CMD_NOP, &status) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if ((status & NRF24L01_STATUS_TX_DS) != 0U) {
             (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF24L01_STATUS_TX_DS);
@@ -154,11 +154,11 @@ int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
         if ((status & NRF24L01_STATUS_MAX_RT) != 0U) {
             (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF24L01_STATUS_MAX_RT);
             (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if ((uint32_t)(driver_tick_ms() - start) > handle->timeout_ms) {
             (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_us(50U);
     }
@@ -172,26 +172,26 @@ int nrf24l01_poll(nrf24l01_handle_t *handle, uint8_t *data, size_t len, size_t *
 
     NRF_CHECK(handle);
     if (data == NULL || len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (nrf24l01_cmd(handle, NRF24L01_CMD_NOP, &status) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if ((status & NRF24L01_STATUS_RX_DR) == 0U ||
         ((status & NRF24L01_STATUS_RX_P_NO) >> 1) == NRF24L01_RX_PIPE_EMPTY) {
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
     width = handle->payload_size;
     if (len < width) {
         (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_RX, NULL);
         (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF_IRQ_CLEAR);
-        return (int)PORT_OVERFLOW;
+        return (int)IOT_OVERFLOW;
     }
     driver_spi_select(&handle->spi);
     if (driver_spi_write(&handle->spi, &cmd, 1U) != DRIVER_OK ||
         driver_spi_read(&handle->spi, data, width) != DRIVER_OK) {
         driver_spi_deselect(&handle->spi);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_spi_deselect(&handle->spi);
     (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF24L01_STATUS_RX_DR);
@@ -209,26 +209,26 @@ int nrf24l01_recv(nrf24l01_handle_t *handle, uint8_t *data, size_t len,
 
     NRF_CHECK(handle);
     if (data == NULL || len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (nrf24l01_set_mode(handle, NRF24L01_MODE_RX) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     start = driver_tick_ms();
     for (;;) {
         ret = nrf24l01_poll(handle, data, len, received);
-        if (ret != (int)PORT_NOT_READY) {
+        if (ret != (int)IOT_NOT_READY) {
             return ret;
         }
         if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_us(100U);
     }
 }
 
-int nrf24l01_init(nrf24l01_handle_t *handle, port_spi_handle_t *spi,
-                  port_pin_t cs, port_pin_t ce, port_pin_t irq)
+int nrf24l01_init(nrf24l01_handle_t *handle, iot_spi_t *spi,
+                  iot_pin_t cs, iot_pin_t ce, iot_pin_t irq)
 {
     static const uint8_t defaults[][2] = {
         { NRF24L01_REG_EN_AA, 0x01U },
@@ -241,7 +241,7 @@ int nrf24l01_init(nrf24l01_handle_t *handle, port_spi_handle_t *spi,
     size_t i;
 
     if (handle == NULL || spi == NULL || ce == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->spi.handle = spi;
     handle->spi.cs = cs;
@@ -253,22 +253,22 @@ int nrf24l01_init(nrf24l01_handle_t *handle, port_spi_handle_t *spi,
     handle->address_width = (uint8_t)NRF24L01_ADDR_WIDTH_MAX;
     handle->timeout_ms = 100U;
     handle->initialized = false;
-    if ((cs != 0U && driver_gpio_output(cs, PORT_GPIO_HIGH) != DRIVER_OK) ||
-        driver_gpio_output(ce, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if ((cs != 0U && driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) ||
+        driver_gpio_output(ce, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
-    if (irq != 0U && driver_gpio_input(irq, PORT_GPIO_PULLUP) != DRIVER_OK) {
+    if (irq != 0U && driver_gpio_input(irq, IOT_GPIO_PULLUP) != DRIVER_OK) {
         LOG_W("nrf24l01", "irq pin init failed");
     }
     driver_delay_ms(100U);   /* Tpor */
     /* 器件探测：SETUP_AW 仅 bit1:0 有效，回读必须等于写入值 */
     if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, 0x03U) != DRIVER_OK ||
         nrf24l01_read_reg(handle, NRF24L01_REG_SETUP_AW, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if ((value & 0x03U) != 0x03U) {
         LOG_E("nrf24l01", "not found (SETUP_AW=0x%02X)", value);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
     for (i = 0U; i < DRIVER_ARRAY_SIZE(defaults); i++) {
         (void)nrf24l01_write_reg8(handle, defaults[i][0], defaults[i][1]);
@@ -286,13 +286,13 @@ int nrf24l01_init(nrf24l01_handle_t *handle, port_spi_handle_t *spi,
 int nrf24l01_deinit(nrf24l01_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)nrf24l01_set_mode(handle, NRF24L01_MODE_POWER_DOWN);
     }
     if (handle->ce != 0U) {
-        (void)port_gpio_deinit(handle->ce);
+        (void)iot_gpio_deinit(handle->ce);
     }
     handle->initialized = false;
     return DRIVER_OK;

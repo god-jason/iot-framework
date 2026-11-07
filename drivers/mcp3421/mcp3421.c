@@ -29,7 +29,7 @@ static uint8_t mcp3421_config(const mcp3421_handle_t *handle)
 static int mcp3421_write_config(mcp3421_handle_t *handle, uint8_t config)
 {
     if (driver_i2c_write(&handle->i2c, &config, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -38,7 +38,7 @@ static int mcp3421_write_config(mcp3421_handle_t *handle, uint8_t config)
 static int mcp3421_read_frame(mcp3421_handle_t *handle, uint8_t *buf, size_t len)
 {
     if (driver_i2c_read(&handle->i2c, buf, len) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -57,13 +57,13 @@ static uint32_t mcp3421_conv_ms(mcp3421_res_t resolution)
     }
 }
 
-int mcp3421_init(mcp3421_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int mcp3421_init(mcp3421_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t buf[MCP3421_FRAME_MAX_LEN] = { 0U, 0U, 0U };
     uint8_t config;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -75,27 +75,27 @@ int mcp3421_init(mcp3421_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
     handle->initialized = false;
 
     if (handle->i2c.address != MCP3421_DEFAULT_ADDRESS) {
-        return (int)PORT_INVALID_PARAM;   /* 地址由出厂固化 */
+        return (int)IOT_INVALID_PARAM;   /* 地址由出厂固化 */
     }
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("mcp3421", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     config = mcp3421_config(handle);
     if (mcp3421_write_config(handle, config) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(MCP3421_CONV_MS_18BIT + MCP3421_CONV_EXTRA_MS);
 
     /* 回读配置（第 3 字节），校验可写位是否与写入一致 */
     if (mcp3421_read_frame(handle, buf, MCP3421_FRAME_MAX_LEN) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if ((buf[2] & MCP3421_CFG_FIELDS_MASK) != (config & MCP3421_CFG_FIELDS_MASK)) {
         LOG_E("mcp3421", "config readback 0x%02X != 0x%02X", (unsigned)buf[2], (unsigned)config);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -106,7 +106,7 @@ int mcp3421_init(mcp3421_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int mcp3421_deinit(mcp3421_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -117,7 +117,7 @@ int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_t resolution)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)resolution > (uint16_t)MCP3421_RES_18BIT_2X) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->resolution = resolution;
     return mcp3421_write_config(handle, mcp3421_config(handle));
@@ -126,7 +126,7 @@ int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_t resolution)
 int mcp3421_set_gain(mcp3421_handle_t *handle, mcp3421_gain_t pga)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)pga > (uint16_t)MCP3421_GAIN_8) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->pga = pga;
     return mcp3421_write_config(handle, mcp3421_config(handle));
@@ -136,7 +136,7 @@ int mcp3421_set_mode(mcp3421_handle_t *handle, mcp3421_mode_t mode)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)mode > (uint16_t)MCP3421_MODE_CONTINUOUS) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->mode = mode;
     return mcp3421_write_config(handle, mcp3421_config(handle));
@@ -151,7 +151,7 @@ int mcp3421_read_raw(mcp3421_handle_t *handle, int32_t *raw)
     size_t i;
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     bits = mcp3421_bits(handle->resolution);
@@ -160,13 +160,13 @@ int mcp3421_read_raw(mcp3421_handle_t *handle, int32_t *raw)
     /* 单次模式需重新触发一次转换 */
     if (handle->mode == MCP3421_MODE_ONESHOT) {
         if (mcp3421_write_config(handle, mcp3421_config(handle)) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
     driver_delay_ms(mcp3421_conv_ms(handle->resolution) + MCP3421_CONV_EXTRA_MS);
 
     if (mcp3421_read_frame(handle, buf, len) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     for (i = 0U; i < len; i++) {
@@ -190,7 +190,7 @@ int mcp3421_read_voltage(mcp3421_handle_t *handle, float *volts)
     int ret;
 
     if (handle == NULL || volts == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = mcp3421_read_raw(handle, &raw);

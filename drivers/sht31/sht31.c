@@ -40,7 +40,7 @@ static uint32_t sht31_measure_delay(sht31_handle_t *handle)
 static int sht31_crc_ok(const uint8_t *data, uint8_t crc)
 {
     return (driver_crc8(data, 2U, SHT31_CRC_POLY, SHT31_CRC_INIT) == crc) ? DRIVER_OK
-                                                                          : (int)PORT_CRC_ERROR;
+                                                                          : (int)IOT_CRC_ERROR;
 }
 
 int sht31_soft_reset(sht31_handle_t *handle)
@@ -48,7 +48,7 @@ int sht31_soft_reset(sht31_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sht31_write_cmd(handle, SHT31_CMD_SOFT_RESET);
     driver_delay_ms(SHT31_RESET_DELAY_MS);
@@ -58,12 +58,12 @@ int sht31_soft_reset(sht31_handle_t *handle)
 int sht31_set_repeatability(sht31_handle_t *handle, sht31_repeatability_t repeatability)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (repeatability != SHT31_REPEAT_HIGH &&
         repeatability != SHT31_REPEAT_MEDIUM &&
         repeatability != SHT31_REPEAT_LOW) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->repeatability = repeatability;
     return DRIVER_OK;
@@ -72,16 +72,16 @@ int sht31_set_repeatability(sht31_handle_t *handle, sht31_repeatability_t repeat
 int sht31_set_heater(sht31_handle_t *handle, bool enable)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return sht31_write_cmd(handle,
                            enable ? SHT31_CMD_HEATER_ENABLE : SHT31_CMD_HEATER_DISABLE);
 }
 
-int sht31_init(sht31_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int sht31_init(sht31_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -93,7 +93,7 @@ int sht31_init(sht31_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sht31", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     (void)sht31_soft_reset(handle);
@@ -105,7 +105,7 @@ int sht31_init(sht31_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int sht31_deinit(sht31_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -118,10 +118,10 @@ int sht31_read_raw(sht31_handle_t *handle, uint16_t *raw_temperature, uint16_t *
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_humidity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = sht31_write_cmd(handle, sht31_measure_command(handle));
@@ -141,7 +141,7 @@ int sht31_read_raw(sht31_handle_t *handle, uint16_t *raw_temperature, uint16_t *
         if (sht31_crc_ok(&data[0], data[2]) != DRIVER_OK ||
             sht31_crc_ok(&data[3], data[5]) != DRIVER_OK) {
             LOG_E("sht31", "crc error");
-            return (int)PORT_CRC_ERROR;
+            return (int)IOT_CRC_ERROR;
         }
     }
 
@@ -160,7 +160,7 @@ int sht31_read_status(sht31_handle_t *handle, uint16_t *status)
     int ret;
 
     if (handle == NULL || status == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = sht31_write_cmd(handle, SHT31_CMD_READ_STATUS);
@@ -174,7 +174,7 @@ int sht31_read_status(sht31_handle_t *handle, uint16_t *status)
         return ret;
     }
     if (handle->crc_enabled && sht31_crc_ok(&data[0], data[2]) != DRIVER_OK) {
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
 
     *status = (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
@@ -189,7 +189,7 @@ int sht31_read(sht31_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (temperature == NULL && humidity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = sht31_read_raw(handle,

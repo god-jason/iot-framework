@@ -23,17 +23,17 @@ static int pcf8591_write_control(pcf8591_handle_t *handle)
     uint8_t ctrl = pcf8591_control(handle);
 
     if (driver_i2c_write(&handle->i2c, &ctrl, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
 
-int pcf8591_init(pcf8591_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int pcf8591_init(pcf8591_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t dummy = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -47,23 +47,23 @@ int pcf8591_init(pcf8591_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
     handle->initialized = false;
 
     if (handle->i2c.address > PCF8591_ADDRESS_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("pcf8591", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->initialized = true;
     if (pcf8591_write_control(handle) != DRIVER_OK) {
         handle->initialized = false;
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     /* 进行一次空读，确认总线可读 */
     if (driver_i2c_read(&handle->i2c, &dummy, 1U) != DRIVER_OK) {
         handle->initialized = false;
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     LOG_I("pcf8591", "init ok at 0x%02X", handle->i2c.address);
@@ -73,7 +73,7 @@ int pcf8591_init(pcf8591_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int pcf8591_deinit(pcf8591_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -84,7 +84,7 @@ int pcf8591_set_input_mode(pcf8591_handle_t *handle, pcf8591_input_mode_t mode)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)mode > (uint16_t)PCF8591_MODE_2_DIFFERENTIAL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->input_mode = mode;
     return pcf8591_write_control(handle);
@@ -93,7 +93,7 @@ int pcf8591_set_input_mode(pcf8591_handle_t *handle, pcf8591_input_mode_t mode)
 int pcf8591_set_channel(pcf8591_handle_t *handle, uint8_t channel)
 {
     if (handle == NULL || !handle->initialized || channel >= PCF8591_CHANNEL_COUNT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->channel = channel;
     return pcf8591_write_control(handle);
@@ -102,7 +102,7 @@ int pcf8591_set_channel(pcf8591_handle_t *handle, uint8_t channel)
 int pcf8591_set_auto_increment(pcf8591_handle_t *handle, bool enable)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->auto_increment = enable;
     return pcf8591_write_control(handle);
@@ -111,7 +111,7 @@ int pcf8591_set_auto_increment(pcf8591_handle_t *handle, bool enable)
 int pcf8591_set_dac_enabled(pcf8591_handle_t *handle, bool enable)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->dac_enabled = enable;
     return pcf8591_write_control(handle);
@@ -120,7 +120,7 @@ int pcf8591_set_dac_enabled(pcf8591_handle_t *handle, bool enable)
 int pcf8591_set_vref(pcf8591_handle_t *handle, uint16_t vref_mv)
 {
     if (handle == NULL || !handle->initialized || vref_mv == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->vref_mv = vref_mv;
     return DRIVER_OK;
@@ -133,7 +133,7 @@ int pcf8591_read(pcf8591_handle_t *handle, uint8_t channel, uint8_t *value)
 
     if (handle == NULL || value == NULL || !handle->initialized ||
         channel >= PCF8591_CHANNEL_COUNT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* 先写控制字节选择通道 */
@@ -149,11 +149,11 @@ int pcf8591_read(pcf8591_handle_t *handle, uint8_t channel, uint8_t *value)
      * 第一次读出的是上一次的结果（丢弃），第二次读出才是本次转换结果。
      */
     if (driver_i2c_read(&handle->i2c, &buf[0], 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(PCF8591_CONV_DELAY_MS);
     if (driver_i2c_read(&handle->i2c, &buf[1], 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     *value = buf[1];
     return DRIVER_OK;
@@ -165,7 +165,7 @@ int pcf8591_read_voltage(pcf8591_handle_t *handle, uint8_t channel, float *volts
     int ret;
 
     if (handle == NULL || volts == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = pcf8591_read(handle, channel, &value);
@@ -182,7 +182,7 @@ int pcf8591_write(pcf8591_handle_t *handle, uint8_t value)
     uint8_t buf[2];
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* 写 DAC：控制字节（使能 AOUT） + 数据字节 */
@@ -191,7 +191,7 @@ int pcf8591_write(pcf8591_handle_t *handle, uint8_t value)
     buf[1] = value;
 
     if (driver_i2c_write(&handle->i2c, buf, 2U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }

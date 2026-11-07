@@ -17,7 +17,7 @@ extern "C" {
 
 typedef struct {
     driver_spi_t spi;
-    port_pin_t res;         /* 复位，可为 0（模块无复位脚时） */
+    iot_pin_t res;         /* 复位，可为 0（模块无复位脚时） */
 
     uint8_t *gram;
     size_t gram_len;

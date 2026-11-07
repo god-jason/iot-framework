@@ -47,7 +47,7 @@ static int sgp41_read_words(sgp41_handle_t *handle, uint8_t *raw, uint8_t words)
     for (i = 0U; i < words; i++) {
         if (sgp41_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
             LOG_E("sgp41", "crc error on word %u", (unsigned)i);
-            return (int)PORT_CRC_ERROR;
+            return (int)IOT_CRC_ERROR;
         }
     }
     return DRIVER_OK;
@@ -60,13 +60,13 @@ static uint16_t sgp41_word_at(const uint8_t *raw, uint8_t index)
     return (uint16_t)(((uint16_t)raw[off] << 8) | raw[off + 1U]);
 }
 
-int sgp41_init(sgp41_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int sgp41_init(sgp41_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint64_t serial = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -76,7 +76,7 @@ int sgp41_init(sgp41_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sgp41", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = sgp41_write_cmd(handle, SGP41_CMD_SOFT_RESET);
@@ -88,7 +88,7 @@ int sgp41_init(sgp41_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
     /* ID 校验：读序列号并验证 CRC */
     if (sgp41_get_serial(handle, &serial) != DRIVER_OK || serial == 0U) {
         LOG_E("sgp41", "serial read failed");
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -100,7 +100,7 @@ int sgp41_init(sgp41_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int sgp41_deinit(sgp41_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -114,7 +114,7 @@ int sgp41_self_test(sgp41_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sgp41_write_cmd(handle, SGP41_CMD_SELF_TEST);
     if (ret != DRIVER_OK) {
@@ -126,7 +126,7 @@ int sgp41_self_test(sgp41_handle_t *handle)
         return ret;
     }
     result = sgp41_word_at(raw, 0U);
-    return (result == SGP41_SELFTEST_PASS) ? DRIVER_OK : (int)PORT_IO_ERROR;
+    return (result == SGP41_SELFTEST_PASS) ? DRIVER_OK : (int)IOT_IO_ERROR;
 }
 
 int sgp41_get_serial(sgp41_handle_t *handle, uint64_t *serial)
@@ -135,7 +135,7 @@ int sgp41_get_serial(sgp41_handle_t *handle, uint64_t *serial)
     int ret;
 
     if (handle == NULL || serial == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sgp41_write_cmd(handle, SGP41_CMD_GET_SERIAL_ID);
     if (ret != DRIVER_OK) {
@@ -158,7 +158,7 @@ int sgp41_execute_conditioning(sgp41_handle_t *handle, sgp41_data_t *data)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sgp41_write_cmd(handle, SGP41_CMD_EXECUTE_CONDITIONING);
     if (ret != DRIVER_OK) {
@@ -182,7 +182,7 @@ int sgp41_measure_raw(sgp41_handle_t *handle, sgp41_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sgp41_write_cmd(handle, SGP41_CMD_MEASURE_RAW);
     if (ret != DRIVER_OK) {
@@ -205,7 +205,7 @@ int sgp41_measure_raw_compensated(sgp41_handle_t *handle, uint16_t rh_ticks,
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = sgp41_write_cmd_2args(handle, SGP41_CMD_MEASURE_RAW_COMP, rh_ticks, t_ticks);
     if (ret != DRIVER_OK) {

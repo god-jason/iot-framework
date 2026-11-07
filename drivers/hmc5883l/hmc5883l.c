@@ -13,18 +13,18 @@ static const float s_lsb_per_gauss[HMC5883L_GAIN_COUNT] = {
 static int hmc5883l_write(hmc5883l_handle_t *handle, uint8_t reg, uint8_t value)
 {
     return (driver_i2c_write_reg(&handle->i2c, reg, &value, 1U) == DRIVER_OK) ? DRIVER_OK
-                                                                              : (int)PORT_IO_ERROR;
+                                                                              : (int)IOT_IO_ERROR;
 }
 
 static int hmc5883l_read_reg(hmc5883l_handle_t *handle, uint8_t reg, uint8_t *buf, size_t len)
 {
     return (driver_i2c_read_reg(&handle->i2c, reg, buf, len) == DRIVER_OK) ? DRIVER_OK
-                                                                          : (int)PORT_IO_ERROR;
+                                                                          : (int)IOT_IO_ERROR;
 }
 
 int hmc5883l_get_status(hmc5883l_handle_t *handle, uint8_t *status)
 {
-    if (handle == NULL || status == NULL || !handle->initialized) { return (int)PORT_INVALID_PARAM; }
+    if (handle == NULL || status == NULL || !handle->initialized) { return (int)IOT_INVALID_PARAM; }
     return hmc5883l_read_reg(handle, HMC5883L_REG_STATUS, status, 1U);
 }
 
@@ -33,21 +33,21 @@ int hmc5883l_set_gain(hmc5883l_handle_t *handle, hmc5883l_gain_t gain)
     uint8_t check = 0U;
     uint8_t value;
     if (handle == NULL || !handle->initialized || (unsigned)gain >= (unsigned)HMC5883L_GAIN_COUNT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     value = (uint8_t)((uint8_t)gain << HMC5883L_CFGB_GN_SHIFT);
-    if (hmc5883l_write(handle, HMC5883L_REG_CFG_B, value) != DRIVER_OK) { return (int)PORT_IO_ERROR; }
+    if (hmc5883l_write(handle, HMC5883L_REG_CFG_B, value) != DRIVER_OK) { return (int)IOT_IO_ERROR; }
     if (hmc5883l_read_reg(handle, HMC5883L_REG_CFG_B, &check, 1U) != DRIVER_OK ||
         (check & HMC5883L_CFGB_GN_MASK) != value) {
         LOG_E("hmc5883l", "cfg_b readback 0x%02X mismatch", check);
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
     handle->gain = gain;
     handle->ut_per_lsb = HMC5883L_UT_PER_GAUSS / s_lsb_per_gauss[gain];
     return DRIVER_OK;
 }
 
-int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+int hmc5883l_init(hmc5883l_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
                   hmc5883l_gain_t gain, hmc5883l_average_t average,
                   hmc5883l_data_rate_t data_rate)
 {
@@ -59,7 +59,7 @@ int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
         (unsigned)gain >= (unsigned)HMC5883L_GAIN_COUNT ||
         (unsigned)average >= (unsigned)HMC5883L_AVG_COUNT ||
         (unsigned)data_rate >= (unsigned)HMC5883L_DR_COUNT) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->i2c = (driver_i2c_t){ .handle = i2c, .timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT,
                                   .address = (address != 0U) ? address : HMC5883L_DEFAULT_ADDRESS };
@@ -71,12 +71,12 @@ int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
 
     /* 身份校验：ID_A/ID_B/ID_C = 'H' '4' '3' */
     if (hmc5883l_read_reg(handle, HMC5883L_REG_ID_A, id, sizeof(id)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (id[0] != HMC5883L_ID_A_VALUE || id[1] != HMC5883L_ID_B_VALUE ||
         id[2] != HMC5883L_ID_C_VALUE) {
         LOG_E("hmc5883l", "id mismatch %02X %02X %02X", id[0], id[1], id[2]);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* CFG_A：平均次数 + 输出率 + 正常测量；CFG_B：增益；MODE：连续测量 */
@@ -86,7 +86,7 @@ int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
     if (hmc5883l_write(handle, HMC5883L_REG_CFG_A, cfga) != DRIVER_OK ||
         hmc5883l_write(handle, HMC5883L_REG_CFG_B, cfgb) != DRIVER_OK ||
         hmc5883l_write(handle, HMC5883L_REG_MODE, HMC5883L_MODE_CONTINUOUS) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(HMC5883L_START_DELAY_MS);
 
@@ -94,17 +94,17 @@ int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
     if (hmc5883l_read_reg(handle, HMC5883L_REG_CFG_A, &check, 1U) != DRIVER_OK ||
         (check & (HMC5883L_CFGA_MA_MASK | HMC5883L_CFGA_DO_MASK)) != cfga) {
         LOG_E("hmc5883l", "cfg_a readback 0x%02X mismatch", check);
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
     if (hmc5883l_read_reg(handle, HMC5883L_REG_CFG_B, &check, 1U) != DRIVER_OK ||
         (check & HMC5883L_CFGB_GN_MASK) != cfgb) {
         LOG_E("hmc5883l", "cfg_b readback 0x%02X mismatch", check);
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
     if (hmc5883l_read_reg(handle, HMC5883L_REG_STATUS, &check, 1U) != DRIVER_OK ||
         (check & HMC5883L_STATUS_LOCK) != 0U) {
         LOG_E("hmc5883l", "status lock, 0x%02X", check);
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
 
     handle->initialized = true;
@@ -114,7 +114,7 @@ int hmc5883l_init(hmc5883l_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
 
 int hmc5883l_deinit(hmc5883l_handle_t *handle)
 {
-    if (handle == NULL) { return (int)PORT_INVALID_PARAM; }
+    if (handle == NULL) { return (int)IOT_INVALID_PARAM; }
     if (handle->initialized) {
         (void)hmc5883l_write(handle, HMC5883L_REG_MODE, HMC5883L_MODE_IDLE);
     }
@@ -128,20 +128,20 @@ int hmc5883l_read_raw(hmc5883l_handle_t *handle, int16_t xyz[3])
     uint8_t d[HMC5883L_DATA_BURST_LEN];
     uint8_t status = 0U;
     uint32_t start;
-    if (handle == NULL || xyz == NULL || !handle->initialized) { return (int)PORT_INVALID_PARAM; }
+    if (handle == NULL || xyz == NULL || !handle->initialized) { return (int)IOT_INVALID_PARAM; }
 
     start = driver_tick_ms();
     do {
         if (hmc5883l_read_reg(handle, HMC5883L_REG_STATUS, &status, 1U) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if ((status & HMC5883L_STATUS_RDY) != 0U) { break; }
         driver_delay_ms(1U);
     } while ((uint32_t)(driver_tick_ms() - start) <= HMC5883L_DATA_TIMEOUT_MS);
-    if ((status & HMC5883L_STATUS_RDY) == 0U) { return (int)PORT_TIMEOUT; }
+    if ((status & HMC5883L_STATUS_RDY) == 0U) { return (int)IOT_TIMEOUT; }
 
     if (hmc5883l_read_reg(handle, HMC5883L_REG_DATA_X_MSB, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     /* 字节序为 X, Z, Y：0x03/0x04 = X，0x05/0x06 = Z，0x07/0x08 = Y */
     xyz[0] = driver_be16(&d[0]);
@@ -155,10 +155,10 @@ int hmc5883l_read(hmc5883l_handle_t *handle, hmc5883l_data_t *data)
     int16_t xyz[3];
     uint8_t status = 0U;
     int ret;
-    if (handle == NULL || data == NULL) { return (int)PORT_INVALID_PARAM; }
+    if (handle == NULL || data == NULL) { return (int)IOT_INVALID_PARAM; }
     ret = hmc5883l_read_raw(handle, xyz);
     if (ret != DRIVER_OK) { return ret; }
-    if (hmc5883l_get_status(handle, &status) != DRIVER_OK) { return (int)PORT_IO_ERROR; }
+    if (hmc5883l_get_status(handle, &status) != DRIVER_OK) { return (int)IOT_IO_ERROR; }
 
     data->mag_ut.x = (float)xyz[0] * handle->ut_per_lsb;
     data->mag_ut.y = (float)xyz[1] * handle->ut_per_lsb;

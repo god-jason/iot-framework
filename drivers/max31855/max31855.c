@@ -25,10 +25,10 @@ static float max31855_decode_internal(uint32_t raw)
     return (float)code * MAX31855_INTERNAL_LSB;
 }
 
-int max31855_init(max31855_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs)
+int max31855_init(max31855_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 {
     if (handle == NULL || spi == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -51,10 +51,10 @@ int max31855_init(max31855_handle_t *handle, port_spi_handle_t *spi, port_pin_t 
 int max31855_deinit(max31855_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
     if (handle->spi.cs != 0U) {
         driver_spi_deselect(&handle->spi);
@@ -71,7 +71,7 @@ int max31855_read_raw(max31855_handle_t *handle, uint32_t *raw)
     int ret;
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     driver_spi_select(&handle->spi);
@@ -79,7 +79,7 @@ int max31855_read_raw(max31855_handle_t *handle, uint32_t *raw)
     driver_spi_deselect(&handle->spi);
     if (ret != DRIVER_OK) {
         LOG_E("max31855", "spi transfer failed: %d", ret);
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     *raw = ((uint32_t)rx[0] << 24) | ((uint32_t)rx[1] << 16) |
@@ -93,7 +93,7 @@ int max31855_read(max31855_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = max31855_read_raw(handle, &raw);
@@ -103,7 +103,7 @@ int max31855_read(max31855_handle_t *handle, float *celsius)
 
     if ((raw & MAX31855_FAULT_BIT) != 0U) {
         LOG_E("max31855", "fault: 0x%02X", (unsigned int)(raw & 0x07U));
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
 
     *celsius = max31855_decode_tc(raw);
@@ -116,7 +116,7 @@ int max31855_read_internal(max31855_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = max31855_read_raw(handle, &raw);
@@ -133,7 +133,7 @@ int max31855_get_fault(max31855_handle_t *handle, uint8_t *fault)
     int ret;
 
     if (fault == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = max31855_read_raw(handle, &raw);

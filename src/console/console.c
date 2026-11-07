@@ -1,19 +1,15 @@
 /*
- * console.c - 主串口控制台与命令行 Shell 实现
+ * console.c - 控制台与命令行 Shell 实现
+ *
+ * 控制台绑定一个 UART 句柄（PC 平台为 UART1，已映射到标准输入输出；
+ * STM32 通常为 UART1）。
  *
  * 模块职责：
- *   1) 控制台：绑定一个 UART 句柄，提供按行输出（自动追加 CRLF）与
- *      接收泵取（把 UART 收到的字节喂给 Shell）。
+ *   1) 控制台：按行输出（自动追加 CRLF），并泵取 UART 接收数据喂给 Shell；
  *   2) Shell：维护命令表，按空格/制表符切分 argv 并分发执行，
  *      同时支持按行喂入字节流（'\n' 触发一条命令）。
  *
- * 数据流与依赖：
- *   UART 中断/DMA 收到字节 -> port_uart_get_rx_count() 查询可读数量
- *   -> console_process() 批量读入 -> shell_input() 累积成行
- *   -> shell_execute() 查表并回调命令处理函数。
- *   外部依赖：port.h 提供的 UART 原语、log.h 的日志系统。
- *
- * 缓冲与边界约束（容量为编译期固定值，内存由 port_mem 运行期分配）：
+ * 缓冲与边界约束（容量为编译期固定值，内存由 iot_mem 运行期分配）：
  *   - s_cmds：命令表，最多 SHELL_MAX_CMD（16）条，满则注册失败。
  *   - s_line：单行命令缓冲，最多 SHELL_LINE_MAX（128）字节（含 '\0'）。
  *   - shell_execute() 内部另有同尺寸栈缓冲与 16 个 argv 槽位。
@@ -23,93 +19,97 @@
 
 #include "console.h"
 #include "log.h"
-#include "port_mem.h"
+#include "iot_mem.h"
 
-#include <stdio.h>
 #include <string.h>
 
-/* 控制台绑定的 UART 句柄与接收缓冲（由 console_init 设置） */
-static port_uart_handle_t *s_uart = NULL;
+/* 控制台状态：绑定一个 UART 句柄（PC 平台为 UART1，STM32 通常为 UART1） */
+static bool s_ready = false;            /* console_init 是否已成功 */
+static iot_uart_t *s_uart = NULL;
 static uint8_t *s_rx = NULL;
 static uint32_t s_rx_size = 0;
 
 /*
  * 初始化控制台。
- * 参数：config - 控制台配置，uart 必须非 NULL；rx_buffer/rx_buffer_size
- *                用于接收泵取，若为 NULL 或 0，则 console_process()
- *                只查询计数而不消费数据。
+ * 参数：config - 控制台配置；uart 必须非 NULL。
+ *                rx_buffer/rx_buffer_size 用于接收泵取，若为 NULL 或 0，
+ *                则 console_process() 只查询计数而不消费数据。
  * 返回：0 成功（Shell 初始化结果）；-1 参数非法
  * 注意：重复调用会用新配置覆盖旧配置，不释放任何资源。
  */
 int console_init(const console_config_t *config)
 {
+    int rc;
+
     if (config == NULL || config->uart == NULL) {
         return -1;
     }
+
     s_uart = config->uart;
     s_rx = config->rx_buffer;
     s_rx_size = config->rx_buffer_size;
 
-    return shell_init();
+    rc = shell_init();
+    if (rc == 0) {
+        s_ready = true;
+    }
+    return rc;
 }
 
 /*
  * 启动控制台：打印一行就绪提示。
  * 参数：无
- * 返回：PORT_OK（平台错误码）；无副作用之外的状态变更
- * 注意：输出依赖 s_uart 已由 console_init() 设置。
+ * 返回：IOT_OK（平台错误码）；无副作用之外的状态变更
  */
 int console_start(void)
 {
     console_puts("iot-os console ready");   /* 启动提示：控制台就绪 */
-    return PORT_OK;
+    return IOT_OK;
 }
 
 /*
  * 直接输出一行文本（绕过 logger）。
  * 参数：s - 以 '\0' 结尾的字符串，不可为 NULL
- * 返回：PORT_OK 成功；-1 尚未初始化或参数非法
- * 注意：先发送正文再发送 "\r\n"，两次发送的超时均为 100 个平台时间单位；
- *       长度由 strlen 计算，因此字符串必须以 '\0' 结尾。
+ * 返回：IOT_OK 成功；-1 尚未初始化或参数非法
+ * 注意：通过绑定的 UART 发送正文与 "\r\n"（PC 平台的 UART1 已映射到 stdout）。
  */
 int console_puts(const char *s)
 {
-    if (s_uart == NULL || s == NULL) {
+    if (!s_ready || s_uart == NULL || s == NULL) {
         return -1;
     }
     /* 输出一行 + CRLF */
-    port_uart_transmit(s_uart, (const uint8_t *)s, strlen(s), 100);
-    port_uart_transmit(s_uart, (const uint8_t *)"\r\n", 2, 100);
-    return PORT_OK;
+    iot_uart_transmit(s_uart, (const uint8_t *)s, strlen(s), 100);
+    iot_uart_transmit(s_uart, (const uint8_t *)"\r\n", 2, 100);
+    return IOT_OK;
 }
 
 /*
  * 主循环调用：泵取 UART 接收数据并喂给 Shell。
- * 参数：无
- * 返回：PORT_OK 正常处理；-1 控制台未初始化
+ * 返回：IOT_OK 正常处理；-1 控制台未初始化
  * 注意：循环直到接收计数为 0、接收缓冲不可用或底层读失败；
- *       每次最多读取 s_rx_size 字节，避免覆盖同一块静态接收缓冲。
+ *       每次最多读取 s_rx_size 字节。
  */
 int console_process(void)
 {
     uint32_t n;
 
-    if (s_uart == NULL) {
+    if (!s_ready || s_uart == NULL) {
         return -1;
     }
 
-    n = (uint32_t)port_uart_get_rx_count(s_uart);
+    n = (uint32_t)iot_uart_get_rx_count(s_uart);
     while (n > 0 && s_rx != NULL && s_rx_size > 0) {
         /* 单次读取量不超过接收缓冲容量 */
         uint32_t chunk = (n > s_rx_size) ? s_rx_size : n;
-        port_status_t r = port_uart_receive(s_uart, s_rx, chunk, 100);
-        if (r != PORT_OK) {
+        iot_status_t r = iot_uart_receive(s_uart, s_rx, chunk, 100);
+        if (r != IOT_OK) {
             break;   /* 底层读失败，保留剩余数据待下次处理 */
         }
         shell_input((const char *)s_rx, chunk);
-        n = (uint32_t)port_uart_get_rx_count(s_uart);   /* 可能有新数据到达 */
+        n = (uint32_t)iot_uart_get_rx_count(s_uart);   /* 可能有新数据到达 */
     }
-    return PORT_OK;
+    return IOT_OK;
 }
 
 /* ==================== Shell ==================== */
@@ -127,7 +127,7 @@ typedef struct {
     shell_command_fn callback;
 } shell_cmd_t;
 
-/* 命令表与行输入缓冲：callback == NULL 表示该槽位空闲；由 port_mem 分配 */
+/* 命令表与行输入缓冲：callback == NULL 表示该槽位空闲；由 iot_mem 分配 */
 static shell_cmd_t *s_cmds = NULL;
 static char *s_line = NULL;
 static uint32_t s_line_len;
@@ -136,11 +136,11 @@ static uint32_t s_line_len;
 static bool shell_ensure(void)
 {
     if (s_cmds == NULL) {
-        s_cmds = (shell_cmd_t *)port_calloc(SHELL_MAX_CMD,
+        s_cmds = (shell_cmd_t *)iot_calloc(SHELL_MAX_CMD,
                                             sizeof(shell_cmd_t));
     }
     if (s_line == NULL) {
-        s_line = (char *)port_calloc(SHELL_LINE_MAX, sizeof(char));
+        s_line = (char *)iot_calloc(SHELL_LINE_MAX, sizeof(char));
     }
     return (s_cmds != NULL && s_line != NULL);
 }
@@ -153,14 +153,14 @@ static bool shell_ensure(void)
  */
 int shell_init(void)
 {
-    port_free(s_cmds);
-    port_free(s_line);
-    s_cmds = (shell_cmd_t *)port_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
-    s_line = (char *)port_calloc(SHELL_LINE_MAX, sizeof(char));
+    iot_free(s_cmds);
+    iot_free(s_line);
+    s_cmds = (shell_cmd_t *)iot_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
+    s_line = (char *)iot_calloc(SHELL_LINE_MAX, sizeof(char));
     s_line_len = 0;
     if (s_cmds == NULL || s_line == NULL) {
-        port_free(s_cmds);
-        port_free(s_line);
+        iot_free(s_cmds);
+        iot_free(s_line);
         s_cmds = NULL;
         s_line = NULL;
         return -1;
@@ -281,6 +281,7 @@ int shell_execute(const char *command)
  * 参数：data - 字节流；len - 字节数
  * 返回：0 处理完成；-1 参数非法
  * 注意：'\r' 被忽略（兼容 CRLF）；'\n' 表示一行结束并立即执行；
+ *       退格（'\b'/127）删除行缓冲最后一个字符；
  *       行缓冲达到 127 字节后若再来新字符，则清空当前行（丢弃整行）；
  *       命令回调的返回值被忽略。
  */
@@ -303,6 +304,10 @@ int shell_input(const char *data, uint32_t len)
             s_line[s_line_len] = '\0';
             s_line_len = 0;
             (void)shell_execute(s_line);
+        } else if (c == '\b' || c == 127) {
+            if (s_line_len > 0U) {
+                s_line_len--;   /* 退格：删除行缓冲最后一个字符 */
+            }
         } else if (s_line_len < SHELL_LINE_MAX - 1) {
             s_line[s_line_len++] = c;
         } else {

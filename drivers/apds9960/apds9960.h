@@ -45,7 +45,7 @@ typedef struct {
 } apds9960_handle_t;
 
 /** 初始化：probe + 校验 ID(0xA8) + 打开 PON/ALS/接近 */
-int apds9960_init(apds9960_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int apds9960_init(apds9960_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 int apds9960_deinit(apds9960_handle_t *handle);
 
 /** 设置 ALS 积分时间寄存器值（(256-ATIME)*2.78ms） */

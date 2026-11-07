@@ -8,7 +8,7 @@
 static int mlx90614_check(const mlx90614_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -26,7 +26,7 @@ int mlx90614_read_word(mlx90614_handle_t *handle, uint8_t cmd, uint16_t *value)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL || value == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* SMBus Read Word：写命令后重复起始读 3 字节（LSB、MSB、PEC） */
@@ -42,7 +42,7 @@ int mlx90614_read_word(mlx90614_handle_t *handle, uint8_t cmd, uint16_t *value)
     if (driver_crc8(crc_src, sizeof(crc_src),
                     MLX90614_CRC_POLY, MLX90614_CRC_INIT) != buf[2]) {
         LOG_E(MLX90614_TAG, "pec error at cmd 0x%02X", cmd);
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
 
     *value = (uint16_t)(((uint16_t)buf[1] << 8) | buf[0]);
@@ -59,12 +59,12 @@ int mlx90614_read_raw(mlx90614_handle_t *handle, uint8_t cmd, uint16_t *raw)
     return mlx90614_read_word(handle, cmd, raw);
 }
 
-int mlx90614_init(mlx90614_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int mlx90614_init(mlx90614_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint16_t config = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -75,11 +75,11 @@ int mlx90614_init(mlx90614_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
 
     if (handle->i2c.address < MLX90614_ADDRESS_MIN ||
         handle->i2c.address > MLX90614_ADDRESS_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(MLX90614_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     driver_delay_ms(MLX90614_POWER_ON_MS);
@@ -100,7 +100,7 @@ int mlx90614_init(mlx90614_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
 int mlx90614_deinit(mlx90614_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -114,7 +114,7 @@ int mlx90614_read(mlx90614_handle_t *handle, mlx90614_data_t *data)
     int ret;
 
     if (data == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = mlx90614_check(handle);
     if (ret != DRIVER_OK) {
@@ -171,7 +171,7 @@ int mlx90614_set_emissivity(mlx90614_handle_t *handle, float emissivity)
         return ret;
     }
     if (emissivity < 0.1f || emissivity > 1.0f) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     raw = (uint16_t)((emissivity * 65535.0f) + 0.5f);
@@ -191,7 +191,7 @@ int mlx90614_get_emissivity(mlx90614_handle_t *handle, float *emissivity)
         return ret;
     }
     if (emissivity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = mlx90614_read_word(handle, MLX90614_CMD_EMISSIVITY, &raw);
@@ -211,7 +211,7 @@ int mlx90614_read_flags(mlx90614_handle_t *handle, uint16_t *flags)
         return ret;
     }
     if (flags == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return mlx90614_read_word(handle, MLX90614_CMD_FLAGS, flags);
 }

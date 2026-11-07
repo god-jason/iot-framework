@@ -18,7 +18,7 @@
  *   mpu6500_init(&imu, &i2c1, NULL, 0, 0x68,
  *                MPU6500_ACCEL_RANGE_4G, MPU6500_GYRO_RANGE_500DPS);
  * 用法（SPI）：
- *   mpu6500_init(&imu, NULL, &spi1, PORT_PIN(0, 4), 0,
+ *   mpu6500_init(&imu, NULL, &spi1, IOT_PIN(0, 4), 0,
  *                MPU6500_ACCEL_RANGE_4G, MPU6500_GYRO_RANGE_500DPS);
  */
 
@@ -76,10 +76,10 @@ typedef struct {
  * @param  address      7 位从机地址，0 表示默认 0x68（SPI 模式忽略）
  * @param  accel_range  加速度量程
  * @param  gyro_range   陀螺量程
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int mpu6500_init(mpu6500_handle_t *handle, port_i2c_handle_t *i2c,
-                 port_spi_handle_t *spi, port_pin_t cs, uint16_t address,
+int mpu6500_init(mpu6500_handle_t *handle, iot_i2c_t *i2c,
+                 iot_spi_t *spi, iot_pin_t cs, uint16_t address,
                  mpu6500_accel_range_t accel_range, mpu6500_gyro_range_t gyro_range);
 
 /** @brief 反初始化：进入睡眠并复位句柄状态 */

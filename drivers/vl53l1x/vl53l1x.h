@@ -27,14 +27,14 @@ typedef struct {
 } vl53l1x_data_t;
 
 /** @param address 7 位地址，传 0 取 0x29 */
-int vl53l1x_init(vl53l1x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int vl53l1x_init(vl53l1x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int vl53l1x_deinit(vl53l1x_handle_t *handle);
 
 /** 单次测距（阻塞，最长约 VL53L1X_RANGE_TIMEOUT_MS） */
 int vl53l1x_read(vl53l1x_handle_t *handle, vl53l1x_data_t *data);
 
-/** 仅取距离；range_status 非 0 时仍填充距离并返回 PORT_NOT_READY */
+/** 仅取距离；range_status 非 0 时仍填充距离并返回 IOT_NOT_READY */
 int vl53l1x_read_distance(vl53l1x_handle_t *handle, uint16_t *distance_mm);
 
 #ifdef __cplusplus

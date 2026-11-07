@@ -3,7 +3,7 @@
 #include "motion_error.h"
 #include "motion_parser.h"
 #include "motion_source.h"
-#include "port_mem.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -26,7 +26,7 @@
  *   - 每个 JOB 最多登记 MOTION_MAX_JOB_DEVICES 个 STEP 与 PWM 设备；
  *   - 设备占用表按 MOTION_MAX_DEVICES 索引，值 0 表示空闲，
  *     否则存放“JOB 下标 + 1”；
- *   - JOB 表与设备占用表在首次 init 时通过 port_mem 分配，重复 init 复用。
+ *   - JOB 表与设备占用表在首次 init 时通过 iot_mem 分配，重复 init 复用。
  */
 
 /* 单个 JOB 任务的运行数据 */
@@ -59,21 +59,21 @@ static int16_t *s_pwm_owner;                 /* PWM 设备占用表（惰性分�
 static int ensure_tables(void)
 {
     if (s_jobs == NULL) {
-        s_jobs = (motion_job_t *)port_calloc(MOTION_MAX_JOBS,
+        s_jobs = (motion_job_t *)iot_calloc(MOTION_MAX_JOBS,
                                              sizeof(*s_jobs));
         if (s_jobs == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_step_owner == NULL) {
-        s_step_owner = (int16_t *)port_calloc(MOTION_MAX_DEVICES,
+        s_step_owner = (int16_t *)iot_calloc(MOTION_MAX_DEVICES,
                                               sizeof(*s_step_owner));
         if (s_step_owner == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_pwm_owner == NULL) {
-        s_pwm_owner = (int16_t *)port_calloc(MOTION_MAX_DEVICES,
+        s_pwm_owner = (int16_t *)iot_calloc(MOTION_MAX_DEVICES,
                                              sizeof(*s_pwm_owner));
         if (s_pwm_owner == NULL) {
             return MOTION_ERR_MEMORY;

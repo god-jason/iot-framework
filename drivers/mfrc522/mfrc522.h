@@ -17,7 +17,7 @@ extern "C" {
 
 typedef struct {
     driver_spi_t spi;
-    port_pin_t reset;           /* 可传 0，则仅软件复位 */
+    iot_pin_t reset;           /* 可传 0，则仅软件复位 */
     uint8_t version;
     uint32_t timeout_ms;
     bool initialized;
@@ -31,8 +31,8 @@ typedef struct {
     bool valid;
 } mfrc522_card_t;
 
-int mfrc522_init(mfrc522_handle_t *handle, port_spi_handle_t *spi,
-                 port_pin_t cs, port_pin_t reset);
+int mfrc522_init(mfrc522_handle_t *handle, iot_spi_t *spi,
+                 iot_pin_t cs, iot_pin_t reset);
 int mfrc522_deinit(mfrc522_handle_t *handle);
 
 int mfrc522_get_version(mfrc522_handle_t *handle, uint8_t *version);
@@ -40,7 +40,7 @@ int mfrc522_set_antenna(mfrc522_handle_t *handle, bool on);
 /* 接收增益 0..7，对应 RFCfgReg 的 RxGain 位 */
 int mfrc522_set_gain(mfrc522_handle_t *handle, uint8_t rx_gain);
 
-/* 寻卡并读取 UID（REQA + 防冲突 + SELECT），无卡返回 PORT_NOT_FOUND */
+/* 寻卡并读取 UID（REQA + 防冲突 + SELECT），无卡返回 IOT_NOT_FOUND */
 int mfrc522_read(mfrc522_handle_t *handle, mfrc522_card_t *card);
 
 /* 发送原始 MIFARE 帧并返回应答（如 {0xA0, block, 16B} 写块，需已认证） */

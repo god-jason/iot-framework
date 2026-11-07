@@ -52,9 +52,9 @@ typedef struct {
  * @param  handle  驱动句柄
  * @param  i2c     已初始化的 I2C 主机句柄
  * @param  address 7 位从机地址，0 表示默认 0x36
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int as5600_init(as5600_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int as5600_init(as5600_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int as5600_deinit(as5600_handle_t *handle);

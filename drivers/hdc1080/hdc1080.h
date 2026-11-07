@@ -25,7 +25,7 @@ typedef struct {
  * @brief  初始化 HDC1080（probe + 校验器件 ID 0x1050，配置为 14 位双通道）
  * @param  address  7 位从机地址，0 表示使用默认 0x40
  */
-int hdc1080_init(hdc1080_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int hdc1080_init(hdc1080_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int hdc1080_deinit(hdc1080_handle_t *handle);

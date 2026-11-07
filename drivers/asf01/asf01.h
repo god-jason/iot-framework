@@ -26,7 +26,7 @@ typedef struct {
     bool initialized;
 } asf01_handle_t;
 
-int asf01_init(asf01_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int asf01_init(asf01_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 int asf01_deinit(asf01_handle_t *handle);
 
 /** 读取 2 字节原始值 */

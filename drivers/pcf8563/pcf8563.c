@@ -12,12 +12,12 @@ static uint8_t pcf8563_bcd_to_bin(uint8_t value)
     return (uint8_t)(((value >> 4) & 0x0FU) * 10U + (value & 0x0FU));
 }
 
-int pcf8563_init(pcf8563_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int pcf8563_init(pcf8563_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t control = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -30,16 +30,16 @@ int pcf8563_init(pcf8563_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("pcf8563", "probe failed, addr=0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* 清除 TEST 与 STOP：使能正常计数 */
     if (driver_i2c_read_reg(&handle->i2c, PCF8563_REG_CONTROL1, &control, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     control = (uint8_t)(control & (uint8_t)~(PCF8563_CTRL1_TEST | PCF8563_CTRL1_STOP));
     if (driver_i2c_write_reg(&handle->i2c, PCF8563_REG_CONTROL1, &control, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -50,10 +50,10 @@ int pcf8563_init(pcf8563_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int pcf8563_deinit(pcf8563_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -63,7 +63,7 @@ int pcf8563_deinit(pcf8563_handle_t *handle)
 int pcf8563_read(pcf8563_handle_t *handle, uint8_t reg, uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || !handle->initialized || len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, reg, data, len);
 }
@@ -71,7 +71,7 @@ int pcf8563_read(pcf8563_handle_t *handle, uint8_t reg, uint8_t *data, size_t le
 int pcf8563_write(pcf8563_handle_t *handle, uint8_t reg, const uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || !handle->initialized || len == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return driver_i2c_write_reg(&handle->i2c, reg, data, len);
 }
@@ -82,14 +82,14 @@ int pcf8563_set_time(pcf8563_handle_t *handle, const pcf8563_time_t *time)
     uint8_t control = 0U;
 
     if (handle == NULL || time == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (time->year < 2000U || time->year > 2199U ||
         time->month < 1U || time->month > 12U ||
         time->day < 1U || time->day > 31U ||
         time->hour > 23U || time->minute > 59U || time->second > 59U ||
         time->weekday > 6U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* 清除 STOP 位，保证写入后立即开始计数 */
@@ -111,7 +111,7 @@ int pcf8563_set_time(pcf8563_handle_t *handle, const pcf8563_time_t *time)
 
     if (driver_i2c_write_reg(&handle->i2c, PCF8563_REG_SECONDS, buf, sizeof(buf)) != DRIVER_OK) {
         LOG_E("pcf8563", "write time failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -123,11 +123,11 @@ int pcf8563_get_time(pcf8563_handle_t *handle, pcf8563_time_t *time)
     bool voltage_low;
 
     if (handle == NULL || time == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, PCF8563_REG_SECONDS, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     voltage_low = ((buf[0] & PCF8563_VL_FLAG) != 0U);
@@ -147,7 +147,7 @@ int pcf8563_get_time(pcf8563_handle_t *handle, pcf8563_time_t *time)
     /* VL=1 表示供电电压曾过低，时间可能已丢失 */
     if (voltage_low) {
         LOG_W("pcf8563", "voltage low flag set, time may be invalid");
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
     return DRIVER_OK;
 }
@@ -157,7 +157,7 @@ int pcf8563_set_clkout(pcf8563_handle_t *handle, uint8_t freq)
     uint8_t value;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (freq == 0xFFU) {
@@ -165,11 +165,11 @@ int pcf8563_set_clkout(pcf8563_handle_t *handle, uint8_t freq)
     } else if (freq <= PCF8563_CLKOUT_1HZ) {
         value = (uint8_t)(PCF8563_CLKOUT_ENABLE | freq);
     } else {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (driver_i2c_write_reg(&handle->i2c, PCF8563_REG_CLKOUT, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }

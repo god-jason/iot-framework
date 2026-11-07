@@ -22,7 +22,7 @@ static int bmp390_bus_read(bmp390_handle_t *handle, uint8_t reg, uint8_t *data, 
         return driver_i2c_read_reg(&handle->i2c, reg, data, len);
     }
     if (data == NULL || len == 0U || (len + 1U) > BMP390_SPI_XFER_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     tx[0] = (uint8_t)(reg | 0x80U);              /* SPI 读：地址最高位置 1 */
@@ -52,7 +52,7 @@ static int bmp390_bus_write(bmp390_handle_t *handle, uint8_t reg,
         return driver_i2c_write_reg(&handle->i2c, reg, data, len);
     }
     if (data == NULL || len == 0U || (len + 1U) > BMP390_SPI_XFER_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     tx[0] = (uint8_t)(reg & 0x7FU);              /* SPI 写：地址最高位清 0 */
@@ -70,7 +70,7 @@ static int bmp390_read_calib(bmp390_handle_t *handle)
     bmp390_calib_t *c = &handle->calib;
 
     if (bmp390_bus_read(handle, BMP390_REG_CALIB, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     /* 0x31 起：T1(u16) T2(u16) T3(i8) P1(i16) P2(i16) P3(i8) P4(i8)
@@ -127,11 +127,11 @@ static int bmp390_setup(bmp390_handle_t *handle)
     uint8_t value;
 
     if (bmp390_get_chip_id(handle, &chip_id) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (chip_id != BMP390_CHIP_ID) {
         LOG_E("bmp390", "chip id mismatch: 0x%02X", chip_id);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     value = BMP390_CMD_SOFT_RESET;
@@ -140,24 +140,24 @@ static int bmp390_setup(bmp390_handle_t *handle)
 
     if (bmp390_read_calib(handle) != DRIVER_OK) {
         LOG_E("bmp390", "read calibration failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (handle->calib.t1 == 0.0 || handle->calib.t2 == 0.0 || handle->calib.p1 == 0.0) {
         LOG_E("bmp390", "invalid calibration data");
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     value = BMP390_CONFIG_DEFAULT;
     if (bmp390_bus_write(handle, BMP390_REG_CONFIG, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     value = BMP390_OSR_DEFAULT;
     if (bmp390_bus_write(handle, BMP390_REG_OSR, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     value = BMP390_PWR_CTRL_NORMAL;
     if (bmp390_bus_write(handle, BMP390_REG_PWR_CTRL, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->t_lin = 0.0;
@@ -178,10 +178,10 @@ static void bmp390_reset_bus(bmp390_handle_t *handle, bool use_spi)
     handle->initialized = false;
 }
 
-int bmp390_init(bmp390_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int bmp390_init(bmp390_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     bmp390_reset_bus(handle, false);
     handle->i2c.handle = i2c;
@@ -189,10 +189,10 @@ int bmp390_init(bmp390_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
     return bmp390_setup(handle);
 }
 
-int bmp390_init_spi(bmp390_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs)
+int bmp390_init_spi(bmp390_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 {
     if (handle == NULL || spi == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     bmp390_reset_bus(handle, true);
     handle->spi.handle = spi;
@@ -205,7 +205,7 @@ int bmp390_deinit(bmp390_handle_t *handle)
     uint8_t value = 0x00U;   /* pwr_ctrl = sleep */
 
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)bmp390_bus_write(handle, BMP390_REG_PWR_CTRL, &value, 1U);
@@ -219,10 +219,10 @@ int bmp390_deinit(bmp390_handle_t *handle)
 int bmp390_get_chip_id(bmp390_handle_t *handle, uint8_t *chip_id)
 {
     if (handle == NULL || chip_id == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->use_spi ? (handle->spi.handle == NULL) : (handle->i2c.handle == NULL)) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return bmp390_bus_read(handle, BMP390_REG_CHIP_ID, chip_id, 1U);
 }
@@ -235,13 +235,13 @@ int bmp390_read_raw(bmp390_handle_t *handle, uint32_t *raw_temperature,
     uint32_t temp;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_pressure == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (bmp390_bus_read(handle, BMP390_REG_DATA_0, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     /* 小端、XLSB 在前 */
@@ -265,7 +265,7 @@ int bmp390_read(bmp390_handle_t *handle, bmp390_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = bmp390_read_raw(handle, &raw_t, &raw_p);
     if (ret != DRIVER_OK) {
@@ -280,7 +280,7 @@ int bmp390_read(bmp390_handle_t *handle, bmp390_data_t *data)
     if (!(pressure >= (double)BMP390_PRESSURE_MIN_PA &&
           pressure <= (double)BMP390_PRESSURE_MAX_PA)) {
         LOG_W("bmp390", "pressure out of range");
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     data->temperature = (float)temperature;

@@ -23,7 +23,7 @@ static int ms5611_read_after_cmd(ms5611_handle_t *handle, uint8_t cmd,
     int ret;
 
     if (data == NULL || len == 0U || len > MS5611_ADC_DATA_SIZE) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->use_spi) {
         ret = driver_i2c_write(&handle->i2c, &cmd, 1U);
@@ -75,7 +75,7 @@ static int ms5611_read_prom(ms5611_handle_t *handle)
 
     for (i = 0U; i < MS5611_PROM_WORDS; i++) {
         if (ms5611_read_after_cmd(handle, MS5611_CMD_PROM_READ(i), d, sizeof(d)) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         handle->prom[i] = (uint16_t)(((uint16_t)d[0] << 8) | (uint16_t)d[1]);
     }
@@ -92,7 +92,7 @@ static int ms5611_compensate(const ms5611_handle_t *handle, int32_t d1, int32_t 
     int64_t dt, temp, off, sens, p;
 
     if (c1 == 0 || c2 == 0 || c5 == 0 || c6 == 0) {   /* 校准数据无效 */
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     dt = (int64_t)d2 - (c5 << 8);
@@ -116,12 +116,12 @@ static int ms5611_compensate(const ms5611_handle_t *handle, int32_t d1, int32_t 
     }
 
     if (sens == 0) {
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
     /* P = D1*SENS/2^21 - OFF，再除 2^15 得到 Pa */
     p = (((int64_t)d1 * sens) / 2097152LL - off) / 32768LL;
     if (p <= 0) {                                    /* 非物理值 */
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     *temp_centi = (int32_t)temp;
@@ -136,16 +136,16 @@ static int ms5611_convert(ms5611_handle_t *handle, uint8_t cmd, uint32_t *raw)
     uint32_t value;
 
     if (ms5611_command(handle, cmd) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ms5611_conv_delay_ms[handle->osr & 0x07U]);
     if (ms5611_read_after_cmd(handle, MS5611_CMD_ADC_READ, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     value = ((uint32_t)buf[0] << 16) | ((uint32_t)buf[1] << 8) | (uint32_t)buf[2];
     if (value == 0U || value == 0xFFFFFFU) {          /* ADC 无有效输出 */
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
     *raw = value;
     return DRIVER_OK;
@@ -169,23 +169,23 @@ static int ms5611_setup(ms5611_handle_t *handle)
     uint8_t i;
 
     if (ms5611_command(handle, MS5611_CMD_RESET) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(MS5611_RESET_DELAY_MS);
 
     if (ms5611_read_prom(handle) != DRIVER_OK) {
         LOG_E("ms5611", "read prom failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (ms5611_crc4(handle->prom) != 0U) {
         LOG_E("ms5611", "prom crc mismatch (not a ms5611/ms5607?)");
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
     for (i = 1U; i <= 6U; i++) {
         if (handle->prom[i] == 0U || handle->prom[i] == 0xFFFFU) {
             LOG_E("ms5611", "invalid prom word %u: 0x%04X",
                   (unsigned)i, (unsigned)handle->prom[i]);
-            return (int)PORT_INVALID_PARAM;
+            return (int)IOT_INVALID_PARAM;
         }
     }
 
@@ -194,10 +194,10 @@ static int ms5611_setup(ms5611_handle_t *handle)
     return DRIVER_OK;
 }
 
-int ms5611_init(ms5611_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int ms5611_init(ms5611_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ms5611_reset_bus(handle, false);
     handle->i2c.handle = i2c;
@@ -205,10 +205,10 @@ int ms5611_init(ms5611_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
     return ms5611_setup(handle);
 }
 
-int ms5611_init_spi(ms5611_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs)
+int ms5611_init_spi(ms5611_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 {
     if (handle == NULL || spi == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ms5611_reset_bus(handle, true);
     handle->spi.handle = spi;
@@ -219,7 +219,7 @@ int ms5611_init_spi(ms5611_handle_t *handle, port_spi_handle_t *spi, port_pin_t 
 int ms5611_deinit(ms5611_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -233,7 +233,7 @@ int ms5611_get_prom(const ms5611_handle_t *handle, uint16_t *prom, size_t count)
 
     if (handle == NULL || prom == NULL || count == 0U || count > MS5611_PROM_WORDS ||
         !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (i = 0U; i < count; i++) {
         prom[i] = handle->prom[i];
@@ -248,10 +248,10 @@ int ms5611_read_raw(ms5611_handle_t *handle, int32_t *d1, int32_t *d2)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (d1 == NULL && d2 == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = ms5611_convert(handle, MS5611_CMD_CONV_D1(handle->osr), &raw_p);
@@ -274,7 +274,7 @@ int ms5611_read(ms5611_handle_t *handle, ms5611_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = ms5611_read_raw(handle, &d1, &d2);
@@ -288,7 +288,7 @@ int ms5611_read(ms5611_handle_t *handle, ms5611_data_t *data)
     if ((float)press_pa < MS5611_PRESSURE_MIN_PA ||
         (float)press_pa > MS5611_PRESSURE_MAX_PA) {
         LOG_W("ms5611", "pressure out of range: %ld Pa", (long)press_pa);
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     data->temperature = (float)temp_centi / 100.0f;

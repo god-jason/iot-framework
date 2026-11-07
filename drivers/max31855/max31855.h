@@ -21,9 +21,9 @@ typedef struct {
 
 /**
  * @brief  初始化
- * @param  cs  片选引脚，PORT_PIN(0,0) 表示由外部控制
+ * @param  cs  片选引脚，IOT_PIN(0,0) 表示由外部控制
  */
-int max31855_init(max31855_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs);
+int max31855_init(max31855_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
 
 /** @brief  反初始化 */
 int max31855_deinit(max31855_handle_t *handle);
@@ -33,7 +33,7 @@ int max31855_read_raw(max31855_handle_t *handle, uint32_t *raw);
 
 /**
  * @brief  读取热电偶温度（℃）
- * @return 0 成功；存在故障位返回 PORT_HW_ERROR
+ * @return 0 成功；存在故障位返回 IOT_HW_ERROR
  */
 int max31855_read(max31855_handle_t *handle, float *celsius);
 

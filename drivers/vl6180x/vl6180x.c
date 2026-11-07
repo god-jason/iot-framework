@@ -43,20 +43,20 @@ static int vl6180x_wait_range_ready(vl6180x_handle_t *handle)
         }
         if ((driver_tick_ms() - start) >= VL6180X_RANGE_TIMEOUT_MS) {
             LOG_W("vl6180x", "range timeout, int status=0x%02X", (unsigned)status);
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(VL6180X_POLL_INTERVAL_MS);
     }
 }
 
-int vl6180x_init(vl6180x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int vl6180x_init(vl6180x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     uint8_t fresh = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -67,7 +67,7 @@ int vl6180x_init(vl6180x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("vl6180x", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* ID 校验：model id 必须为 0xB4 */
@@ -78,7 +78,7 @@ int vl6180x_init(vl6180x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
     }
     if (id != VL6180X_MODEL_ID_VALUE) {
         LOG_E("vl6180x", "unexpected model id 0x%02X", (unsigned)id);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     /* 首次上电：需要 ST 私有参数，这里只清标志并记录待补状态 */
@@ -115,7 +115,7 @@ int vl6180x_init(vl6180x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int vl6180x_deinit(vl6180x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -129,7 +129,7 @@ int vl6180x_read(vl6180x_handle_t *handle, vl6180x_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = vl6180x_write_u8(handle, VL6180X_REG_SYSRANGE__START,
@@ -176,7 +176,7 @@ int vl6180x_read_distance(vl6180x_handle_t *handle, uint16_t *distance_mm)
     int ret;
 
     if (distance_mm == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = vl6180x_read(handle, &data);
@@ -185,5 +185,5 @@ int vl6180x_read_distance(vl6180x_handle_t *handle, uint16_t *distance_mm)
     }
 
     *distance_mm = data.distance_mm;
-    return (data.range_status == 0U) ? DRIVER_OK : (int)PORT_NOT_READY;
+    return (data.range_status == 0U) ? DRIVER_OK : (int)IOT_NOT_READY;
 }

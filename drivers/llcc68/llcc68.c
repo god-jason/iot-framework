@@ -2,8 +2,8 @@
 
 /* LLCC68 与 SX1262 共用实现，仅 variant 不同（PA/校准差异需按 datasheet 复核） */
 
-int llcc68_init(llcc68_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
-                port_pin_t busy, port_pin_t reset, port_pin_t dio1)
+int llcc68_init(llcc68_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
+                iot_pin_t busy, iot_pin_t reset, iot_pin_t dio1)
 {
     return sx1262_init_variant(handle, spi, cs, busy, reset, dio1, SX1262_VARIANT_LLCC68);
 }

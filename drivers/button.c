@@ -1,12 +1,12 @@
 #include "button.h"
-#include "port.h"
+#include "iot.h"
 #include "log.h"
 
 int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
                     uint32_t debounce_ms, uint32_t long_press_ms,
                     button_callback_fn cb, void *user)
 {
-    port_gpio_config_t cfg;
+    iot_gpio_config_t cfg;
 
     if (btn == NULL || cb == NULL) {
         return -1;
@@ -23,25 +23,25 @@ int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
     btn->press_reported = 0;
 
     /* 输入上拉 */
-    cfg.mode = PORT_GPIO_MODE_INPUT;
-    cfg.output = PORT_GPIO_OUTPUT_PP;
-    cfg.pull = PORT_GPIO_PULLUP;
-    cfg.speed = PORT_GPIO_SPEED_LOW;
+    cfg.mode = IOT_GPIO_MODE_INPUT;
+    cfg.output = IOT_GPIO_OUTPUT_PP;
+    cfg.pull = IOT_GPIO_PULLUP;
+    cfg.speed = IOT_GPIO_SPEED_LOW;
     cfg.alternate = 0;
-    cfg.initial_level = PORT_GPIO_HIGH;
-    return (port_gpio_init(PORT_PIN(0, pin), &cfg) == PORT_OK) ? 0 : -1;
+    cfg.initial_level = IOT_GPIO_HIGH;
+    return (iot_gpio_init(IOT_PIN(0, pin), &cfg) == IOT_OK) ? 0 : -1;
 }
 
 int button_process(button_t *btn, uint32_t tick_ms)
 {
-    port_gpio_level_t level;
+    iot_gpio_level_t level;
     uint8_t pressed;
     button_event_t ev = BUTTON_RELEASED;
 
     if (btn == NULL) {
         return -1;
     }
-    if (port_gpio_read(PORT_PIN(0, btn->pin), &level) != PORT_OK) {
+    if (iot_gpio_read(IOT_PIN(0, btn->pin), &level) != IOT_OK) {
         return -1;
     }
     pressed = ((uint8_t)level == btn->active_level) ? 1 : 0;
@@ -74,5 +74,5 @@ int button_process(button_t *btn, uint32_t tick_ms)
     if (ev != BUTTON_RELEASED) {
         btn->callback(ev, btn->user);
     }
-    return PORT_OK;
+    return IOT_OK;
 }

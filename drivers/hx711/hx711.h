@@ -10,7 +10,7 @@
  *
  * 用法：
  *   hx711_handle_t hx711;
- *   hx711_init(&hx711, PORT_PIN(0, 1), PORT_PIN(0, 2));
+ *   hx711_init(&hx711, IOT_PIN(0, 1), IOT_PIN(0, 2));
  *   hx711_tare(&hx711, 10);
  *   float weight;
  *   hx711_read(&hx711, &weight);
@@ -30,8 +30,8 @@ typedef enum {
 } hx711_gain_t;
 
 typedef struct {
-    port_pin_t sck;         /* PD_SCK，主机输出 */
-    port_pin_t dout;        /* DOUT，芯片输出（低电平=就绪） */
+    iot_pin_t sck;         /* PD_SCK，主机输出 */
+    iot_pin_t dout;        /* DOUT，芯片输出（低电平=就绪） */
     hx711_gain_t gain;      /* 当前通道/增益 */
     int32_t offset;         /* 零点（皮重）原始值 */
     float scale;            /* 换算系数：重量 = (raw - offset) / scale */
@@ -43,9 +43,9 @@ typedef struct {
  * @param  handle  驱动句柄
  * @param  sck     PD_SCK 引脚
  * @param  dout    DOUT 引脚
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int hx711_init(hx711_handle_t *handle, port_pin_t sck, port_pin_t dout);
+int hx711_init(hx711_handle_t *handle, iot_pin_t sck, iot_pin_t dout);
 
 /** @brief 反初始化，释放引脚 */
 int hx711_deinit(hx711_handle_t *handle);

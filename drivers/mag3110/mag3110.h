@@ -64,9 +64,9 @@ typedef struct {
  * @param  address      7 位从机地址，0 表示默认 0x0E
  * @param  data_rate    数据率
  * @param  oversampling 过采样倍数
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int mag3110_init(mag3110_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address,
+int mag3110_init(mag3110_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
                  mag3110_data_rate_t data_rate, mag3110_oversampling_t oversampling);
 
 /** @brief 反初始化：进入待机模式 */

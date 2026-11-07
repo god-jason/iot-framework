@@ -60,7 +60,7 @@ typedef struct {
 } bme680_data_t;
 
 /** 初始化：校验 chip id 0x61，读两组校准系数，关闭气体通道 */
-int bme680_init(bme680_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int bme680_init(bme680_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** 反初始化（进入 sleep，不关闭总线） */
 int bme680_deinit(bme680_handle_t *handle);

@@ -36,12 +36,12 @@ static void ws2812b_encode_byte(uint8_t value, uint8_t *out)
     out[2] = (uint8_t)(bits & 0xFFU);
 }
 
-int ws2812b_init(ws2812b_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
+int ws2812b_init(ws2812b_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
                  uint16_t led_count, uint8_t *pixels, uint8_t *encoded)
 {
     if (handle == NULL || spi == NULL || led_count == 0U ||
         pixels == NULL || encoded == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -53,13 +53,13 @@ int ws2812b_init(ws2812b_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, PORT_GPIO_HIGH) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+        if (driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) {
+            return (int)IOT_IO_ERROR;
         }
     }
 
     /* 建议 2.4MHz；平台不支持时保持原速率 */
-    (void)port_spi_set_speed(spi, 2400000U);
+    (void)iot_spi_set_speed(spi, 2400000U);
 
     (void)ws2812b_clear(handle);
     handle->initialized = true;
@@ -70,7 +70,7 @@ int ws2812b_init(ws2812b_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs
 int ws2812b_deinit(ws2812b_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->pixels = NULL;
@@ -84,7 +84,7 @@ int ws2812b_set_pixel(ws2812b_handle_t *handle, uint16_t index,
     uint32_t offset;
 
     if (handle == NULL || index >= handle->led_count || handle->pixels == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     offset = (uint32_t)index * WS2812B_BYTES_PER_LED;
@@ -100,7 +100,7 @@ int ws2812b_set_all(ws2812b_handle_t *handle, uint8_t red, uint8_t green, uint8_
     int ret;
 
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (i = 0U; i < handle->led_count; i++) {
         ret = ws2812b_set_pixel(handle, i, red, green, blue);
@@ -114,7 +114,7 @@ int ws2812b_set_all(ws2812b_handle_t *handle, uint8_t red, uint8_t green, uint8_
 int ws2812b_clear(ws2812b_handle_t *handle)
 {
     if (handle == NULL || handle->pixels == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (uint32_t i = 0U; i < ws2812b_pixel_buffer_size(handle->led_count); i++) {
         handle->pixels[i] = 0U;
@@ -129,7 +129,7 @@ int ws2812b_show(ws2812b_handle_t *handle)
 
     if (handle == NULL || !handle->initialized ||
         handle->pixels == NULL || handle->encoded == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     for (led = 0U; led < handle->led_count; led++) {

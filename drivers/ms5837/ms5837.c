@@ -17,7 +17,7 @@ static int ms5837_read_after_cmd(ms5837_handle_t *handle, uint8_t cmd,
     int ret;
 
     if (data == NULL || len == 0U || len > MS5837_ADC_DATA_SIZE) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &cmd, 1U);
@@ -62,7 +62,7 @@ static int ms5837_read_prom(ms5837_handle_t *handle)
 
     for (i = 0U; i < MS5837_PROM_WORDS; i++) {
         if (ms5837_read_after_cmd(handle, MS5837_CMD_PROM_READ(i), d, sizeof(d)) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         handle->prom[i] = (uint16_t)(((uint16_t)d[0] << 8) | (uint16_t)d[1]);
     }
@@ -92,7 +92,7 @@ static int ms5837_compensate(const ms5837_handle_t *handle, int32_t d1, int32_t 
     int64_t p;
 
     if (c1 == 0 || c2 == 0 || c5 == 0 || c6 == 0) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     dt = (int64_t)d2 - (c5 << 8);
@@ -117,13 +117,13 @@ static int ms5837_compensate(const ms5837_handle_t *handle, int32_t d1, int32_t 
     }
 
     if (sens == 0) {
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     /* 结果为 0.1 mbar */
     p = (((int64_t)d1 * sens) / 2097152LL - off) / 8192LL;
     if (p <= 0) {
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     *temp_centi = (int32_t)temp;
@@ -142,12 +142,12 @@ float ms5837_pressure_to_depth(float pressure_pa)
     return (mbar - MS5837_ATM_MBAR) * MS5837_MBAR_TO_METER(1.0f);
 }
 
-int ms5837_init(ms5837_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int ms5837_init(ms5837_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t i;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -157,23 +157,23 @@ int ms5837_init(ms5837_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
     handle->initialized = false;
 
     if (ms5837_command(handle, MS5837_CMD_RESET) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(MS5837_RESET_DELAY_MS);
 
     if (ms5837_read_prom(handle) != DRIVER_OK) {
         LOG_E("ms5837", "read prom failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (ms5837_crc4(handle->prom) != 0U) {
         LOG_E("ms5837", "prom crc mismatch (not a ms5837?)");
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
     for (i = 1U; i <= 6U; i++) {
         if (handle->prom[i] == 0U || handle->prom[i] == 0xFFFFU) {
             LOG_E("ms5837", "invalid prom word %u: 0x%04X",
                   (unsigned)i, (unsigned)handle->prom[i]);
-            return (int)PORT_INVALID_PARAM;
+            return (int)IOT_INVALID_PARAM;
         }
     }
 
@@ -185,7 +185,7 @@ int ms5837_init(ms5837_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
 int ms5837_deinit(ms5837_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -197,10 +197,10 @@ int ms5837_get_prom(const ms5837_handle_t *handle, uint16_t *prom, size_t count)
     size_t i;
 
     if (handle == NULL || prom == NULL || count == 0U || count > MS5837_PROM_WORDS) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (i = 0U; i < count; i++) {
         prom[i] = handle->prom[i];
@@ -215,36 +215,36 @@ int ms5837_read_raw(ms5837_handle_t *handle, int32_t *d1, int32_t *d2)
     uint32_t raw_t;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (d1 == NULL && d2 == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* D1：压力 */
     if (ms5837_command(handle, MS5837_CMD_CONV_D1(handle->osr)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ms5837_conv_delay_ms[handle->osr]);
     if (ms5837_read_after_cmd(handle, MS5837_CMD_ADC_READ, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     raw_p = ((uint32_t)buf[0] << 16) | ((uint32_t)buf[1] << 8) | (uint32_t)buf[2];
     if (raw_p == 0U || raw_p == 0xFFFFFFU) {
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     /* D2：温度 */
     if (ms5837_command(handle, MS5837_CMD_CONV_D2(handle->osr)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ms5837_conv_delay_ms[handle->osr]);
     if (ms5837_read_after_cmd(handle, MS5837_CMD_ADC_READ, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     raw_t = ((uint32_t)buf[0] << 16) | ((uint32_t)buf[1] << 8) | (uint32_t)buf[2];
     if (raw_t == 0U || raw_t == 0xFFFFFFU) {
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     if (d1 != NULL) {
@@ -266,7 +266,7 @@ int ms5837_read(ms5837_handle_t *handle, ms5837_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = ms5837_read_raw(handle, &d1, &d2);
@@ -283,7 +283,7 @@ int ms5837_read(ms5837_handle_t *handle, ms5837_data_t *data)
     pressure = (float)press_dmbar * 10.0f;
     if (!(pressure >= MS5837_PRESSURE_MIN_PA && pressure <= MS5837_PRESSURE_MAX_PA)) {
         LOG_W("ms5837", "pressure out of range: %ld Pa", (long)pressure);
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     data->temperature = (float)temp_centi / 100.0f;

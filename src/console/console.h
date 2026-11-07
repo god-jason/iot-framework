@@ -22,7 +22,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "port.h"
+#include "iot.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,30 +30,31 @@ extern "C" {
 
 /* 控制台配置 */
 typedef struct {
-    port_uart_handle_t *uart;   /* 绑定的 UART 句柄，不可为 NULL */
+    iot_uart_t *uart;   /* 绑定 UART 句柄，不可为 NULL（PC 平台填 UART1） */
     uint8_t *rx_buffer;         /* 接收泵取用的临时缓冲（可由调用者提供） */
     uint32_t rx_buffer_size;    /* 接收缓冲容量（字节），为 0 则不消费数据 */
 } console_config_t;
 
 /*
  * 初始化控制台并初始化 Shell。
- * 参数：config - 配置，见 console_config_t
+ * 参数：config - 配置，见 console_config_t；uart 必须非 NULL。
+ *       PC 平台上 UART1 已映射到标准输入输出，STM32 上通常绑定 UART1。
  * 返回：0 成功；-1 参数非法（config 或 uart 为 NULL）
  */
 int console_init(const console_config_t *config);
 
 /*
  * 启动控制台，输出就绪提示行。
- * 返回：PORT_OK；依赖 console_init() 已成功调用
+ * 返回：IOT_OK；依赖 console_init() 已成功调用
  */
 int console_start(void);
 
 /* 主循环调用：泵取 UART 接收字节并喂给 shell */
-/* 返回：PORT_OK 正常；-1 控制台未初始化 */
+/* 返回：IOT_OK 正常；-1 控制台未初始化 */
 int console_process(void);
 
 /* 直接输出一行（绕过 logger，用于控制台回显/提示） */
-/* 返回：PORT_OK 成功；-1 未初始化或参数非法 */
+/* 返回：IOT_OK 成功；-1 未初始化或参数非法 */
 int console_puts(const char *s);
 
 /* ---------------- Shell ---------------- */

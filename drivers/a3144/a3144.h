@@ -16,15 +16,15 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_pin_t pin;
+    iot_pin_t pin;
     bool initialized;
 } a3144_handle_t;
 
 /**
  * @brief  初始化霍尔开关：引脚配置为上拉输入
- * @param  pin  输出脚逻辑编号（PORT_PIN(port, index)），0 视为无效
+ * @param  pin  输出脚逻辑编号（IOT_PIN(port, index)），0 视为无效
  */
-int a3144_init(a3144_handle_t *handle, port_pin_t pin);
+int a3144_init(a3144_handle_t *handle, iot_pin_t pin);
 
 int a3144_deinit(a3144_handle_t *handle);
 

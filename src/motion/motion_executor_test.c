@@ -6,7 +6,7 @@
 #include "motion_source.h"
 #include "motion_variable.h"
 #include "motion_vm.h"
-#include "port_test.h"
+#include "pc.h"
 
 static void run_vm(motion_vm_t *vm, int max_polls)
 {
@@ -54,7 +54,7 @@ void ut_motion_executor(void)
     motion_vm_start(&vm);
     motion_vm_poll(&vm);
     TF_CHECK_INT(motion_vm_get_state(&vm), MOTION_STATE_WAITING);
-    port_test_tick_advance(11U);
+    iot_test_tick_advance(11U);
     motion_vm_poll(&vm);
     TF_CHECK_INT(motion_vm_get_state(&vm), MOTION_STATE_COMPLETED);
     tf_end();

@@ -48,7 +48,7 @@ typedef struct {
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址，0 表示默认 0x57
  */
-int max30102_init(max30102_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int max30102_init(max30102_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int max30102_deinit(max30102_handle_t *handle);
 

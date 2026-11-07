@@ -8,7 +8,7 @@
  *   wt5888e02_init / wt5888e02_deinit / wt5888e02_play / wt5888e02_stop
  *
  * 两种控制方式：
- *   - UART：调用方传入已初始化的 port_uart_handle_t（通常 9600 8N1）
+ *   - UART：调用方传入已初始化的 iot_uart_t（通常 9600 8N1）
  *   - 一线串口：只用一个 GPIO 数据脚，按时序发送脉宽编码
  * BUSY 脚可选，用于查询当前是否在播放。
  */
@@ -26,9 +26,9 @@ typedef enum {
 } wt5888e02_bus_t;
 
 typedef struct {
-    port_uart_handle_t *uart;   /* UART 模式必需，一线模式可为 NULL */
-    port_pin_t data_pin;        /* 一线串口数据脚，UART 模式为 0 */
-    port_pin_t busy_pin;        /* BUSY 指示脚，0 表示不检测 */
+    iot_uart_t *uart;   /* UART 模式必需，一线模式可为 NULL */
+    iot_pin_t data_pin;        /* 一线串口数据脚，UART 模式为 0 */
+    iot_pin_t busy_pin;        /* BUSY 指示脚，0 表示不检测 */
     wt5888e02_bus_t bus;
     uint32_t timeout_ms;
     bool initialized;
@@ -39,12 +39,12 @@ typedef struct {
  * @param  uart     已初始化的 UART 句柄
  * @param  busy_pin BUSY 引脚，0 表示不接
  */
-int wt5888e02_init(wt5888e02_handle_t *handle, port_uart_handle_t *uart,
-                   port_pin_t busy_pin);
+int wt5888e02_init(wt5888e02_handle_t *handle, iot_uart_t *uart,
+                   iot_pin_t busy_pin);
 
 /** 以一线串口方式初始化（data_pin 为双向数据脚） */
-int wt5888e02_init_oneline(wt5888e02_handle_t *handle, port_pin_t data_pin,
-                           port_pin_t busy_pin);
+int wt5888e02_init_oneline(wt5888e02_handle_t *handle, iot_pin_t data_pin,
+                           iot_pin_t busy_pin);
 
 int wt5888e02_deinit(wt5888e02_handle_t *handle);
 
@@ -63,7 +63,7 @@ int wt5888e02_set_volume(wt5888e02_handle_t *handle, uint8_t volume);
 /** 设置单次/循环播放 */
 int wt5888e02_set_loop(wt5888e02_handle_t *handle, bool loop);
 
-/** 查询 BUSY 状态；未接 BUSY 脚返回 PORT_NOT_SUPPORTED */
+/** 查询 BUSY 状态；未接 BUSY 脚返回 IOT_NOT_SUPPORTED */
 int wt5888e02_busy(wt5888e02_handle_t *handle, bool *busy);
 
 #ifdef __cplusplus

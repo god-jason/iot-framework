@@ -20,7 +20,7 @@
  *   - 全局状态可被下一次 navigation_dstar_lite 覆盖，非线程安全。
  */
 #include "navigation.h"
-#include "port_mem.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -45,22 +45,22 @@ static int dstar_ensure(void)
         return 0;
     }
     if (g == NULL) {
-        g = (uint32_t *)port_calloc(NAVIGATION_MAX_CELLS, sizeof(*g));
+        g = (uint32_t *)iot_calloc(NAVIGATION_MAX_CELLS, sizeof(*g));
     }
     if (rhs == NULL) {
-        rhs = (uint32_t *)port_calloc(NAVIGATION_MAX_CELLS, sizeof(*rhs));
+        rhs = (uint32_t *)iot_calloc(NAVIGATION_MAX_CELLS, sizeof(*rhs));
     }
     if (u_list == NULL) {
-        u_list = (uint32_t *)port_calloc(NAVIGATION_MAX_CELLS, sizeof(*u_list));
+        u_list = (uint32_t *)iot_calloc(NAVIGATION_MAX_CELLS, sizeof(*u_list));
     }
     if (u_in == NULL) {
-        u_in = (uint8_t *)port_calloc(NAVIGATION_MAX_CELLS, sizeof(*u_in));
+        u_in = (uint8_t *)iot_calloc(NAVIGATION_MAX_CELLS, sizeof(*u_in));
     }
     if (g == NULL || rhs == NULL || u_list == NULL || u_in == NULL) {
-        port_free(g);
-        port_free(rhs);
-        port_free(u_list);
-        port_free(u_in);
+        iot_free(g);
+        iot_free(rhs);
+        iot_free(u_list);
+        iot_free(u_in);
         g = NULL;
         rhs = NULL;
         u_list = NULL;

@@ -87,8 +87,8 @@ typedef struct {
  * @param  gyro_range   陀螺量程
  * @return 0 成功；磁力计缺失不算失败
  */
-int mpu9250_init(mpu9250_handle_t *handle, port_i2c_handle_t *i2c,
-                 port_spi_handle_t *spi, port_pin_t cs, uint16_t address,
+int mpu9250_init(mpu9250_handle_t *handle, iot_i2c_t *i2c,
+                 iot_spi_t *spi, iot_pin_t cs, uint16_t address,
                  mpu9250_accel_range_t accel_range, mpu9250_gyro_range_t gyro_range);
 
 /** @brief 反初始化：陀螺/加速度进入睡眠，磁力计掉电 */
@@ -103,7 +103,7 @@ int mpu9250_read_raw(mpu9250_handle_t *handle, int16_t accel[3], int16_t gyro[3]
 
 /**
  * @brief 读取磁力计原始计数（AK8963 16 位，LSB 需按 ASA 修正后换算 µT）
- * @note  原始值含硬铁偏置，驱动不做标定；SPI 模式返回 PORT_NOT_SUPPORTED
+ * @note  原始值含硬铁偏置，驱动不做标定；SPI 模式返回 IOT_NOT_SUPPORTED
  */
 int mpu9250_read_mag_raw(mpu9250_handle_t *handle, int16_t mag[3]);
 

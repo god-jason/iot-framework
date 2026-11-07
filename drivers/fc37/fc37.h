@@ -10,7 +10,7 @@
  * 输出语义：0% = 板面干燥，100% = 板面完全被水覆盖。
  * 旧实现只回传原始电压，换算责任在调用方；新实现内建干/湿端点。
  *
- * 硬件访问：直接调用 port_adc_*，不包含 bus 目录头文件，不依赖任何 HAL。
+ * 硬件访问：直接调用 iot_adc_*，不包含 bus 目录头文件，不依赖任何 HAL。
  *
  * 用法：
  *   fc37_handle_t rain;
@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_adc_handle_t *adc;      /* 已初始化的 ADC 句柄 */
+    iot_adc_t *adc;      /* 已初始化的 ADC 句柄 */
     uint8_t channel;             /* ADC 通道号 */
     float vref_mv;               /* ADC 参考电压 mV */
     uint32_t adc_max;            /* ADC 满量程码值 */
@@ -39,9 +39,9 @@ typedef struct {
  * @brief  初始化驱动并配置 ADC 通道
  * @param  adc      已初始化的 ADC 句柄（不可为 NULL）
  * @param  channel  ADC 通道号
- * @return 0 成功；PORT_INVALID_PARAM 参数非法；PORT_IO_ERROR 通道配置失败
+ * @return 0 成功；IOT_INVALID_PARAM 参数非法；IOT_IO_ERROR 通道配置失败
  */
-int fc37_init(fc37_handle_t *handle, port_adc_handle_t *adc, uint8_t channel);
+int fc37_init(fc37_handle_t *handle, iot_adc_t *adc, uint8_t channel);
 
 /** @brief 反初始化（不关闭 ADC） */
 int fc37_deinit(fc37_handle_t *handle);
@@ -49,7 +49,7 @@ int fc37_deinit(fc37_handle_t *handle);
 /**
  * @brief  读取润湿程度
  * @param  percent  0~100%，0 为干燥
- * @return 0 成功；PORT_NOT_READY 未初始化；PORT_IO_ERROR ADC 读取失败
+ * @return 0 成功；IOT_NOT_READY 未初始化；IOT_IO_ERROR ADC 读取失败
  */
 int fc37_read(fc37_handle_t *handle, float *percent);
 

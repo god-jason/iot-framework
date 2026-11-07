@@ -39,7 +39,7 @@ typedef struct {
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址，0 表示默认 0x60
  */
-int tea5767_init(tea5767_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int tea5767_init(tea5767_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int tea5767_deinit(tea5767_handle_t *handle);
 
@@ -49,7 +49,7 @@ int tea5767_read(tea5767_handle_t *handle, tea5767_status_t *status);
 /** 直接写入 5 字节配置（同时更新本地缓存） */
 int tea5767_write(tea5767_handle_t *handle, const uint8_t config[TEA5767_REG_COUNT]);
 
-/** 设置频率（MHz），失败返回 PORT_INVALID_PARAM */
+/** 设置频率（MHz），失败返回 IOT_INVALID_PARAM */
 int tea5767_set_frequency(tea5767_handle_t *handle, float frequency_mhz);
 
 /** 从状态寄存器换算当前频率 */

@@ -31,11 +31,11 @@ typedef struct {
 } tcs3200_color_t;
 
 typedef struct {
-    port_pin_t s0;
-    port_pin_t s1;
-    port_pin_t s2;
-    port_pin_t s3;
-    port_pin_t out;
+    iot_pin_t s0;
+    iot_pin_t s1;
+    iot_pin_t s2;
+    iot_pin_t s3;
+    iot_pin_t out;
     uint32_t window_us;
     bool initialized;
 } tcs3200_handle_t;
@@ -44,8 +44,8 @@ typedef struct {
  * @brief  初始化：S0~S3 推挽输出，OUT 输入（下拉）
  * @param  s0/s1/s2/s3/out  引脚逻辑编号，任一为 0 或彼此重复则视为无效
  */
-int tcs3200_init(tcs3200_handle_t *handle, port_pin_t s0, port_pin_t s1,
-                 port_pin_t s2, port_pin_t s3, port_pin_t out);
+int tcs3200_init(tcs3200_handle_t *handle, iot_pin_t s0, iot_pin_t s1,
+                 iot_pin_t s2, iot_pin_t s3, iot_pin_t out);
 
 int tcs3200_deinit(tcs3200_handle_t *handle);
 

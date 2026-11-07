@@ -25,7 +25,7 @@
 #include "at.h"
 #include "at_parser.h"
 #include "at_urc.h"
-#include "port_mem.h"
+#include "iot_mem.h"
 #include <string.h>
 
 /* 单条响应的累积缓冲大小（字节），超出后截断 */
@@ -45,7 +45,7 @@ static at_request_t s_req;
 /* 是否有事务正在等待响应 */
 static bool s_req_pending = false;
 
-/* 响应累积缓冲：多行以 '\n' 连接，始终以 '\0' 结尾；由 port_mem 分配 */
+/* 响应累积缓冲：多行以 '\n' 连接，始终以 '\0' 结尾；由 iot_mem 分配 */
 static char *s_response = NULL;
 /* 已写入响应缓冲的字节数（不含结尾 '\0'） */
 static uint32_t s_response_len;
@@ -73,7 +73,7 @@ static void at_tx_bytes(const uint8_t *data, uint32_t len)
         return;
     }
     if (s_cfg.uart != NULL) {
-        port_uart_transmit(s_cfg.uart, data, len, 100);
+        iot_uart_transmit(s_cfg.uart, data, len, 100);
     }
 }
 
@@ -105,7 +105,7 @@ static void at_tx_command(const char *cmd)
 static bool at_response_ensure(void)
 {
     if (s_response == NULL) {
-        s_response = (char *)port_calloc(AT_RESPONSE_SIZE, sizeof(char));
+        s_response = (char *)iot_calloc(AT_RESPONSE_SIZE, sizeof(char));
     }
     return (s_response != NULL);
 }
@@ -265,7 +265,7 @@ int at_init(const at_config_t *config)
         return -1;
     }
     /* 重复初始化时先释放旧响应缓冲，再重新分配 */
-    port_free(s_response);
+    iot_free(s_response);
     s_response = NULL;
     if (!at_response_ensure()) {
         s_inited = false;
@@ -472,7 +472,7 @@ void at_input(const uint8_t *data, uint32_t len)
 int at_process(void)
 {
     uint32_t n;
-    port_status_t r;
+    iot_status_t r;
 
     s_tick_ms++;
 
@@ -480,16 +480,16 @@ int at_process(void)
     if (s_started && s_cfg.uart != NULL &&
         s_cfg.rx_buffer != NULL && s_cfg.rx_buffer_size > 0) {
 
-        n = (uint32_t)port_uart_get_rx_count(s_cfg.uart);
+        n = (uint32_t)iot_uart_get_rx_count(s_cfg.uart);
         while (n > 0) {
             uint32_t chunk = (n > s_cfg.rx_buffer_size)
                              ? s_cfg.rx_buffer_size : n;
-            r = port_uart_receive(s_cfg.uart, s_cfg.rx_buffer, chunk, 100);
-            if (r != PORT_OK) {
+            r = iot_uart_receive(s_cfg.uart, s_cfg.rx_buffer, chunk, 100);
+            if (r != IOT_OK) {
                 break;   /* 读取失败：本轮放弃，等待下次轮询 */
             }
             at_input(s_cfg.rx_buffer, chunk);
-            n = (uint32_t)port_uart_get_rx_count(s_cfg.uart);
+            n = (uint32_t)iot_uart_get_rx_count(s_cfg.uart);
         }
     }
 

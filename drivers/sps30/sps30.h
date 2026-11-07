@@ -33,7 +33,7 @@ typedef struct {
 } sps30_data_t;
 
 /** @param address 7 位地址，传 0 取 0x69 */
-int sps30_init(sps30_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int sps30_init(sps30_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int sps30_deinit(sps30_handle_t *handle);
 
@@ -53,7 +53,7 @@ int sps30_get_serial(sps30_handle_t *handle, char *buf, size_t buf_len);
 
 /**
  * @brief  等待数据就绪并读取一次测量值
- * @note   内部轮询 SPS30_READ_TIMEOUT_MS，超时返回 PORT_TIMEOUT
+ * @note   内部轮询 SPS30_READ_TIMEOUT_MS，超时返回 IOT_TIMEOUT
  */
 int sps30_read(sps30_handle_t *handle, sps30_data_t *data);
 

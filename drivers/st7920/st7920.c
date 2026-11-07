@@ -60,7 +60,7 @@ static int st7920_push(st7920_handle_t *handle)
 
     for (v = 0U; v < 32U; v++) {
         if (st7920_write_row(handle, v) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
     return DRIVER_OK;
@@ -71,13 +71,13 @@ int st7920_init(st7920_handle_t *handle, const st7920_config_t *config)
     size_t i;
 
     if (handle == NULL || config == NULL || config->gram == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->gram_len < ST7920_GRAM_SIZE) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->spi.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->config = *config;
@@ -86,9 +86,9 @@ int st7920_init(st7920_handle_t *handle, const st7920_config_t *config)
     handle->initialized = false;
 
     if (config->res != 0U) {
-        (void)driver_gpio_output(config->res, PORT_GPIO_LOW);
+        (void)driver_gpio_output(config->res, IOT_GPIO_LOW);
         driver_delay_ms(ST7920_RESET_WAIT_MS);
-        (void)driver_gpio_write(config->res, PORT_GPIO_HIGH);
+        (void)driver_gpio_write(config->res, IOT_GPIO_HIGH);
     }
     driver_delay_ms(ST7920_POWER_ON_MS);
 
@@ -96,27 +96,27 @@ int st7920_init(st7920_handle_t *handle, const st7920_config_t *config)
     if (st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_BASIC) != DRIVER_OK ||
         st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_BASIC) != DRIVER_OK) {
         LOG_E("st7920", "sync sequence failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ST7920_RESET_WAIT_MS);
 
     if (st7920_write_byte(handle, false, ST7920_CMD_DISPLAY_ON) != DRIVER_OK ||
         st7920_write_byte(handle, false, ST7920_CMD_CLEAR) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_ms(ST7920_CLEAR_MS);
 
     if (st7920_write_byte(handle, false, ST7920_CMD_ENTRY_MODE) != DRIVER_OK ||
         st7920_write_byte(handle, false, ST7920_CMD_FUNCTION_EXT) != DRIVER_OK ||
         st7920_write_byte(handle, false, ST7920_CMD_GRAPHIC_ON) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     for (i = 0U; i < ST7920_GRAM_SIZE; i++) {
         handle->config.gram[i] = 0x00U;
     }
     if (st7920_push(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -127,7 +127,7 @@ int st7920_init(st7920_handle_t *handle, const st7920_config_t *config)
 int st7920_deinit(st7920_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)st7920_set_display(handle, false);
@@ -140,7 +140,7 @@ int st7920_deinit(st7920_handle_t *handle)
 int st7920_write_cmd(st7920_handle_t *handle, uint8_t cmd)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7920_write_byte(handle, false, cmd);
 }
@@ -148,7 +148,7 @@ int st7920_write_cmd(st7920_handle_t *handle, uint8_t cmd)
 int st7920_write_data(st7920_handle_t *handle, uint8_t data)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7920_write_byte(handle, true, data);
 }
@@ -158,7 +158,7 @@ int st7920_fill(st7920_handle_t *handle, uint8_t pattern)
     size_t i;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (i = 0U; i < ST7920_GRAM_SIZE; i++) {
         handle->config.gram[i] = pattern;
@@ -177,10 +177,10 @@ int st7920_draw_pixel(st7920_handle_t *handle, uint8_t x, uint8_t y, bool on)
     uint8_t mask;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (x >= handle->width || y >= handle->height) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->config.mirror_x) {
         x = (uint8_t)(handle->width - 1U - x);
@@ -203,7 +203,7 @@ int st7920_draw_pixel(st7920_handle_t *handle, uint8_t x, uint8_t y, bool on)
 int st7920_show(st7920_handle_t *handle)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7920_push(handle);
 }
@@ -211,7 +211,7 @@ int st7920_show(st7920_handle_t *handle)
 int st7920_set_display(st7920_handle_t *handle, bool on)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return st7920_write_byte(handle, false,
                              on ? ST7920_CMD_DISPLAY_ON : ST7920_CMD_DISPLAY_OFF);

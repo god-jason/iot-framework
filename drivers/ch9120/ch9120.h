@@ -29,13 +29,13 @@ typedef enum {
 } ch9120_net_mode_t;
 
 typedef struct {
-    port_uart_handle_t *uart;
+    iot_uart_t *uart;
     uint32_t timeout_ms;
     ch9120_net_mode_t mode;
     bool initialized;
 } ch9120_handle_t;
 
-int ch9120_init(ch9120_handle_t *handle, port_uart_handle_t *uart, uint32_t timeout_ms);
+int ch9120_init(ch9120_handle_t *handle, iot_uart_t *uart, uint32_t timeout_ms);
 
 int ch9120_deinit(ch9120_handle_t *handle);
 

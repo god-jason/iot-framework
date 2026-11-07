@@ -25,7 +25,7 @@ typedef struct {
  * @brief  初始化 SHT2x（probe + 软复位 + 校验用户寄存器默认值）
  * @param  address  7 位从机地址，0 表示使用默认 0x40
  */
-int sht2x_init(sht2x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int sht2x_init(sht2x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int sht2x_deinit(sht2x_handle_t *handle);

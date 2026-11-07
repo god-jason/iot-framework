@@ -21,9 +21,9 @@ typedef struct {
 
 /**
  * @brief  初始化（器件无配置寄存器，仅保存总线并拉高片选）
- * @param  cs  片选引脚，PORT_PIN(0,0) 表示由外部控制
+ * @param  cs  片选引脚，IOT_PIN(0,0) 表示由外部控制
  */
-int max6675_init(max6675_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs);
+int max6675_init(max6675_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
 
 /** @brief  反初始化 */
 int max6675_deinit(max6675_handle_t *handle);
@@ -33,7 +33,7 @@ int max6675_read_raw(max6675_handle_t *handle, uint16_t *raw);
 
 /**
  * @brief  读取温度（℃）
- * @return 0 成功；热电偶开路返回 PORT_HW_ERROR
+ * @return 0 成功；热电偶开路返回 IOT_HW_ERROR
  */
 int max6675_read(max6675_handle_t *handle, float *celsius);
 

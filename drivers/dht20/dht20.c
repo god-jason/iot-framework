@@ -5,7 +5,7 @@
 int dht20_get_status(dht20_handle_t *handle, uint8_t *status)
 {
     if (handle == NULL || status == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, DHT20_CMD_STATUS, status, 1U);
 }
@@ -17,13 +17,13 @@ static int dht20_wait_ready(dht20_handle_t *handle)
 
     for (;;) {
         if (driver_i2c_read_reg(&handle->i2c, DHT20_CMD_STATUS, &status, 1U) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if ((status & DHT20_STATUS_BUSY) == 0U) {
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > DHT20_MEASURE_DELAY_MS * 3U) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
@@ -44,7 +44,7 @@ static int dht20_read_frame(dht20_handle_t *handle, uint8_t data[7])
     driver_delay_ms(DHT20_MEASURE_DELAY_MS);
 
     if (dht20_wait_ready(handle) != DRIVER_OK) {
-        return (int)PORT_TIMEOUT;
+        return (int)IOT_TIMEOUT;
     }
 
     driver_delay_ms(DHT20_READ_DELAY_MS);
@@ -53,12 +53,12 @@ static int dht20_read_frame(dht20_handle_t *handle, uint8_t data[7])
         return ret;
     }
     if ((data[0] & DHT20_STATUS_BUSY) != 0U) {
-        return (int)PORT_BUSY;
+        return (int)IOT_BUSY;
     }
     return DRIVER_OK;
 }
 
-int dht20_init(dht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int dht20_init(dht20_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t status = 0U;
     uint8_t calibrate[2] = { 0x08U, 0x00U };
@@ -68,7 +68,7 @@ int dht20_init(dht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -81,7 +81,7 @@ int dht20_init(dht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("dht20", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = driver_i2c_write(&handle->i2c, &reset, 1U);
@@ -92,11 +92,11 @@ int dht20_init(dht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 
     if (dht20_wait_ready(handle) != DRIVER_OK) {
         LOG_E("dht20", "device not ready");
-        return (int)PORT_NOT_READY;
+        return (int)IOT_NOT_READY;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, DHT20_CMD_STATUS, &status, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if ((status & DHT20_STATUS_CALIBRATED) == 0U) {
         uint8_t cmd = DHT20_CMD_CALIBRATE;
@@ -104,7 +104,7 @@ int dht20_init(dht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
         if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK ||
             driver_i2c_write(&handle->i2c, calibrate, sizeof(calibrate)) != DRIVER_OK) {
             LOG_E("dht20", "calibrate failed");
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         driver_delay_ms(DHT20_CALIBRATE_DELAY_MS);
     }
@@ -134,7 +134,7 @@ int dht20_init(dht20_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
 int dht20_deinit(dht20_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -150,10 +150,10 @@ int dht20_read(dht20_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = dht20_read_frame(handle, data);
@@ -164,7 +164,7 @@ int dht20_read(dht20_handle_t *handle, float *temperature, float *humidity)
     if (handle->crc_enabled &&
         driver_crc8(data, 6U, DHT20_CRC_POLY, DHT20_CRC_INIT) != data[6]) {
         LOG_E("dht20", "crc error");
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
 
     /* 20 位无符号原始值：湿度 [1..3] 高 20 位，温度从 data[3] 低 4 位开始 */

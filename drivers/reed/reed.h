@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_pin_t pin;
+    iot_pin_t pin;
     bool initialized;
 } reed_handle_t;
 
@@ -24,7 +24,7 @@ typedef struct {
  * @brief  初始化：引脚配置为上拉输入
  * @param  pin  输出脚逻辑编号，0 视为无效
  */
-int reed_init(reed_handle_t *handle, port_pin_t pin);
+int reed_init(reed_handle_t *handle, iot_pin_t pin);
 
 int reed_deinit(reed_handle_t *handle);
 

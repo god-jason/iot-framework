@@ -28,7 +28,7 @@ typedef struct {
 } scd4x_data_t;
 
 /** @param address 7 位地址，传 0 取 0x62 */
-int scd4x_init(scd4x_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int scd4x_init(scd4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int scd4x_deinit(scd4x_handle_t *handle);
 
@@ -53,7 +53,7 @@ int scd4x_set_altitude(scd4x_handle_t *handle, uint16_t altitude_m);
 /** 强制基线校准，reference_ppm 为已知 CO2 浓度 */
 int scd4x_force_recalibration(scd4x_handle_t *handle, uint16_t reference_ppm);
 
-/** 数据未就绪返回 PORT_NOT_READY */
+/** 数据未就绪返回 IOT_NOT_READY */
 int scd4x_read(scd4x_handle_t *handle, scd4x_data_t *data);
 
 #ifdef __cplusplus

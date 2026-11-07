@@ -19,7 +19,7 @@
  *   - 非线程安全。
  */
 #include "planner.h"
-#include "port_mem.h"
+#include "iot_mem.h"
 
 /* 注册表容量：可同时登记的计划数上限 */
 #define PLANNER_PLAN_MAX 8
@@ -36,7 +36,7 @@ static int planner_ensure(void)
     if (s_plans != NULL) {
         return 0;
     }
-    s_plans = (planner_plan_t **)port_calloc(PLANNER_PLAN_MAX, sizeof(*s_plans));
+    s_plans = (planner_plan_t **)iot_calloc(PLANNER_PLAN_MAX, sizeof(*s_plans));
     return (s_plans != NULL) ? 0 : -1;
 }
 

@@ -22,7 +22,7 @@ typedef struct {
     bool initialized;
 } max7219_handle_t;
 
-int max7219_init(max7219_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
+int max7219_init(max7219_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
                  uint8_t chain_length);
 int max7219_deinit(max7219_handle_t *handle);
 

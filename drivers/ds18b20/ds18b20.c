@@ -4,27 +4,27 @@
 
 static void ds18b20_low(ds18b20_handle_t *handle)
 {
-    (void)port_gpio_write(handle->pin, PORT_GPIO_LOW);
+    (void)iot_gpio_write(handle->pin, IOT_GPIO_LOW);
 }
 
 static void ds18b20_release(ds18b20_handle_t *handle)
 {
-    (void)port_gpio_write(handle->pin, PORT_GPIO_HIGH);
+    (void)iot_gpio_write(handle->pin, IOT_GPIO_HIGH);
 }
 
 static int ds18b20_sample(ds18b20_handle_t *handle)
 {
-    port_gpio_level_t level = PORT_GPIO_LOW;
+    iot_gpio_level_t level = IOT_GPIO_LOW;
 
-    if (port_gpio_read(handle->pin, &level) != PORT_OK) {
+    if (iot_gpio_read(handle->pin, &level) != IOT_OK) {
         return 0;
     }
-    return (level == PORT_GPIO_HIGH) ? 1 : 0;
+    return (level == IOT_GPIO_HIGH) ? 1 : 0;
 }
 
 static void ds18b20_write_bit(ds18b20_handle_t *handle, uint8_t bit)
 {
-    port_irq_disable();
+    iot_irq_disable();
     ds18b20_low(handle);
     driver_delay_us(DS18B20_WRITE_LOW_US);
     if (bit != 0U) {
@@ -33,21 +33,21 @@ static void ds18b20_write_bit(ds18b20_handle_t *handle, uint8_t bit)
     driver_delay_us(DS18B20_WRITE_HOLD_US);
     ds18b20_release(handle);
     driver_delay_us(DS18B20_WRITE_LOW_US);
-    port_irq_enable();
+    iot_irq_enable();
 }
 
 static uint8_t ds18b20_read_bit(ds18b20_handle_t *handle)
 {
     uint8_t bit;
 
-    port_irq_disable();
+    iot_irq_disable();
     ds18b20_low(handle);
     driver_delay_us(DS18B20_READ_LOW_US);
     ds18b20_release(handle);
     driver_delay_us(DS18B20_READ_SAMPLE_US);
     bit = (uint8_t)ds18b20_sample(handle);
     driver_delay_us(DS18B20_READ_TAIL_US);
-    port_irq_enable();
+    iot_irq_enable();
     return bit;
 }
 
@@ -73,28 +73,28 @@ static uint8_t ds18b20_read_byte(ds18b20_handle_t *handle)
     return value;
 }
 
-int ds18b20_init(ds18b20_handle_t *handle, port_pin_t pin)
+int ds18b20_init(ds18b20_handle_t *handle, iot_pin_t pin)
 {
-    port_gpio_config_t cfg;
+    iot_gpio_config_t cfg;
 
     if (handle == NULL || pin == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->pin = pin;
     handle->initialized = false;
 
     /* 开漏输出 + 上拉：写 1 释放总线，同时可直接读取引脚电平 */
-    cfg.mode = PORT_GPIO_MODE_OUTPUT;
-    cfg.output = PORT_GPIO_OUTPUT_OD;
-    cfg.pull = PORT_GPIO_PULLUP;
-    cfg.speed = PORT_GPIO_SPEED_HIGH;
+    cfg.mode = IOT_GPIO_MODE_OUTPUT;
+    cfg.output = IOT_GPIO_OUTPUT_OD;
+    cfg.pull = IOT_GPIO_PULLUP;
+    cfg.speed = IOT_GPIO_SPEED_HIGH;
     cfg.alternate = 0U;
-    cfg.initial_level = PORT_GPIO_HIGH;
+    cfg.initial_level = IOT_GPIO_HIGH;
 
-    if (port_gpio_init(pin, &cfg) != PORT_OK) {
+    if (iot_gpio_init(pin, &cfg) != IOT_OK) {
         LOG_E("ds18b20", "gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -107,10 +107,10 @@ int ds18b20_init(ds18b20_handle_t *handle, port_pin_t pin)
 int ds18b20_deinit(ds18b20_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->pin != 0U) {
-        (void)port_gpio_deinit(handle->pin);
+        (void)iot_gpio_deinit(handle->pin);
     }
     handle->initialized = false;
     return DRIVER_OK;
@@ -121,17 +121,17 @@ int ds18b20_reset(ds18b20_handle_t *handle)
     int presence;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
-    port_irq_disable();
+    iot_irq_disable();
     ds18b20_low(handle);
     driver_delay_us(DS18B20_RESET_LOW_US);
     ds18b20_release(handle);
     driver_delay_us(DS18B20_RESET_RELEASE_US);
     presence = ds18b20_sample(handle);
     driver_delay_us(DS18B20_RESET_WAIT_US);
-    port_irq_enable();
+    iot_irq_enable();
 
     return (presence == 0) ? 1 : 0;
 }
@@ -139,10 +139,10 @@ int ds18b20_reset(ds18b20_handle_t *handle)
 int ds18b20_start(ds18b20_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (ds18b20_reset(handle) != 1) {
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
     ds18b20_write_byte(handle, DS18B20_CMD_SKIP_ROM);
     ds18b20_write_byte(handle, DS18B20_CMD_CONVERT_T);
@@ -154,10 +154,10 @@ int ds18b20_read_scratchpad(ds18b20_handle_t *handle, uint8_t scratchpad[9])
     uint8_t i;
 
     if (handle == NULL || scratchpad == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (ds18b20_reset(handle) != 1) {
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
     ds18b20_write_byte(handle, DS18B20_CMD_SKIP_ROM);
     ds18b20_write_byte(handle, DS18B20_CMD_READ_SCRATCH);
@@ -167,7 +167,7 @@ int ds18b20_read_scratchpad(ds18b20_handle_t *handle, uint8_t scratchpad[9])
 
     if (driver_crc8_maxim(scratchpad, DS18B20_SCRATCHPAD_SIZE - 1U) != scratchpad[8]) {
         LOG_E("ds18b20", "crc error");
-        return (int)PORT_CRC_ERROR;
+        return (int)IOT_CRC_ERROR;
     }
     return DRIVER_OK;
 }
@@ -179,7 +179,7 @@ int ds18b20_read(ds18b20_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = ds18b20_start(handle);

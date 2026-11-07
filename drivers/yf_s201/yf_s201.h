@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_pin_t pin;
+    iot_pin_t pin;
     float pulses_per_liter;   /* 每升脉冲数（默认 YF_S201_PULSES_PER_LITER_DEFAULT） */
     uint32_t window_ms;       /* 采样窗（默认 YF_S201_WINDOW_MS_DEFAULT） */
     bool initialized;
@@ -29,7 +29,7 @@ typedef struct {
  * @brief  初始化：引脚配置为下拉输入
  * @param  pin  脉冲输出脚逻辑编号，0 视为无效
  */
-int yf_s201_init(yf_s201_handle_t *handle, port_pin_t pin);
+int yf_s201_init(yf_s201_handle_t *handle, iot_pin_t pin);
 
 int yf_s201_deinit(yf_s201_handle_t *handle);
 

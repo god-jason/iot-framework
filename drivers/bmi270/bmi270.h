@@ -86,9 +86,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x68
- * @return 0 成功，负值为 port_status_t（-11 表示 probe / CHIP_ID 不匹配）
+ * @return 0 成功，负值为 iot_status_t（-11 表示 probe / CHIP_ID 不匹配）
  */
-int bmi270_init(bmi270_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int bmi270_init(bmi270_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化：关闭加速度计与陀螺仪，复位句柄状态（不关闭总线） */
 int bmi270_deinit(bmi270_handle_t *handle);

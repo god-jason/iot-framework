@@ -66,9 +66,9 @@ typedef struct {
  * @param  cs      片选引脚，总线自带片选时传 0
  * @param  range   量程
  * @param  odr     输出率
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int adxl362_init(adxl362_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
+int adxl362_init(adxl362_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
                  adxl362_range_t range, adxl362_odr_t odr);
 
 /** @brief 反初始化：进入待机模式 */

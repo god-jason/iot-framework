@@ -7,7 +7,7 @@
 static int tea5767_check(const tea5767_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -24,12 +24,12 @@ static uint16_t tea5767_mhz_to_pll(float mhz)
     return (uint16_t)(((hz + TEA5767_PLL_OFFSET_HZ) / TEA5767_PLL_DIVIDER) + 0.5f);
 }
 
-int tea5767_init(tea5767_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int tea5767_init(tea5767_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t i;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -47,7 +47,7 @@ int tea5767_init(tea5767_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(TEA5767_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -62,7 +62,7 @@ int tea5767_init(tea5767_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addr
 int tea5767_deinit(tea5767_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)tea5767_set_standby(handle, true);
@@ -82,7 +82,7 @@ int tea5767_write(tea5767_handle_t *handle, const uint8_t config[TEA5767_REG_COU
         return ret;
     }
     if (config == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, config, TEA5767_REG_COUNT);
@@ -102,7 +102,7 @@ int tea5767_read(tea5767_handle_t *handle, tea5767_status_t *status)
     int ret;
 
     if (status == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = tea5767_check(handle);
     if (ret != DRIVER_OK) {
@@ -145,11 +145,11 @@ int tea5767_set_frequency(tea5767_handle_t *handle, float frequency_mhz)
     if (japan) {
         if (frequency_mhz < TEA5767_FREQ_JAPAN_MIN_MHZ ||
             frequency_mhz > TEA5767_FREQ_JAPAN_MAX_MHZ) {
-            return (int)PORT_INVALID_PARAM;
+            return (int)IOT_INVALID_PARAM;
         }
     } else if (frequency_mhz < TEA5767_FREQ_MIN_MHZ ||
                frequency_mhz > TEA5767_FREQ_MAX_MHZ) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     pll = tea5767_mhz_to_pll(frequency_mhz);
@@ -172,7 +172,7 @@ int tea5767_get_frequency(tea5767_handle_t *handle, float *frequency_mhz)
     int ret;
 
     if (frequency_mhz == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = tea5767_read(handle, &status);
     if (ret != DRIVER_OK) {
@@ -232,7 +232,7 @@ int tea5767_seek(tea5767_handle_t *handle, bool up, float *mhz_out)
         return ret;
     }
     if (mhz_out == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     for (i = 0U; i < TEA5767_REG_COUNT; i++) {
@@ -261,7 +261,7 @@ int tea5767_seek(tea5767_handle_t *handle, bool up, float *mhz_out)
         }
         if ((uint32_t)(driver_tick_ms() - start) > TEA5767_SEARCH_TIMEOUT_MS) {
             LOG_W(TEA5767_TAG, "seek timeout");
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
     }
 

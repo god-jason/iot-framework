@@ -8,7 +8,7 @@
  *   ntc_init / ntc_deinit / ntc_read
  *
  * 说明：drivers/common/driver_io.h 未提供 ADC 抽象，本驱动与其他 ADC
- *       器件（lm35 / da267）一致，直接使用 port_adc_* 接口；
+ *       器件（lm35 / da267）一致，直接使用 iot_adc_* 接口；
  *       不使用任何 HAL，也不包含 bus 目录下的总线头文件。
  *
  * 用法：
@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_adc_handle_t *adc;   /* 已初始化的 ADC 句柄 */
+    iot_adc_t *adc;   /* 已初始化的 ADC 句柄 */
     uint8_t channel;          /* ADC 通道号 */
     uint32_t r_series;        /* 分压串联电阻，单位 Ω */
     float r25;                /* 25℃ 标称电阻，单位 Ω */
@@ -46,7 +46,7 @@ typedef struct {
  * @param  vref_mv   参考电压（mV，>0）
  * @param  adc_max   满量程码值（>0）
  */
-int ntc_init(ntc_handle_t *handle, port_adc_handle_t *adc, uint8_t channel,
+int ntc_init(ntc_handle_t *handle, iot_adc_t *adc, uint8_t channel,
              uint32_t r_series, float r25, float beta,
              float vref_mv, uint32_t adc_max);
 
@@ -56,7 +56,7 @@ int ntc_deinit(ntc_handle_t *handle);
 /**
  * @brief  读取温度
  * @param  temperature  温度，单位 ℃
- * @return 0 成功；PORT_HW_ERROR 表示 v=0（短路）或开路/超量程
+ * @return 0 成功；IOT_HW_ERROR 表示 v=0（短路）或开路/超量程
  */
 int ntc_read(ntc_handle_t *handle, float *temperature);
 

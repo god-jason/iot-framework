@@ -5,7 +5,7 @@
  * AS608 指纹模块驱动（UART 协议：0xEF01 包头 + 指令包 + 应答包）。
  *
  * 说明：drivers/common/driver_io.h 目前没有 UART 抽象，本驱动直接调用
- * port_uart_transmit()/port_uart_receive()（同属 src/port 抽象层，
+ * iot_uart_transmit()/iot_uart_receive()（同属 src/core 抽象层，
  * 不依赖任何 HAL）；后续如补充 driver_uart_* 可无痛替换。
  *
  * 已实现：指令包收发、密码校验、取图像、生成特征、搜索、读模板数量。
@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    port_uart_handle_t *uart;
+    iot_uart_t *uart;
     uint32_t address;
     uint32_t password;
     uint32_t timeout_ms;
@@ -32,7 +32,7 @@ typedef struct {
     size_t len;
 } as608_response_t;
 
-int as608_init(as608_handle_t *handle, port_uart_handle_t *uart, uint32_t password);
+int as608_init(as608_handle_t *handle, iot_uart_t *uart, uint32_t password);
 int as608_deinit(as608_handle_t *handle);
 
 /* 发送指令包（cmd + 可选参数） */

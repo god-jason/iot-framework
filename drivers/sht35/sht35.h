@@ -32,7 +32,7 @@ typedef struct {
  * @brief  初始化 SHT35（probe + 软复位）
  * @param  address  7 位从机地址，0 表示使用默认 0x44
  */
-int sht35_init(sht35_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int sht35_init(sht35_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int sht35_deinit(sht35_handle_t *handle);

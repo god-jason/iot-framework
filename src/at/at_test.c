@@ -9,15 +9,15 @@
 #include "test.h"
 #include "at.h"
 #include "at_urc.h"
-#include "port.h"
-#include "port_test.h"
+#include "iot.h"
+#include "pc.h"
 
 #include <string.h>
 
 #define TX_MAX 2048
 #define RX_MAX 2048
 
-static port_uart_handle_t s_uart;
+static iot_uart_t s_uart;
 
 static uint8_t s_tx[TX_MAX + 1];
 static uint32_t s_tx_len;
@@ -35,18 +35,18 @@ static int s_urc_calls;
 
 static void uart_fixture_reset(void)
 {
-    port_uart_config_t cfg;
+    iot_uart_config_t cfg;
 
-    port_test_reset_state();
+    iot_test_reset_state();
     memset(&s_uart, 0, sizeof(s_uart));
     memset(&cfg, 0, sizeof(cfg));
     cfg.baudrate = 115200;
-    cfg.word_length = PORT_UART_WORD_8BIT;
-    cfg.parity = PORT_UART_PARITY_NONE;
-    cfg.stop_bits = PORT_UART_STOP_1;
-    cfg.flow_control = PORT_UART_FLOW_NONE;
-    cfg.mode = PORT_UART_MODE_TX_RX;
-    (void)port_uart_init(&s_uart, &cfg);
+    cfg.word_length = IOT_UART_WORD_8BIT;
+    cfg.parity = IOT_UART_PARITY_NONE;
+    cfg.stop_bits = IOT_UART_STOP_1;
+    cfg.flow_control = IOT_UART_FLOW_NONE;
+    cfg.mode = IOT_UART_MODE_TX_RX;
+    (void)iot_uart_init(&s_uart, &cfg);
     s_tx_len = 0;
     s_tx[0] = '\0';
 }
@@ -58,12 +58,12 @@ static void reset_mock(void)
 
 static void set_rx(const char *s)
 {
-    (void)port_test_uart_inject(&s_uart, (const uint8_t *)s, (uint32_t)strlen(s));
+    (void)iot_test_uart_inject(&s_uart, (const uint8_t *)s, (uint32_t)strlen(s));
 }
 
 static void refresh_tx(void)
 {
-    s_tx_len = port_test_uart_get_tx(&s_uart, s_tx, TX_MAX);
+    s_tx_len = iot_test_uart_get_tx(&s_uart, s_tx, TX_MAX);
     s_tx[s_tx_len] = '\0';
 }
 

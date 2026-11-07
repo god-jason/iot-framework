@@ -20,7 +20,7 @@ typedef struct {
 } mcp9600_handle_t;
 
 /** @brief  初始化并探测从机，address 为 0 时使用 0x60 */
-int mcp9600_init(mcp9600_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int mcp9600_init(mcp9600_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief  反初始化（不关闭总线） */
 int mcp9600_deinit(mcp9600_handle_t *handle);

@@ -7,7 +7,7 @@ static int bmp280_read_calib(bmp280_handle_t *handle)
     uint8_t d[BMP280_CALIB_DATA_SIZE];
 
     if (driver_i2c_read_reg(&handle->i2c, BMP280_REG_CALIB_00, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->calib.t1 = (uint16_t)((uint16_t)d[0] | ((uint16_t)d[1] << 8));
@@ -72,13 +72,13 @@ static uint32_t bmp280_compensate_pressure(bmp280_handle_t *handle, int32_t adc_
     return p;
 }
 
-int bmp280_init(bmp280_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int bmp280_init(bmp280_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint8_t chip_id = 0U;
     uint8_t value;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -88,11 +88,11 @@ int bmp280_init(bmp280_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
     handle->initialized = false;
 
     if (bmp280_get_chip_id(handle, &chip_id) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (chip_id != BMP280_CHIP_ID) {
         LOG_E("bmp280", "chip id mismatch: 0x%02X", chip_id);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     value = BMP280_RESET_VALUE;
@@ -101,20 +101,20 @@ int bmp280_init(bmp280_handle_t *handle, port_i2c_handle_t *i2c, uint16_t addres
 
     if (bmp280_read_calib(handle) != DRIVER_OK) {
         LOG_E("bmp280", "read calibration failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (handle->calib.t1 == 0U || handle->calib.p1 == 0U) {
         LOG_E("bmp280", "invalid calibration data");
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     value = BMP280_CONFIG_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BMP280_REG_CONFIG, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     value = BMP280_CTRL_MEAS_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BMP280_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -127,7 +127,7 @@ int bmp280_deinit(bmp280_handle_t *handle)
     uint8_t value = BMP280_MODE_SLEEP;
 
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)driver_i2c_write_reg(&handle->i2c, BMP280_REG_CTRL_MEAS, &value, 1U);
@@ -140,7 +140,7 @@ int bmp280_deinit(bmp280_handle_t *handle)
 int bmp280_get_chip_id(bmp280_handle_t *handle, uint8_t *chip_id)
 {
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, BMP280_REG_CHIP_ID, chip_id, 1U);
 }
@@ -153,11 +153,11 @@ int bmp280_read_raw(bmp280_handle_t *handle, int32_t *raw_temperature,
     int32_t adc_t;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, BMP280_REG_PRESS_MSB, d, sizeof(d)) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     adc_p = ((int32_t)d[0] << 12) | ((int32_t)d[1] << 4) | ((int32_t)d[2] >> 4);
@@ -181,7 +181,7 @@ int bmp280_read(bmp280_handle_t *handle, bmp280_data_t *data)
     int ret;
 
     if (data == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = bmp280_read_raw(handle, &adc_t, &adc_p);
@@ -192,7 +192,7 @@ int bmp280_read(bmp280_handle_t *handle, bmp280_data_t *data)
     temperature = bmp280_compensate_temperature(handle, adc_t);
     pressure = bmp280_compensate_pressure(handle, adc_p);
     if (pressure == 0U) {
-        return (int)PORT_ERROR;
+        return (int)IOT_ERROR;
     }
 
     data->temperature = (float)temperature / 100.0f;

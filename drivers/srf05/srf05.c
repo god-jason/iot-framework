@@ -6,12 +6,12 @@
 static int srf05_check(const srf05_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-/* 等待 ECHO 到达指定电平；超时返回 PORT_TIMEOUT，同时回传已等待时长 */
+/* 等待 ECHO 到达指定电平；超时返回 IOT_TIMEOUT，同时回传已等待时长 */
 static int srf05_wait_level(const srf05_handle_t *handle, int level,
                             uint32_t timeout_us, uint32_t *waited_us)
 {
@@ -21,7 +21,7 @@ static int srf05_wait_level(const srf05_handle_t *handle, int level,
         int value = driver_gpio_read(handle->echo);
 
         if (value < 0) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
         if (value == level) {
             if (waited_us != NULL) {
@@ -30,17 +30,17 @@ static int srf05_wait_level(const srf05_handle_t *handle, int level,
             return DRIVER_OK;
         }
         if (waited >= timeout_us) {
-            return (int)PORT_TIMEOUT;
+            return (int)IOT_TIMEOUT;
         }
         driver_delay_us(1U);
         waited++;
     }
 }
 
-int srf05_init(srf05_handle_t *handle, port_pin_t trig, port_pin_t echo)
+int srf05_init(srf05_handle_t *handle, iot_pin_t trig, iot_pin_t echo)
 {
     if (handle == NULL || trig == 0U || echo == 0U || trig == echo) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->trig = trig;
@@ -48,13 +48,13 @@ int srf05_init(srf05_handle_t *handle, port_pin_t trig, port_pin_t echo)
     handle->timeout_us = SRF05_TIMEOUT_US;
     handle->initialized = false;
 
-    if (driver_gpio_output(trig, PORT_GPIO_LOW) != DRIVER_OK) {
+    if (driver_gpio_output(trig, IOT_GPIO_LOW) != DRIVER_OK) {
         LOG_E(SRF05_TAG, "trig gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
-    if (driver_gpio_input(echo, PORT_GPIO_PULLDOWN) != DRIVER_OK) {
+    if (driver_gpio_input(echo, IOT_GPIO_PULLDOWN) != DRIVER_OK) {
         LOG_E(SRF05_TAG, "echo gpio init failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -65,10 +65,10 @@ int srf05_init(srf05_handle_t *handle, port_pin_t trig, port_pin_t echo)
 int srf05_deinit(srf05_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->trig != 0U) {
-        (void)driver_gpio_write(handle->trig, PORT_GPIO_LOW);
+        (void)driver_gpio_write(handle->trig, IOT_GPIO_LOW);
         (void)driver_gpio_deinit(handle->trig);
     }
     if (handle->echo != 0U) {
@@ -86,7 +86,7 @@ int srf05_set_timeout(srf05_handle_t *handle, uint32_t timeout_us)
         return ret;
     }
     if (timeout_us < 100U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->timeout_us = timeout_us;
     return DRIVER_OK;
@@ -98,7 +98,7 @@ int srf05_read_us(srf05_handle_t *handle, uint32_t *echo_us)
     int ret;
 
     if (echo_us == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     ret = srf05_check(handle);
     if (ret != DRIVER_OK) {
@@ -108,23 +108,23 @@ int srf05_read_us(srf05_handle_t *handle, uint32_t *echo_us)
     /* 上一次回响尚未结束，避免叠加测量 */
     ret = driver_gpio_read(handle->echo);
     if (ret < 0) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (ret != 0) {
-        return (int)PORT_BUSY;
+        return (int)IOT_BUSY;
     }
 
     /* 触发脉冲：先确保空闲低电平，再拉高 10us */
-    if (driver_gpio_write(handle->trig, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_write(handle->trig, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_us(SRF05_TRIG_IDLE_US);
-    if (driver_gpio_write(handle->trig, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_write(handle->trig, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     driver_delay_us(SRF05_TRIG_PULSE_US);
-    if (driver_gpio_write(handle->trig, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_write(handle->trig, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
 
     /* 等待回响上升沿 */
@@ -151,7 +151,7 @@ int srf05_read(srf05_handle_t *handle, float *distance_m)
     int ret;
 
     if (distance_m == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = srf05_read_us(handle, &echo_us);
@@ -161,7 +161,7 @@ int srf05_read(srf05_handle_t *handle, float *distance_m)
 
     *distance_m = (float)echo_us / (SRF05_US_PER_CM * 100.0f);
     if (*distance_m > SRF05_MAX_RANGE_M) {
-        return (int)PORT_OVERFLOW;
+        return (int)IOT_OVERFLOW;
     }
     return DRIVER_OK;
 }

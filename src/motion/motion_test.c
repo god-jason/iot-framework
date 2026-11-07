@@ -13,7 +13,7 @@
 #include "motion_variable.h"
 #include "motion_source.h"
 
-#include "port_test.h"
+#include "pc.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -323,7 +323,7 @@ static const motion_device_ops_t g_mock_ops = {
 
 static void reset_all(void)
 {
-    port_test_reset_state();
+    iot_test_reset_state();
     (void)motion_init();
     memset(&g_mock, 0, sizeof(g_mock));
     (void)motion_device_register(&g_mock_ops);
@@ -851,10 +851,10 @@ static void test_wait(void)
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
     TF_CHECK_INT(g_mock.gpio_writes, 0);
-    port_test_tick_advance(50);
+    iot_test_tick_advance(50);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
-    port_test_tick_advance(50);
+    iot_test_tick_advance(50);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_COMPLETED);
     TF_CHECK_INT(g_mock.gpio_values[0], 1);
@@ -886,7 +886,7 @@ static void test_wait(void)
     motion_start();
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
-    port_test_tick_advance(11);
+    iot_test_tick_advance(11);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_ERROR);
     TF_CHECK_INT(motion_get_error()->code, MOTION_ERR_TIMEOUT);
@@ -972,7 +972,7 @@ static void test_errors(void)
     tf_end();
 
     tf_begin("motion/错误 设备未注册");
-    port_test_reset_state();
+    iot_test_reset_state();
     (void)motion_init();
     memset(&g_mock, 0, sizeof(g_mock));
     TF_CHECK_INT(motion_load(
@@ -1053,7 +1053,7 @@ static void test_jobs(void)
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
     TF_CHECK_INT(motion_task_state("FAN"), MOTION_STATE_WAITING);
-    port_test_tick_advance(50);
+    iot_test_tick_advance(50);
     motion_poll();
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_COMPLETED);
@@ -1776,7 +1776,7 @@ static void test_wait_extra(void)
     TF_CHECK_INT(motion_start(), 0);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
-    port_test_tick_advance(10000U);
+    iot_test_tick_advance(10000U);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
     g_mock.step_busy = 0;
@@ -1794,7 +1794,7 @@ static void test_wait_extra(void)
     TF_CHECK_INT(motion_start(), 0);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_WAITING);
-    port_test_tick_advance(6U);
+    iot_test_tick_advance(6U);
     motion_poll();
     TF_CHECK_INT(motion_state(), MOTION_STATE_ERROR);
     TF_CHECK_INT(motion_get_error()->code, MOTION_ERR_TIMEOUT);

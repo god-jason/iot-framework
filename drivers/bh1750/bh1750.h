@@ -28,7 +28,7 @@ typedef struct {
     bool initialized;
 } bh1750_handle_t;
 
-int bh1750_init(bh1750_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int bh1750_init(bh1750_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 int bh1750_deinit(bh1750_handle_t *handle);
 
 int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_t mode);

@@ -4,15 +4,15 @@
 /*
  * 驱动公共 I/O 层。
  *
- * 所有驱动只通过本层访问硬件，本层再调用 src/port 的抽象接口，
+ * 所有驱动只通过本层访问硬件，本层再调用 src/core 的抽象接口，
  * 因此驱动代码不依赖任何 MCU / HAL，可在 simulator 与真实平台复用。
  */
 
 #include "driver_types.h"
 
-/* 延时、时基、临界区统一来自 src/port/port_os.h（port_delay_ms/us、port_tick_get、
- * port_irq_disable/enable），驱动不得直接调用 HAL 或自行忙等。 */
-#include "port_os.h"
+/* 延时、时基、临界区统一来自 src/core/iot_os.h（iot_delay_ms/us、iot_tick_get、
+ * iot_irq_disable/enable），驱动不得直接调用 HAL 或自行忙等。 */
+#include "iot_os.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,13 +50,13 @@ int driver_spi_read_cs(driver_spi_t *bus, uint8_t *data, size_t len);
 
 /* ---------------- GPIO ---------------- */
 
-int driver_gpio_deinit(port_pin_t pin);
-int driver_gpio_output(port_pin_t pin, port_gpio_level_t initial);
-int driver_gpio_input(port_pin_t pin, port_gpio_pull_t pull);
-int driver_gpio_write(port_pin_t pin, port_gpio_level_t level);
-int driver_gpio_toggle(port_pin_t pin);
+int driver_gpio_deinit(iot_pin_t pin);
+int driver_gpio_output(iot_pin_t pin, iot_gpio_level_t initial);
+int driver_gpio_input(iot_pin_t pin, iot_gpio_pull_t pull);
+int driver_gpio_write(iot_pin_t pin, iot_gpio_level_t level);
+int driver_gpio_toggle(iot_pin_t pin);
 /* 返回 0/1 电平，负值为错误码 */
-int driver_gpio_read(port_pin_t pin);
+int driver_gpio_read(iot_pin_t pin);
 
 /* ---------------- 时间 ---------------- */
 

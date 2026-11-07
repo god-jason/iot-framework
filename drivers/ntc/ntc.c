@@ -11,15 +11,15 @@ static int ntc_compute_resistance(ntc_handle_t *handle, float *ohms)
     float v;
     float vref = handle->vref_mv;
 
-    if (port_adc_read(handle->adc, handle->channel, &raw, 0U) != PORT_OK) {
+    if (iot_adc_read(handle->adc, handle->channel, &raw, 0U) != IOT_OK) {
         LOG_E("ntc", "adc read failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     if (raw == 0U) {
         /* 电压为 0：NTC 短路到地或通道未接 */
         LOG_E("ntc", "zero voltage, check wiring");
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
 
     v = (float)raw * vref / (float)handle->adc_max;
@@ -28,13 +28,13 @@ static int ntc_compute_resistance(ntc_handle_t *handle, float *ohms)
         /* 满量程：NTC 开路（或上拉缺失），按极大电阻处理并交由上层判定 */
         LOG_E("ntc", "open circuit detected");
         *ohms = NTC_OPEN_RESISTANCE;
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
 
     /* 下臂接法：R_ntc = r_series * V / (VCC - V) */
     *ohms = (float)handle->r_series * v / (vref - v);
     if (*ohms <= 0.0f) {
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
     return DRIVER_OK;
 }
@@ -54,21 +54,21 @@ static float ntc_resistance_to_celsius(const ntc_handle_t *handle, float ohms)
 int ntc_read_resistance(ntc_handle_t *handle, float *ohms)
 {
     if (handle == NULL || ohms == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return ntc_compute_resistance(handle, ohms);
 }
 
-int ntc_init(ntc_handle_t *handle, port_adc_handle_t *adc, uint8_t channel,
+int ntc_init(ntc_handle_t *handle, iot_adc_t *adc, uint8_t channel,
              uint32_t r_series, float r25, float beta,
              float vref_mv, uint32_t adc_max)
 {
     if (handle == NULL || adc == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (r_series == 0U || r25 <= 0.0f || beta <= 0.0f ||
         vref_mv <= 0.0f || adc_max == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->adc = adc;
@@ -88,7 +88,7 @@ int ntc_init(ntc_handle_t *handle, port_adc_handle_t *adc, uint8_t channel,
 int ntc_deinit(ntc_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->adc = NULL;
     handle->initialized = false;
@@ -102,7 +102,7 @@ int ntc_read(ntc_handle_t *handle, float *temperature)
     int ret;
 
     if (handle == NULL || temperature == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = ntc_compute_resistance(handle, &ohms);

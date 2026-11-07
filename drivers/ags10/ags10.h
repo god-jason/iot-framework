@@ -35,7 +35,7 @@ typedef struct {
 } ags10_data_t;
 
 /** @param address 7 位地址，传 0 取 0x1A */
-int ags10_init(ags10_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int ags10_init(ags10_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 int ags10_deinit(ags10_handle_t *handle);
 

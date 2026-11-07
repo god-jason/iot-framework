@@ -29,14 +29,14 @@ static int veml3328_read_word(veml3328_handle_t *handle, uint8_t reg, uint16_t *
     return DRIVER_OK;
 }
 
-int veml3328_init(veml3328_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address)
+int veml3328_init(veml3328_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 {
     uint16_t conf = 0U;
     uint16_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -46,7 +46,7 @@ int veml3328_init(veml3328_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("veml3328", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)PORT_NOT_FOUND;
+        return (int)IOT_NOT_FOUND;
     }
 
     ret = veml3328_write_conf(handle, VEML3328_CONF_DEFAULT);
@@ -63,7 +63,7 @@ int veml3328_init(veml3328_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
         (VEML3328_CONF_DEFAULT & VEML3328_CONF_CHECK_MASK)) {
         LOG_E("veml3328", "conf readback 0x%04X != 0x%04X",
               (unsigned)conf, (unsigned)VEML3328_CONF_DEFAULT);
-        return (int)PORT_HW_ERROR;
+        return (int)IOT_HW_ERROR;
     }
 
     /* 首次转换需要完整积分时间 */
@@ -84,7 +84,7 @@ int veml3328_init(veml3328_handle_t *handle, port_i2c_handle_t *i2c, uint16_t ad
 int veml3328_deinit(veml3328_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         /* SD = 1 关断，降低功耗；下次 init 会重新写配置 */
@@ -98,7 +98,7 @@ int veml3328_deinit(veml3328_handle_t *handle)
 int veml3328_get_conf(veml3328_handle_t *handle, uint16_t *conf)
 {
     if (handle == NULL || conf == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return veml3328_read_word(handle, VEML3328_REG_CONF, conf);
 }
@@ -110,7 +110,7 @@ int veml3328_read_raw(veml3328_handle_t *handle, uint16_t counts[VEML3328_CHANNE
     int ret;
 
     if (handle == NULL || counts == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     /* 单次块读 5 个通道，保证同一采样时刻的一致性 */
@@ -133,7 +133,7 @@ int veml3328_read(veml3328_handle_t *handle, veml3328_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     ret = veml3328_read_raw(handle, counts);

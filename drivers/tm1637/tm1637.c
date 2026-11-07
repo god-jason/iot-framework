@@ -7,12 +7,12 @@ static void tm1637_delay(void)
     driver_delay_us(TM1637_DELAY_US);
 }
 
-static int tm1637_dio(tm1637_handle_t *handle, port_gpio_level_t level)
+static int tm1637_dio(tm1637_handle_t *handle, iot_gpio_level_t level)
 {
     return driver_gpio_write(handle->config.dio, level);
 }
 
-static int tm1637_clk(tm1637_handle_t *handle, port_gpio_level_t level)
+static int tm1637_clk(tm1637_handle_t *handle, iot_gpio_level_t level)
 {
     return driver_gpio_write(handle->config.clk, level);
 }
@@ -20,13 +20,13 @@ static int tm1637_clk(tm1637_handle_t *handle, port_gpio_level_t level)
 /* 起始信号：CLK 高电平期间 DIO 由高变低 */
 static int tm1637_start(tm1637_handle_t *handle)
 {
-    if (tm1637_dio(handle, PORT_GPIO_HIGH) != DRIVER_OK ||
-        tm1637_clk(handle, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_dio(handle, IOT_GPIO_HIGH) != DRIVER_OK ||
+        tm1637_clk(handle, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
-    if (tm1637_dio(handle, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_dio(handle, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
     return DRIVER_OK;
@@ -35,17 +35,17 @@ static int tm1637_start(tm1637_handle_t *handle)
 /* 停止信号：CLK 高电平期间 DIO 由低变高 */
 static int tm1637_stop(tm1637_handle_t *handle)
 {
-    if (tm1637_clk(handle, PORT_GPIO_LOW) != DRIVER_OK ||
-        tm1637_dio(handle, PORT_GPIO_LOW) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_clk(handle, IOT_GPIO_LOW) != DRIVER_OK ||
+        tm1637_dio(handle, IOT_GPIO_LOW) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
-    if (tm1637_clk(handle, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_clk(handle, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
-    if (tm1637_dio(handle, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_dio(handle, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
     return DRIVER_OK;
@@ -57,31 +57,31 @@ static int tm1637_write_byte(tm1637_handle_t *handle, uint8_t value)
     uint8_t i;
 
     for (i = 0U; i < 8U; i++) {
-        if (tm1637_clk(handle, PORT_GPIO_LOW) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+        if (tm1637_clk(handle, IOT_GPIO_LOW) != DRIVER_OK) {
+            return (int)IOT_IO_ERROR;
         }
         tm1637_delay();
-        if (tm1637_dio(handle, ((value >> i) & 0x01U) != 0U ? PORT_GPIO_HIGH : PORT_GPIO_LOW) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+        if (tm1637_dio(handle, ((value >> i) & 0x01U) != 0U ? IOT_GPIO_HIGH : IOT_GPIO_LOW) != DRIVER_OK) {
+            return (int)IOT_IO_ERROR;
         }
         tm1637_delay();
-        if (tm1637_clk(handle, PORT_GPIO_HIGH) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+        if (tm1637_clk(handle, IOT_GPIO_HIGH) != DRIVER_OK) {
+            return (int)IOT_IO_ERROR;
         }
         tm1637_delay();
     }
 
     /* 第 9 个时钟：释放 DIO，忽略从机应答 */
-    if (tm1637_clk(handle, PORT_GPIO_LOW) != DRIVER_OK ||
-        tm1637_dio(handle, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_clk(handle, IOT_GPIO_LOW) != DRIVER_OK ||
+        tm1637_dio(handle, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
-    if (tm1637_clk(handle, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (tm1637_clk(handle, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
     tm1637_delay();
-    return tm1637_clk(handle, PORT_GPIO_LOW);
+    return tm1637_clk(handle, IOT_GPIO_LOW);
 }
 
 static int tm1637_update_display(tm1637_handle_t *handle, bool on)
@@ -93,7 +93,7 @@ static int tm1637_update_display(tm1637_handle_t *handle, bool on)
     if (tm1637_start(handle) != DRIVER_OK ||
         tm1637_write_byte(handle, cmd) != DRIVER_OK ||
         tm1637_stop(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -103,25 +103,25 @@ int tm1637_init(tm1637_handle_t *handle, const tm1637_config_t *config)
     uint8_t i;
 
     if (handle == NULL || config == NULL || config->gram == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->clk == 0U || config->dio == 0U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->digits == 0U || config->digits > TM1637_DIGITS_MAX ||
         config->gram_len < config->digits) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (config->brightness > TM1637_BRIGHTNESS_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     handle->config = *config;
     handle->initialized = false;
 
-    if (driver_gpio_output(config->clk, PORT_GPIO_HIGH) != DRIVER_OK ||
-        driver_gpio_output(config->dio, PORT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+    if (driver_gpio_output(config->clk, IOT_GPIO_HIGH) != DRIVER_OK ||
+        driver_gpio_output(config->dio, IOT_GPIO_HIGH) != DRIVER_OK) {
+        return (int)IOT_IO_ERROR;
     }
 
     for (i = 0U; i < config->digits; i++) {
@@ -133,20 +133,20 @@ int tm1637_init(tm1637_handle_t *handle, const tm1637_config_t *config)
         tm1637_write_byte(handle, TM1637_CMD_DATA_AUTO) != DRIVER_OK ||
         tm1637_stop(handle) != DRIVER_OK) {
         LOG_E("tm1637", "init sequence failed");
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (tm1637_start(handle) != DRIVER_OK ||
         tm1637_write_byte(handle, TM1637_CMD_ADDR_BASE) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     for (i = 0U; i < config->digits; i++) {
         if (tm1637_write_byte(handle, 0x00U) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
     if (tm1637_stop(handle) != DRIVER_OK ||
         tm1637_update_display(handle, true) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -157,7 +157,7 @@ int tm1637_init(tm1637_handle_t *handle, const tm1637_config_t *config)
 int tm1637_deinit(tm1637_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)tm1637_update_display(handle, false);
@@ -171,7 +171,7 @@ int tm1637_clear(tm1637_handle_t *handle)
     uint8_t i;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     for (i = 0U; i < handle->config.digits; i++) {
         handle->config.gram[i] = 0x00U;
@@ -185,26 +185,26 @@ int tm1637_show(tm1637_handle_t *handle)
     uint8_t digits;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     digits = handle->config.digits;
 
     if (tm1637_start(handle) != DRIVER_OK ||
         tm1637_write_byte(handle, TM1637_CMD_DATA_AUTO) != DRIVER_OK ||
         tm1637_stop(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     if (tm1637_start(handle) != DRIVER_OK ||
         tm1637_write_byte(handle, TM1637_CMD_ADDR_BASE) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     for (i = 0U; i < digits; i++) {
         if (tm1637_write_byte(handle, handle->config.gram[i]) != DRIVER_OK) {
-            return (int)PORT_IO_ERROR;
+            return (int)IOT_IO_ERROR;
         }
     }
     if (tm1637_stop(handle) != DRIVER_OK) {
-        return (int)PORT_IO_ERROR;
+        return (int)IOT_IO_ERROR;
     }
     return tm1637_update_display(handle, true);
 }
@@ -214,10 +214,10 @@ int tm1637_draw_pixel(tm1637_handle_t *handle, uint8_t x, uint8_t y, bool on)
     uint8_t mask;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (x >= handle->config.digits || y > 7U) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
 
     mask = (uint8_t)DRIVER_BIT(y);
@@ -232,10 +232,10 @@ int tm1637_draw_pixel(tm1637_handle_t *handle, uint8_t x, uint8_t y, bool on)
 int tm1637_set_brightness(tm1637_handle_t *handle, uint8_t brightness)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     if (brightness > TM1637_BRIGHTNESS_MAX) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     handle->config.brightness = brightness;
     return tm1637_update_display(handle, true);
@@ -244,7 +244,7 @@ int tm1637_set_brightness(tm1637_handle_t *handle, uint8_t brightness)
 int tm1637_set_display(tm1637_handle_t *handle, bool on)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)PORT_INVALID_PARAM;
+        return (int)IOT_INVALID_PARAM;
     }
     return tm1637_update_display(handle, on);
 }

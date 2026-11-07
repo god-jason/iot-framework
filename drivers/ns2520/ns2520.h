@@ -9,7 +9,7 @@
  * 设计要点：
  *   - 寄存器布局兼容 LIS2DH 系列（WHO_AM_I 0x0F、CTRL_REG1 0x20、数据 0x28）；
  *   - 该器件无公开固定 CHIP_ID，init 采用 probe + CTRL_REG1/CTRL_REG4 回读自检，
- *     写通路异常时返回 PORT_NOT_FOUND；
+ *     写通路异常时返回 IOT_NOT_FOUND；
  *   - read 按当前量程灵敏度把原始 LSB 换算为 g；
  *   - read_raw 输出原始 16 位补码计数（小端）。
  *
@@ -64,9 +64,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x18
- * @return 0 成功，负值为 port_status_t
+ * @return 0 成功，负值为 iot_status_t
  */
-int ns2520_init(ns2520_handle_t *handle, port_i2c_handle_t *i2c, uint16_t address);
+int ns2520_init(ns2520_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化：关闭三轴，复位句柄状态（不关闭总线） */
 int ns2520_deinit(ns2520_handle_t *handle);

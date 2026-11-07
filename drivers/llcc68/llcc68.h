@@ -16,8 +16,8 @@ extern "C" {
 typedef sx1262_handle_t llcc68_handle_t;
 typedef sx1262_mode_t llcc68_mode_t;
 
-int llcc68_init(llcc68_handle_t *handle, port_spi_handle_t *spi, port_pin_t cs,
-                port_pin_t busy, port_pin_t reset, port_pin_t dio1);
+int llcc68_init(llcc68_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
+                iot_pin_t busy, iot_pin_t reset, iot_pin_t dio1);
 int llcc68_deinit(llcc68_handle_t *handle);
 int llcc68_set_frequency(llcc68_handle_t *handle, uint32_t frequency_hz);
 int llcc68_set_mode(llcc68_handle_t *handle, llcc68_mode_t mode);
