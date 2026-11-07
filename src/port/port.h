@@ -17,6 +17,7 @@
 #include "port_config.h"
 
 #include "port_platform.h"
+#include "port_os.h"
 #include "port_clock.h"
 #include "port_pin.h"
 
