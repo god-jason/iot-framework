@@ -20,11 +20,11 @@ int iot_timer_create(iot_timer_t *timer, uint32_t period, bool repeat,
 {
     int i;
     if (timer == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_TIMER_MAX; i++) {
         if (s_timers[i] == timer) {
-            return IOT_ERR_EXISTS;
+            return -1;
         }
     }
     for (i = 0; i < IOT_TIMER_MAX; i++) {
@@ -34,7 +34,7 @@ int iot_timer_create(iot_timer_t *timer, uint32_t period, bool repeat,
         }
     }
     if (i == IOT_TIMER_MAX) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
 
     timer->period = period;
@@ -50,10 +50,10 @@ int iot_timer_create(iot_timer_t *timer, uint32_t period, bool repeat,
 int iot_timer_start(iot_timer_t *timer)
 {
     if (timer == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     if (timer->active) {
-        return IOT_ERR_BUSY;
+        return -1;
     }
     timer->timeout = s_tick + timer->period;
     timer->active = true;
@@ -63,7 +63,7 @@ int iot_timer_start(iot_timer_t *timer)
 int iot_timer_stop(iot_timer_t *timer)
 {
     if (timer == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     timer->active = false;
     return IOT_OK;
@@ -72,7 +72,7 @@ int iot_timer_stop(iot_timer_t *timer)
 int iot_timer_reset(iot_timer_t *timer)
 {
     if (timer == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     timer->timeout = s_tick + timer->period;
     timer->active = true;
@@ -83,7 +83,7 @@ int iot_timer_delete(iot_timer_t *timer)
 {
     int i;
     if (timer == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     timer->active = false;
     timer->callback = NULL;
@@ -93,7 +93,7 @@ int iot_timer_delete(iot_timer_t *timer)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 bool iot_timer_is_active(const iot_timer_t *timer)

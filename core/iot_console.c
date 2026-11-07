@@ -33,7 +33,7 @@ int iot_console_init(const iot_console_config_t *config)
     iot_log_backend_t backend;
 
     if (config == NULL || config->uart == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     s_uart = config->uart;
     s_rx = config->rx_buffer;
@@ -58,7 +58,7 @@ int iot_console_start(void)
 int iot_console_puts(const char *s)
 {
     if (s_uart == NULL || s_uart->send == NULL || s == NULL) {
-        return IOT_ERR_STATE;
+        return -1;
     }
     /* 输出一行 + CRLF */
     s_uart->send(s_uart->ctx, (const uint8_t *)s, (uint32_t)strlen(s));
@@ -71,7 +71,7 @@ int iot_console_process(void)
     uint32_t n;
 
     if (s_uart == NULL || s_uart->available == NULL || s_uart->receive == NULL) {
-        return IOT_ERR_STATE;
+        return -1;
     }
 
     n = s_uart->available(s_uart->ctx);

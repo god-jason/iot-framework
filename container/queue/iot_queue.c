@@ -5,7 +5,7 @@ int iot_queue_init(iot_queue_t *queue, void *buffer,
                    uint32_t item_size, uint32_t capacity)
 {
     if (queue == NULL || buffer == NULL || item_size == 0 || capacity == 0) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     queue->buffer = (uint8_t *)buffer;
     queue->item_size = item_size;
@@ -21,10 +21,10 @@ int iot_queue_push(iot_queue_t *queue, const void *item)
     uint8_t *dst;
 
     if (queue == NULL || item == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     if (queue->count >= queue->capacity) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
     dst = queue->buffer + ((iot_size_t)queue->tail * queue->item_size);
     iot_memory_copy(dst, item, queue->item_size);
@@ -38,10 +38,10 @@ int iot_queue_pop(iot_queue_t *queue, void *item)
     const uint8_t *src;
 
     if (queue == NULL || item == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     if (queue->count == 0) {
-        return IOT_ERR_AGAIN;
+        return -1;
     }
     src = queue->buffer + ((iot_size_t)queue->head * queue->item_size);
     iot_memory_copy(item, src, queue->item_size);
@@ -55,10 +55,10 @@ int iot_queue_peek(iot_queue_t *queue, void *item)
     const uint8_t *src;
 
     if (queue == NULL || item == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     if (queue->count == 0) {
-        return IOT_ERR_AGAIN;
+        return -1;
     }
     src = queue->buffer + ((iot_size_t)queue->head * queue->item_size);
     iot_memory_copy(item, src, queue->item_size);

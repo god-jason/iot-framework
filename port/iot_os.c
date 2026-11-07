@@ -5,7 +5,7 @@ static const iot_os_ops_t *s_os = NULL;
 int iot_os_init(const iot_os_ops_t *ops)
 {
     if (ops == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     s_os = ops;
     return IOT_OK;

@@ -25,7 +25,7 @@ int iot_device_register(iot_device_t *device)
 {
     int i;
     if (device == NULL || device->name == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_DEVICE_MAX; i++) {
         if (s_devices[i] == NULL) {
@@ -34,7 +34,7 @@ int iot_device_register(iot_device_t *device)
         }
     }
     if (i == IOT_DEVICE_MAX) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
     device->id = s_next_id++;
     device->state = IOT_DEVICE_OFFLINE;
@@ -50,7 +50,7 @@ int iot_device_unregister(const char *name)
 {
     int i;
     if (name == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_DEVICE_MAX; i++) {
         if (s_devices[i] != NULL &&
@@ -59,19 +59,19 @@ int iot_device_unregister(const char *name)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 int iot_device_open(const char *name)
 {
     iot_device_t *d = iot_device_find(name);
     if (d == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (d->ops != NULL && d->ops->open != NULL) {
         if (d->ops->open(d->ctx) != IOT_OK) {
             d->state = IOT_DEVICE_ERROR;
-            return IOT_ERR_STATE;
+            return -1;
         }
     }
     d->state = IOT_DEVICE_ONLINE;
@@ -82,7 +82,7 @@ int iot_device_close(const char *name)
 {
     iot_device_t *d = iot_device_find(name);
     if (d == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (d->ops != NULL && d->ops->close != NULL) {
         d->ops->close(d->ctx);
@@ -95,10 +95,10 @@ int iot_device_read(const char *name, void *data, uint32_t size)
 {
     iot_device_t *d = iot_device_find(name);
     if (d == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (d->ops == NULL || d->ops->read == NULL) {
-        return IOT_ERR_NOT_SUPPORTED;
+        return -1;
     }
     return d->ops->read(d->ctx, data, size);
 }
@@ -107,10 +107,10 @@ int iot_device_write(const char *name, const void *data, uint32_t size)
 {
     iot_device_t *d = iot_device_find(name);
     if (d == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (d->ops == NULL || d->ops->write == NULL) {
-        return IOT_ERR_NOT_SUPPORTED;
+        return -1;
     }
     return d->ops->write(d->ctx, data, size);
 }
@@ -119,10 +119,10 @@ int iot_device_control(const char *name, uint32_t cmd, void *arg)
 {
     iot_device_t *d = iot_device_find(name);
     if (d == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (d->ops == NULL || d->ops->control == NULL) {
-        return IOT_ERR_NOT_SUPPORTED;
+        return -1;
     }
     return d->ops->control(d->ctx, cmd, arg);
 }

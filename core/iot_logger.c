@@ -26,7 +26,7 @@ int iot_log_register(const iot_log_backend_t *backend)
 {
     int i;
     if (backend == NULL || backend->output == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_LOG_MAX_BACKENDS; i++) {
         if (s_backends[i].output == NULL) {
@@ -34,14 +34,14 @@ int iot_log_register(const iot_log_backend_t *backend)
             return IOT_OK;
         }
     }
-    return IOT_ERR_OVERFLOW;
+    return -1;
 }
 
 int iot_log_unregister(iot_log_output_fn output)
 {
     int i;
     if (output == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_LOG_MAX_BACKENDS; i++) {
         if (s_backends[i].output == output) {
@@ -49,13 +49,13 @@ int iot_log_unregister(iot_log_output_fn output)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 int iot_log_set_level(iot_log_level_t level)
 {
     if (level < IOT_LOG_DEBUG || level > IOT_LOG_FATAL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     s_level = level;
     return IOT_OK;

@@ -4,8 +4,8 @@
 #include "iot_console.h"
 #include "iot_shell.h"
 #include "iot_mcu.h"
-#include "iot_drv_led.h"
-#include "iot_sensor_voltage.h"
+#include "led.h"
+#include "voltage.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -33,7 +33,7 @@ int main(void)
     iot_port_uart_t uart;
     iot_console_config_t cfg;
     iot_shell_command_t cmd;
-    iot_led_t led;
+    led_t led;
     uint8_t rx[64];
     int i;
 
@@ -56,10 +56,10 @@ int main(void)
     iot_shell_register(&cmd);
 
     /* LED 闪烁 */
-    iot_led_init(&led, 0, 1);
+    led_init(&led, 0, 1);
 
     for (i = 0; i < 5; i++) {
-        iot_led_toggle(&led);
+        led_toggle(&led);
         LOG_I("demo", "tick %d", i);   /* blink tick */
         iot_console_process();
     }

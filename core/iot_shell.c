@@ -29,7 +29,7 @@ int iot_shell_register(const iot_shell_command_t *command)
 {
     int i;
     if (command == NULL || command->name == NULL || command->callback == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_SHELL_MAX_CMD; i++) {
         if (s_cmds[i].callback == NULL) {
@@ -39,14 +39,14 @@ int iot_shell_register(const iot_shell_command_t *command)
             return IOT_OK;
         }
     }
-    return IOT_ERR_OVERFLOW;
+    return -1;
 }
 
 int iot_shell_unregister(const char *name)
 {
     int i;
     if (name == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_SHELL_MAX_CMD; i++) {
         if (s_cmds[i].callback != NULL &&
@@ -56,7 +56,7 @@ int iot_shell_unregister(const char *name)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 int iot_shell_execute(const char *command)
@@ -68,7 +68,7 @@ int iot_shell_execute(const char *command)
     int i;
 
     if (command == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
 
     /* 拷贝到可变缓冲并切分 */
@@ -91,7 +91,7 @@ int iot_shell_execute(const char *command)
     }
 
     if (argc == 0) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
 
     for (i = 0; i < IOT_SHELL_MAX_CMD; i++) {
@@ -100,7 +100,7 @@ int iot_shell_execute(const char *command)
             return s_cmds[i].callback(argc, argv);
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 int iot_shell_input(const char *data, uint32_t len)
@@ -108,7 +108,7 @@ int iot_shell_input(const char *data, uint32_t len)
     uint32_t i;
 
     if (data == NULL || len == 0) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < len; i++) {
         char c = data[i];

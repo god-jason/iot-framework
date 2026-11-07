@@ -3,7 +3,7 @@
 int iot_ringbuf_init(iot_ringbuf_t *rb, void *buffer, uint32_t size)
 {
     if (rb == NULL || buffer == NULL || size == 0) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     rb->buffer = (uint8_t *)buffer;
     rb->capacity = size;

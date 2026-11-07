@@ -3,7 +3,6 @@
 
 /*
  * 配置项（Settings）管理：参数注册（默认值）+ RAM 读写 + 重置。
- * 注意：与 core/iot_config.h（编译期裁剪宏）区分开。
  */
 
 #include "iot_types.h"

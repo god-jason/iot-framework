@@ -20,7 +20,7 @@ int iot_scheduler_add(iot_task_t *task)
 {
     int i;
     if (task == NULL || task->callback == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_TASK_MAX; i++) {
         if (s_tasks[i] == NULL) {
@@ -29,7 +29,7 @@ int iot_scheduler_add(iot_task_t *task)
         }
     }
     if (i == IOT_TASK_MAX) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
     task->state = IOT_TASK_READY;
     task->next_run = 0;
@@ -43,7 +43,7 @@ int iot_scheduler_remove(iot_task_t *task)
 {
     int i;
     if (task == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_TASK_MAX; i++) {
         if (s_tasks[i] == task) {
@@ -52,13 +52,13 @@ int iot_scheduler_remove(iot_task_t *task)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 int iot_scheduler_enable(iot_task_t *task)
 {
     if (task == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     task->state = IOT_TASK_READY;
     task->next_run = s_tick;
@@ -68,7 +68,7 @@ int iot_scheduler_enable(iot_task_t *task)
 int iot_scheduler_disable(iot_task_t *task)
 {
     if (task == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     task->state = IOT_TASK_DISABLED;
     return IOT_OK;

@@ -49,10 +49,10 @@ int iot_settings_register(const iot_settings_item_t *item)
 
     if (item == NULL || item->name == NULL ||
         item->default_value == NULL || item->size == 0) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     if (s_buf_used + item->size > IOT_SETTINGS_BUF_SIZE) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
     for (i = 0; i < IOT_SETTINGS_MAX; i++) {
         if (!s_entries[i].used) {
@@ -68,17 +68,17 @@ int iot_settings_register(const iot_settings_item_t *item)
             return IOT_OK;
         }
     }
-    return IOT_ERR_OVERFLOW;
+    return -1;
 }
 
 int iot_settings_get(const char *name, void *value, uint16_t size)
 {
     settings_entry_t *e = settings_find(name);
     if (e == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (value == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     iot_memory_copy(value, &s_buf[e->offset],
                     (size < e->size) ? size : e->size);
@@ -89,10 +89,10 @@ int iot_settings_set(const char *name, const void *value, uint16_t size)
 {
     settings_entry_t *e = settings_find(name);
     if (e == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     if (value == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     iot_memory_copy(&s_buf[e->offset], value,
                     (size < e->size) ? size : e->size);
@@ -103,7 +103,7 @@ int iot_settings_reset(const char *name)
 {
     settings_entry_t *e = settings_find(name);
     if (e == NULL) {
-        return IOT_ERR_NOT_FOUND;
+        return -1;
     }
     iot_memory_copy(&s_buf[e->offset], e->default_value, e->size);
     return IOT_OK;

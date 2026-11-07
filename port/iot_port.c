@@ -12,7 +12,7 @@
     int iot_port_register_##SUFFIX(const char *name, const TYPE *dev) {        \
         int i;                                                                 \
         if (name == NULL || dev == NULL) {                                     \
-            return IOT_ERR_PARAM;                                              \
+            return -1;                                              \
         }                                                                      \
         for (i = 0; i < IOT_PORT_MAX_DEV; i++) {                               \
             if (g_##SUFFIX[i].dev == NULL) {                                   \
@@ -21,7 +21,7 @@
                 return IOT_OK;                                                 \
             }                                                                  \
         }                                                                      \
-        return IOT_ERR_OVERFLOW;                                               \
+        return -1;                                               \
     }                                                                          \
                                                                                \
     const TYPE *iot_port_get_##SUFFIX(const char *name) {                      \
@@ -55,7 +55,7 @@ static const iot_port_t *s_port = NULL;
 int iot_port_init(const iot_port_t *port)
 {
     if (port == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     s_port = port;
     if (port->system.init != NULL) {

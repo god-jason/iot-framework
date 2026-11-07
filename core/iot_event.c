@@ -43,7 +43,7 @@ int iot_event_subscribe(iot_event_id_t id, iot_event_fn callback, void *user)
 {
     int i;
     if (callback == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_EVENT_MAX_LISTENERS; i++) {
         if (s_listeners[i].callback == NULL) {
@@ -53,14 +53,14 @@ int iot_event_subscribe(iot_event_id_t id, iot_event_fn callback, void *user)
             return IOT_OK;
         }
     }
-    return IOT_ERR_OVERFLOW;
+    return -1;
 }
 
 int iot_event_unsubscribe(iot_event_id_t id, iot_event_fn callback)
 {
     int i;
     if (callback == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_EVENT_MAX_LISTENERS; i++) {
         if (s_listeners[i].callback == callback &&
@@ -71,7 +71,7 @@ int iot_event_unsubscribe(iot_event_id_t id, iot_event_fn callback)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 int iot_event_publish(iot_event_id_t id, void *data, uint32_t size)
@@ -89,7 +89,7 @@ int iot_event_publish_isr(iot_event_id_t id, void *data, uint32_t size)
 {
     uint32_t idx;
     if (s_pending_count >= IOT_EVENT_MAX_PENDING) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
     idx = (s_pending_head + s_pending_count) % IOT_EVENT_MAX_PENDING;
     s_pending[idx].id = id;

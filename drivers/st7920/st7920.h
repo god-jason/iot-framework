@@ -1,0 +1,20 @@
+#ifndef ST7920_H
+#define ST7920_H
+
+// ST7920 12864 液晶驱动（4 位并行接口 RS/RW/EN/D4-D7，GPIO 位操作）。
+// 仅做基础初始化与字符串输出（使用芯片内置 ASCII 字库），不含汉字字库。
+#include "bus/gpio.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int st7920_init(const gpio_bus_t *gpio, uint8_t rs, uint8_t rw, uint8_t en,
+                    uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7);
+int st7920_write(const gpio_bus_t *gpio, const char *str);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

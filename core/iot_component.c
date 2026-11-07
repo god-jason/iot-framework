@@ -10,7 +10,7 @@ int iot_component_register(iot_component_t *component)
 {
     int i;
     if (component == NULL || component->name == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_COMPONENT_MAX; i++) {
         if (s_components[i] == NULL) {
@@ -19,7 +19,7 @@ int iot_component_register(iot_component_t *component)
         }
     }
     if (i == IOT_COMPONENT_MAX) {
-        return IOT_ERR_OVERFLOW;
+        return -1;
     }
     component->id = s_next_id++;
     component->state = IOT_COMPONENT_REGISTERED;
@@ -30,7 +30,7 @@ int iot_component_unregister(const char *name)
 {
     int i;
     if (name == NULL) {
-        return IOT_ERR_PARAM;
+        return -1;
     }
     for (i = 0; i < IOT_COMPONENT_MAX; i++) {
         if (s_components[i] != NULL &&
@@ -39,7 +39,7 @@ int iot_component_unregister(const char *name)
             return IOT_OK;
         }
     }
-    return IOT_ERR_NOT_FOUND;
+    return -1;
 }
 
 iot_component_t *iot_component_find(const char *name)
