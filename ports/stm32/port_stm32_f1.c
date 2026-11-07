@@ -1,3 +1,5 @@
+#if defined(PORT_STM32_F1)
+
 /* STM32F1 平台实现：新 PORT 公共 API -> STM32CubeF1 HAL。
  *
  * 依赖约定：
@@ -11,7 +13,7 @@
  * 注意：本文件依赖 STM32CubeF1 HAL，仅在 STM32 交叉编译目标中参与构建。
  */
 #include "port.h"
-#include "port_stm32f1.h"
+#include "port_stm32.h"
 #include "stm32f1xx_hal.h"
 
 #include <string.h>
@@ -979,10 +981,10 @@ port_status_t port_uart_register_callback(port_uart_handle_t *handle,
 
 /*
  * 供 USARTx_IRQHandler() 调用。用户工程的中断服务函数应替换为：
- *   void USART1_IRQHandler(void) { port_stm32f1_uart_irq_handler(&huart1_port); }
+ *   void USART1_IRQHandler(void) { port_stm32_uart_irq_handler(&huart1_port); }
  * 本函数内部调用 HAL_UART_IRQHandler()，然后按状态派发 PORT 回调。
  */
-void port_stm32f1_uart_irq_handler(port_uart_handle_t *handle)
+void port_stm32_uart_irq_handler(port_uart_handle_t *handle)
 {
     UART_HandleTypeDef *huart;
     port_state_t previous;
@@ -2322,7 +2324,7 @@ port_status_t port_can_clear_filters(port_can_handle_t *handle)
     return PORT_OK;
 }
 
-void port_stm32f1_can_irq_handler(port_can_handle_t *handle)
+void port_stm32_can_irq_handler(port_can_handle_t *handle)
 {
     CAN_HandleTypeDef *hcan;
 
@@ -3992,7 +3994,7 @@ port_status_t port_rtc_get_timestamp(uint32_t *timestamp)
     return PORT_OK;
 }
 
-void port_stm32f1_rtc_alarm_irq_handler(void)
+void port_stm32_rtc_alarm_irq_handler(void)
 {
     bool alarm_a;
 
@@ -4902,67 +4904,6 @@ port_status_t port_clock_disable(void *peripheral)
 /* CORE / PLATFORM                                                            */
 /* ========================================================================== */
 
-void port_irq_enable(void)
-{
-    __enable_irq();
-}
-
-void port_irq_disable(void)
-{
-    __disable_irq();
-}
-
-void port_system_reset(void)
-{
-    NVIC_SystemReset();
-}
-
-void port_system_sleep(void)
-{
-    HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
-}
-
-void port_system_deepsleep(void)
-{
-    HAL_PWR_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFI);
-}
-
-uint32_t port_tick_get(void)
-{
-    return HAL_GetTick();
-}
-
-void port_delay_ms(uint32_t ms)
-{
-    HAL_Delay(ms);
-}
-
-void port_delay_us(uint32_t us)
-{
-    uint32_t cycles;
-    uint32_t start;
-
-    if (us == 0U) {
-        return;
-    }
-
-    if (SystemCoreClock == 0U) {
-        /* 退化处理：至少保证不会死循环。 */
-        HAL_Delay((us + 999U) / 1000U);
-        return;
-    }
-
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CYCCNT = 0U;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
-    cycles = us * (SystemCoreClock / 1000000U);
-    start = DWT->CYCCNT;
-    while ((DWT->CYCCNT - start) < cycles) {
-        ;
-    }
-}
-
 uint32_t port_get_capabilities(port_device_type_t type, uint8_t instance)
 {
     PORT_UNUSED(instance);
@@ -5035,3 +4976,5 @@ port_status_t port_platform_install(void)
 {
     return port_platform_register(&s_f1_platform_ops);
 }
+
+#endif /* PORT_STM32_F1 */

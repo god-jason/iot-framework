@@ -38,11 +38,11 @@
 #define AVR_EXTI_PCINT2         4U
 
 /* ---------------- 毫秒时基 ---------------- */
-static volatile uint32_t s_millis = 0U;
+volatile uint32_t g_avr_millis = 0U;
 
 ISR(TIMER0_OVF_vect)
 {
-    s_millis++;
+    g_avr_millis++;
 }
 
 /* ---------------- GPIO 寄存器表 ---------------- */
@@ -116,7 +116,7 @@ static bool avr_timeout(uint32_t start, uint32_t timeout)
     if (timeout == PORT_TIMEOUT_FOREVER) {
         return false;
     }
-    return (uint32_t)(s_millis - start) >= timeout;
+    return (uint32_t)(g_avr_millis - start) >= timeout;
 }
 
 /* ---------------- Platform ---------------- */
@@ -126,7 +126,7 @@ static port_status_t avr_platform_init(void)
     TCCR0A = 0U;
     TCCR0B = (uint8_t)((1U << CS01) | (1U << CS00));
     TIMSK0 |= (uint8_t)(1U << TOIE0);
-    s_rng_state = 0x12345678UL ^ (uint32_t)s_millis;
+    s_rng_state = 0x12345678UL ^ (uint32_t)g_avr_millis;
     return PORT_OK;
 }
 
@@ -152,68 +152,6 @@ static port_status_t avr_platform_get_info(port_mcu_info_t *info)
     info->flash_size = AVR_FLASH_SIZE;
     info->sram_size = AVR_SRAM_SIZE;
     return PORT_OK;
-}
-
-/* ---------------- 核心 API ---------------- */
-uint32_t port_tick_get(void)
-{
-    uint32_t value;
-
-    cli();
-    value = s_millis;
-    sei();
-    return value;
-}
-
-void port_delay_ms(uint32_t ms)
-{
-    while (ms > 0U) {
-        _delay_ms(1.0);
-        ms--;
-    }
-}
-
-void port_delay_us(uint32_t us)
-{
-    while (us > 0U) {
-        _delay_us(1.0);
-        us--;
-    }
-}
-
-void port_irq_enable(void)
-{
-    sei();
-}
-
-void port_irq_disable(void)
-{
-    cli();
-}
-
-void port_system_reset(void)
-{
-    cli();
-    wdt_enable(WDTO_15MS);
-    for (;;) {
-        ;
-    }
-}
-
-void port_system_sleep(void)
-{
-    set_sleep_mode(SLEEP_MODE_IDLE);
-    sleep_enable();
-    sleep_cpu();
-    sleep_disable();
-}
-
-void port_system_deepsleep(void)
-{
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    sleep_enable();
-    sleep_cpu();
-    sleep_disable();
 }
 
 /* ---------------- 时钟 ---------------- */
@@ -666,7 +604,7 @@ port_status_t port_uart_transmit(port_uart_handle_t *handle, const uint8_t *data
     if (avr_base_check(&handle->base) != PORT_OK) {
         return PORT_NOT_READY;
     }
-    start = s_millis;
+    start = g_avr_millis;
     for (i = 0U; i < length; i++) {
         while ((UCSR0A & (uint8_t)(1U << UDRE0)) == 0U) {
             if (avr_timeout(start, (timeout == 0U) ? 1U : timeout)) {
@@ -691,7 +629,7 @@ port_status_t port_uart_receive(port_uart_handle_t *handle, uint8_t *data,
     if (avr_base_check(&handle->base) != PORT_OK) {
         return PORT_NOT_READY;
     }
-    start = s_millis;
+    start = g_avr_millis;
     for (i = 0U; i < length; i++) {
         while ((UCSR0A & (uint8_t)(1U << RXC0)) == 0U) {
             if (avr_timeout(start, (timeout == 0U) ? 1U : timeout)) {
@@ -963,7 +901,7 @@ port_status_t port_spi_transmit(port_spi_handle_t *handle, const void *data,
     if (avr_base_check(&handle->base) != PORT_OK) {
         return PORT_NOT_READY;
     }
-    start = s_millis;
+    start = g_avr_millis;
     for (i = 0U; i < length; i++) {
         SPDR = source[i];
         status = avr_spi_wait(start, timeout);
@@ -990,7 +928,7 @@ port_status_t port_spi_receive(port_spi_handle_t *handle, void *data,
     if (avr_base_check(&handle->base) != PORT_OK) {
         return PORT_NOT_READY;
     }
-    start = s_millis;
+    start = g_avr_millis;
     for (i = 0U; i < length; i++) {
         SPDR = 0xFFU;
         status = avr_spi_wait(start, timeout);
@@ -1017,7 +955,7 @@ port_status_t port_spi_transfer(port_spi_handle_t *handle, const void *tx_data,
     if (avr_base_check(&handle->base) != PORT_OK) {
         return PORT_NOT_READY;
     }
-    start = s_millis;
+    start = g_avr_millis;
     for (i = 0U; i < length; i++) {
         SPDR = source[i];
         status = avr_spi_wait(start, timeout);
@@ -1109,7 +1047,7 @@ port_state_t port_spi_get_state(port_spi_handle_t *handle)
 /* ---------------- I2C（TWI） ---------------- */
 static port_status_t avr_i2c_wait(uint32_t timeout, uint8_t *status)
 {
-    uint32_t start = s_millis;
+    uint32_t start = g_avr_millis;
     uint32_t effective = (timeout == 0U) ? 1U : timeout;
 
     while ((TWCR & (uint8_t)(1U << TWINT)) == 0U) {
@@ -2408,7 +2346,7 @@ port_status_t port_rtc_init(void)
     s_rtc_base.second = 0U;
     days = avr_epoch_days(2000U, 1U, 1U);
     s_rtc_base.weekday = (uint8_t)(((days + 3UL) % 7UL) + 1UL);
-    s_rtc_base_tick = s_millis;
+    s_rtc_base_tick = g_avr_millis;
     s_rtc_valid = true;
     return PORT_OK;
 }
@@ -2433,7 +2371,7 @@ port_status_t port_rtc_set_time(const port_rtc_time_t *time)
         return PORT_INVALID_PARAM;
     }
     s_rtc_base = *time;
-    s_rtc_base_tick = s_millis;
+    s_rtc_base_tick = g_avr_millis;
     return PORT_OK;
 }
 
@@ -2447,7 +2385,7 @@ port_status_t port_rtc_get_time(port_rtc_time_t *time)
     if (!s_rtc_valid) {
         return PORT_NOT_READY;
     }
-    elapsed = (uint32_t)(s_millis - s_rtc_base_tick) / 1000UL;
+    elapsed = (uint32_t)(g_avr_millis - s_rtc_base_tick) / 1000UL;
     avr_rtc_apply_elapsed(time, elapsed);
     return PORT_OK;
 }
@@ -2896,7 +2834,7 @@ port_status_t port_adc_read(port_adc_handle_t *handle, uint8_t channel,
     }
     ADMUX = (uint8_t)((ADMUX & 0xF0U) | (channel & 0x0FU));
     ADCSRA |= (uint8_t)(1U << ADSC);
-    start = s_millis;
+    start = g_avr_millis;
     effective = (timeout == 0U) ? 1U : timeout;
     while ((ADCSRA & (uint8_t)(1U << ADSC)) != 0U) {
         if (avr_timeout(start, effective)) {

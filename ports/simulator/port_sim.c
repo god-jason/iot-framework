@@ -47,11 +47,6 @@
 
 /* ------------------------------ 核心 ------------------------------ */
 
-static uint32_t s_tick;
-static bool s_irq_enabled = true;
-static bool s_reset_called;
-static bool s_sleep_called;
-static bool s_deepsleep_called;
 static bool s_platform_initialized;
 
 /* ------------------------------ GPIO / EXTI ------------------------------ */
@@ -290,48 +285,6 @@ port_status_t port_platform_install(void)
 }
 
 /* ============================== 核心 ============================== */
-
-uint32_t port_tick_get(void)
-{
-    return s_tick;
-}
-
-void port_delay_ms(uint32_t ms)
-{
-    s_tick += ms;
-}
-
-void port_delay_us(uint32_t us)
-{
-    if (us > 0) {
-        s_tick += (us + 999U) / 1000U;
-    }
-}
-
-void port_irq_enable(void)
-{
-    s_irq_enabled = true;
-}
-
-void port_irq_disable(void)
-{
-    s_irq_enabled = false;
-}
-
-void port_system_reset(void)
-{
-    s_reset_called = true;
-}
-
-void port_system_sleep(void)
-{
-    s_sleep_called = true;
-}
-
-void port_system_deepsleep(void)
-{
-    s_deepsleep_called = true;
-}
 
 uint32_t port_get_capabilities(port_device_type_t type, uint8_t instance)
 {
@@ -3197,11 +3150,7 @@ port_status_t port_eth_receive(port_eth_handle_t *handle, void *buffer,
 
 void port_sim_reset_state(void)
 {
-    s_tick = 0U;
-    s_irq_enabled = true;
-    s_reset_called = false;
-    s_sleep_called = false;
-    s_deepsleep_called = false;
+    port_sim_os_reset_state();
     s_platform_initialized = false;
 
     memset(s_clock_freq, 0, sizeof(s_clock_freq));
@@ -3252,11 +3201,6 @@ void port_sim_reset_state(void)
     s_eth_len = 0U;
     memset(s_eth_frame, 0, sizeof(s_eth_frame));
 
-}
-
-void port_sim_tick_advance(uint32_t ms)
-{
-    s_tick += ms;
 }
 
 uint32_t port_sim_uart_get_tx(port_uart_handle_t *h, uint8_t *buf, uint32_t cap)
@@ -3407,9 +3351,4 @@ void port_sim_time_set(const port_rtc_time_t *t)
 uint32_t port_sim_wdg_refresh_count(void)
 {
     return s_wdg_refresh_count;
-}
-
-bool port_sim_reset_called(void)
-{
-    return s_reset_called;
 }

@@ -1,6 +1,7 @@
 -- iot-os 构建脚本（xmake）
 -- 默认编译 Windows 模拟版本（mcu/simulator）用于功能测试。
--- 后续可通过 target("stm32f1") / target("stm32f4") 加入交叉编译目标。
+-- STM32 统一平台位于 ports/stm32/，交叉编译时加入该目录下的 .c，
+-- 并在目标宏中定义 PORT_STM32_F1 / PORT_STM32_F4 / PORT_STM32_H7 之一。
 
 add_rules("mode.debug", "mode.release")
 
@@ -74,6 +75,7 @@ target("iot-test")
     -- 模拟平台实现（不包含带 main 的 sim_main.c，包含模拟平台测试）
     add_files("ports/simulator/port_sim.c")
     add_files("ports/simulator/port_mem_sim.c")
+    add_files("ports/simulator/port_os_sim.c")
     add_files("ports/simulator/*_test.c")
 
     -- 框架源码（测试文件与源码同目录）

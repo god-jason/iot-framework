@@ -1,4 +1,5 @@
 #include "common/driver_io.h"
+#include "port_os.h"
 
 /* ---------------- I2C ---------------- */
 

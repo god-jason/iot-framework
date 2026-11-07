@@ -10,6 +10,10 @@
 
 #include "driver_types.h"
 
+/* 延时、时基、临界区统一来自 src/port/port_os.h（port_delay_ms/us、port_tick_get、
+ * port_irq_disable/enable），驱动不得直接调用 HAL 或自行忙等。 */
+#include "port_os.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

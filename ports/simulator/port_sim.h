@@ -47,6 +47,9 @@ void port_sim_time_set(const port_rtc_time_t *t);
 uint32_t port_sim_wdg_refresh_count(void);
 bool port_sim_reset_called(void);
 
+/* 内部接口：复位系统级状态（tick/中断/复位/睡眠标记），由 port_sim.c 调用 */
+void port_sim_os_reset_state(void);
+
 #ifdef __cplusplus
 }
 #endif

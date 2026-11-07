@@ -104,6 +104,7 @@ void ut_mqtt(void);
 
 /* ---------------- port ---------------- */
 void ut_port_mem(void);
+void ut_port_os(void);
 void ut_port_sim_bus(void);
 void ut_port_sim_analog(void);
 void ut_port_sim_timer(void);
@@ -210,6 +211,7 @@ int main(void)
 
     printf("\n--- port ---\n");
     ut_port_mem();
+    ut_port_os();
     ut_port_sim_bus();
     ut_port_sim_analog();
     ut_port_sim_timer();
