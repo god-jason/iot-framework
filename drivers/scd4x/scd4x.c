@@ -44,7 +44,7 @@ static int scd4x_read_words(scd4x_handle_t *handle, uint8_t *raw, uint8_t words)
     for (i = 0U; i < words; i++) {
         if (scd4x_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
             LOG_E("scd4x", "crc error on word %u", (unsigned)i);
-            return (int)IOT_CRC_ERROR;
+            return (int)HAL_CRC_ERROR;
         }
     }
     return DRIVER_OK;
@@ -57,13 +57,13 @@ static uint16_t scd4x_word_at(const uint8_t *raw, uint8_t index)
     return (uint16_t)(((uint16_t)raw[off] << 8) | raw[off + 1U]);
 }
 
-int scd4x_init(scd4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int scd4x_init(scd4x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint64_t serial = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -73,7 +73,7 @@ int scd4x_init(scd4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("scd4x", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 唤醒（器件可能处于低功耗），失败不视为致命 */
@@ -89,7 +89,7 @@ int scd4x_init(scd4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     /* ID 校验：序列号 + CRC */
     if (scd4x_get_serial(handle, &serial) != DRIVER_OK || serial == 0U) {
         LOG_E("scd4x", "serial read failed");
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = scd4x_send_cmd(handle, SCD4X_CMD_START_PERIODIC);
@@ -108,7 +108,7 @@ int scd4x_init(scd4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int scd4x_deinit(scd4x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)scd4x_send_cmd(handle, SCD4X_CMD_STOP_PERIODIC);
@@ -124,7 +124,7 @@ int scd4x_get_serial(scd4x_handle_t *handle, uint64_t *serial)
     int ret;
 
     if (handle == NULL || serial == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = scd4x_send_cmd(handle, SCD4X_CMD_GET_SERIAL);
     if (ret != DRIVER_OK) {
@@ -144,7 +144,7 @@ int scd4x_get_serial(scd4x_handle_t *handle, uint64_t *serial)
 int scd4x_stop(scd4x_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return scd4x_send_cmd(handle, SCD4X_CMD_STOP_PERIODIC);
 }
@@ -152,7 +152,7 @@ int scd4x_stop(scd4x_handle_t *handle)
 int scd4x_reinit(scd4x_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return scd4x_send_cmd(handle, SCD4X_CMD_REINIT);
 }
@@ -162,7 +162,7 @@ int scd4x_power_down(scd4x_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = scd4x_send_cmd(handle, SCD4X_CMD_POWER_DOWN);
     if (ret == DRIVER_OK) {
@@ -174,7 +174,7 @@ int scd4x_power_down(scd4x_handle_t *handle)
 int scd4x_set_temperature_offset(scd4x_handle_t *handle, uint16_t offset_centi_c)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return scd4x_send_cmd_u16(handle, SCD4X_CMD_SET_TEMP_OFFSET, offset_centi_c);
 }
@@ -182,7 +182,7 @@ int scd4x_set_temperature_offset(scd4x_handle_t *handle, uint16_t offset_centi_c
 int scd4x_set_altitude(scd4x_handle_t *handle, uint16_t altitude_m)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return scd4x_send_cmd_u16(handle, SCD4X_CMD_SET_ALTITUDE, altitude_m);
 }
@@ -190,7 +190,7 @@ int scd4x_set_altitude(scd4x_handle_t *handle, uint16_t altitude_m)
 int scd4x_force_recalibration(scd4x_handle_t *handle, uint16_t reference_ppm)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return scd4x_send_cmd_u16(handle, SCD4X_CMD_FORCED_RECAL, reference_ppm);
 }
@@ -202,7 +202,7 @@ int scd4x_read(scd4x_handle_t *handle, scd4x_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = scd4x_send_cmd(handle, SCD4X_CMD_GET_DATA_READY);
@@ -216,7 +216,7 @@ int scd4x_read(scd4x_handle_t *handle, scd4x_data_t *data)
     }
     /* 数据就绪状态为 23 位，低 11 位保留，非 0 即就绪 */
     if (((((uint16_t)ready[0] << 8) | ready[1]) & 0x07FFU) == 0U) {
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
 
     ret = scd4x_send_cmd(handle, SCD4X_CMD_READ_MEASUREMENT);

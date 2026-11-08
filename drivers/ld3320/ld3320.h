@@ -25,8 +25,8 @@ extern "C" {
 
 typedef struct {
     driver_spi_t spi;
-    iot_pin_t reset_pin;   /* RST 引脚，0 表示不控制 */
-    iot_pin_t irq_pin;     /* 中断/忙指示引脚，0 表示不接 */
+    hal_pin_t reset_pin;   /* RST 引脚，0 表示不控制 */
+    hal_pin_t irq_pin;     /* 中断/忙指示引脚，0 表示不接 */
     bool initialized;
 } ld3320_handle_t;
 
@@ -36,8 +36,8 @@ typedef struct {
  * @param  cs        片选引脚，0 表示由 SPI 外设内部管理
  * @param  reset_pin 复位引脚，0 表示不控制
  */
-int ld3320_init(ld3320_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
-                iot_pin_t reset_pin);
+int ld3320_init(ld3320_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
+                hal_pin_t reset_pin);
 
 int ld3320_deinit(ld3320_handle_t *handle);
 

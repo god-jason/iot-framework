@@ -6,23 +6,23 @@
 static int hc_sr501_check(const hc_sr501_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-int hc_sr501_init(hc_sr501_handle_t *handle, iot_pin_t pin)
+int hc_sr501_init(hc_sr501_handle_t *handle, hal_pin_t pin)
 {
     if (handle == NULL || pin == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->pin = pin;
     handle->initialized = false;
 
-    if (driver_gpio_input(pin, IOT_GPIO_PULLDOWN) != DRIVER_OK) {
+    if (driver_gpio_input(pin, HAL_GPIO_PULLDOWN) != DRIVER_OK) {
         LOG_E(HC_SR501_TAG, "gpio init failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -33,7 +33,7 @@ int hc_sr501_init(hc_sr501_handle_t *handle, iot_pin_t pin)
 int hc_sr501_deinit(hc_sr501_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->pin != 0U) {
         (void)driver_gpio_deinit(handle->pin);
@@ -48,7 +48,7 @@ int hc_sr501_read(hc_sr501_handle_t *handle, bool *motion)
     int ret;
 
     if (motion == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = hc_sr501_check(handle);
     if (ret != DRIVER_OK) {
@@ -58,7 +58,7 @@ int hc_sr501_read(hc_sr501_handle_t *handle, bool *motion)
     level = driver_gpio_read(handle->pin);
     if (level < 0) {
         LOG_E(HC_SR501_TAG, "gpio read failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     *motion = (level == (int)HC_SR501_ACTIVE_LEVEL);

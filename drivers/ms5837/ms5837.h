@@ -34,7 +34,7 @@ typedef struct {
 } ms5837_data_t;
 
 /** 初始化：复位、读 PROM、校验 CRC4 */
-int ms5837_init(ms5837_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int ms5837_init(ms5837_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** 反初始化（不关闭总线） */
 int ms5837_deinit(ms5837_handle_t *handle);

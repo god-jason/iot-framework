@@ -27,7 +27,7 @@ typedef struct {
     bool initialized;
 } w25qxx_handle_t;
 
-int w25qxx_init(w25qxx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
+int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
 int w25qxx_deinit(w25qxx_handle_t *handle);
 
 int w25qxx_read_id(w25qxx_handle_t *handle, w25qxx_id_t *id);

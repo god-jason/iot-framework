@@ -9,7 +9,7 @@
  *
  * 用法：
  *   ds1302_handle_t rtc;
- *   ds1302_init(&rtc, IOT_PIN(1, 0), IOT_PIN(1, 1), IOT_PIN(1, 2));
+ *   ds1302_init(&rtc, HAL_PIN(1, 0), HAL_PIN(1, 1), HAL_PIN(1, 2));
  *   ds1302_time_t t = { 2026, 11, 7, 12, 0, 0, 6 };
  *   ds1302_set_time(&rtc, &t);
  */
@@ -32,17 +32,17 @@ typedef struct {
 } ds1302_time_t;
 
 typedef struct {
-    iot_pin_t ce;    /* 片选 / 使能 */
-    iot_pin_t sclk;  /* 串行时钟 */
-    iot_pin_t io;    /* 双向数据线 */
+    hal_pin_t ce;    /* 片选 / 使能 */
+    hal_pin_t sclk;  /* 串行时钟 */
+    hal_pin_t io;    /* 双向数据线 */
     bool initialized;
 } ds1302_handle_t;
 
 /**
  * @brief  初始化三线 GPIO 并解除写保护
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int ds1302_init(ds1302_handle_t *handle, iot_pin_t ce, iot_pin_t sclk, iot_pin_t io);
+int ds1302_init(ds1302_handle_t *handle, hal_pin_t ce, hal_pin_t sclk, hal_pin_t io);
 
 /** @brief  反初始化（释放三个引脚） */
 int ds1302_deinit(ds1302_handle_t *handle);

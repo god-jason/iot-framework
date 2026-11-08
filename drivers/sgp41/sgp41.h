@@ -31,7 +31,7 @@ typedef struct {
 } sgp41_data_t;
 
 /** @param address 7 位地址，传 0 取 0x59 */
-int sgp41_init(sgp41_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int sgp41_init(sgp41_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int sgp41_deinit(sgp41_handle_t *handle);
 

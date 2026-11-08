@@ -5,7 +5,7 @@
 int cs100_init(cs100_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = true;
     LOG_I("cs100", "init ok");
@@ -15,7 +15,7 @@ int cs100_init(cs100_handle_t *handle)
 int cs100_deinit(cs100_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     return DRIVER_OK;
@@ -31,14 +31,14 @@ int cs100_parse(cs100_handle_t *handle, const uint8_t *buffer, size_t length,
     size_t i;
 
     if (handle == NULL || !handle->initialized || buffer == NULL || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (length < CS100_FRAME_LEN) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (buffer[0] != CS100_HEAD || buffer[1] != CS100_ADDR) {
         LOG_D("cs100", "bad header");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     for (i = 0U; i < CS100_CHECKSUM_BYTES; i++) {
@@ -51,14 +51,14 @@ int cs100_parse(cs100_handle_t *handle, const uint8_t *buffer, size_t length,
     if (expect != actual) {
         LOG_D("cs100", "checksum mismatch 0x%04X != 0x%04X",
               (unsigned)expect, (unsigned)actual);
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     co2 = (uint16_t)(((uint16_t)buffer[CS100_OFF_CO2_H] << 8) |
                      (uint16_t)buffer[CS100_OFF_CO2_L]);
     if (co2 > CS100_CO2_MAX_PPM) {
         LOG_W("cs100", "co2 %uppm out of range", (unsigned)co2);
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     data->co2_ppm = co2;

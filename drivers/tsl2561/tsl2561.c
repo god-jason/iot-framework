@@ -99,13 +99,13 @@ static float tsl2561_lux_from_counts(float ch0, float ch1)
     return (lux < 0.0f) ? 0.0f : lux;
 }
 
-int tsl2561_init(tsl2561_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int tsl2561_init(tsl2561_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -117,7 +117,7 @@ int tsl2561_init(tsl2561_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("tsl2561", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = driver_i2c_read_reg(&handle->i2c, (uint8_t)(TSL2561_CMD | TSL2561_REG_ID), &id, 1U);
@@ -127,16 +127,16 @@ int tsl2561_init(tsl2561_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     if ((id & TSL2561_ID_PART_MASK) != TSL2561_ID_PART_TSL2560 &&
         (id & TSL2561_ID_PART_MASK) != TSL2561_ID_PART_TSL2561) {
         LOG_E("tsl2561", "unexpected id 0x%02X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (tsl2561_write_power(handle, TSL2561_CONTROL_POWER_ON) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(1U);
 
     if (tsl2561_write_timing(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -147,7 +147,7 @@ int tsl2561_init(tsl2561_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int tsl2561_deinit(tsl2561_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)tsl2561_write_power(handle, TSL2561_CONTROL_POWER_OFF);
@@ -160,15 +160,15 @@ int tsl2561_deinit(tsl2561_handle_t *handle)
 int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_t gain)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (gain != TSL2561_GAIN_1X && gain != TSL2561_GAIN_16X) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->gain = gain;
     if (tsl2561_write_timing(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(tsl2561_integration_delay_ms(handle->integration));
     return DRIVER_OK;
@@ -177,16 +177,16 @@ int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_t gain)
 int tsl2561_set_integration_time(tsl2561_handle_t *handle, tsl2561_integration_t integration)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (integration != TSL2561_INTEG_13MS && integration != TSL2561_INTEG_101MS &&
         integration != TSL2561_INTEG_402MS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->integration = integration;
     if (tsl2561_write_timing(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(tsl2561_integration_delay_ms(handle->integration));
     return DRIVER_OK;
@@ -199,7 +199,7 @@ int tsl2561_read_raw(tsl2561_handle_t *handle, uint32_t *ch0, uint32_t *ch1)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 积分时间 + 余量后读取，datasheet 要求等待一个完整积分周期 */
@@ -228,7 +228,7 @@ int tsl2561_read(tsl2561_handle_t *handle, tsl2561_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = tsl2561_read_raw(handle, &ch0, &ch1);

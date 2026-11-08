@@ -5,14 +5,14 @@
 /* 释放总线：切换为输入 + 上拉，由上拉电阻拉高 */
 static void dht11_release(dht11_handle_t *handle)
 {
-    (void)driver_gpio_input(handle->pin, IOT_GPIO_PULLUP);
+    (void)driver_gpio_input(handle->pin, HAL_GPIO_PULLUP);
 }
 
 /* 主机拉低总线 */
 static void dht11_drive_low(dht11_handle_t *handle)
 {
-    (void)driver_gpio_output(handle->pin, IOT_GPIO_LOW);
-    (void)driver_gpio_write(handle->pin, IOT_GPIO_LOW);
+    (void)driver_gpio_output(handle->pin, HAL_GPIO_LOW);
+    (void)driver_gpio_write(handle->pin, HAL_GPIO_LOW);
 }
 
 static int dht11_line(dht11_handle_t *handle)
@@ -22,7 +22,7 @@ static int dht11_line(dht11_handle_t *handle)
     return (level < 0) ? level : (level != 0) ? 1 : 0;
 }
 
-/* 等待总线到达指定电平，超时返回 IOT_TIMEOUT */
+/* 等待总线到达指定电平，超时返回 HAL_TIMEOUT */
 static int dht11_wait_level(dht11_handle_t *handle, int level, uint32_t timeout_us)
 {
     uint32_t elapsed = 0U;
@@ -39,7 +39,7 @@ static int dht11_wait_level(dht11_handle_t *handle, int level, uint32_t timeout_
         driver_delay_us(1U);
         elapsed++;
     }
-    return (int)IOT_TIMEOUT;
+    return (int)HAL_TIMEOUT;
 }
 
 /* 读取一个字节：以高电平持续时间区分 0 / 1 */
@@ -85,11 +85,11 @@ int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
     int ret;
 
     if (handle == NULL || frame == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 起始信号 + 40 位数据：全程关闭中断，避免位时序被拉长 */
-    iot_irq_disable();
+    hal_irq_disable();
 
     dht11_drive_low(handle);
     driver_delay_ms(DHT11_START_LOW_MS);
@@ -109,29 +109,29 @@ int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
         ret = dht11_read_byte(handle, &frame[i]);
     }
 
-    iot_irq_enable();
+    hal_irq_enable();
     dht11_release(handle);
 
     if (ret != DRIVER_OK) {
         LOG_E("dht11", "bus timeout");
-        return (int)IOT_TIMEOUT;
+        return (int)HAL_TIMEOUT;
     }
     return DRIVER_OK;
 }
 
-int dht11_init(dht11_handle_t *handle, iot_pin_t pin)
+int dht11_init(dht11_handle_t *handle, hal_pin_t pin)
 {
     int ret;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->pin = pin;
     handle->last_read_ms = 0U;
     handle->initialized = false;
 
-    ret = driver_gpio_input(pin, IOT_GPIO_PULLUP);
+    ret = driver_gpio_input(pin, HAL_GPIO_PULLUP);
     if (ret != DRIVER_OK) {
         LOG_E("dht11", "gpio init failed: %d", ret);
         return ret;
@@ -150,10 +150,10 @@ int dht11_init(dht11_handle_t *handle, iot_pin_t pin)
 int dht11_deinit(dht11_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
-        (void)driver_gpio_input(handle->pin, IOT_GPIO_PULLUP);
+        (void)driver_gpio_input(handle->pin, HAL_GPIO_PULLUP);
     }
     handle->initialized = false;
     return DRIVER_OK;
@@ -168,17 +168,17 @@ int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* DHT11 采样间隔不得小于 1s */
     now = driver_tick_ms();
     if (handle->last_read_ms != 0U &&
         (uint32_t)(now - handle->last_read_ms) < DHT11_MIN_INTERVAL_MS) {
-        return (int)IOT_BUSY;
+        return (int)HAL_BUSY;
     }
 
     ret = dht11_read_raw(handle, frame);
@@ -190,7 +190,7 @@ int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity)
                     frame[DHT11_IDX_TEMP_INT] + frame[DHT11_IDX_TEMP_DEC]);
     if (sum != frame[DHT11_IDX_CHECKSUM]) {
         LOG_E("dht11", "checksum fail 0x%02X != 0x%02X", sum, frame[DHT11_IDX_CHECKSUM]);
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     handle->last_read_ms = now;

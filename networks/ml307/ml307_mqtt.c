@@ -105,14 +105,14 @@ static iot_mqtt_message_cb_t s_callback;
 static void *s_user_data;
 static bool s_connected;
 
-iot_status_t iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
+hal_status_t iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
 {
     s_callback = callback;
     s_user_data = user_data;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_mqtt_deinit(void)
+hal_status_t iot_mqtt_deinit(void)
 {
     if (s_connected) {
         (void)ml307_mqtt_disconnect();
@@ -120,64 +120,64 @@ iot_status_t iot_mqtt_deinit(void)
     }
     s_callback = NULL;
     s_user_data = NULL;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_mqtt_connect(const iot_mqtt_config_t *config)
+hal_status_t iot_mqtt_connect(const iot_mqtt_config_t *config)
 {
     if (config == NULL || config->host == NULL || config->host[0] == '\0') {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (ml307_mqtt_connect(config->host, config->port, config->client_id,
                            config->username, config->password) != 0) {
         s_connected = false;
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
     s_connected = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_mqtt_disconnect(void)
+hal_status_t iot_mqtt_disconnect(void)
 {
     if (ml307_mqtt_disconnect() != 0) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
     s_connected = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos)
+hal_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos)
 {
     if (topic == NULL || topic[0] == '\0') {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return (ml307_mqtt_subscribe(topic, qos) == 0) ? IOT_OK : IOT_IO_ERROR;
+    return (ml307_mqtt_subscribe(topic, qos) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-iot_status_t iot_mqtt_unsubscribe(const char *topic)
+hal_status_t iot_mqtt_unsubscribe(const char *topic)
 {
     if (topic == NULL || topic[0] == '\0') {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return (ml307_mqtt_unsubscribe(topic) == 0) ? IOT_OK : IOT_IO_ERROR;
+    return (ml307_mqtt_unsubscribe(topic) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-iot_status_t iot_mqtt_publish(const iot_mqtt_message_t *message)
+hal_status_t iot_mqtt_publish(const iot_mqtt_message_t *message)
 {
     if (message == NULL || message->topic[0] == '\0') {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (message->payload == NULL || message->payload_len == 0) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     return (ml307_mqtt_publish(message->topic, message->payload,
                                message->payload_len, message->qos,
-                               message->retain) == 0) ? IOT_OK : IOT_IO_ERROR;
+                               message->retain) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-iot_status_t iot_mqtt_process(void)
+hal_status_t iot_mqtt_process(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
 bool iot_mqtt_is_connected(void)

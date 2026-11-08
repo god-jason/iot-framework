@@ -166,19 +166,19 @@ static bool ml307_net_ipv4(const char *s, size_t len)
 
 /* ---------------- iot_net 接口实现 ---------------- */
 
-iot_status_t iot_net_init(void)
+hal_status_t iot_net_init(void)
 {
     if (!s_urc_registered) {
         if (at_urc_register("+MIPURC:", ml307_net_urc, NULL) != 0) {
-            return IOT_ERROR;
+            return HAL_ERROR;
         }
         s_urc_registered = true;
     }
     memset(s_sockets, 0, sizeof(s_sockets));
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_net_deinit(void)
+hal_status_t iot_net_deinit(void)
 {
     int i;
 
@@ -196,7 +196,7 @@ iot_status_t iot_net_deinit(void)
         (void)at_urc_unregister("+MIPURC:");
         s_urc_registered = false;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
 iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
@@ -236,7 +236,7 @@ int32_t iot_net_send(iot_net_id_t id, const uint8_t *data, uint32_t len)
 
     if (id < 0 || id >= ML307_NET_MAX_SOCKETS || !s_sockets[id].used ||
         !s_sockets[id].connected || data == NULL || len == 0) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
 
     snprintf(cmd, sizeof(cmd), "AT+MIPSEND=%d,%u", (int)id, (unsigned)len);
@@ -247,7 +247,7 @@ int32_t iot_net_send(iot_net_id_t id, const uint8_t *data, uint32_t len)
     phase.failure = "ERROR";
     phase.timeout = 5000;
     if (at_transact(&phase) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     at_send_raw(data, len);
@@ -258,7 +258,7 @@ int32_t iot_net_send(iot_net_id_t id, const uint8_t *data, uint32_t len)
     phase.failure = "ERROR";
     phase.timeout = 5000;
     if (at_transact(&phase) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     return (int32_t)len;
@@ -271,10 +271,10 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
 
     if (id < 0 || id >= ML307_NET_MAX_SOCKETS || !s_sockets[id].used ||
         data == NULL || len == 0) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
 
-    start = iot_tick_get();
+    start = hal_tick_get();
     for (;;) {
         if (s_sockets[id].rx_len > 0) {
             uint32_t n = (s_sockets[id].rx_len < len) ? s_sockets[id].rx_len : len;
@@ -292,21 +292,21 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
             return 0;
         }
         if (timeout == 0 ||
-            (uint32_t)(iot_tick_get() - start) >= timeout) {
+            (uint32_t)(hal_tick_get() - start) >= timeout) {
             return 0;
         }
 
         (void)at_process();
-        iot_delay_ms(1);
+        hal_delay_ms(1);
     }
 }
 
-iot_status_t iot_net_close(iot_net_id_t id)
+hal_status_t iot_net_close(iot_net_id_t id)
 {
     char cmd[32];
 
     if (id < 0 || id >= ML307_NET_MAX_SOCKETS || !s_sockets[id].used) {
-        return IOT_NOT_FOUND;
+        return HAL_NOT_FOUND;
     }
 
     snprintf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", (int)id);
@@ -315,33 +315,33 @@ iot_status_t iot_net_close(iot_net_id_t id)
     s_sockets[id].used = false;
     s_sockets[id].connected = false;
     s_sockets[id].rx_len = 0;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
+hal_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
 {
     char cmd[192];
     const char *resp;
     const char *p;
 
     if (name == NULL || ip == NULL || size == 0) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
 
     if (strlen(name) < size && ml307_net_ipv4(name, strlen(name))) {
         memcpy(ip, name, strlen(name) + 1);
-        return IOT_OK;
+        return HAL_OK;
     }
 
     snprintf(cmd, sizeof(cmd), "AT+MDNSGIP=\"%s\"", name);
     if (at_exec(cmd, 30000) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     resp = at_get_response();
     p = (resp != NULL) ? strchr(resp, '"') : NULL;
     if (p == NULL) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     while (*p != '\0') {
@@ -363,49 +363,49 @@ iot_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
             }
             memcpy(ip, p, n);
             ip[n] = '\0';
-            return IOT_OK;
+            return HAL_OK;
         }
         p = q + 1;
     }
-    return IOT_NOT_FOUND;
+    return HAL_NOT_FOUND;
 }
 
-iot_status_t iot_net_getip(char *ip, uint32_t size)
+hal_status_t iot_net_getip(char *ip, uint32_t size)
 {
     if (ip == NULL || size == 0) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return (ml307_get_ip(ip, size) == 0) ? IOT_OK : IOT_IO_ERROR;
+    return (ml307_get_ip(ip, size) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
 /* 模组不提供 MAC 地址 */
-iot_status_t iot_net_getmac(char *mac, uint32_t size)
+hal_status_t iot_net_getmac(char *mac, uint32_t size)
 {
     (void)mac;
     (void)size;
-    return IOT_NOT_SUPPORTED;
+    return HAL_NOT_SUPPORTED;
 }
 
-iot_status_t iot_net_gettime(iot_net_time_t *time)
+hal_status_t iot_net_gettime(iot_net_time_t *time)
 {
     const char *resp;
     const char *p;
     int yy, month, day, hour, minute, second, zone;
 
     if (time == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (at_exec("AT+CCLK?", 3000) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
     resp = at_get_response();
     p = (resp != NULL) ? strchr(resp, '"') : NULL;
     if (p == NULL) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
     if (sscanf(p, "\"%d/%d/%d,%d:%d:%d%d\"", &yy, &month, &day,
                &hour, &minute, &second, &zone) != 7) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     time->year = 2000 + yy;
@@ -415,11 +415,11 @@ iot_status_t iot_net_gettime(iot_net_time_t *time)
     time->minute = minute;
     time->second = second;
     time->zone_min = zone * 15;     /* 3GPP 时区单位为 15 分钟 */
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ML307 的 MIP 指令只支持客户端连接，不提供本地监听与服务端 accept */
-iot_status_t iot_net_listen(iot_net_type_t type, const char *host,
+hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
                             uint16_t port, iot_net_id_t *id)
 {
     (void)type;
@@ -429,10 +429,10 @@ iot_status_t iot_net_listen(iot_net_type_t type, const char *host,
     if (id != NULL) {
         *id = IOT_NET_INVALID_ID;
     }
-    return IOT_NOT_SUPPORTED;
+    return HAL_NOT_SUPPORTED;
 }
 
-iot_status_t iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
+hal_status_t iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
                             char *peer_ip, uint32_t ip_size,
                             uint16_t *peer_port, uint32_t timeout)
 {
@@ -445,7 +445,7 @@ iot_status_t iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
     if (conn_id != NULL) {
         *conn_id = IOT_NET_INVALID_ID;
     }
-    return IOT_NOT_SUPPORTED;
+    return HAL_NOT_SUPPORTED;
 }
 
 /* 模组 UDP 为连接式（MIPOPEN + MIPSEND），不支持无连接 sendto/recvfrom */
@@ -457,7 +457,7 @@ int32_t iot_net_sendto(iot_net_id_t id, const char *host, uint16_t port,
     (void)port;
     (void)data;
     (void)len;
-    return IOT_NOT_SUPPORTED;
+    return HAL_NOT_SUPPORTED;
 }
 
 int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
@@ -471,7 +471,7 @@ int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
     (void)peer_ip;
     (void)ip_size;
     (void)peer_port;
-    return IOT_NOT_SUPPORTED;
+    return HAL_NOT_SUPPORTED;
 }
 
 #endif /* IOT_NETWORK_ML307 */

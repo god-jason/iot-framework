@@ -67,10 +67,10 @@ typedef struct {
  * @param  address  7 位从机地址，0 表示默认 0x6A（SPI 模式忽略）
  * @param  range    量程
  * @param  odr      输出率
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int l3gd20h_init(l3gd20h_handle_t *handle, iot_i2c_t *i2c,
-                 iot_spi_t *spi, iot_pin_t cs, uint16_t address,
+int l3gd20h_init(l3gd20h_handle_t *handle, hal_i2c_t *i2c,
+                 hal_spi_t *spi, hal_pin_t cs, uint16_t address,
                  l3gd20h_range_t range, l3gd20h_odr_t odr);
 
 /** @brief 反初始化：进入掉电模式 */

@@ -42,13 +42,13 @@ static int apds9960_wait_status(apds9960_handle_t *handle, uint8_t mask)
 
     for (;;) {
         if (driver_i2c_read_reg(&handle->i2c, APDS9960_REG_STATUS, &status, 1U) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         if ((status & mask) != 0U) {
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) >= APDS9960_POLL_TIMEOUT_MS) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
@@ -62,13 +62,13 @@ float apds9960_get_integration_time_ms(const apds9960_handle_t *handle)
     return (float)(256U - (uint32_t)handle->atime) * APDS9960_ALS_STEP_MS;
 }
 
-int apds9960_init(apds9960_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int apds9960_init(apds9960_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -82,7 +82,7 @@ int apds9960_init(apds9960_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("apds9960", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = driver_i2c_read_reg(&handle->i2c, APDS9960_REG_ID, &id, 1U);
@@ -91,7 +91,7 @@ int apds9960_init(apds9960_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     }
     if (id != APDS9960_ID_APDS9960) {
         LOG_E("apds9960", "unexpected id 0x%02X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 先关闭所有引擎再配置，避免旧配置残留 */
@@ -101,18 +101,18 @@ int apds9960_init(apds9960_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
                            apds9960_control_value(handle)) != DRIVER_OK ||
         apds9960_write_reg(handle, APDS9960_REG_PPULSE,
                            apds9960_ppulse_value(handle)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     if (apds9960_write_reg(handle, APDS9960_REG_ENABLE, APDS9960_ENABLE_PON) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(APDS9960_POWER_ON_DELAY_MS);
 
     if (apds9960_write_reg(handle, APDS9960_REG_ENABLE,
                            APDS9960_ENABLE_PON | APDS9960_ENABLE_AEN |
                                APDS9960_ENABLE_PEN) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -123,7 +123,7 @@ int apds9960_init(apds9960_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int apds9960_deinit(apds9960_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)apds9960_write_reg(handle, APDS9960_REG_ENABLE, 0x00U);
@@ -136,10 +136,10 @@ int apds9960_deinit(apds9960_handle_t *handle)
 int apds9960_set_atime(apds9960_handle_t *handle, uint8_t atime)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (apds9960_write_reg(handle, APDS9960_REG_ATIME, atime) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->atime = atime;
     driver_delay_ms((uint32_t)apds9960_get_integration_time_ms(handle) + 2U);
@@ -149,15 +149,15 @@ int apds9960_set_atime(apds9960_handle_t *handle, uint8_t atime)
 int apds9960_set_als_gain(apds9960_handle_t *handle, apds9960_gain_t gain)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if ((unsigned int)gain > (unsigned int)APDS9960_AGAIN_64X) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->gain = gain;
     if (apds9960_write_reg(handle, APDS9960_REG_CONTROL,
                            apds9960_control_value(handle)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms((uint32_t)apds9960_get_integration_time_ms(handle) + 2U);
     return DRIVER_OK;
@@ -167,21 +167,21 @@ int apds9960_set_proximity_pulse(apds9960_handle_t *handle, uint8_t pulse_count,
                                  uint8_t pulse_len)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (pulse_count == 0U || pulse_count > 64U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (pulse_len != APDS9960_PPULSE_LEN_4US && pulse_len != APDS9960_PPULSE_LEN_8US &&
         pulse_len != APDS9960_PPULSE_LEN_16US && pulse_len != APDS9960_PPULSE_LEN_32US) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->pulse_count = pulse_count;
     handle->pulse_len = pulse_len;
     if (apds9960_write_reg(handle, APDS9960_REG_PPULSE,
                            apds9960_ppulse_value(handle)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -192,7 +192,7 @@ int apds9960_read_rgbc(apds9960_handle_t *handle, apds9960_rgbc_t *rgbc)
     int ret;
 
     if (handle == NULL || rgbc == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 等待一个完整 ALS 积分周期，再用 AVALID 确认数据就绪 */
@@ -223,7 +223,7 @@ int apds9960_read_proximity(apds9960_handle_t *handle, uint8_t *proximity, bool 
     int ret;
 
     if (handle == NULL || proximity == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = apds9960_wait_status(handle, APDS9960_STATUS_PVALID);
@@ -248,7 +248,7 @@ int apds9960_read(apds9960_handle_t *handle, apds9960_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = apds9960_read_rgbc(handle, &data->rgbc);

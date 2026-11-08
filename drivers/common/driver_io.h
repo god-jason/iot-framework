@@ -4,15 +4,15 @@
 /*
  * 驱动公共 I/O 层。
  *
- * 所有驱动只通过本层访问硬件，本层再调用 src/core 的抽象接口，
+ * 所有驱动只通过本层访问硬件，本层再调用 hal 的抽象接口，
  * 因此驱动代码不依赖任何 MCU / HAL，可在 simulator 与真实平台复用。
  */
 
 #include "driver_types.h"
 
-/* 延时、时基、临界区统一来自 src/core/iot_os.h（iot_delay_ms/us、iot_tick_get、
- * iot_irq_disable/enable），驱动不得直接调用 HAL 或自行忙等。 */
-#include "iot_os.h"
+/* 延时、时基、临界区统一来自 hal/hal_os.h（hal_delay_ms/us、hal_tick_get、
+ * hal_irq_disable/enable），驱动不得直接调用 HAL 或自行忙等。 */
+#include "hal_os.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,13 +50,13 @@ int driver_spi_read_cs(driver_spi_t *bus, uint8_t *data, size_t len);
 
 /* ---------------- GPIO ---------------- */
 
-int driver_gpio_deinit(iot_pin_t pin);
-int driver_gpio_output(iot_pin_t pin, iot_gpio_level_t initial);
-int driver_gpio_input(iot_pin_t pin, iot_gpio_pull_t pull);
-int driver_gpio_write(iot_pin_t pin, iot_gpio_level_t level);
-int driver_gpio_toggle(iot_pin_t pin);
+int driver_gpio_deinit(hal_pin_t pin);
+int driver_gpio_output(hal_pin_t pin, hal_gpio_level_t initial);
+int driver_gpio_input(hal_pin_t pin, hal_gpio_pull_t pull);
+int driver_gpio_write(hal_pin_t pin, hal_gpio_level_t level);
+int driver_gpio_toggle(hal_pin_t pin);
 /* 返回 0/1 电平，负值为错误码 */
-int driver_gpio_read(iot_pin_t pin);
+int driver_gpio_read(hal_pin_t pin);
 
 /* ---------------- 时间 ---------------- */
 

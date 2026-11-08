@@ -5,32 +5,32 @@
 static int acs712_check(const acs712_handle_t *handle)
 {
     if (handle == NULL || handle->adc == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
     return DRIVER_OK;
 }
 
-int acs712_init(acs712_handle_t *handle, iot_adc_t *adc, uint8_t channel)
+int acs712_init(acs712_handle_t *handle, hal_adc_t *adc, uint8_t channel)
 {
-    iot_adc_channel_config_t cfg;
+    hal_adc_channel_config_t cfg;
     uint32_t adc_max;
 
     if (handle == NULL || adc == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     cfg.channel = channel;
     cfg.rank = 1U;
     cfg.sample_time = 0U;   /* 0：由平台选择默认采样时间 */
-    if (iot_adc_config_channel(adc, &cfg) != IOT_OK) {
+    if (hal_adc_config_channel(adc, &cfg) != HAL_OK) {
         LOG_E("acs712", "adc channel %u config failed", (unsigned)channel);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
-    adc_max = iot_adc_get_max_value(adc);
+    adc_max = hal_adc_get_max_value(adc);
 
     handle->adc = adc;
     handle->channel = channel;
@@ -48,7 +48,7 @@ int acs712_init(acs712_handle_t *handle, iot_adc_t *adc, uint8_t channel)
 int acs712_deinit(acs712_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->adc = NULL;
     handle->initialized = false;
@@ -63,11 +63,11 @@ int acs712_read_raw(acs712_handle_t *handle, uint32_t *raw)
         return ret;
     }
     if (raw == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
-    if (iot_adc_read(handle->adc, handle->channel, raw, ACS712_ADC_TIMEOUT_MS) != IOT_OK) {
+    if (hal_adc_read(handle->adc, handle->channel, raw, ACS712_ADC_TIMEOUT_MS) != HAL_OK) {
         LOG_E("acs712", "adc read failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -80,7 +80,7 @@ int acs712_read(acs712_handle_t *handle, float *amps)
     int ret;
 
     if (amps == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = acs712_read_raw(handle, &raw);
     if (ret != DRIVER_OK) {
@@ -106,10 +106,10 @@ int acs712_read(acs712_handle_t *handle, float *amps)
 int acs712_set_calibration(acs712_handle_t *handle, float sens_mv_per_a, float zero_mv)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (sens_mv_per_a <= 0.0f || zero_mv < 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->sens_mv_per_a = sens_mv_per_a;
     handle->zero_mv = zero_mv;
@@ -119,7 +119,7 @@ int acs712_set_calibration(acs712_handle_t *handle, float sens_mv_per_a, float z
 int acs712_set_reference(acs712_handle_t *handle, float vref_mv, uint32_t adc_max)
 {
     if (handle == NULL || vref_mv <= 0.0f || adc_max == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->vref_mv = vref_mv;
     handle->adc_max = adc_max;

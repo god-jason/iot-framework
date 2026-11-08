@@ -35,7 +35,7 @@ static int spl06_001_read_calib(spl06_001_handle_t *handle)
     uint32_t u20;
 
     if (driver_i2c_read_reg(&handle->i2c, SPL06_001_REG_COEF, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 0x10: c0(12bit) c1(12bit) c00(20bit) c10(20bit) c01 c11 c20 c21 c30 */
@@ -63,26 +63,26 @@ static int spl06_001_wait_ready(spl06_001_handle_t *handle)
 
     for (;;) {
         if (driver_i2c_read_reg(&handle->i2c, SPL06_001_REG_MEAS_CFG, &status, 1U) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         if ((status & (SPL06_001_STATUS_PRS_RDY | SPL06_001_STATUS_TMP_RDY)) ==
             (SPL06_001_STATUS_PRS_RDY | SPL06_001_STATUS_TMP_RDY)) {
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > SPL06_001_READY_TIMEOUT_MS) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(2U);
     }
 }
 
-int spl06_001_init(spl06_001_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int spl06_001_init(spl06_001_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t chip_id = 0U;
     uint8_t value;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -93,11 +93,11 @@ int spl06_001_init(spl06_001_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     handle->initialized = false;
 
     if (spl06_001_get_chip_id(handle, &chip_id) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (chip_id != SPL06_001_CHIP_ID) {
         LOG_E("spl06", "chip id mismatch: 0x%02X", chip_id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     value = SPL06_001_RESET_VALUE;
@@ -106,29 +106,29 @@ int spl06_001_init(spl06_001_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (spl06_001_read_calib(handle) != DRIVER_OK) {
         LOG_E("spl06", "read calibration failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (handle->calib.c1 == 0 || handle->calib.c10 == 0) {
         LOG_E("spl06", "invalid calibration data");
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 过采样与速率必须先配置，再启动连续测量 */
     value = SPL06_001_PRS_CFG_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, SPL06_001_REG_PRS_CFG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = SPL06_001_TMP_CFG_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, SPL06_001_REG_TMP_CFG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = SPL06_001_CFG_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, SPL06_001_REG_CFG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = SPL06_001_MEAS_CONT_PT;
     if (driver_i2c_write_reg(&handle->i2c, SPL06_001_REG_MEAS_CFG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(SPL06_001_MEASURE_DELAY_MS);
 
@@ -142,7 +142,7 @@ int spl06_001_deinit(spl06_001_handle_t *handle)
     uint8_t value = SPL06_001_MEAS_IDLE;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)driver_i2c_write_reg(&handle->i2c, SPL06_001_REG_MEAS_CFG, &value, 1U);
@@ -155,7 +155,7 @@ int spl06_001_deinit(spl06_001_handle_t *handle)
 int spl06_001_get_chip_id(spl06_001_handle_t *handle, uint8_t *chip_id)
 {
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, SPL06_001_REG_ID, chip_id, 1U);
 }
@@ -169,10 +169,10 @@ int spl06_001_read_raw(spl06_001_handle_t *handle, int32_t *raw_temperature,
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_pressure == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = spl06_001_wait_ready(handle);
@@ -182,7 +182,7 @@ int spl06_001_read_raw(spl06_001_handle_t *handle, int32_t *raw_temperature,
 
     /* 0x00..0x02 压力、0x03..0x05 温度，均为 24 位补码且 MSB 在前 */
     if (driver_i2c_read_reg(&handle->i2c, SPL06_001_REG_PSR_B2, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     press = ((int32_t)d[0] << 16) | ((int32_t)d[1] << 8) | (int32_t)d[2];
@@ -215,10 +215,10 @@ int spl06_001_read(spl06_001_handle_t *handle, spl06_001_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->kp <= 0.0f || handle->kt <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = spl06_001_read_raw(handle, &raw_t, &raw_p);
@@ -240,7 +240,7 @@ int spl06_001_read(spl06_001_handle_t *handle, spl06_001_data_t *data)
 
     if (!(pressure >= SPL06_001_PRESSURE_MIN_PA && pressure <= SPL06_001_PRESSURE_MAX_PA)) {
         LOG_W("spl06", "pressure out of range: %ld Pa", (long)pressure);
-        return (int)IOT_ERROR;
+        return (int)HAL_ERROR;
     }
 
     data->temperature = temperature;

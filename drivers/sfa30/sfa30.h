@@ -30,7 +30,7 @@ typedef struct {
 } sfa30_data_t;
 
 /** @param address 7 位地址，传 0 取 0x5D */
-int sfa30_init(sfa30_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int sfa30_init(sfa30_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int sfa30_deinit(sfa30_handle_t *handle);
 

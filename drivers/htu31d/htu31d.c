@@ -15,7 +15,7 @@ static int htu31d_read_frame(htu31d_handle_t *handle, uint16_t *raw)
     if (handle->crc_enabled &&
         driver_crc8(data, 2U, HTU31D_CRC_POLY, HTU31D_CRC_INIT) != data[2]) {
         LOG_E("htu31d", "crc error");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     *raw = (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
@@ -42,7 +42,7 @@ int htu31d_read_manufacturer_id(htu31d_handle_t *handle, uint16_t *id)
     int ret;
 
     if (handle == NULL || id == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &command, 1U);
@@ -57,20 +57,20 @@ int htu31d_read_manufacturer_id(htu31d_handle_t *handle, uint16_t *id)
     if (handle->crc_enabled &&
         driver_crc8(data, 2U, HTU31D_CRC_POLY, HTU31D_CRC_INIT) != data[2]) {
         LOG_E("htu31d", "id crc error");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     *id = (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
     return DRIVER_OK;
 }
 
-int htu31d_init(htu31d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int htu31d_init(htu31d_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint16_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -81,7 +81,7 @@ int htu31d_init(htu31d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("htu31d", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -95,7 +95,7 @@ int htu31d_init(htu31d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
         if (id != HTU31D_MANUFACTURER_ID) {
             handle->initialized = false;
             LOG_E("htu31d", "unexpected manufacturer id 0x%04X", id);
-            return (int)IOT_NOT_FOUND;
+            return (int)HAL_NOT_FOUND;
         }
     } else {
         LOG_W("htu31d", "manufacturer id not readable: %d", ret);
@@ -108,7 +108,7 @@ int htu31d_init(htu31d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int htu31d_deinit(htu31d_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -122,10 +122,10 @@ int htu31d_read(htu31d_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (temperature != NULL) {

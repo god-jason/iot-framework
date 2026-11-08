@@ -6,23 +6,23 @@
 static int vibration_check(const vibration_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
 
-int vibration_init(vibration_handle_t *handle, iot_pin_t pin)
+int vibration_init(vibration_handle_t *handle, hal_pin_t pin)
 {
     if (handle == NULL || pin == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->pin = pin;
     handle->initialized = false;
 
-    if (driver_gpio_input(pin, IOT_GPIO_PULLDOWN) != DRIVER_OK) {
+    if (driver_gpio_input(pin, HAL_GPIO_PULLDOWN) != DRIVER_OK) {
         LOG_E(VIBRATION_TAG, "gpio init failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -33,7 +33,7 @@ int vibration_init(vibration_handle_t *handle, iot_pin_t pin)
 int vibration_deinit(vibration_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->pin != 0U) {
         (void)driver_gpio_deinit(handle->pin);
@@ -48,7 +48,7 @@ int vibration_read(vibration_handle_t *handle, bool *vibrating)
     int ret;
 
     if (vibrating == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = vibration_check(handle);
     if (ret != DRIVER_OK) {
@@ -61,7 +61,7 @@ int vibration_read(vibration_handle_t *handle, bool *vibrating)
 
         if (level < 0) {
             LOG_E(VIBRATION_TAG, "gpio read failed");
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         if (level == (int)VIBRATION_ACTIVE_LEVEL) {
             *vibrating = true;

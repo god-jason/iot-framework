@@ -9,7 +9,7 @@ target("iot-pc")
     set_kind("binary")
     set_toolchains("gcc")
     add_defines("IOT_PLATFORM_PC")
-    add_defines("IOT_NETWORK_PC")
+    add_defines("IOT_NETWORK_ETH")
     add_defines("_WIN32_WINNT=0x0600")
 
     -- 平台模拟实现（含模拟入口 main）
@@ -17,6 +17,7 @@ target("iot-pc")
 
     -- 框架源码（纯 C，与平台无关）
     add_files("src/**.c")
+    add_files("components/**.c")
     add_files("vendor/**.c")
     add_files("boot/**.c")
     add_files("networks/**.c")
@@ -28,6 +29,8 @@ target("iot-pc")
     remove_files(
         "src/*_test.c", "src/**/*_test.c",
         "src/test_*.c", "src/**/test_*.c",
+        "components/*_test.c", "components/**/*_test.c",
+        "components/test_*.c", "components/**/test_*.c",
         "vendor/*_test.c", "vendor/**/*_test.c",
         "vendor/test_*.c", "vendor/**/test_*.c",
         "boot/*_test.c", "boot/**/*_test.c",
@@ -41,24 +44,24 @@ target("iot-pc")
 
     -- 头文件搜索路径
     add_includedirs(
-        "src", "src/core", "vendor", "vendor/cjson",
+        "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena",
         "vendor/mongoose",
-        "src/crypto",
-        "src/bytes",
-        "src/common",
-        "src/tlv",
-        "src/datetime",
+        "components/crypto",
+        "components/bytes",
+        "components/common",
+        "components/tlv",
+        "components/datetime",
         "boot",
-        "src/action", "src/behavior", "src/planner", "src/executor",
-        "src/navigation", "src/mapping",
-        "src/filter", "src/statistics",
-        "src/interpolation", "src/pid", "src/motion",
-        "networks/ml307", "src/at", "src/modbus", "src/storage",
-        "networks/pc",
-        "src/motor", "src/encoder", "src/servo", "src/stepper",
-        "src/fan", "src/breath_led", "src/fota", "src/scheduler",
-        "src/console",
+        "components/action", "components/behavior", "components/planner", "components/executor",
+        "components/navigation", "components/mapping",
+        "components/filter", "components/statistics",
+        "components/interpolation", "components/pid", "components/motion",
+        "networks", "networks/ml307", "components/at", "components/modbus", "components/storage",
+        "networks/eth",
+        "components/motor", "components/encoder", "components/servo", "components/stepper",
+        "components/fan", "components/breath_led", "components/fota", "components/scheduler",
+        "components/console",
         "drivers", "platforms", "platforms/pc"
     )
 
@@ -75,7 +78,7 @@ target("iot-test")
     set_kind("binary")
     set_toolchains("gcc")
     add_defines("IOT_PLATFORM_PC")
-    add_defines("IOT_NETWORK_PC")
+    add_defines("IOT_NETWORK_ETH")
     add_defines("_WIN32_WINNT=0x0600")
 
     -- 模拟平台实现
@@ -83,33 +86,35 @@ target("iot-test")
     add_files("platforms/pc/pc_mem.c")
     add_files("platforms/pc/pc_os.c")
     add_files("platforms/pc/pc_uart.c")
+    add_files("platforms/pc/pc_rtos.c")
 
     -- 框架源码（测试文件与源码同目录）
     add_files("src/**.c")
+    add_files("components/**.c")
     add_files("vendor/**.c")
     add_files("boot/**.c")
     add_files("networks/**.c")
     add_files("drivers/**.c")
 
     add_includedirs(
-        "src", "src/core", "vendor", "vendor/cjson",
+        "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena",
         "vendor/mongoose",
-        "src/crypto",
-        "src/bytes",
-        "src/common",
-        "src/tlv",
-        "src/datetime",
+        "components/crypto",
+        "components/bytes",
+        "components/common",
+        "components/tlv",
+        "components/datetime",
         "boot",
-        "src/action", "src/behavior", "src/planner", "src/executor",
-        "src/navigation", "src/mapping",
-        "src/filter", "src/statistics",
-        "src/interpolation", "src/pid", "src/motion",
-        "networks/ml307", "src/at", "src/modbus", "src/storage",
-        "networks/pc",
-        "src/motor", "src/encoder", "src/servo", "src/stepper",
-        "src/fan", "src/breath_led", "src/fota", "src/scheduler",
-        "src/console",
+        "components/action", "components/behavior", "components/planner", "components/executor",
+        "components/navigation", "components/mapping",
+        "components/filter", "components/statistics",
+        "components/interpolation", "components/pid", "components/motion",
+        "networks", "networks/ml307", "components/at", "components/modbus", "components/storage",
+        "networks/eth",
+        "components/motor", "components/encoder", "components/servo", "components/stepper",
+        "components/fan", "components/breath_led", "components/fota", "components/scheduler",
+        "components/console",
         "drivers", "platforms", "platforms/pc"
     )
 
@@ -125,13 +130,14 @@ target("iot-demo")
     set_kind("binary")
     set_toolchains("gcc")
     add_defines("IOT_PLATFORM_PC")
-    add_defines("IOT_NETWORK_PC")
+    add_defines("IOT_NETWORK_ETH")
     add_defines("_WIN32_WINNT=0x0600")
     add_defines("IOT_PC_REAL_DELAY")
 
     add_files("examples/demo.c")
     add_files("platforms/pc/**.c")
     add_files("src/**.c")
+    add_files("components/**.c")
     add_files("vendor/**.c")
     add_files("boot/**.c")
     add_files("networks/**.c")
@@ -140,6 +146,8 @@ target("iot-demo")
     remove_files(
         "src/*_test.c", "src/**/*_test.c",
         "src/test_*.c", "src/**/test_*.c",
+        "components/*_test.c", "components/**/*_test.c",
+        "components/test_*.c", "components/**/test_*.c",
         "vendor/*_test.c", "vendor/**/*_test.c",
         "vendor/test_*.c", "vendor/**/test_*.c",
         "boot/*_test.c", "boot/**/*_test.c",
@@ -151,24 +159,24 @@ target("iot-demo")
     )
 
     add_includedirs(
-        "src", "src/core", "vendor", "vendor/cjson",
+        "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena",
         "vendor/mongoose",
-        "src/crypto",
-        "src/bytes",
-        "src/common",
-        "src/tlv",
-        "src/datetime",
+        "components/crypto",
+        "components/bytes",
+        "components/common",
+        "components/tlv",
+        "components/datetime",
         "boot",
-        "src/action", "src/behavior", "src/planner", "src/executor",
-        "src/navigation", "src/mapping",
-        "src/filter", "src/statistics",
-        "src/interpolation", "src/pid", "src/motion",
-        "networks/ml307", "src/at", "src/modbus", "src/storage",
-        "networks/pc",
-        "src/motor", "src/encoder", "src/servo", "src/stepper",
-        "src/fan", "src/breath_led", "src/fota", "src/scheduler",
-        "src/console",
+        "components/action", "components/behavior", "components/planner", "components/executor",
+        "components/navigation", "components/mapping",
+        "components/filter", "components/statistics",
+        "components/interpolation", "components/pid", "components/motion",
+        "networks", "networks/ml307", "components/at", "components/modbus", "components/storage",
+        "networks/eth",
+        "components/motor", "components/encoder", "components/servo", "components/stepper",
+        "components/fan", "components/breath_led", "components/fota", "components/scheduler",
+        "components/console",
         "drivers", "platforms", "platforms/pc"
     )
 

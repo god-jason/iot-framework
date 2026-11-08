@@ -49,10 +49,10 @@ typedef struct {
 } bmp390_data_t;
 
 /** 初始化（I2C）：校验 chip id 0x60、软复位、读校准、配置过采样 */
-int bmp390_init(bmp390_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int bmp390_init(bmp390_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** 初始化（SPI，4 线模式，cs 为片选引脚） */
-int bmp390_init_spi(bmp390_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
+int bmp390_init_spi(bmp390_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
 
 /** 反初始化（切回 sleep，不关闭总线） */
 int bmp390_deinit(bmp390_handle_t *handle);

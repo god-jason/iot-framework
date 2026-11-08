@@ -16,8 +16,8 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_pin_t clk;
-    iot_pin_t dio;
+    hal_pin_t clk;
+    hal_pin_t dio;
 
     uint8_t *gram;          /* 每位数码管一个段码字节 */
     size_t gram_len;

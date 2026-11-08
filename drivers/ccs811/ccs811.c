@@ -29,7 +29,7 @@ static int ccs811_soft_reset(ccs811_handle_t *handle)
     magic[3] = CCS811_SW_RESET_MAGIC_3;
 
     if (driver_i2c_write_reg(&handle->i2c, CCS811_REG_SW_RESET, magic, sizeof(magic)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(CCS811_RESET_DELAY_MS);
     return DRIVER_OK;
@@ -61,7 +61,7 @@ static int ccs811_start_app(ccs811_handle_t *handle)
     }
     if ((status & CCS811_STATUS_FW_MODE) == 0U) {
         LOG_E("ccs811", "not in app mode, status=0x%02X", (unsigned)status);
-        return (int)IOT_HW_ERROR;
+        return (int)HAL_HW_ERROR;
     }
     return DRIVER_OK;
 }
@@ -83,27 +83,27 @@ static int ccs811_wait_data_ready(ccs811_handle_t *handle)
 
             (void)ccs811_read_u8(handle, CCS811_REG_ERROR_ID, &err);
             LOG_E("ccs811", "sensor error, ERROR_ID=0x%02X", (unsigned)err);
-            return (int)IOT_HW_ERROR;
+            return (int)HAL_HW_ERROR;
         }
         if ((status & CCS811_STATUS_DATA_READY) != 0U) {
             return DRIVER_OK;
         }
         if ((driver_tick_ms() - start) >= handle->ready_timeout_ms) {
             LOG_W("ccs811", "data not ready, status=0x%02X", (unsigned)status);
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(CCS811_POLL_INTERVAL_MS);
     }
 }
 
-int ccs811_init(ccs811_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int ccs811_init(ccs811_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     uint8_t status = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -114,7 +114,7 @@ int ccs811_init(ccs811_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("ccs811", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (ccs811_soft_reset(handle) != DRIVER_OK) {
@@ -129,7 +129,7 @@ int ccs811_init(ccs811_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     }
     if (id != CCS811_HW_ID_VALUE) {
         LOG_E("ccs811", "unexpected hw id 0x%02X", (unsigned)id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = ccs811_read_u8(handle, CCS811_REG_STATUS, &status);
@@ -141,11 +141,11 @@ int ccs811_init(ccs811_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
         (void)ccs811_read_u8(handle, CCS811_REG_ERROR_ID, &err);
         LOG_E("ccs811", "status error, ERROR_ID=0x%02X", (unsigned)err);
-        return (int)IOT_HW_ERROR;
+        return (int)HAL_HW_ERROR;
     }
     if ((status & CCS811_STATUS_APP_VALID) == 0U) {
         LOG_E("ccs811", "no valid app firmware (bootloader only)");
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
 
     if ((status & CCS811_STATUS_FW_MODE) == 0U) {
@@ -172,7 +172,7 @@ int ccs811_init(ccs811_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int ccs811_deinit(ccs811_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -185,7 +185,7 @@ int ccs811_read(ccs811_handle_t *handle, ccs811_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ccs811_wait_data_ready(handle);
@@ -214,7 +214,7 @@ int ccs811_set_environment(ccs811_handle_t *handle, float humidity_rh, float tem
     float rh = humidity_rh;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (rh < 0.0f) {
@@ -236,7 +236,7 @@ int ccs811_set_environment(ccs811_handle_t *handle, float humidity_rh, float tem
 int ccs811_read_error(ccs811_handle_t *handle, uint8_t *error_id)
 {
     if (handle == NULL || error_id == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ccs811_read_u8(handle, CCS811_REG_ERROR_ID, error_id);
 }

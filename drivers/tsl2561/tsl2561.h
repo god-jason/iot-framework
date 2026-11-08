@@ -40,7 +40,7 @@ typedef struct {
 } tsl2561_data_t;
 
 /** 初始化：probe + 校验 ID + 上电 + 写入默认增益/积分时间 */
-int tsl2561_init(tsl2561_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int tsl2561_init(tsl2561_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int tsl2561_deinit(tsl2561_handle_t *handle);
 
 int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_t gain);

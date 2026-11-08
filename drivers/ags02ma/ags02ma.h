@@ -33,7 +33,7 @@ typedef struct {
 } ags02ma_data_t;
 
 /** @param address 7 位地址，传 0 取 0x1A */
-int ags02ma_init(ags02ma_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int ags02ma_init(ags02ma_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int ags02ma_deinit(ags02ma_handle_t *handle);
 

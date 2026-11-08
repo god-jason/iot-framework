@@ -16,8 +16,8 @@ extern "C" {
 typedef sx1262_handle_t sx1268_handle_t;
 typedef sx1262_mode_t sx1268_mode_t;
 
-int sx1268_init(sx1268_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
-                iot_pin_t busy, iot_pin_t reset, iot_pin_t dio1);
+int sx1268_init(sx1268_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
+                hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1);
 int sx1268_deinit(sx1268_handle_t *handle);
 int sx1268_set_frequency(sx1268_handle_t *handle, uint32_t frequency_hz);
 int sx1268_set_mode(sx1268_handle_t *handle, sx1268_mode_t mode);

@@ -18,10 +18,10 @@ static int bme280_read_calib(bme280_handle_t *handle)
     bme280_calib_t *c = &handle->calib;
 
     if (driver_i2c_read_reg(&handle->i2c, BME280_REG_CALIB_00, tp, sizeof(tp)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (driver_i2c_read_reg(&handle->i2c, BME280_REG_CALIB_HUM, h, sizeof(h)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 0x88..0xA1：T1(u16) T2(i16) T3(i16) P1(u16) P2..P9(i16)，小端 */
@@ -126,13 +126,13 @@ static double bme280_compensate_humidity(bme280_handle_t *handle, int32_t adc_h)
     return var_h;
 }
 
-int bme280_init(bme280_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int bme280_init(bme280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t chip_id = 0U;
     uint8_t value;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -142,11 +142,11 @@ int bme280_init(bme280_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     handle->initialized = false;
 
     if (bme280_get_chip_id(handle, &chip_id) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (chip_id != BME280_CHIP_ID) {
         LOG_E("bme280", "chip id mismatch: 0x%02X", chip_id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     value = BME280_RESET_VALUE;
@@ -155,25 +155,25 @@ int bme280_init(bme280_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (bme280_read_calib(handle) != DRIVER_OK) {
         LOG_E("bme280", "read calibration failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (handle->calib.t1 == 0U || handle->calib.p1 == 0U) {
         LOG_E("bme280", "invalid calibration data");
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* ctrl_hum 必须先写，再写 ctrl_meas 才生效 */
     value = BME280_CTRL_HUM_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_HUM, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BME280_CONFIG_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CONFIG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BME280_CTRL_MEAS_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -186,7 +186,7 @@ int bme280_deinit(bme280_handle_t *handle)
     uint8_t value = BME280_MODE_SLEEP;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U);
@@ -199,7 +199,7 @@ int bme280_deinit(bme280_handle_t *handle)
 int bme280_get_chip_id(bme280_handle_t *handle, uint8_t *chip_id)
 {
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, BME280_REG_CHIP_ID, chip_id, 1U);
 }
@@ -213,14 +213,14 @@ int bme280_read_raw(bme280_handle_t *handle, int32_t *raw_temperature,
     int32_t adc_h;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_pressure == NULL && raw_humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, BME280_REG_DATA, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     adc_p = ((int32_t)d[0] << 12) | ((int32_t)d[1] << 4) | ((int32_t)d[2] >> 4);
@@ -250,7 +250,7 @@ int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = bme280_read_raw(handle, &adc_t, &adc_p, &adc_h);
@@ -265,7 +265,7 @@ int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
 
     if (pressure < BME280_PRESSURE_MIN_PA || pressure > BME280_PRESSURE_MAX_PA) {
         LOG_W("bme280", "pressure out of range: %lu Pa", (unsigned long)pressure);
-        return (int)IOT_ERROR;
+        return (int)HAL_ERROR;
     }
 
     data->temperature = (float)temp01 / 100.0f;

@@ -56,10 +56,10 @@ typedef struct {
  * @brief  初始化：配置片选、回读配置寄存器校验保留位
  * @param  handle  驱动句柄
  * @param  spi     已初始化的 SPI 主机句柄（模式 1，8 位，MSB first）
- * @param  cs      片选引脚，IOT_PIN(0,0) 表示由总线管理
- * @return 0 成功，负值为 iot_status_t（无响应返回 IOT_NOT_FOUND）
+ * @param  cs      片选引脚，HAL_PIN(0,0) 表示由总线管理
+ * @return 0 成功，负值为 hal_status_t（无响应返回 HAL_NOT_FOUND）
  */
-int ads1118_init(ads1118_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
+int ads1118_init(ads1118_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
 
 /** @brief 反初始化（拉高片选，不关闭总线） */
 int ads1118_deinit(ads1118_handle_t *handle);

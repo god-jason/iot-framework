@@ -7,7 +7,7 @@ static int ina219_read_reg16(ina219_handle_t *handle, uint8_t reg, uint16_t *val
     uint8_t d[2];
 
     if (driver_i2c_read_reg(&handle->i2c, reg, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *value = (uint16_t)(((uint16_t)d[0] << 8) | d[1]);
     return DRIVER_OK;
@@ -22,11 +22,11 @@ static int ina219_write_reg16(ina219_handle_t *handle, uint8_t reg, uint16_t val
     return driver_i2c_write_reg(&handle->i2c, reg, d, sizeof(d));
 }
 
-int ina219_init(ina219_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
+int ina219_init(ina219_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
                 float shunt_ohm, float max_current_a)
 {
     if (handle == NULL || i2c == NULL || shunt_ohm <= 0.0f || max_current_a <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -39,12 +39,12 @@ int ina219_init(ina219_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("ina219", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (ina219_write_reg16(handle, INA219_REG_CONFIG,
                            INA219_CONFIG_16V_320MV_12BIT_CONT) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     {
@@ -60,7 +60,7 @@ int ina219_init(ina219_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
     }
 
     if (ina219_write_reg16(handle, INA219_REG_CALIBRATION, handle->calibration) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -71,7 +71,7 @@ int ina219_init(ina219_handle_t *handle, iot_i2c_t *i2c, uint16_t address,
 int ina219_deinit(ina219_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -83,10 +83,10 @@ int ina219_read_bus_voltage(ina219_handle_t *handle, float *voltage)
     uint16_t raw = 0U;
 
     if (handle == NULL || voltage == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina219_read_reg16(handle, INA219_REG_BUS_VOLTAGE, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 总线电压为 bit15:3，LSB 4mV */
@@ -99,10 +99,10 @@ int ina219_read_current(ina219_handle_t *handle, float *current)
     uint16_t raw = 0U;
 
     if (handle == NULL || current == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina219_read_reg16(handle, INA219_REG_CURRENT, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *current = (float)(int16_t)raw * handle->current_lsb_a;
     return DRIVER_OK;
@@ -113,10 +113,10 @@ int ina219_read_power(ina219_handle_t *handle, float *power)
     uint16_t raw = 0U;
 
     if (handle == NULL || power == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina219_read_reg16(handle, INA219_REG_POWER, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *power = (float)raw * handle->power_lsb_w;
     return DRIVER_OK;
@@ -127,7 +127,7 @@ int ina219_read(ina219_handle_t *handle, ina219_data_t *data)
     int ret;
 
     if (data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = ina219_read_bus_voltage(handle, &data->bus_voltage);
     if (ret != DRIVER_OK) {

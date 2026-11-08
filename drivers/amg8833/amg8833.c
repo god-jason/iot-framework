@@ -7,7 +7,7 @@
 static int amg8833_check(const amg8833_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -33,12 +33,12 @@ static int16_t amg8833_therm_raw(int16_t raw)
     return value;
 }
 
-int amg8833_init(amg8833_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int amg8833_init(amg8833_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t value;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -49,30 +49,30 @@ int amg8833_init(amg8833_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(AMG8833_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 进入 normal 模式 */
     value = AMG8833_PCLT_NORMAL;
     if (amg8833_write(handle, AMG8833_REG_PCLT, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 清除复位标志 */
     value = AMG8833_RST_INITIAL;
     if (amg8833_write(handle, AMG8833_REG_RST, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(AMG8833_RESET_DELAY_MS);
 
     /* 默认 10fps、关闭中断 */
     value = AMG8833_FPSC_10FPS;
     if (amg8833_write(handle, AMG8833_REG_FPSC, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = 0x00U;
     if (amg8833_write(handle, AMG8833_REG_INTC, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -85,7 +85,7 @@ int amg8833_deinit(amg8833_handle_t *handle)
     uint8_t value = AMG8833_PCLT_STANDBY_10S;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)amg8833_write(handle, AMG8833_REG_PCLT, &value, 1U);
@@ -99,7 +99,7 @@ int amg8833_write(amg8833_handle_t *handle, uint8_t reg, const uint8_t *data, si
 {
     if (handle == NULL || handle->i2c.handle == NULL ||
         (data == NULL && len > 0U) || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_write_reg(&handle->i2c, reg, data, len);
 }
@@ -108,7 +108,7 @@ int amg8833_read_reg(amg8833_handle_t *handle, uint8_t reg, uint8_t *data, size_
 {
     if (handle == NULL || handle->i2c.handle == NULL ||
         (data == NULL && len > 0U) || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, reg, data, len);
 }
@@ -121,7 +121,7 @@ int amg8833_read_raw(amg8833_handle_t *handle, amg8833_raw_frame_t *frame)
     int ret;
 
     if (frame == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = amg8833_check(handle);
     if (ret != DRIVER_OK) {
@@ -151,7 +151,7 @@ int amg8833_read(amg8833_handle_t *handle, float *pixels, float *thermistor_c)
     int ret;
 
     if (pixels == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = amg8833_read_raw(handle, &frame);
@@ -174,7 +174,7 @@ int amg8833_read_thermistor(amg8833_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = amg8833_check(handle);
     if (ret != DRIVER_OK) {
@@ -199,7 +199,7 @@ int amg8833_set_frame_rate(amg8833_handle_t *handle, amg8833_frame_rate_t rate)
         return ret;
     }
     if (rate != AMG8833_FRAME_RATE_10FPS && rate != AMG8833_FRAME_RATE_1FPS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     value = (rate == AMG8833_FRAME_RATE_1FPS) ? AMG8833_FPSC_1FPS : AMG8833_FPSC_10FPS;
@@ -232,7 +232,7 @@ int amg8833_set_interrupt(amg8833_handle_t *handle, bool enable, float high_c, f
     /* 阈值范围检查：TTH 为 11 位有符号（0.0625℃/LSB），TTL 为 8 位（1℃/LSB） */
     if (high_c < 0.0f || high_c > 127.0f || low_c < 0.0f || low_c > 127.0f ||
         high_c <= low_c) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     tth = (uint16_t)(high_c / AMG8833_THERM_LSB_C) & 0x07FFU;
@@ -258,7 +258,7 @@ int amg8833_read_status(amg8833_handle_t *handle, uint8_t *status)
     int ret;
 
     if (status == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = amg8833_check(handle);
     if (ret != DRIVER_OK) {

@@ -28,7 +28,7 @@ typedef struct {
 } uvis25_handle_t;
 
 /** 初始化：probe + 校验 WHO_AM_I + 打开传感器并配置 ODR */
-int uvis25_init(uvis25_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int uvis25_init(uvis25_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int uvis25_deinit(uvis25_handle_t *handle);
 
 int uvis25_set_odr(uvis25_handle_t *handle, uvis25_odr_t odr);

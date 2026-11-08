@@ -47,7 +47,7 @@ int hdc1080_read_id(hdc1080_handle_t *handle, uint16_t *id)
     int ret;
 
     if (handle == NULL || id == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = driver_i2c_read_reg(&handle->i2c, HDC1080_REG_SERIAL_HIGH, data, sizeof(data));
@@ -64,7 +64,7 @@ int hdc1080_set_heater(hdc1080_handle_t *handle, bool enable)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     config = (enable ? HDC1080_CONFIG_HEAT : 0U) | HDC1080_CONFIG_14BIT_BOTH;
@@ -75,13 +75,13 @@ int hdc1080_set_heater(hdc1080_handle_t *handle, bool enable)
     return ret;
 }
 
-int hdc1080_init(hdc1080_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int hdc1080_init(hdc1080_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint16_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -92,7 +92,7 @@ int hdc1080_init(hdc1080_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("hdc1080", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 软复位（自清零位），复位后需等待 15ms 才能访问 */
@@ -105,12 +105,12 @@ int hdc1080_init(hdc1080_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     if (ret != DRIVER_OK) {
         handle->initialized = false;
         LOG_E("hdc1080", "read id failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (id != HDC1080_DEVICE_ID) {
         handle->initialized = false;
         LOG_E("hdc1080", "unexpected id 0x%04X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 14 位温度 + 14 位湿度，独立采集模式，加热器关闭 */
@@ -127,7 +127,7 @@ int hdc1080_init(hdc1080_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int hdc1080_deinit(hdc1080_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     (void)hdc1080_write_config(handle, HDC1080_CONFIG_14BIT_BOTH);
     handle->initialized = false;
@@ -142,10 +142,10 @@ int hdc1080_read(hdc1080_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 先触发温度，再触发湿度（HDC1080 建议顺序） */

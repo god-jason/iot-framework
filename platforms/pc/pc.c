@@ -48,9 +48,9 @@
 
 typedef struct {
     bool initialized;
-    iot_gpio_mode_t mode;
-    iot_gpio_pull_t pull;
-    iot_gpio_level_t level;
+    hal_gpio_mode_t mode;
+    hal_gpio_pull_t pull;
+    hal_gpio_level_t level;
 } pc_gpio_t;
 
 static pc_gpio_t s_gpio[PC_GPIO_PORTS][PC_GPIO_PINS];
@@ -58,7 +58,7 @@ static pc_gpio_t s_gpio[PC_GPIO_PORTS][PC_GPIO_PINS];
 typedef struct {
     bool initialized;
     bool enabled;
-    iot_exti_config_t config;
+    hal_exti_config_t config;
 } pc_exti_t;
 
 static pc_exti_t s_exti[PC_GPIO_PORTS][PC_GPIO_PINS];
@@ -78,10 +78,10 @@ static size_t s_i2s_len;
 typedef struct {
     bool used;
     const void *owner;
-    iot_can_frame_t queue[PC_CAN_QUEUE];
+    hal_can_frame_t queue[PC_CAN_QUEUE];
     uint32_t head;
     uint32_t count;
-    iot_can_filter_t filters[PC_CAN_FILTERS];
+    hal_can_filter_t filters[PC_CAN_FILTERS];
     uint32_t filter_count;
 } pc_can_ctx_t;
 
@@ -127,13 +127,13 @@ static bool s_wdg_reset_flag;
 
 /* ------------------------------ RTC ------------------------------ */
 
-static iot_rtc_time_t s_rtc_time;
+static hal_rtc_time_t s_rtc_time;
 
 typedef struct {
     bool enabled;
     bool fired;
-    iot_rtc_time_t time;
-    iot_rtc_alarm_callback_t callback;
+    hal_rtc_time_t time;
+    hal_rtc_alarm_callback_t callback;
     void *user_data;
 } pc_rtc_alarm_t;
 
@@ -161,7 +161,7 @@ static uint32_t s_rng_state = PC_RNG_SEED;
 
 /* ------------------------------ PWR ------------------------------ */
 
-static iot_pwr_status_t s_pwr_status;
+static hal_pwr_status_t s_pwr_status;
 
 /* ------------------------------ QSPI ------------------------------ */
 
@@ -184,53 +184,53 @@ static size_t s_eth_len;
 
 /* ============================== 通用辅助 ============================== */
 
-static bool pc_gpio_valid(iot_pin_t pin)
+static bool pc_gpio_valid(hal_pin_t pin)
 {
-    return IOT_PIN_GET_PORT(pin) < PC_GPIO_PORTS &&
-           IOT_PIN_GET_INDEX(pin) < PC_GPIO_PINS;
+    return HAL_PIN_GET_PORT(pin) < PC_GPIO_PORTS &&
+           HAL_PIN_GET_INDEX(pin) < PC_GPIO_PINS;
 }
 
-static void pc_handle_ready(iot_handle_base_t *base, iot_state_t state)
+static void pc_handle_ready(hal_handle_base_t *base, hal_state_t state)
 {
     base->state = state;
-    base->error = IOT_OK;
+    base->error = HAL_OK;
 }
 
-static void pc_handle_deinit(iot_handle_base_t *base)
+static void pc_handle_deinit(hal_handle_base_t *base)
 {
-    base->state = IOT_STATE_RESET;
-    base->error = IOT_OK;
+    base->state = HAL_STATE_RESET;
+    base->error = HAL_OK;
 }
 
 /* ============================== 平台注册 ============================== */
 
-static iot_status_t pc_platform_init(void)
+static hal_status_t pc_platform_init(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-static iot_status_t pc_platform_deinit(void)
+static hal_status_t pc_platform_deinit(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_init(void)
+hal_status_t hal_init(void)
 {
     return pc_platform_init();
 }
 
-iot_status_t iot_deinit(void)
+hal_status_t hal_deinit(void)
 {
     return pc_platform_deinit();
 }
 
-iot_status_t iot_get_info(iot_mcu_info_t *info)
+hal_status_t hal_get_info(hal_mcu_info_t *info)
 {
     if (info == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     memset(info, 0, sizeof(*info));
-    info->family = IOT_MCU_PC;
+    info->family = HAL_MCU_PC;
     info->model = 1;
     info->revision = 1;
     info->core_clock = 72000000U;
@@ -239,50 +239,50 @@ iot_status_t iot_get_info(iot_mcu_info_t *info)
     info->apb2_clock = 72000000U;
     info->flash_size = 1024U * 1024U;
     info->sram_size = 512U * 1024U;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== 核心 ============================== */
 
-uint32_t iot_get_capabilities(iot_device_type_t type, uint8_t instance)
+uint32_t hal_get_capabilities(hal_device_type_t type, uint8_t instance)
 {
     uint32_t caps;
 
     switch (type) {
-    case IOT_DEVICE_GPIO:
+    case HAL_DEVICE_GPIO:
         return (instance < PC_GPIO_PORTS) ? 0U : 0U;
-    case IOT_DEVICE_UART:
-        caps = IOT_CAP_DMA | IOT_CAP_IT | IOT_CAP_IDLE_DETECT;
+    case HAL_DEVICE_UART:
+        caps = HAL_CAP_DMA | HAL_CAP_IT | HAL_CAP_IDLE_DETECT;
         break;
-    case IOT_DEVICE_SPI:
-        caps = IOT_CAP_DMA | IOT_CAP_IT;
+    case HAL_DEVICE_SPI:
+        caps = HAL_CAP_DMA | HAL_CAP_IT;
         break;
-    case IOT_DEVICE_I2C:
-        caps = IOT_CAP_DMA | IOT_CAP_IT;
+    case HAL_DEVICE_I2C:
+        caps = HAL_CAP_DMA | HAL_CAP_IT;
         break;
-    case IOT_DEVICE_CAN:
-        caps = IOT_CAP_IT;
+    case HAL_DEVICE_CAN:
+        caps = HAL_CAP_IT;
         break;
-    case IOT_DEVICE_ADC:
-        caps = IOT_CAP_DMA | IOT_CAP_IT;
+    case HAL_DEVICE_ADC:
+        caps = HAL_CAP_DMA | HAL_CAP_IT;
         break;
-    case IOT_DEVICE_DAC:
-        caps = IOT_CAP_DMA;
+    case HAL_DEVICE_DAC:
+        caps = HAL_CAP_DMA;
         break;
-    case IOT_DEVICE_PWM:
+    case HAL_DEVICE_PWM:
         caps = 0U;
         break;
-    case IOT_DEVICE_TIMER:
-        caps = IOT_CAP_IT;
+    case HAL_DEVICE_TIMER:
+        caps = HAL_CAP_IT;
         break;
-    case IOT_DEVICE_FLASH:
+    case HAL_DEVICE_FLASH:
         caps = 0U;
         break;
-    case IOT_DEVICE_USB:
+    case HAL_DEVICE_USB:
         caps = 0U;
         break;
-    case IOT_DEVICE_ETH:
-        caps = IOT_CAP_DMA | IOT_CAP_IT;
+    case HAL_DEVICE_ETH:
+        caps = HAL_CAP_DMA | HAL_CAP_IT;
         break;
     default:
         return 0U;
@@ -297,393 +297,393 @@ uint32_t iot_get_capabilities(iot_device_type_t type, uint8_t instance)
 
 static uint32_t s_clock_freq[6];
 
-iot_status_t iot_clock_init(const iot_clock_config_t *config)
+hal_status_t hal_clock_init(const hal_clock_config_t *config)
 {
     if (config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    s_clock_freq[IOT_CLOCK_CORE] = (config->pll_frequency != 0U) ?
+    s_clock_freq[HAL_CLOCK_CORE] = (config->pll_frequency != 0U) ?
                                     config->pll_frequency : config->frequency;
-    s_clock_freq[IOT_CLOCK_AHB] = s_clock_freq[IOT_CLOCK_CORE];
-    s_clock_freq[IOT_CLOCK_APB1] = s_clock_freq[IOT_CLOCK_CORE] / 2U;
-    s_clock_freq[IOT_CLOCK_APB2] = s_clock_freq[IOT_CLOCK_CORE];
-    s_clock_freq[IOT_CLOCK_APB3] = s_clock_freq[IOT_CLOCK_CORE];
-    s_clock_freq[IOT_CLOCK_APB4] = s_clock_freq[IOT_CLOCK_CORE];
-    return IOT_OK;
+    s_clock_freq[HAL_CLOCK_AHB] = s_clock_freq[HAL_CLOCK_CORE];
+    s_clock_freq[HAL_CLOCK_APB1] = s_clock_freq[HAL_CLOCK_CORE] / 2U;
+    s_clock_freq[HAL_CLOCK_APB2] = s_clock_freq[HAL_CLOCK_CORE];
+    s_clock_freq[HAL_CLOCK_APB3] = s_clock_freq[HAL_CLOCK_CORE];
+    s_clock_freq[HAL_CLOCK_APB4] = s_clock_freq[HAL_CLOCK_CORE];
+    return HAL_OK;
 }
 
-uint32_t iot_clock_get_frequency(iot_clock_bus_t bus)
+uint32_t hal_clock_get_frequency(hal_clock_bus_t bus)
 {
-    if ((uint32_t)bus >= IOT_ARRAY_SIZE(s_clock_freq)) {
+    if ((uint32_t)bus >= HAL_ARRAY_SIZE(s_clock_freq)) {
         return 0U;
     }
     return s_clock_freq[bus];
 }
 
-iot_status_t iot_clock_enable(void *peripheral)
+hal_status_t hal_clock_enable(void *peripheral)
 {
     if (peripheral == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_clock_disable(void *peripheral)
+hal_status_t hal_clock_disable(void *peripheral)
 {
     if (peripheral == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pin_init(const iot_pin_config_t *config)
+hal_status_t hal_pin_init(const hal_pin_config_t *config)
 {
     if (config == NULL || !pc_gpio_valid(config->pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pin_deinit(iot_pin_t pin)
+hal_status_t hal_pin_deinit(hal_pin_t pin)
 {
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== GPIO ============================== */
 
-iot_status_t iot_gpio_init(iot_pin_t pin, const iot_gpio_config_t *config)
+hal_status_t hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
 {
     pc_gpio_t *gpio;
 
     if (config == NULL || !pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    gpio = &s_gpio[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    gpio = &s_gpio[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     gpio->initialized = true;
     gpio->mode = config->mode;
     gpio->pull = config->pull;
-    gpio->level = (config->mode == IOT_GPIO_MODE_OUTPUT) ?
-                  config->initial_level : IOT_GPIO_LOW;
-    return IOT_OK;
+    gpio->level = (config->mode == HAL_GPIO_MODE_OUTPUT) ?
+                  config->initial_level : HAL_GPIO_LOW;
+    return HAL_OK;
 }
 
-iot_status_t iot_gpio_deinit(iot_pin_t pin)
+hal_status_t hal_gpio_deinit(hal_pin_t pin)
 {
     pc_gpio_t *gpio;
 
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    gpio = &s_gpio[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    gpio = &s_gpio[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     gpio->initialized = false;
-    gpio->mode = IOT_GPIO_MODE_INPUT;
-    gpio->pull = IOT_GPIO_NOPULL;
-    gpio->level = IOT_GPIO_LOW;
-    return IOT_OK;
+    gpio->mode = HAL_GPIO_MODE_INPUT;
+    gpio->pull = HAL_GPIO_NOPULL;
+    gpio->level = HAL_GPIO_LOW;
+    return HAL_OK;
 }
 
-iot_status_t iot_gpio_write(iot_pin_t pin, iot_gpio_level_t level)
+hal_status_t hal_gpio_write(hal_pin_t pin, hal_gpio_level_t level)
 {
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (level != IOT_GPIO_LOW && level != IOT_GPIO_HIGH) {
-        return IOT_INVALID_PARAM;
+    if (level != HAL_GPIO_LOW && level != HAL_GPIO_HIGH) {
+        return HAL_INVALID_PARAM;
     }
-    s_gpio[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)].level = level;
-    return IOT_OK;
+    s_gpio[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)].level = level;
+    return HAL_OK;
 }
 
-iot_status_t iot_gpio_read(iot_pin_t pin, iot_gpio_level_t *level)
+hal_status_t hal_gpio_read(hal_pin_t pin, hal_gpio_level_t *level)
 {
     if (level == NULL || !pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    *level = s_gpio[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)].level;
-    return IOT_OK;
+    *level = s_gpio[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)].level;
+    return HAL_OK;
 }
 
-iot_status_t iot_gpio_toggle(iot_pin_t pin)
+hal_status_t hal_gpio_toggle(hal_pin_t pin)
 {
     pc_gpio_t *gpio;
 
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    gpio = &s_gpio[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
-    gpio->level = (gpio->level == IOT_GPIO_HIGH) ? IOT_GPIO_LOW : IOT_GPIO_HIGH;
-    return IOT_OK;
+    gpio = &s_gpio[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
+    gpio->level = (gpio->level == HAL_GPIO_HIGH) ? HAL_GPIO_LOW : HAL_GPIO_HIGH;
+    return HAL_OK;
 }
 
-iot_status_t iot_gpio_set(iot_pin_t pin)
+hal_status_t hal_gpio_set(hal_pin_t pin)
 {
-    return iot_gpio_write(pin, IOT_GPIO_HIGH);
+    return hal_gpio_write(pin, HAL_GPIO_HIGH);
 }
 
-iot_status_t iot_gpio_reset(iot_pin_t pin)
+hal_status_t hal_gpio_reset(hal_pin_t pin)
 {
-    return iot_gpio_write(pin, IOT_GPIO_LOW);
+    return hal_gpio_write(pin, HAL_GPIO_LOW);
 }
 
 /* ============================== EXTI ============================== */
 
-iot_status_t iot_exti_init(iot_pin_t pin, const iot_exti_config_t *config)
+hal_status_t hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
 {
     pc_exti_t *exti;
 
     if (config == NULL || !pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    exti = &s_exti[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    exti = &s_exti[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     exti->config = *config;
     exti->initialized = true;
     exti->enabled = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_exti_enable(iot_pin_t pin)
+hal_status_t hal_exti_enable(hal_pin_t pin)
 {
     pc_exti_t *exti;
 
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    exti = &s_exti[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    exti = &s_exti[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     if (!exti->initialized) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     exti->enabled = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_exti_disable(iot_pin_t pin)
+hal_status_t hal_exti_disable(hal_pin_t pin)
 {
     pc_exti_t *exti;
 
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    exti = &s_exti[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    exti = &s_exti[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     exti->enabled = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_exti_clear(iot_pin_t pin)
+hal_status_t hal_exti_clear(hal_pin_t pin)
 {
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_exti_deinit(iot_pin_t pin)
+hal_status_t hal_exti_deinit(hal_pin_t pin)
 {
     pc_exti_t *exti;
 
     if (!pc_gpio_valid(pin)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    exti = &s_exti[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    exti = &s_exti[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     memset(exti, 0, sizeof(*exti));
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== DMA ============================== */
 
-iot_status_t iot_dma_init(iot_dma_t *handle, const iot_dma_config_t *config)
+hal_status_t hal_dma_init(hal_dma_t *handle, const hal_dma_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_dma_deinit(iot_dma_t *handle)
+hal_status_t hal_dma_deinit(hal_dma_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_dma_start(iot_dma_t *handle, uintptr_t src, uintptr_t dst, size_t length)
+hal_status_t hal_dma_start(hal_dma_t *handle, uintptr_t src, uintptr_t dst, size_t length)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    if (handle->config.direction != IOT_DMA_MEMORY_TO_MEMORY) {
-        return IOT_NOT_SUPPORTED;
+    if (handle->config.direction != HAL_DMA_MEMORY_TO_MEMORY) {
+        return HAL_NOT_SUPPORTED;
     }
     if (length > 0U) {
         if (src == 0U || dst == 0U) {
-            return IOT_INVALID_PARAM;
+            return HAL_INVALID_PARAM;
         }
         memcpy((void *)dst, (const void *)src, length);
     }
-    handle->base.state = IOT_STATE_READY;
+    handle->base.state = HAL_STATE_READY;
     if (handle->callback != NULL) {
-        handle->callback(handle, IOT_EVENT_COMPLETE, handle->user_data);
+        handle->callback(handle, HAL_EVENT_COMPLETE, handle->user_data);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_dma_stop(iot_dma_t *handle)
+hal_status_t hal_dma_stop(hal_dma_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_dma_suspend(iot_dma_t *handle)
+hal_status_t hal_dma_suspend(hal_dma_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_SUSPENDED;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_SUSPENDED;
+    return HAL_OK;
 }
 
-iot_status_t iot_dma_resume(iot_dma_t *handle)
+hal_status_t hal_dma_resume(hal_dma_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-size_t iot_dma_get_remaining(iot_dma_t *handle)
+size_t hal_dma_get_remaining(hal_dma_t *handle)
 {
-    IOT_UNUSED(handle);
+    HAL_UNUSED(handle);
     return 0U;
 }
 
 /* ============================== SPI ============================== */
 
-iot_status_t iot_spi_init(iot_spi_t *handle, const iot_spi_config_t *config)
+hal_status_t hal_spi_init(hal_spi_t *handle, const hal_spi_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_spi_deinit(iot_spi_t *handle)
+hal_status_t hal_spi_deinit(hal_spi_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_spi_transmit(iot_spi_t *handle, const void *data,
+hal_status_t hal_spi_transmit(hal_spi_t *handle, const void *data,
                                 size_t length, uint32_t timeout)
 {
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
-    return IOT_OK;
+    HAL_UNUSED(timeout);
+    return HAL_OK;
 }
 
-iot_status_t iot_spi_receive(iot_spi_t *handle, void *data,
+hal_status_t hal_spi_receive(hal_spi_t *handle, void *data,
                                size_t length, uint32_t timeout)
 {
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     if (length > 0U) {
         memset(data, 0, length);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_spi_transfer(iot_spi_t *handle, const void *tx_data,
+hal_status_t hal_spi_transfer(hal_spi_t *handle, const void *tx_data,
                                 void *rx_data, size_t length, uint32_t timeout)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (length == 0U) {
-        return IOT_OK;
+        return HAL_OK;
     }
     if (tx_data == NULL || rx_data == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     memcpy(rx_data, tx_data, length);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_spi_transmit_dma(iot_spi_t *handle, const void *data, size_t length)
+hal_status_t hal_spi_transmit_dma(hal_spi_t *handle, const void *data, size_t length)
 {
-    return iot_spi_transmit(handle, data, length, IOT_TIMEOUT_FOREVER);
+    return hal_spi_transmit(handle, data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_spi_receive_dma(iot_spi_t *handle, void *data, size_t length)
+hal_status_t hal_spi_receive_dma(hal_spi_t *handle, void *data, size_t length)
 {
-    return iot_spi_receive(handle, data, length, IOT_TIMEOUT_FOREVER);
+    return hal_spi_receive(handle, data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_spi_transfer_dma(iot_spi_t *handle, const void *tx_data,
+hal_status_t hal_spi_transfer_dma(hal_spi_t *handle, const void *tx_data,
                                     void *rx_data, size_t length)
 {
-    return iot_spi_transfer(handle, tx_data, rx_data, length, IOT_TIMEOUT_FOREVER);
+    return hal_spi_transfer(handle, tx_data, rx_data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_spi_set_speed(iot_spi_t *handle, uint32_t baudrate)
+hal_status_t hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     handle->config.baudrate = baudrate;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_spi_abort(iot_spi_t *handle)
+hal_status_t hal_spi_abort(hal_spi_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_state_t iot_spi_get_state(iot_spi_t *handle)
+hal_state_t hal_spi_get_state(hal_spi_t *handle)
 {
     if (handle == NULL) {
-        return IOT_STATE_RESET;
+        return HAL_STATE_RESET;
     }
     return handle->base.state;
 }
@@ -695,298 +695,298 @@ static bool pc_i2c_addr_valid(uint16_t address)
     return address <= 0xFFU;
 }
 
-iot_status_t iot_i2c_init(iot_i2c_t *handle, const iot_i2c_config_t *config)
+hal_status_t hal_i2c_init(hal_i2c_t *handle, const hal_i2c_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_deinit(iot_i2c_t *handle)
+hal_status_t hal_i2c_deinit(hal_i2c_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_master_transmit(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_master_transmit(hal_i2c_t *handle, uint16_t address,
                                        const uint8_t *data, size_t length, uint32_t timeout)
 {
     size_t i;
 
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (!pc_i2c_addr_valid(address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     if (length == 0U) {
-        return IOT_OK;
+        return HAL_OK;
     }
     s_i2c_reg = data[0];
     for (i = 1U; i < length; i++) {
         s_i2c_mem[address][s_i2c_reg & 0xFFU] = data[i];
         s_i2c_reg = (uint8_t)((s_i2c_reg + 1U) & 0xFFU);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_master_receive(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_master_receive(hal_i2c_t *handle, uint16_t address,
                                       uint8_t *data, size_t length, uint32_t timeout)
 {
     size_t i;
 
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (!pc_i2c_addr_valid(address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     for (i = 0U; i < length; i++) {
         data[i] = s_i2c_mem[address][s_i2c_reg & 0xFFU];
         s_i2c_reg = (uint8_t)((s_i2c_reg + 1U) & 0xFFU);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_master_transfer(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_master_transfer(hal_i2c_t *handle, uint16_t address,
                                        const uint8_t *tx_data, size_t tx_length,
                                        uint8_t *rx_data, size_t rx_length, uint32_t timeout)
 {
-    iot_status_t status;
+    hal_status_t status;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (tx_length > 0U && tx_data == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (rx_length > 0U && rx_data == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (tx_length > 0U) {
-        status = iot_i2c_master_transmit(handle, address, tx_data, tx_length, timeout);
-        if (status != IOT_OK) {
+        status = hal_i2c_master_transmit(handle, address, tx_data, tx_length, timeout);
+        if (status != HAL_OK) {
             return status;
         }
     }
     if (rx_length > 0U) {
-        return iot_i2c_master_receive(handle, address, rx_data, rx_length, timeout);
+        return hal_i2c_master_receive(handle, address, rx_data, rx_length, timeout);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_mem_write(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_mem_write(hal_i2c_t *handle, uint16_t address,
                                  uint16_t reg, uint8_t reg_size,
                                  const uint8_t *data, size_t length, uint32_t timeout)
 {
     size_t i;
 
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (reg_size != 1U && reg_size != 2U) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (!pc_i2c_addr_valid(address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     s_i2c_reg = (uint8_t)(reg & 0xFFU);
     for (i = 0U; i < length; i++) {
         s_i2c_mem[address][s_i2c_reg & 0xFFU] = data[i];
         s_i2c_reg = (uint8_t)((s_i2c_reg + 1U) & 0xFFU);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_mem_read(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_mem_read(hal_i2c_t *handle, uint16_t address,
                                 uint16_t reg, uint8_t reg_size,
                                 uint8_t *data, size_t length, uint32_t timeout)
 {
     size_t i;
 
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (reg_size != 1U && reg_size != 2U) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (!pc_i2c_addr_valid(address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     s_i2c_reg = (uint8_t)(reg & 0xFFU);
     for (i = 0U; i < length; i++) {
         data[i] = s_i2c_mem[address][s_i2c_reg & 0xFFU];
         s_i2c_reg = (uint8_t)((s_i2c_reg + 1U) & 0xFFU);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_master_transmit_dma(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_master_transmit_dma(hal_i2c_t *handle, uint16_t address,
                                            const uint8_t *data, size_t length)
 {
-    return iot_i2c_master_transmit(handle, address, data, length, IOT_TIMEOUT_FOREVER);
+    return hal_i2c_master_transmit(handle, address, data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_i2c_master_receive_dma(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_master_receive_dma(hal_i2c_t *handle, uint16_t address,
                                           uint8_t *data, size_t length)
 {
-    return iot_i2c_master_receive(handle, address, data, length, IOT_TIMEOUT_FOREVER);
+    return hal_i2c_master_receive(handle, address, data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_i2c_is_device_ready(iot_i2c_t *handle, uint16_t address,
+hal_status_t hal_i2c_is_device_ready(hal_i2c_t *handle, uint16_t address,
                                        uint32_t trials, uint32_t timeout)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(trials);
-    IOT_UNUSED(timeout);
-    return (address <= 0x7FU) ? IOT_OK : IOT_NOT_FOUND;
+    HAL_UNUSED(trials);
+    HAL_UNUSED(timeout);
+    return (address <= 0x7FU) ? HAL_OK : HAL_NOT_FOUND;
 }
 
-iot_status_t iot_i2c_bus_recover(iot_i2c_t *handle)
+hal_status_t hal_i2c_bus_recover(hal_i2c_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2c_abort(iot_i2c_t *handle)
+hal_status_t hal_i2c_abort(hal_i2c_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_state_t iot_i2c_get_state(iot_i2c_t *handle)
+hal_state_t hal_i2c_get_state(hal_i2c_t *handle)
 {
     if (handle == NULL) {
-        return IOT_STATE_RESET;
+        return HAL_STATE_RESET;
     }
     return handle->base.state;
 }
 
 /* ============================== I2S ============================== */
 
-iot_status_t iot_i2s_init(iot_i2s_t *handle, const iot_i2s_config_t *config)
+hal_status_t hal_i2s_init(hal_i2s_t *handle, const hal_i2s_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_i2s_deinit(iot_i2s_t *handle)
+hal_status_t hal_i2s_deinit(hal_i2s_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2s_transmit(iot_i2s_t *handle, const void *data,
+hal_status_t hal_i2s_transmit(hal_i2s_t *handle, const void *data,
                                 size_t length, uint32_t timeout)
 {
     size_t n;
 
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
-    n = IOT_MIN(length, PC_I2S_BUF_SIZE);
+    HAL_UNUSED(timeout);
+    n = HAL_MIN(length, PC_I2S_BUF_SIZE);
     if (n > 0U) {
         memcpy(s_i2s_buf, data, n);
     }
     s_i2s_len = n;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2s_receive(iot_i2s_t *handle, void *data,
+hal_status_t hal_i2s_receive(hal_i2s_t *handle, void *data,
                                size_t length, uint32_t timeout)
 {
     size_t n;
 
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
-    n = IOT_MIN(length, s_i2s_len);
+    HAL_UNUSED(timeout);
+    n = HAL_MIN(length, s_i2s_len);
     if (n > 0U) {
         memcpy(data, s_i2s_buf, n);
     }
     if (length > n) {
         memset((uint8_t *)data + n, 0, length - n);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_i2s_transmit_dma(iot_i2s_t *handle, const void *data, size_t length)
+hal_status_t hal_i2s_transmit_dma(hal_i2s_t *handle, const void *data, size_t length)
 {
-    return iot_i2s_transmit(handle, data, length, IOT_TIMEOUT_FOREVER);
+    return hal_i2s_transmit(handle, data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_i2s_receive_dma(iot_i2s_t *handle, void *data, size_t length)
+hal_status_t hal_i2s_receive_dma(hal_i2s_t *handle, void *data, size_t length)
 {
-    return iot_i2s_receive(handle, data, length, IOT_TIMEOUT_FOREVER);
+    return hal_i2s_receive(handle, data, length, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_i2s_abort(iot_i2s_t *handle)
+hal_status_t hal_i2s_abort(hal_i2s_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
 /* ============================== CAN ============================== */
 
-static pc_can_ctx_t *pc_can_ctx(iot_can_t *handle, bool create)
+static pc_can_ctx_t *pc_can_ctx(hal_can_t *handle, bool create)
 {
     int index;
 
@@ -1012,27 +1012,27 @@ static pc_can_ctx_t *pc_can_ctx(iot_can_t *handle, bool create)
     return NULL;
 }
 
-iot_status_t iot_can_init(iot_can_t *handle, const iot_can_config_t *config)
+hal_status_t hal_can_init(hal_can_t *handle, const hal_can_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (pc_can_ctx(handle, true) == NULL) {
-        return IOT_NO_MEMORY;
+        return HAL_NO_MEMORY;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_can_deinit(iot_can_t *handle)
+hal_status_t hal_can_deinit(hal_can_t *handle)
 {
     int index;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     for (index = 0; index < PC_CAN_MAX; index++) {
         if (s_can[index].used && s_can[index].owner == handle) {
@@ -1041,217 +1041,217 @@ iot_status_t iot_can_deinit(iot_can_t *handle)
         }
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_can_start(iot_can_t *handle)
+hal_status_t hal_can_start(hal_can_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_can_stop(iot_can_t *handle)
+hal_status_t hal_can_stop(hal_can_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_RESET;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_RESET;
+    return HAL_OK;
 }
 
-iot_status_t iot_can_transmit(iot_can_t *handle, const iot_can_frame_t *frame,
+hal_status_t hal_can_transmit(hal_can_t *handle, const hal_can_frame_t *frame,
                                 uint32_t timeout)
 {
     if (handle == NULL || frame == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
-    if ((handle->config.mode == IOT_CAN_MODE_LOOPBACK ||
-         handle->config.mode == IOT_CAN_MODE_SILENT_LOOPBACK) &&
+    HAL_UNUSED(timeout);
+    if ((handle->config.mode == HAL_CAN_MODE_LOOPBACK ||
+         handle->config.mode == HAL_CAN_MODE_SILENT_LOOPBACK) &&
         handle->callback != NULL) {
-        handle->callback(handle, IOT_EVENT_RX_COMPLETE, handle->user_data);
+        handle->callback(handle, HAL_EVENT_RX_COMPLETE, handle->user_data);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_can_receive(iot_can_t *handle, iot_can_frame_t *frame,
+hal_status_t hal_can_receive(hal_can_t *handle, hal_can_frame_t *frame,
                                uint32_t timeout)
 {
     pc_can_ctx_t *ctx;
 
     if (handle == NULL || frame == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     ctx = pc_can_ctx(handle, false);
     if (ctx == NULL || ctx->count == 0U) {
-        return IOT_TIMEOUT;
+        return HAL_TIMEOUT;
     }
     *frame = ctx->queue[ctx->head];
     ctx->head = (ctx->head + 1U) % PC_CAN_QUEUE;
     ctx->count--;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_can_transmit_it(iot_can_t *handle, const iot_can_frame_t *frame)
+hal_status_t hal_can_transmit_it(hal_can_t *handle, const hal_can_frame_t *frame)
 {
-    return iot_can_transmit(handle, frame, IOT_TIMEOUT_FOREVER);
+    return hal_can_transmit(handle, frame, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_can_add_filter(iot_can_t *handle, const iot_can_filter_t *filter)
+hal_status_t hal_can_add_filter(hal_can_t *handle, const hal_can_filter_t *filter)
 {
     pc_can_ctx_t *ctx;
 
     if (handle == NULL || filter == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     ctx = pc_can_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     if (ctx->filter_count >= PC_CAN_FILTERS) {
-        return IOT_NO_MEMORY;
+        return HAL_NO_MEMORY;
     }
     ctx->filters[ctx->filter_count] = *filter;
     ctx->filter_count++;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_can_clear_filters(iot_can_t *handle)
+hal_status_t hal_can_clear_filters(hal_can_t *handle)
 {
     pc_can_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     ctx = pc_can_ctx(handle, false);
     if (ctx != NULL) {
         ctx->filter_count = 0U;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== ADC ============================== */
 
-iot_status_t iot_adc_init(iot_adc_t *handle, const iot_adc_config_t *config)
+hal_status_t hal_adc_init(hal_adc_t *handle, const hal_adc_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_deinit(iot_adc_t *handle)
+hal_status_t hal_adc_deinit(hal_adc_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_config_channel(iot_adc_t *handle,
-                                      const iot_adc_channel_config_t *config)
+hal_status_t hal_adc_config_channel(hal_adc_t *handle,
+                                      const hal_adc_channel_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (config->channel >= PC_ADC_CHANNELS) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_start(iot_adc_t *handle)
+hal_status_t hal_adc_start(hal_adc_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_stop(iot_adc_t *handle)
+hal_status_t hal_adc_stop(hal_adc_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_read(iot_adc_t *handle, uint8_t channel,
+hal_status_t hal_adc_read(hal_adc_t *handle, uint8_t channel,
                             uint32_t *value, uint32_t timeout)
 {
     uint32_t max_value;
 
     if (handle == NULL || value == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (channel >= PC_ADC_CHANNELS) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     max_value = (uint32_t)((1UL << (uint32_t)handle->config.resolution) - 1UL);
     if (s_adc_max[channel] != 0U && s_adc_max[channel] < max_value) {
         max_value = s_adc_max[channel];
     }
-    *value = IOT_MIN(s_adc_value[channel], max_value);
-    return IOT_OK;
+    *value = HAL_MIN(s_adc_value[channel], max_value);
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_start_it(iot_adc_t *handle)
+hal_status_t hal_adc_start_it(hal_adc_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (handle->callback != NULL) {
-        handle->callback(handle, IOT_EVENT_COMPLETE, handle->user_data);
+        handle->callback(handle, HAL_EVENT_COMPLETE, handle->user_data);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_start_dma(iot_adc_t *handle, uint32_t *buffer, size_t length)
+hal_status_t hal_adc_start_dma(hal_adc_t *handle, uint32_t *buffer, size_t length)
 {
     uint32_t max_value;
     size_t i;
 
     if (handle == NULL || (buffer == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     max_value = (uint32_t)((1UL << (uint32_t)handle->config.resolution) - 1UL);
     for (i = 0U; i < length; i++) {
@@ -1260,26 +1260,26 @@ iot_status_t iot_adc_start_dma(iot_adc_t *handle, uint32_t *buffer, size_t lengt
         if (s_adc_max[channel] != 0U && s_adc_max[channel] < limit) {
             limit = s_adc_max[channel];
         }
-        buffer[i] = IOT_MIN(s_adc_value[channel], limit);
+        buffer[i] = HAL_MIN(s_adc_value[channel], limit);
     }
     if (handle->callback != NULL) {
-        handle->callback(handle, IOT_EVENT_COMPLETE, handle->user_data);
+        handle->callback(handle, HAL_EVENT_COMPLETE, handle->user_data);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_adc_calibrate(iot_adc_t *handle)
+hal_status_t hal_adc_calibrate(hal_adc_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-uint32_t iot_adc_get_max_value(iot_adc_t *handle)
+uint32_t hal_adc_get_max_value(hal_adc_t *handle)
 {
     uint32_t width;
 
@@ -1295,119 +1295,119 @@ uint32_t iot_adc_get_max_value(iot_adc_t *handle)
 
 /* ============================== DAC ============================== */
 
-iot_status_t iot_dac_init(iot_dac_t *handle, const iot_dac_config_t *config)
+hal_status_t hal_dac_init(hal_dac_t *handle, const hal_dac_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_dac_deinit(iot_dac_t *handle)
+hal_status_t hal_dac_deinit(hal_dac_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_dac_start(iot_dac_t *handle)
+hal_status_t hal_dac_start(hal_dac_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_dac_stop(iot_dac_t *handle)
+hal_status_t hal_dac_stop(hal_dac_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_dac_write(iot_dac_t *handle, uint32_t value)
+hal_status_t hal_dac_write(hal_dac_t *handle, uint32_t value)
 {
     uint8_t channel;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     channel = handle->config.channel;
     if (channel >= PC_DAC_CHANNELS) {
         channel = 0U;
     }
     s_dac_value[channel] = (value > 4095U) ? 4095U : value;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_dac_write_dma(iot_dac_t *handle, const uint32_t *buffer, size_t length)
+hal_status_t hal_dac_write_dma(hal_dac_t *handle, const uint32_t *buffer, size_t length)
 {
     size_t i;
 
     if (handle == NULL || (buffer == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     for (i = 0U; i < length; i++) {
-        iot_status_t status = iot_dac_write(handle, buffer[i]);
-        if (status != IOT_OK) {
+        hal_status_t status = hal_dac_write(handle, buffer[i]);
+        if (status != HAL_OK) {
             return status;
         }
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== OPAMP ============================== */
 
-iot_status_t iot_opamp_init(iot_opamp_t *handle, const iot_opamp_config_t *config)
+hal_status_t hal_opamp_init(hal_opamp_t *handle, const hal_opamp_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_opamp_start(iot_opamp_t *handle)
+hal_status_t hal_opamp_start(hal_opamp_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_opamp_stop(iot_opamp_t *handle)
+hal_status_t hal_opamp_stop(hal_opamp_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
 /* ============================== TIM ============================== */
 
-static pc_tim_ctx_t *pc_tim_ctx(iot_tim_t *handle, bool create)
+static pc_tim_ctx_t *pc_tim_ctx(hal_tim_t *handle, bool create)
 {
     int index;
 
@@ -1434,27 +1434,27 @@ static pc_tim_ctx_t *pc_tim_ctx(iot_tim_t *handle, bool create)
     return NULL;
 }
 
-iot_status_t iot_tim_init(iot_tim_t *handle, const iot_tim_config_t *config)
+hal_status_t hal_tim_init(hal_tim_t *handle, const hal_tim_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (pc_tim_ctx(handle, true) == NULL) {
-        return IOT_NO_MEMORY;
+        return HAL_NO_MEMORY;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_deinit(iot_tim_t *handle)
+hal_status_t hal_tim_deinit(hal_tim_t *handle)
 {
     int index;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     for (index = 0; index < PC_TIM_MAX; index++) {
         if (s_tim[index].used && s_tim[index].owner == handle) {
@@ -1463,107 +1463,107 @@ iot_status_t iot_tim_deinit(iot_tim_t *handle)
         }
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_start(iot_tim_t *handle)
+hal_status_t hal_tim_start(hal_tim_t *handle)
 {
     pc_tim_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     ctx = pc_tim_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     ctx->started = true;
-    handle->base.state = IOT_STATE_BUSY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_BUSY;
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_stop(iot_tim_t *handle)
+hal_status_t hal_tim_stop(hal_tim_t *handle)
 {
     pc_tim_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     ctx = pc_tim_ctx(handle, false);
     if (ctx != NULL) {
         ctx->started = false;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_start_it(iot_tim_t *handle)
+hal_status_t hal_tim_start_it(hal_tim_t *handle)
 {
     pc_tim_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     ctx = pc_tim_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     ctx->started = true;
-    handle->base.state = IOT_STATE_BUSY;
+    handle->base.state = HAL_STATE_BUSY;
     if (handle->callback != NULL) {
-        handle->callback(handle, IOT_EVENT_COMPLETE, handle->user_data);
+        handle->callback(handle, HAL_EVENT_COMPLETE, handle->user_data);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_stop_it(iot_tim_t *handle)
+hal_status_t hal_tim_stop_it(hal_tim_t *handle)
 {
-    return iot_tim_stop(handle);
+    return hal_tim_stop(handle);
 }
 
-iot_status_t iot_tim_set_period(iot_tim_t *handle, uint32_t period)
+hal_status_t hal_tim_set_period(hal_tim_t *handle, uint32_t period)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config.period = period;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_set_prescaler(iot_tim_t *handle, uint32_t prescaler)
+hal_status_t hal_tim_set_prescaler(hal_tim_t *handle, uint32_t prescaler)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config.prescaler = prescaler;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_tim_set_counter(iot_tim_t *handle, uint32_t counter)
+hal_status_t hal_tim_set_counter(hal_tim_t *handle, uint32_t counter)
 {
     pc_tim_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     ctx = pc_tim_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     ctx->counter = counter;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-uint32_t iot_tim_get_counter(iot_tim_t *handle)
+uint32_t hal_tim_get_counter(hal_tim_t *handle)
 {
     pc_tim_ctx_t *ctx;
 
@@ -1576,85 +1576,85 @@ uint32_t iot_tim_get_counter(iot_tim_t *handle)
 
 /* ============================== PWM ============================== */
 
-iot_status_t iot_pwm_init(iot_pwm_t *handle, const iot_pwm_config_t *config)
+hal_status_t hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (config->duty > 10000U) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_pwm_deinit(iot_pwm_t *handle)
+hal_status_t hal_pwm_deinit(hal_pwm_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwm_start(iot_pwm_t *handle)
+hal_status_t hal_pwm_start(hal_pwm_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwm_stop(iot_pwm_t *handle)
+hal_status_t hal_pwm_stop(hal_pwm_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwm_set_frequency(iot_pwm_t *handle, uint32_t frequency)
+hal_status_t hal_pwm_set_frequency(hal_pwm_t *handle, uint32_t frequency)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (frequency == 0U) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config.frequency = frequency;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwm_set_duty(iot_pwm_t *handle, uint32_t duty)
+hal_status_t hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (duty > 10000U) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config.duty = duty;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwm_set_polarity(iot_pwm_t *handle, iot_pwm_polarity_t polarity)
+hal_status_t hal_pwm_set_polarity(hal_pwm_t *handle, hal_pwm_polarity_t polarity)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config.polarity = polarity;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== CAPTURE ============================== */
 
-static pc_capture_ctx_t *pc_capture_ctx(iot_capture_t *handle, bool create)
+static pc_capture_ctx_t *pc_capture_ctx(hal_capture_t *handle, bool create)
 {
     int index;
 
@@ -1680,62 +1680,62 @@ static pc_capture_ctx_t *pc_capture_ctx(iot_capture_t *handle, bool create)
     return NULL;
 }
 
-iot_status_t iot_capture_init(iot_capture_t *handle,
-                                const iot_capture_config_t *config)
+hal_status_t hal_capture_init(hal_capture_t *handle,
+                                const hal_capture_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (pc_capture_ctx(handle, true) == NULL) {
-        return IOT_NO_MEMORY;
+        return HAL_NO_MEMORY;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_capture_start(iot_capture_t *handle)
+hal_status_t hal_capture_start(hal_capture_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_BUSY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_BUSY;
+    return HAL_OK;
 }
 
-iot_status_t iot_capture_stop(iot_capture_t *handle)
+hal_status_t hal_capture_stop(hal_capture_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_capture_start_it(iot_capture_t *handle)
+hal_status_t hal_capture_start_it(hal_capture_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (pc_capture_ctx(handle, false) == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_BUSY;
+    handle->base.state = HAL_STATE_BUSY;
     if (handle->callback != NULL) {
-        handle->callback(handle, IOT_EVENT_COMPLETE, handle->user_data);
+        handle->callback(handle, HAL_EVENT_COMPLETE, handle->user_data);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-uint32_t iot_capture_get_value(iot_capture_t *handle)
+uint32_t hal_capture_get_value(hal_capture_t *handle)
 {
     pc_capture_ctx_t *ctx;
 
@@ -1748,7 +1748,7 @@ uint32_t iot_capture_get_value(iot_capture_t *handle)
 
 /* ============================== ENCODER ============================== */
 
-static pc_encoder_ctx_t *pc_encoder_ctx(iot_encoder_t *handle, bool create)
+static pc_encoder_ctx_t *pc_encoder_ctx(hal_encoder_t *handle, bool create)
 {
     int index;
 
@@ -1774,42 +1774,42 @@ static pc_encoder_ctx_t *pc_encoder_ctx(iot_encoder_t *handle, bool create)
     return NULL;
 }
 
-iot_status_t iot_encoder_init(iot_encoder_t *handle,
-                                const iot_encoder_config_t *config)
+hal_status_t hal_encoder_init(hal_encoder_t *handle,
+                                const hal_encoder_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (pc_encoder_ctx(handle, true) == NULL) {
-        return IOT_NO_MEMORY;
+        return HAL_NO_MEMORY;
     }
     handle->config = *config;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_encoder_start(iot_encoder_t *handle)
+hal_status_t hal_encoder_start(hal_encoder_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_BUSY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_BUSY;
+    return HAL_OK;
 }
 
-iot_status_t iot_encoder_stop(iot_encoder_t *handle)
+hal_status_t hal_encoder_stop(hal_encoder_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-int32_t iot_encoder_get_count(iot_encoder_t *handle)
+int32_t hal_encoder_get_count(hal_encoder_t *handle)
 {
     pc_encoder_ctx_t *ctx;
 
@@ -1823,75 +1823,75 @@ int32_t iot_encoder_get_count(iot_encoder_t *handle)
     return handle->config.reverse ? -ctx->count : ctx->count;
 }
 
-iot_status_t iot_encoder_set_count(iot_encoder_t *handle, int32_t count)
+hal_status_t hal_encoder_set_count(hal_encoder_t *handle, int32_t count)
 {
     pc_encoder_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     ctx = pc_encoder_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     ctx->count = count;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== WDG ============================== */
 
-iot_status_t iot_wdg_init(iot_wdg_t *handle, const iot_wdg_config_t *config)
+hal_status_t hal_wdg_init(hal_wdg_t *handle, const hal_wdg_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_wdg_start(iot_wdg_t *handle)
+hal_status_t hal_wdg_start(hal_wdg_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    handle->base.state = IOT_STATE_READY;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
 }
 
-iot_status_t iot_wdg_refresh(iot_wdg_t *handle)
+hal_status_t hal_wdg_refresh(hal_wdg_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     s_wdg_refresh_count++;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_wdg_stop(iot_wdg_t *handle)
+hal_status_t hal_wdg_stop(hal_wdg_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    handle->base.state = IOT_STATE_RESET;
-    return IOT_OK;
+    handle->base.state = HAL_STATE_RESET;
+    return HAL_OK;
 }
 
-bool iot_wdg_is_reset(void)
+bool hal_wdg_is_reset(void)
 {
     return s_wdg_reset_flag;
 }
 
-void iot_wdg_clear_reset_flag(void)
+void hal_wdg_clear_reset_flag(void)
 {
     s_wdg_reset_flag = false;
 }
@@ -1903,20 +1903,20 @@ static bool pc_rtc_leap(uint32_t year)
     return ((year % 4U) == 0U && (year % 100U) != 0U) || ((year % 400U) == 0U);
 }
 
-static bool pc_rtc_valid(const iot_rtc_time_t *time)
+static bool pc_rtc_valid(const hal_rtc_time_t *time)
 {
     return time->month >= 1U && time->month <= 12U &&
            time->day >= 1U && time->day <= 31U &&
            time->hour < 24U && time->minute < 60U && time->second < 60U;
 }
 
-static bool pc_rtc_equal(const iot_rtc_time_t *a, const iot_rtc_time_t *b)
+static bool pc_rtc_equal(const hal_rtc_time_t *a, const hal_rtc_time_t *b)
 {
     return a->year == b->year && a->month == b->month && a->day == b->day &&
            a->hour == b->hour && a->minute == b->minute && a->second == b->second;
 }
 
-static uint32_t pc_rtc_timestamp(const iot_rtc_time_t *time)
+static uint32_t pc_rtc_timestamp(const hal_rtc_time_t *time)
 {
     static const uint16_t days_before_month[12] = {
         0U, 31U, 59U, 90U, 120U, 151U, 181U, 212U, 243U, 273U, 304U, 334U
@@ -1954,57 +1954,57 @@ static uint32_t pc_rtc_timestamp(const iot_rtc_time_t *time)
                       (int64_t)time->second);
 }
 
-iot_status_t iot_rtc_init(void)
+hal_status_t hal_rtc_init(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rtc_deinit(void)
+hal_status_t hal_rtc_deinit(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rtc_set_time(const iot_rtc_time_t *time)
+hal_status_t hal_rtc_set_time(const hal_rtc_time_t *time)
 {
     if (time == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (!pc_rtc_valid(time)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_rtc_time = *time;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rtc_get_time(iot_rtc_time_t *time)
+hal_status_t hal_rtc_get_time(hal_rtc_time_t *time)
 {
     uint32_t i;
 
     if (time == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     *time = s_rtc_time;
-    for (i = 0U; i < IOT_ARRAY_SIZE(s_rtc_alarm); i++) {
+    for (i = 0U; i < HAL_ARRAY_SIZE(s_rtc_alarm); i++) {
         pc_rtc_alarm_t *alarm = &s_rtc_alarm[i];
         if (alarm->enabled && !alarm->fired && pc_rtc_equal(&alarm->time, &s_rtc_time)) {
             alarm->fired = true;
             if (alarm->callback != NULL) {
-                alarm->callback((iot_rtc_alarm_t)i, alarm->user_data);
+                alarm->callback((hal_rtc_alarm_t)i, alarm->user_data);
             }
         }
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rtc_set_alarm(iot_rtc_alarm_t alarm, const iot_rtc_alarm_config_t *config)
+hal_status_t hal_rtc_set_alarm(hal_rtc_alarm_t alarm, const hal_rtc_alarm_config_t *config)
 {
     pc_rtc_alarm_t *ctx;
 
     if (config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if ((uint32_t)alarm >= IOT_ARRAY_SIZE(s_rtc_alarm)) {
-        return IOT_INVALID_PARAM;
+    if ((uint32_t)alarm >= HAL_ARRAY_SIZE(s_rtc_alarm)) {
+        return HAL_INVALID_PARAM;
     }
     ctx = &s_rtc_alarm[alarm];
     ctx->enabled = true;
@@ -2012,25 +2012,25 @@ iot_status_t iot_rtc_set_alarm(iot_rtc_alarm_t alarm, const iot_rtc_alarm_config
     ctx->time = config->time;
     ctx->callback = config->callback;
     ctx->user_data = config->user_data;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rtc_disable_alarm(iot_rtc_alarm_t alarm)
+hal_status_t hal_rtc_disable_alarm(hal_rtc_alarm_t alarm)
 {
-    if ((uint32_t)alarm >= IOT_ARRAY_SIZE(s_rtc_alarm)) {
-        return IOT_INVALID_PARAM;
+    if ((uint32_t)alarm >= HAL_ARRAY_SIZE(s_rtc_alarm)) {
+        return HAL_INVALID_PARAM;
     }
     s_rtc_alarm[alarm].enabled = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rtc_get_timestamp(uint32_t *timestamp)
+hal_status_t hal_rtc_get_timestamp(uint32_t *timestamp)
 {
     if (timestamp == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     *timestamp = pc_rtc_timestamp(&s_rtc_time);
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== FLASH ============================== */
@@ -2043,120 +2043,120 @@ static void pc_flash_ensure(void)
     }
 }
 
-iot_status_t iot_flash_init(iot_flash_t *handle)
+hal_status_t hal_flash_init(hal_flash_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_flash_ensure();
     handle->info.start = 0U;
     handle->info.size = PC_FLASH_SIZE;
     handle->info.erase_size = PC_FLASH_ERASE;
     handle->info.program_size = 1U;
-    handle->info.flags = IOT_FLASH_FLAG_READ | IOT_FLASH_FLAG_WRITE | IOT_FLASH_FLAG_ERASE;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    handle->info.flags = HAL_FLASH_FLAG_READ | HAL_FLASH_FLAG_WRITE | HAL_FLASH_FLAG_ERASE;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_deinit(iot_flash_t *handle)
+hal_status_t hal_flash_deinit(hal_flash_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_get_info(iot_flash_t *handle, iot_flash_info_t *info)
+hal_status_t hal_flash_get_info(hal_flash_t *handle, hal_flash_info_t *info)
 {
     if (handle == NULL || info == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     *info = handle->info;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_read(iot_flash_t *handle, uintptr_t address,
+hal_status_t hal_flash_read(hal_flash_t *handle, uintptr_t address,
                               void *buffer, size_t length)
 {
     if (handle == NULL || (buffer == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (address > (uintptr_t)PC_FLASH_SIZE ||
         length > (size_t)((uintptr_t)PC_FLASH_SIZE - address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_flash_ensure();
     if (length > 0U) {
         memcpy(buffer, &s_flash[address], length);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_write(iot_flash_t *handle, uintptr_t address,
+hal_status_t hal_flash_write(hal_flash_t *handle, uintptr_t address,
                                const void *buffer, size_t length)
 {
     if (handle == NULL || (buffer == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (address > (uintptr_t)PC_FLASH_SIZE ||
         length > (size_t)((uintptr_t)PC_FLASH_SIZE - address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_flash_ensure();
     if (length > 0U) {
         memcpy(&s_flash[address], buffer, length);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_erase(iot_flash_t *handle, uintptr_t address, size_t length)
+hal_status_t hal_flash_erase(hal_flash_t *handle, uintptr_t address, size_t length)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (address > (uintptr_t)PC_FLASH_SIZE ||
         length > (size_t)((uintptr_t)PC_FLASH_SIZE - address)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_flash_ensure();
     if (length > 0U) {
         memset(&s_flash[address], 0xFF, length);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_lock(iot_flash_t *handle)
+hal_status_t hal_flash_lock(hal_flash_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_flash_unlock(iot_flash_t *handle)
+hal_status_t hal_flash_unlock(hal_flash_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== CRC ============================== */
 
-static pc_crc_ctx_t *pc_crc_ctx(iot_crc_t *handle, bool create)
+static pc_crc_ctx_t *pc_crc_ctx(hal_crc_t *handle, bool create)
 {
     int index;
 
@@ -2194,7 +2194,7 @@ static uint32_t pc_crc_reverse_bits(uint32_t value, uint32_t width)
     return result;
 }
 
-static uint32_t pc_crc_compute(const iot_crc_config_t *config,
+static uint32_t pc_crc_compute(const hal_crc_config_t *config,
                                 const uint8_t *data, size_t length)
 {
     uint32_t width = (uint32_t)config->width;
@@ -2225,69 +2225,69 @@ static uint32_t pc_crc_compute(const iot_crc_config_t *config,
     return (crc ^ config->xor_output) & mask;
 }
 
-iot_status_t iot_crc_init(iot_crc_t *handle, const iot_crc_config_t *config)
+hal_status_t hal_crc_init(hal_crc_t *handle, const hal_crc_config_t *config)
 {
     pc_crc_ctx_t *ctx;
 
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (config->width != IOT_CRC_WIDTH_8 &&
-        config->width != IOT_CRC_WIDTH_16 &&
-        config->width != IOT_CRC_WIDTH_32) {
-        return IOT_INVALID_PARAM;
+    if (config->width != HAL_CRC_WIDTH_8 &&
+        config->width != HAL_CRC_WIDTH_16 &&
+        config->width != HAL_CRC_WIDTH_32) {
+        return HAL_INVALID_PARAM;
     }
     ctx = pc_crc_ctx(handle, true);
     if (ctx == NULL) {
-        return IOT_NO_MEMORY;
+        return HAL_NO_MEMORY;
     }
     handle->config = *config;
     ctx->state = config->initial_value;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_crc_reset(iot_crc_t *handle)
+hal_status_t hal_crc_reset(hal_crc_t *handle)
 {
     pc_crc_ctx_t *ctx;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     ctx = pc_crc_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     ctx->state = handle->config.initial_value;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_crc_calculate(iot_crc_t *handle, const void *data,
+hal_status_t hal_crc_calculate(hal_crc_t *handle, const void *data,
                                  size_t length, uint32_t *result)
 {
     pc_crc_ctx_t *ctx;
 
     if (handle == NULL || result == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     ctx = pc_crc_ctx(handle, false);
     if (ctx == NULL) {
-        return IOT_NOT_READY;
+        return HAL_NOT_READY;
     }
     ctx->state = pc_crc_compute(&handle->config, (const uint8_t *)data, length);
     *result = ctx->state;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_crc_deinit(iot_crc_t *handle)
+hal_status_t hal_crc_deinit(hal_crc_t *handle)
 {
     int index;
 
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     for (index = 0; index < PC_CRC_MAX; index++) {
         if (s_crc[index].used && s_crc[index].owner == handle) {
@@ -2296,7 +2296,7 @@ iot_status_t iot_crc_deinit(iot_crc_t *handle)
         }
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== RNG ============================== */
@@ -2307,47 +2307,47 @@ static uint32_t pc_rng_next(void)
     return s_rng_state;
 }
 
-iot_status_t iot_rng_init(iot_rng_t *handle)
+hal_status_t hal_rng_init(hal_rng_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_rng_state = PC_RNG_SEED;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_rng_deinit(iot_rng_t *handle)
+hal_status_t hal_rng_deinit(hal_rng_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rng_get(iot_rng_t *handle, uint32_t *value)
+hal_status_t hal_rng_get(hal_rng_t *handle, uint32_t *value)
 {
     if (handle == NULL || value == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     *value = pc_rng_next();
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_rng_generate(iot_rng_t *handle, void *buffer, size_t length)
+hal_status_t hal_rng_generate(hal_rng_t *handle, void *buffer, size_t length)
 {
     uint8_t *out = (uint8_t *)buffer;
     size_t i;
 
     if (handle == NULL || (buffer == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     for (i = 0U; i < length; i++) {
         if ((i % 4U) == 0U) {
@@ -2358,124 +2358,124 @@ iot_status_t iot_rng_generate(iot_rng_t *handle, void *buffer, size_t length)
             }
         }
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== PWR ============================== */
 
-iot_status_t iot_pwr_init(void)
+hal_status_t hal_pwr_init(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwr_enter(const iot_pwr_config_t *config)
+hal_status_t hal_pwr_enter(const hal_pwr_config_t *config)
 {
     if (config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_pwr_status.wakeup_flags = config->wakeup_sources;
-    IOT_UNUSED(config->low_power_regulator);
-    return IOT_OK;
+    HAL_UNUSED(config->low_power_regulator);
+    return HAL_OK;
 }
 
-iot_status_t iot_pwr_get_status(iot_pwr_status_t *status)
+hal_status_t hal_pwr_get_status(hal_pwr_status_t *status)
 {
     if (status == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     *status = s_pwr_status;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_pwr_clear_flags(void)
+hal_status_t hal_pwr_clear_flags(void)
 {
     s_pwr_status.reset_flags = 0U;
     s_pwr_status.wakeup_flags = 0U;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== QSPI ============================== */
 
-iot_status_t iot_qspi_init(iot_qspi_t *handle, const iot_qspi_config_t *config)
+hal_status_t hal_qspi_init(hal_qspi_t *handle, const hal_qspi_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_qspi_deinit(iot_qspi_t *handle)
+hal_status_t hal_qspi_deinit(hal_qspi_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_qspi_command(iot_qspi_t *handle, const iot_qspi_command_t *command)
+hal_status_t hal_qspi_command(hal_qspi_t *handle, const hal_qspi_command_t *command)
 {
     if (handle == NULL || command == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_qspi_transmit(iot_qspi_t *handle, const void *data,
+hal_status_t hal_qspi_transmit(hal_qspi_t *handle, const void *data,
                                  size_t length, uint32_t timeout)
 {
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
-    return IOT_OK;
+    HAL_UNUSED(timeout);
+    return HAL_OK;
 }
 
-iot_status_t iot_qspi_receive(iot_qspi_t *handle, void *data,
+hal_status_t hal_qspi_receive(hal_qspi_t *handle, void *data,
                                 size_t length, uint32_t timeout)
 {
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     if (length > 0U) {
         memset(data, 0, length);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_qspi_memory_map(iot_qspi_t *handle)
+hal_status_t hal_qspi_memory_map(hal_qspi_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     s_qspi_mapped = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_qspi_memory_unmap(iot_qspi_t *handle)
+hal_status_t hal_qspi_memory_unmap(hal_qspi_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_qspi_mapped = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== SDIO ============================== */
@@ -2488,228 +2488,228 @@ static bool pc_sdio_range_valid(uint32_t block, size_t block_count)
     return block_count <= (size_t)(PC_SDIO_BLOCKS - block);
 }
 
-iot_status_t iot_sdio_init(iot_sdio_t *handle, const iot_sdio_config_t *config)
+hal_status_t hal_sdio_init(hal_sdio_t *handle, const hal_sdio_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_sdio_deinit(iot_sdio_t *handle)
+hal_status_t hal_sdio_deinit(hal_sdio_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_sdio_read(iot_sdio_t *handle, uint32_t block, void *buffer,
+hal_status_t hal_sdio_read(hal_sdio_t *handle, uint32_t block, void *buffer,
                              size_t block_count, uint32_t timeout)
 {
     size_t offset;
 
     if (handle == NULL || (buffer == NULL && block_count > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (!pc_sdio_range_valid(block, block_count)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     offset = (size_t)block * PC_SDIO_BLOCK_SIZE;
     if (block_count > 0U) {
         memcpy(buffer, &s_sdio[offset], block_count * PC_SDIO_BLOCK_SIZE);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_sdio_write(iot_sdio_t *handle, uint32_t block,
+hal_status_t hal_sdio_write(hal_sdio_t *handle, uint32_t block,
                               const void *buffer, size_t block_count, uint32_t timeout)
 {
     size_t offset;
 
     if (handle == NULL || (buffer == NULL && block_count > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     if (!pc_sdio_range_valid(block, block_count)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    IOT_UNUSED(timeout);
+    HAL_UNUSED(timeout);
     offset = (size_t)block * PC_SDIO_BLOCK_SIZE;
     if (block_count > 0U) {
         memcpy(&s_sdio[offset], buffer, block_count * PC_SDIO_BLOCK_SIZE);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_sdio_read_dma(iot_sdio_t *handle, uint32_t block,
+hal_status_t hal_sdio_read_dma(hal_sdio_t *handle, uint32_t block,
                                  void *buffer, size_t block_count)
 {
-    return iot_sdio_read(handle, block, buffer, block_count, IOT_TIMEOUT_FOREVER);
+    return hal_sdio_read(handle, block, buffer, block_count, HAL_TIMEOUT_FOREVER);
 }
 
-iot_status_t iot_sdio_write_dma(iot_sdio_t *handle, uint32_t block,
+hal_status_t hal_sdio_write_dma(hal_sdio_t *handle, uint32_t block,
                                   const void *buffer, size_t block_count)
 {
-    return iot_sdio_write(handle, block, buffer, block_count, IOT_TIMEOUT_FOREVER);
+    return hal_sdio_write(handle, block, buffer, block_count, HAL_TIMEOUT_FOREVER);
 }
 
 /* ============================== USB ============================== */
 
-iot_status_t iot_usb_init(iot_usb_t *handle, const iot_usb_config_t *config)
+hal_status_t hal_usb_init(hal_usb_t *handle, const hal_usb_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
     s_usb_started = false;
     s_usb_connected = false;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_usb_deinit(iot_usb_t *handle)
+hal_status_t hal_usb_deinit(hal_usb_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_usb_started = false;
     s_usb_connected = false;
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_usb_start(iot_usb_t *handle)
+hal_status_t hal_usb_start(hal_usb_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     s_usb_started = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_usb_stop(iot_usb_t *handle)
+hal_status_t hal_usb_stop(hal_usb_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_usb_started = false;
     s_usb_connected = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_usb_connect(iot_usb_t *handle)
+hal_status_t hal_usb_connect(hal_usb_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     s_usb_connected = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_usb_disconnect(iot_usb_t *handle)
+hal_status_t hal_usb_disconnect(hal_usb_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_usb_connected = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== ETH ============================== */
 
-iot_status_t iot_eth_init(iot_eth_t *handle, const iot_eth_config_t *config)
+hal_status_t hal_eth_init(hal_eth_t *handle, const hal_eth_config_t *config)
 {
     if (handle == NULL || config == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
     s_eth_started = false;
     s_eth_len = 0U;
-    pc_handle_ready(&handle->base, IOT_STATE_READY);
-    return IOT_OK;
+    pc_handle_ready(&handle->base, HAL_STATE_READY);
+    return HAL_OK;
 }
 
-iot_status_t iot_eth_deinit(iot_eth_t *handle)
+hal_status_t hal_eth_deinit(hal_eth_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_eth_started = false;
     s_eth_len = 0U;
     pc_handle_deinit(&handle->base);
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_eth_start(iot_eth_t *handle)
+hal_status_t hal_eth_start(hal_eth_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
     s_eth_started = true;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_eth_stop(iot_eth_t *handle)
+hal_status_t hal_eth_stop(hal_eth_t *handle)
 {
     if (handle == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     s_eth_started = false;
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_eth_transmit(iot_eth_t *handle, const void *data, size_t length)
+hal_status_t hal_eth_transmit(hal_eth_t *handle, const void *data, size_t length)
 {
     if (handle == NULL || (data == NULL && length > 0U)) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET || !s_eth_started) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET || !s_eth_started) {
+        return HAL_NOT_READY;
     }
-    s_eth_len = IOT_MIN(length, PC_ETH_FRAME_MAX);
+    s_eth_len = HAL_MIN(length, PC_ETH_FRAME_MAX);
     if (s_eth_len > 0U) {
         memcpy(s_eth_frame, data, s_eth_len);
     }
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_eth_receive(iot_eth_t *handle, void *buffer,
+hal_status_t hal_eth_receive(hal_eth_t *handle, void *buffer,
                                size_t buffer_size, size_t *received_length)
 {
     if (handle == NULL || buffer == NULL || received_length == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
-    if (handle->base.state == IOT_STATE_RESET) {
-        return IOT_NOT_READY;
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
     }
-    IOT_UNUSED(buffer_size);
+    HAL_UNUSED(buffer_size);
     *received_length = 0U;
-    return IOT_OK;
+    return HAL_OK;
 }
 
 /* ============================== 测试辅助 ============================== */
@@ -2782,20 +2782,20 @@ void iot_pc_adc_set_max(uint8_t channel, uint32_t max)
     }
 }
 
-void iot_pc_exti_trigger(iot_pin_t pin)
+void iot_pc_exti_trigger(hal_pin_t pin)
 {
     pc_exti_t *exti;
 
     if (!pc_gpio_valid(pin)) {
         return;
     }
-    exti = &s_exti[IOT_PIN_GET_PORT(pin)][IOT_PIN_GET_INDEX(pin)];
+    exti = &s_exti[HAL_PIN_GET_PORT(pin)][HAL_PIN_GET_INDEX(pin)];
     if (exti->initialized && exti->enabled && exti->config.callback != NULL) {
         exti->config.callback(pin, exti->config.user_data);
     }
 }
 
-void iot_pc_can_inject(iot_can_t *h, const iot_can_frame_t *frame)
+void iot_pc_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
 {
     pc_can_ctx_t *ctx;
     uint32_t tail;
@@ -2814,12 +2814,12 @@ void iot_pc_can_inject(iot_can_t *h, const iot_can_frame_t *frame)
     tail = (ctx->head + ctx->count) % PC_CAN_QUEUE;
     ctx->queue[tail] = *frame;
     ctx->count++;
-    if (h->base.state != IOT_STATE_RESET && h->callback != NULL) {
-        h->callback(h, IOT_EVENT_RX_COMPLETE, h->user_data);
+    if (h->base.state != HAL_STATE_RESET && h->callback != NULL) {
+        h->callback(h, HAL_EVENT_RX_COMPLETE, h->user_data);
     }
 }
 
-void iot_pc_capture_set(iot_capture_t *h, uint32_t value)
+void iot_pc_capture_set(hal_capture_t *h, uint32_t value)
 {
     pc_capture_ctx_t *ctx;
 
@@ -2832,7 +2832,7 @@ void iot_pc_capture_set(iot_capture_t *h, uint32_t value)
     }
 }
 
-void iot_pc_encoder_set(iot_encoder_t *h, int32_t count)
+void iot_pc_encoder_set(hal_encoder_t *h, int32_t count)
 {
     pc_encoder_ctx_t *ctx;
 
@@ -2852,7 +2852,7 @@ void iot_pc_i2c_set_mem(uint16_t addr, uint8_t reg, uint8_t value)
     }
 }
 
-void iot_pc_time_set(const iot_rtc_time_t *t)
+void iot_pc_time_set(const hal_rtc_time_t *t)
 {
     if (t != NULL) {
         s_rtc_time = *t;
@@ -2880,12 +2880,12 @@ void iot_test_tick_advance(uint32_t ms)
     iot_pc_tick_advance(ms);
 }
 
-uint32_t iot_test_uart_get_tx(iot_uart_t *h, uint8_t *buf, uint32_t cap)
+uint32_t iot_test_uart_get_tx(hal_uart_t *h, uint8_t *buf, uint32_t cap)
 {
     return iot_pc_uart_get_tx(h, buf, cap);
 }
 
-uint32_t iot_test_uart_inject(iot_uart_t *h,
+uint32_t iot_test_uart_inject(hal_uart_t *h,
                                const uint8_t *data, uint32_t len)
 {
     return iot_pc_uart_inject(h, data, len);
@@ -2901,22 +2901,22 @@ void iot_test_adc_set_max(uint8_t channel, uint32_t max)
     iot_pc_adc_set_max(channel, max);
 }
 
-void iot_test_exti_trigger(iot_pin_t pin)
+void iot_test_exti_trigger(hal_pin_t pin)
 {
     iot_pc_exti_trigger(pin);
 }
 
-void iot_test_can_inject(iot_can_t *h, const iot_can_frame_t *frame)
+void iot_test_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
 {
     iot_pc_can_inject(h, frame);
 }
 
-void iot_test_capture_set(iot_capture_t *h, uint32_t value)
+void iot_test_capture_set(hal_capture_t *h, uint32_t value)
 {
     iot_pc_capture_set(h, value);
 }
 
-void iot_test_encoder_set(iot_encoder_t *h, int32_t count)
+void iot_test_encoder_set(hal_encoder_t *h, int32_t count)
 {
     iot_pc_encoder_set(h, count);
 }
@@ -2926,7 +2926,7 @@ void iot_test_i2c_set_mem(uint16_t addr, uint8_t reg, uint8_t value)
     iot_pc_i2c_set_mem(addr, reg, value);
 }
 
-void iot_test_time_set(const iot_rtc_time_t *t)
+void iot_test_time_set(const hal_rtc_time_t *t)
 {
     iot_pc_time_set(t);
 }

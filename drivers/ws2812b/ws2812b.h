@@ -29,7 +29,7 @@ typedef struct {
     bool initialized;
 } ws2812b_handle_t;
 
-int ws2812b_init(ws2812b_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
+int ws2812b_init(ws2812b_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
                  uint16_t led_count, uint8_t *pixels, uint8_t *encoded);
 int ws2812b_deinit(ws2812b_handle_t *handle);
 

@@ -31,7 +31,7 @@ typedef struct {
  * @brief  初始化 HTU31D（probe + 校验厂商 ID）
  * @param  address  7 位从机地址，0 表示使用默认 0x40
  */
-int htu31d_init(htu31d_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int htu31d_init(htu31d_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int htu31d_deinit(htu31d_handle_t *handle);

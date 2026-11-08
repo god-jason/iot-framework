@@ -9,10 +9,10 @@ static int bme680_read_calib(bme680_handle_t *handle)
     bme680_calib_t *c = &handle->calib;
 
     if (driver_i2c_read_reg(&handle->i2c, BME680_REG_CALIB_00, d1, sizeof(d1)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (driver_i2c_read_reg(&handle->i2c, BME680_REG_CALIB_01, d2, sizeof(d2)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 0x89..0x9C：d1[0] 保留，其余 T2/T3/P1..P10，均为小端 */
@@ -118,19 +118,19 @@ static int bme680_trigger(bme680_handle_t *handle)
     uint8_t value = BME680_CTRL_MEAS_FORCED;
 
     if (driver_i2c_write_reg(&handle->i2c, BME680_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(BME680_MEASURE_DELAY_MS);
     return DRIVER_OK;
 }
 
-int bme680_init(bme680_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int bme680_init(bme680_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t chip_id = 0U;
     uint8_t value;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -140,11 +140,11 @@ int bme680_init(bme680_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     handle->initialized = false;
 
     if (bme680_get_chip_id(handle, &chip_id) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (chip_id != BME680_CHIP_ID) {
         LOG_E("bme680", "chip id mismatch: 0x%02X", chip_id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     value = BME680_RESET_VALUE;
@@ -153,28 +153,28 @@ int bme680_init(bme680_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (bme680_read_calib(handle) != DRIVER_OK) {
         LOG_E("bme680", "read calibration failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (handle->calib.t2 == 0 || handle->calib.p1 == 0U) {
         LOG_E("bme680", "invalid calibration data");
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     value = BME680_CTRL_GAS1_OFF;
     if (driver_i2c_write_reg(&handle->i2c, BME680_REG_CTRL_GAS_1, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BME680_CTRL_HUM_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BME680_REG_CTRL_HUM, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BME680_CONFIG_DEFAULT;
     if (driver_i2c_write_reg(&handle->i2c, BME680_REG_CONFIG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BME680_MODE_SLEEP;
     if (driver_i2c_write_reg(&handle->i2c, BME680_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -187,7 +187,7 @@ int bme680_deinit(bme680_handle_t *handle)
     uint8_t value = BME680_MODE_SLEEP;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)driver_i2c_write_reg(&handle->i2c, BME680_REG_CTRL_MEAS, &value, 1U);
@@ -200,7 +200,7 @@ int bme680_deinit(bme680_handle_t *handle)
 int bme680_get_chip_id(bme680_handle_t *handle, uint8_t *chip_id)
 {
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, BME680_REG_CHIP_ID, chip_id, 1U);
 }
@@ -215,10 +215,10 @@ int bme680_read_raw(bme680_handle_t *handle, int32_t *raw_temperature,
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_pressure == NULL && raw_humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = bme680_trigger(handle);
@@ -227,7 +227,7 @@ int bme680_read_raw(bme680_handle_t *handle, int32_t *raw_temperature,
     }
 
     if (driver_i2c_read_reg(&handle->i2c, BME680_REG_DATA, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 0x1D..0x1F 压力 20 位，0x20..0x22 温度 20 位，0x23/0x24 湿度 */
@@ -258,7 +258,7 @@ int bme680_read(bme680_handle_t *handle, bme680_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = bme680_read_raw(handle, &adc_t, &adc_p, &adc_h);
@@ -274,7 +274,7 @@ int bme680_read(bme680_handle_t *handle, bme680_data_t *data)
     if (!(pressure >= (double)BME680_PRESSURE_MIN_PA &&
           pressure <= (double)BME680_PRESSURE_MAX_PA)) {
         LOG_W("bme680", "pressure out of range");
-        return (int)IOT_ERROR;
+        return (int)HAL_ERROR;
     }
 
     data->temperature = (float)temperature;

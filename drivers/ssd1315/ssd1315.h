@@ -23,8 +23,8 @@ typedef struct {
 
     driver_i2c_t i2c;       /* I2C 模式 */
     driver_spi_t spi;       /* SPI 模式 */
-    iot_pin_t dc;          /* 命令/数据选择，SPI 必填 */
-    iot_pin_t res;         /* 复位，可为 0 */
+    hal_pin_t dc;          /* 命令/数据选择，SPI 必填 */
+    hal_pin_t res;         /* 复位，可为 0 */
 
     uint8_t *gram;
     size_t gram_len;

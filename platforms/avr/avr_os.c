@@ -1,11 +1,11 @@
 /*
- * AVR 平台 —— 系统级接口（iot_os.h 实现）。
+ * AVR 平台 —— 系统级接口（hal_os.h 实现）。
  *
  * 毫秒时基由 TIMER0 溢出中断维护（计数值定义在 avr.c）；
  * 延时使用 util/delay 忙等；复位通过看门狗实现。
  */
 
-#include "iot.h"
+#include "hal.h"
 
 #ifndef F_CPU
 #define F_CPU 16000000UL
@@ -20,7 +20,7 @@
 /* 由 avr.c 的 TIMER0_OVF_vect 中断递增 */
 extern volatile uint32_t g_avr_millis;
 
-uint32_t iot_tick_get(void)
+uint32_t hal_tick_get(void)
 {
     uint32_t value;
 
@@ -30,7 +30,7 @@ uint32_t iot_tick_get(void)
     return value;
 }
 
-void iot_delay_ms(uint32_t ms)
+void hal_delay_ms(uint32_t ms)
 {
     while (ms > 0U) {
         _delay_ms(1.0);
@@ -38,7 +38,7 @@ void iot_delay_ms(uint32_t ms)
     }
 }
 
-void iot_delay_us(uint32_t us)
+void hal_delay_us(uint32_t us)
 {
     while (us > 0U) {
         _delay_us(1.0);
@@ -46,17 +46,17 @@ void iot_delay_us(uint32_t us)
     }
 }
 
-void iot_irq_enable(void)
+void hal_irq_enable(void)
 {
     sei();
 }
 
-void iot_irq_disable(void)
+void hal_irq_disable(void)
 {
     cli();
 }
 
-void iot_system_reset(void)
+void hal_system_reset(void)
 {
     cli();
     wdt_enable(WDTO_15MS);
@@ -65,7 +65,7 @@ void iot_system_reset(void)
     }
 }
 
-void iot_system_sleep(void)
+void hal_system_sleep(void)
 {
     set_sleep_mode(SLEEP_MODE_IDLE);
     sleep_enable();
@@ -73,7 +73,7 @@ void iot_system_sleep(void)
     sleep_disable();
 }
 
-void iot_system_deepsleep(void)
+void hal_system_deepsleep(void)
 {
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();

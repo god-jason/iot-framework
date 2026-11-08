@@ -32,7 +32,7 @@ static int ads1118_transfer(ads1118_handle_t *handle, uint16_t config,
     ret = driver_spi_transfer(&handle->spi, tx, rx, sizeof(tx));
     driver_spi_deselect(&handle->spi);
     if (ret != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     if (conversion != NULL) {
@@ -59,12 +59,12 @@ static uint16_t ads1118_build_config(const ads1118_handle_t *handle,
     return config;
 }
 
-int ads1118_init(ads1118_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
+int ads1118_init(ads1118_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 {
     uint16_t cfg = 0U;
 
     if (handle == NULL || spi == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -74,19 +74,19 @@ int ads1118_init(ads1118_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
     handle->data_rate = ADS1118_DR_128;
     handle->initialized = false;
 
-    if (cs != 0U && driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+    if (cs != 0U && driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
+        return (int)HAL_IO_ERROR;
     }
 
     driver_delay_ms(1U);   /* 上电/复位稳定 */
 
     /* 回读配置寄存器：bit0 恒为 1，为 0 说明总线上没有器件 */
     if (ads1118_transfer(handle, ADS1118_CFG_DEFAULT, NULL, &cfg) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if ((cfg & ADS1118_CFG_RESERVED) == 0U) {
         LOG_E("ads1118", "config readback 0x%04X invalid", (unsigned)cfg);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -97,7 +97,7 @@ int ads1118_init(ads1118_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 int ads1118_deinit(ads1118_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     driver_spi_deselect(&handle->spi);
     handle->initialized = false;
@@ -109,7 +109,7 @@ int ads1118_set_pga(ads1118_handle_t *handle, ads1118_pga_t pga)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)pga > (uint16_t)ADS1118_PGA_0V256) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->pga = pga;
     return DRIVER_OK;
@@ -119,7 +119,7 @@ int ads1118_set_data_rate(ads1118_handle_t *handle, ads1118_dr_t data_rate)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)data_rate > (uint16_t)ADS1118_DR_860) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->data_rate = data_rate;
     return DRIVER_OK;
@@ -133,13 +133,13 @@ static int ads1118_convert_once(ads1118_handle_t *handle, uint16_t start_cfg,
 
     /* 第一次传输启动转换，同时读出的上一次结果丢弃 */
     if (ads1118_transfer(handle, start_cfg, NULL, NULL) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms((uint32_t)ads1118_conv_ms[handle->data_rate] + ADS1118_CONV_EXTRA_MS);
 
     /* 第二次传输（不启动新转换）读回刚完成的结果 */
     if (ads1118_transfer(handle, idle_cfg, &value, NULL) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *raw = (int16_t)value;
     return DRIVER_OK;
@@ -148,10 +148,10 @@ static int ads1118_convert_once(ads1118_handle_t *handle, uint16_t start_cfg,
 int ads1118_read_raw(ads1118_handle_t *handle, ads1118_mux_t mux, int16_t *raw)
 {
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if ((uint16_t)mux > (uint16_t)ADS1118_MUX_SINGLE_3) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     return ads1118_convert_once(handle, ads1118_build_config(handle, mux, true),
@@ -164,7 +164,7 @@ int ads1118_read_voltage(ads1118_handle_t *handle, ads1118_mux_t mux, float *vol
     int ret;
 
     if (handle == NULL || volts == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ads1118_read_raw(handle, mux, &raw);
@@ -184,7 +184,7 @@ int ads1118_read_internal_temp(ads1118_handle_t *handle, float *celsius)
     int ret;
 
     if (handle == NULL || celsius == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* MUX=111 + TS_MODE=1 选择内部温度传感器 */
@@ -210,10 +210,10 @@ int ads1118_read(ads1118_handle_t *handle, int16_t *values, size_t count)
     size_t i;
 
     if (handle == NULL || values == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (count == 0U || count > 4U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     for (i = 0U; i < count; i++) {

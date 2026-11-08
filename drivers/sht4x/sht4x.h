@@ -32,7 +32,7 @@ typedef struct {
  * @brief  初始化 SHT4x（probe + 读序列号确认器件在位）
  * @param  address  7 位从机地址，0 表示使用默认 0x44
  */
-int sht4x_init(sht4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int sht4x_init(sht4x_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int sht4x_deinit(sht4x_handle_t *handle);

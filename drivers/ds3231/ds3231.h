@@ -30,7 +30,7 @@ typedef struct {
 } ds3231_handle_t;
 
 /** @brief  初始化并探测从机，address 为 0 时使用 0x68 */
-int ds3231_init(ds3231_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int ds3231_init(ds3231_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief  反初始化（不关闭总线） */
 int ds3231_deinit(ds3231_handle_t *handle);

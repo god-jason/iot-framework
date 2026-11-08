@@ -14,7 +14,7 @@
 
 static char s_http_resp[ML307_HTTP_RESP_MAX];
 
-static iot_status_t ml307_http_copy(iot_http_response_t *response,
+static hal_status_t ml307_http_copy(iot_http_response_t *response,
                                     const char *data, uint32_t len)
 {
     uint32_t n;
@@ -24,25 +24,25 @@ static iot_status_t ml307_http_copy(iot_http_response_t *response,
     response->body_len = 0;
 
     if (response->body == NULL || response->body_cap == 0) {
-        return IOT_OK;
+        return HAL_OK;
     }
 
     n = (len < response->body_cap) ? len : response->body_cap;
     memcpy(response->body, data, n);
     response->body_len = n;
-    return (n < len) ? IOT_OVERFLOW : IOT_OK;
+    return (n < len) ? HAL_OVERFLOW : HAL_OK;
 }
 
-static iot_status_t ml307_http_read(iot_http_response_t *response)
+static hal_status_t ml307_http_read(iot_http_response_t *response)
 {
     const char *r;
 
     if (at_exec("AT+HTTPREAD=0,1024", 5000) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
     r = at_get_response();
     if (r == NULL) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     strncpy(s_http_resp, r, sizeof(s_http_resp) - 1);
@@ -51,7 +51,7 @@ static iot_status_t ml307_http_read(iot_http_response_t *response)
                            (uint32_t)strlen(s_http_resp));
 }
 
-static iot_status_t ml307_http_do_get(const iot_http_request_t *request,
+static hal_status_t ml307_http_do_get(const iot_http_request_t *request,
                                       iot_http_response_t *response)
 {
     char cmd[320];
@@ -60,12 +60,12 @@ static iot_status_t ml307_http_do_get(const iot_http_request_t *request,
 
     snprintf(cmd, sizeof(cmd), "AT+HTTPGET=%s", request->url);
     if (at_exec(cmd, 10000) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
     return ml307_http_read(response);
 }
 
-static iot_status_t ml307_http_do_post(const iot_http_request_t *request,
+static hal_status_t ml307_http_do_post(const iot_http_request_t *request,
                                        iot_http_response_t *response)
 {
     char cmd[320];
@@ -83,7 +83,7 @@ static iot_status_t ml307_http_do_post(const iot_http_request_t *request,
     phase.failure = "ERROR";
     phase.timeout = 5000;
     if (at_transact(&phase) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     /* 阶段2：发送请求体 */
@@ -99,7 +99,7 @@ static iot_status_t ml307_http_do_post(const iot_http_request_t *request,
     phase.failure = "ERROR";
     phase.timeout = 5000;
     if (at_transact(&phase) != AT_RESULT_OK) {
-        return IOT_IO_ERROR;
+        return HAL_IO_ERROR;
     }
 
     return ml307_http_read(response);
@@ -107,25 +107,25 @@ static iot_status_t ml307_http_do_post(const iot_http_request_t *request,
 
 /* ---------------- iot_http 接口实现 ---------------- */
 
-iot_status_t iot_http_init(void)
+hal_status_t iot_http_init(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_http_deinit(void)
+hal_status_t iot_http_deinit(void)
 {
-    return IOT_OK;
+    return HAL_OK;
 }
 
-iot_status_t iot_http_request(const iot_http_request_t *request,
+hal_status_t iot_http_request(const iot_http_request_t *request,
                               iot_http_response_t *response)
 {
     if (request == NULL || response == NULL || request->url == NULL ||
         request->url[0] == '\0') {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
     if (response->body_cap > 0 && response->body == NULL) {
-        return IOT_INVALID_PARAM;
+        return HAL_INVALID_PARAM;
     }
 
     response->status_code = 0;
@@ -138,7 +138,7 @@ iot_status_t iot_http_request(const iot_http_request_t *request,
     case IOT_HTTP_POST:
         return ml307_http_do_post(request, response);
     default:
-        return IOT_NOT_SUPPORTED;
+        return HAL_NOT_SUPPORTED;
     }
 }
 

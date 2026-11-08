@@ -24,10 +24,10 @@ typedef enum {
 
 typedef struct {
     driver_spi_t spi;
-    iot_pin_t trx_ce;
-    iot_pin_t tx_en;
-    iot_pin_t pwr_up;
-    iot_pin_t dr;              /* 可传 0，则发送/接收按超时轮询 */
+    hal_pin_t trx_ce;
+    hal_pin_t tx_en;
+    hal_pin_t pwr_up;
+    hal_pin_t dr;              /* 可传 0，则发送/接收按超时轮询 */
     uint32_t frequency_khz;
     uint8_t channel;            /* CH_NO */
     uint8_t config[10];         /* RF-CONFIG 区映像 */
@@ -36,8 +36,8 @@ typedef struct {
     bool initialized;
 } nrf905_handle_t;
 
-int nrf905_init(nrf905_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
-                iot_pin_t trx_ce, iot_pin_t tx_en, iot_pin_t pwr_up, iot_pin_t dr);
+int nrf905_init(nrf905_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
+                hal_pin_t trx_ce, hal_pin_t tx_en, hal_pin_t pwr_up, hal_pin_t dr);
 int nrf905_deinit(nrf905_handle_t *handle);
 
 /* 频率单位 kHz：422400..473500 或 862000..932000 */
@@ -49,7 +49,7 @@ int nrf905_set_config(nrf905_handle_t *handle, const uint8_t config[10]);
 
 /* 发送 len(<=32) 字节，不足部分补 0 */
 int nrf905_send(nrf905_handle_t *handle, const uint8_t *data, size_t len);
-/* 非阻塞读：无数据返回 IOT_NOT_READY */
+/* 非阻塞读：无数据返回 HAL_NOT_READY */
 int nrf905_poll(nrf905_handle_t *handle, uint8_t *data, size_t len, size_t *received);
 int nrf905_recv(nrf905_handle_t *handle, uint8_t *data, size_t len,
                 size_t *received, uint32_t timeout_ms);

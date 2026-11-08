@@ -16,7 +16,7 @@ static int max31865_write_reg(max31865_handle_t *handle, uint8_t reg, uint8_t va
     driver_spi_deselect(&handle->spi);
     if (ret != DRIVER_OK) {
         LOG_E("max31865", "write reg 0x%02X failed: %d", (unsigned int)reg, ret);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -30,7 +30,7 @@ static int max31865_read_regs(max31865_handle_t *handle, uint8_t reg,
     int ret;
 
     if (len == 0U || len > 4U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     tx[0] = (uint8_t)(MAX31865_SPI_READ | (reg & 0x7FU));
@@ -43,7 +43,7 @@ static int max31865_read_regs(max31865_handle_t *handle, uint8_t reg,
     driver_spi_deselect(&handle->spi);
     if (ret != DRIVER_OK) {
         LOG_E("max31865", "read reg 0x%02X failed: %d", (unsigned int)reg, ret);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     for (i = 0U; i < len; i++) {
@@ -127,12 +127,12 @@ static float max31865_resistance_to_celsius(float resistance, float r0)
     return t;
 }
 
-int max31865_init(max31865_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
+int max31865_init(max31865_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 {
     uint8_t config = 0U;
 
     if (handle == NULL || spi == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -149,13 +149,13 @@ int max31865_init(max31865_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
     if (max31865_read_regs(handle, MAX31865_REG_CONFIG, &config, 1U) != DRIVER_OK ||
         config == 0xFFU) {
         LOG_E("max31865", "probe failed");
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
     if (max31865_apply_config(handle) != DRIVER_OK) {
         handle->initialized = false;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     LOG_I("max31865", "init ok, config=0x%02X", (unsigned int)config);
@@ -165,10 +165,10 @@ int max31865_init(max31865_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 int max31865_deinit(max31865_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
 
     /* 关闭 VBIAS 以减少 RTD 自热 */
@@ -184,10 +184,10 @@ int max31865_deinit(max31865_handle_t *handle)
 int max31865_set_wire_mode(max31865_handle_t *handle, uint8_t wires)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (wires != 2U && wires != 3U && wires != 4U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->wire = wires;
@@ -197,7 +197,7 @@ int max31865_set_wire_mode(max31865_handle_t *handle, uint8_t wires)
 int max31865_set_rref(max31865_handle_t *handle, float rref)
 {
     if (handle == NULL || !handle->initialized || rref <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->rref = rref;
     return DRIVER_OK;
@@ -206,7 +206,7 @@ int max31865_set_rref(max31865_handle_t *handle, float rref)
 int max31865_set_r0(max31865_handle_t *handle, float r0)
 {
     if (handle == NULL || !handle->initialized || r0 <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->r0 = r0;
     return DRIVER_OK;
@@ -217,11 +217,11 @@ int max31865_read_raw(max31865_handle_t *handle, uint16_t *raw)
     uint8_t buf[2];
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (max31865_read_regs(handle, MAX31865_REG_RTD_MSB, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     {
@@ -230,7 +230,7 @@ int max31865_read_raw(max31865_handle_t *handle, uint16_t *raw)
         /* LSB 的 bit0 为故障标志，右移 1 位得到 15 位 ADC 码 */
         if ((value & MAX31865_RTD_FAULT_BIT) != 0U) {
             LOG_E("max31865", "rtd fault bit set");
-            return (int)IOT_HW_ERROR;
+            return (int)HAL_HW_ERROR;
         }
         *raw = (uint16_t)(value >> 1);
     }
@@ -243,7 +243,7 @@ int max31865_read_resistance(max31865_handle_t *handle, float *ohms)
     int ret;
 
     if (ohms == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = max31865_read_raw(handle, &raw);
@@ -260,7 +260,7 @@ int max31865_read(max31865_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = max31865_read_resistance(handle, &resistance);
@@ -276,11 +276,11 @@ int max31865_get_fault(max31865_handle_t *handle, uint8_t *fault)
     uint8_t status = 0U;
 
     if (handle == NULL || fault == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (max31865_read_regs(handle, MAX31865_REG_FAULT_STATUS, &status, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *fault = status;
     return DRIVER_OK;
@@ -291,7 +291,7 @@ int max31865_clear_fault(max31865_handle_t *handle)
     uint8_t config;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     /* FAULT_CLEAR 位自清零，写入后恢复正常配置 */
     config = (uint8_t)(max31865_config_value(handle) | MAX31865_CONFIG_FAULT_CLEAR);

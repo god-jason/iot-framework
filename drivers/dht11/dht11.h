@@ -8,7 +8,7 @@
  *   dht11_init / dht11_deinit / dht11_read
  * 引脚操作只使用 driver_gpio_* 与 driver_delay_us。
  *
- * 注意：位时序对中断敏感，临界区通过 iot_irq_disable/enable 保护
+ * 注意：位时序对中断敏感，临界区通过 hal_irq_disable/enable 保护
  *       （driver_io.h 未提供中断接口，沿用 ds18b20 的既有做法）。
  */
 
@@ -19,16 +19,16 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_pin_t pin;
+    hal_pin_t pin;
     uint32_t last_read_ms;   /* 上次成功读取时刻，用于限制 1s 采样间隔 */
     bool initialized;
 } dht11_handle_t;
 
 /**
  * @brief  初始化 DHT11（配置为输入 + 上拉，等待总线空闲）
- * @param  pin  数据引脚（iot_pin_t，IOT_PIN(port, pin) 编码）
+ * @param  pin  数据引脚（hal_pin_t，HAL_PIN(port, pin) 编码）
  */
-int dht11_init(dht11_handle_t *handle, iot_pin_t pin);
+int dht11_init(dht11_handle_t *handle, hal_pin_t pin);
 
 /** @brief 反初始化（释放引脚为输入） */
 int dht11_deinit(dht11_handle_t *handle);
@@ -37,7 +37,7 @@ int dht11_deinit(dht11_handle_t *handle);
  * @brief  读取温度与湿度（含校验和验证）
  * @param  temperature  温度，单位 ℃，可为 NULL
  * @param  humidity     湿度，单位 %RH，可为 NULL
- * @note   两次读取之间需间隔 >= 1s，过早调用返回 IOT_BUSY
+ * @note   两次读取之间需间隔 >= 1s，过早调用返回 HAL_BUSY
  */
 int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity);
 

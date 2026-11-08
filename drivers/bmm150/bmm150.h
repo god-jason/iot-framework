@@ -48,10 +48,10 @@ typedef struct {
  * @param  spi      SPI 主机句柄，I2C 模式传 NULL
  * @param  cs       片选引脚，总线自带片选时传 0
  * @param  address  7 位从机地址，0 表示默认 0x10（SPI 模式忽略）
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int bmm150_init(bmm150_handle_t *handle, iot_i2c_t *i2c,
-                iot_spi_t *spi, iot_pin_t cs, uint16_t address);
+int bmm150_init(bmm150_handle_t *handle, hal_i2c_t *i2c,
+                hal_spi_t *spi, hal_pin_t cs, uint16_t address);
 
 /** @brief 反初始化：进入挂起模式 */
 int bmm150_deinit(bmm150_handle_t *handle);

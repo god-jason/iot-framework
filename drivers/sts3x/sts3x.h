@@ -35,7 +35,7 @@ typedef struct {
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址，0 表示默认 0x4A
  */
-int sts3x_init(sts3x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int sts3x_init(sts3x_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int sts3x_deinit(sts3x_handle_t *handle);
 

@@ -13,7 +13,7 @@
  *     由硬件/板级完成）。UART 句柄由调用方初始化和持有。
  *   - 配置帧收发为“命令 + 可选响应”，响应解析仅做基本帧头与校验检查；
  *     具体命令码与字段顺序需按 datasheet/固件补充。
- *   - SPI 配置通道本实现未启用，如需要由调用方使用 iot_spi 实现，
+ *   - SPI 配置通道本实现未启用，如需要由调用方使用 hal_spi 实现，
  *     或在后续版本补充（见 ch9121_write 注释）。
  */
 
@@ -32,7 +32,7 @@ typedef enum {
 } ch9121_net_mode_t;
 
 typedef struct {
-    iot_uart_t *uart;
+    hal_uart_t *uart;
     uint32_t timeout_ms;
     ch9121_net_mode_t mode;
     bool initialized;
@@ -42,7 +42,7 @@ typedef struct {
  * @brief  初始化 CH9121 驱动（只保存 UART 句柄，不改变芯片配置）
  * @param  uart  已初始化的 UART 句柄（波特率需与芯片一致）
  */
-int ch9121_init(ch9121_handle_t *handle, iot_uart_t *uart, uint32_t timeout_ms);
+int ch9121_init(ch9121_handle_t *handle, hal_uart_t *uart, uint32_t timeout_ms);
 
 int ch9121_deinit(ch9121_handle_t *handle);
 

@@ -24,7 +24,7 @@ typedef struct {
  * @brief  初始化 AHT30（上电延时 + 软复位 + 必要校准）
  * @param  address  7 位从机地址，0 表示使用默认 0x38
  */
-int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int aht30_init(aht30_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int aht30_deinit(aht30_handle_t *handle);

@@ -33,7 +33,7 @@ static int ags10_read_reg(ags10_handle_t *handle, uint8_t reg,
     }
     if (ags10_crc(data, data_len) != data[data_len]) {
         LOG_E("ags10", "crc error on reg 0x%02X", (unsigned)reg);
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
     return DRIVER_OK;
 }
@@ -44,7 +44,7 @@ int ags10_get_version(ags10_handle_t *handle, uint16_t *version)
     int ret;
 
     if (handle == NULL || version == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = ags10_read_reg(handle, AGS10_REG_VERSION, raw, 2U);
     if (ret != DRIVER_OK) {
@@ -54,13 +54,13 @@ int ags10_get_version(ags10_handle_t *handle, uint16_t *version)
     return DRIVER_OK;
 }
 
-int ags10_init(ags10_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int ags10_init(ags10_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint16_t version = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -72,14 +72,14 @@ int ags10_init(ags10_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("ags10", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* ID 校验：版本号 + CRC */
     ret = ags10_get_version(handle, &version);
     if (ret != DRIVER_OK) {
         LOG_E("ags10", "version read failed: %d", ret);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->version = version;
@@ -91,7 +91,7 @@ int ags10_init(ags10_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int ags10_deinit(ags10_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -101,7 +101,7 @@ int ags10_deinit(ags10_handle_t *handle)
 int ags10_set_tvoc_scale(ags10_handle_t *handle, float scale)
 {
     if (handle == NULL || !handle->initialized || scale < 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->tvoc_scale = scale;
     return DRIVER_OK;
@@ -114,7 +114,7 @@ int ags10_read(ags10_handle_t *handle, ags10_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ags10_read_reg(handle, AGS10_REG_VOC, raw, 4U);

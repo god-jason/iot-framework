@@ -22,7 +22,7 @@ static int htu21d_read_frame(htu21d_handle_t *handle, uint16_t *raw)
     if (handle->crc_enabled &&
         driver_crc8(data, 2U, HTU21D_CRC_POLY, HTU21D_CRC_INIT) != data[2]) {
         LOG_E("htu21d", "crc error");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     value = (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
@@ -47,12 +47,12 @@ static int htu21d_measure(htu21d_handle_t *handle, uint8_t command,
     return htu21d_read_frame(handle, raw);
 }
 
-int htu21d_init(htu21d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int htu21d_init(htu21d_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t user = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -63,7 +63,7 @@ int htu21d_init(htu21d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("htu21d", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (htu21d_soft_reset(handle) != DRIVER_OK) {
@@ -76,7 +76,7 @@ int htu21d_init(htu21d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     if (htu21d_read_user_register(handle, &user) != DRIVER_OK) {
         handle->initialized = false;
         LOG_E("htu21d", "read user register failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (user != HTU21D_USER_REG_DEFAULT) {
         LOG_W("htu21d", "unexpected user reg 0x%02X", user);
@@ -89,7 +89,7 @@ int htu21d_init(htu21d_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int htu21d_deinit(htu21d_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -101,7 +101,7 @@ int htu21d_soft_reset(htu21d_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = htu21d_send_cmd(handle, HTU21D_CMD_SOFT_RESET);
@@ -115,7 +115,7 @@ int htu21d_read_user_register(htu21d_handle_t *handle, uint8_t *value)
     int ret;
 
     if (handle == NULL || value == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, &command, 1U);
@@ -134,10 +134,10 @@ int htu21d_read(htu21d_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (temperature != NULL) {

@@ -28,7 +28,7 @@ typedef struct {
 } vl53l0x_data_t;
 
 /** @param address 7 位地址，传 0 取 0x29 */
-int vl53l0x_init(vl53l0x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int vl53l0x_init(vl53l0x_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int vl53l0x_deinit(vl53l0x_handle_t *handle);
 

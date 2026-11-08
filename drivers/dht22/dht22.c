@@ -7,32 +7,32 @@
  * 输入 + 上拉释放总线（由外部上拉拉高）并读取从机电平。
  * 不依赖开漏输出，可移植到没有 OD 能力的端口（如 AVR）。
  */
-static int dht22_mode(dht22_handle_t *handle, iot_gpio_mode_t mode)
+static int dht22_mode(dht22_handle_t *handle, hal_gpio_mode_t mode)
 {
-    iot_gpio_config_t cfg;
+    hal_gpio_config_t cfg;
 
     cfg.mode = mode;
-    cfg.output = IOT_GPIO_OUTPUT_PP;
-    cfg.pull = (mode == IOT_GPIO_MODE_INPUT) ? IOT_GPIO_PULLUP : IOT_GPIO_NOPULL;
-    cfg.speed = IOT_GPIO_SPEED_HIGH;
+    cfg.output = HAL_GPIO_OUTPUT_PP;
+    cfg.pull = (mode == HAL_GPIO_MODE_INPUT) ? HAL_GPIO_PULLUP : HAL_GPIO_NOPULL;
+    cfg.speed = HAL_GPIO_SPEED_HIGH;
     cfg.alternate = 0U;
-    cfg.initial_level = IOT_GPIO_LOW;
+    cfg.initial_level = HAL_GPIO_LOW;
 
-    return (iot_gpio_init(handle->pin, &cfg) == IOT_OK) ? DRIVER_OK : (int)IOT_IO_ERROR;
+    return (hal_gpio_init(handle->pin, &cfg) == HAL_OK) ? DRIVER_OK : (int)HAL_IO_ERROR;
 }
 
 /* 采样数据线：1 高 / 0 低，负值为错误码 */
 static int dht22_line(dht22_handle_t *handle)
 {
-    iot_gpio_level_t level = IOT_GPIO_LOW;
+    hal_gpio_level_t level = HAL_GPIO_LOW;
 
-    if (iot_gpio_read(handle->pin, &level) != IOT_OK) {
-        return (int)IOT_IO_ERROR;
+    if (hal_gpio_read(handle->pin, &level) != HAL_OK) {
+        return (int)HAL_IO_ERROR;
     }
-    return (level == IOT_GPIO_HIGH) ? 1 : 0;
+    return (level == HAL_GPIO_HIGH) ? 1 : 0;
 }
 
-/* 等待总线到达指定电平，超时返回 IOT_TIMEOUT */
+/* 等待总线到达指定电平，超时返回 HAL_TIMEOUT */
 static int dht22_wait_level(dht22_handle_t *handle, int level, uint32_t timeout_us)
 {
     uint32_t elapsed;
@@ -48,7 +48,7 @@ static int dht22_wait_level(dht22_handle_t *handle, int level, uint32_t timeout_
         }
         driver_delay_us(1U);
     }
-    return (int)IOT_TIMEOUT;
+    return (int)HAL_TIMEOUT;
 }
 
 /* 读一个字节：每位先 50us 低电平，再按高电平宽度判 0/1（约 27us / 70us） */
@@ -94,19 +94,19 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
     int ret;
 
     if (handle == NULL || frame == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     /* 传感器采样周期 >=2s，过密读取会造成数据陈旧与自热累积 */
     now = driver_tick_ms();
     if (handle->sampled &&
         (uint32_t)(now - handle->last_read_ms) < DHT22_MIN_INTERVAL_MS) {
-        return (int)IOT_BUSY;
+        return (int)HAL_BUSY;
     }
     /* 起始信号 + 40 位数据全程关中断，避免位时序被中断拉长 */
-    iot_irq_disable();
-    (void)dht22_mode(handle, IOT_GPIO_MODE_OUTPUT);
+    hal_irq_disable();
+    (void)dht22_mode(handle, HAL_GPIO_MODE_OUTPUT);
     driver_delay_us(DHT22_START_LOW_US);
-    ret = dht22_mode(handle, IOT_GPIO_MODE_INPUT);
+    ret = dht22_mode(handle, HAL_GPIO_MODE_INPUT);
     driver_delay_us(DHT22_RELEASE_US);
     /* 从机响应：低约 80us -> 高约 80us -> 低，随后即第 1 位的低电平 */
     if (ret == DRIVER_OK) {
@@ -121,7 +121,7 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
     for (i = 0U; (i < DHT22_FRAME_BYTES) && (ret == DRIVER_OK); i++) {
         ret = dht22_read_byte(handle, &frame[i]);
     }
-    iot_irq_enable();
+    hal_irq_enable();
 
     if (ret != DRIVER_OK) {
         LOG_E("dht22", "frame error: %d", ret);
@@ -132,12 +132,12 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
     return DRIVER_OK;
 }
 
-int dht22_init(dht22_handle_t *handle, iot_pin_t pin)
+int dht22_init(dht22_handle_t *handle, hal_pin_t pin)
 {
     int ret;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->pin = pin;
     handle->last_read_ms = 0U;
@@ -145,7 +145,7 @@ int dht22_init(dht22_handle_t *handle, iot_pin_t pin)
     handle->initialized = false;
 
     /* 空闲态：输入 + 上拉，总线应由上拉电阻保持高电平 */
-    ret = dht22_mode(handle, IOT_GPIO_MODE_INPUT);
+    ret = dht22_mode(handle, HAL_GPIO_MODE_INPUT);
     if (ret != DRIVER_OK) {
         LOG_E("dht22", "gpio init failed: %d", ret);
         return ret;
@@ -162,10 +162,10 @@ int dht22_init(dht22_handle_t *handle, iot_pin_t pin)
 int dht22_deinit(dht22_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
-        (void)iot_gpio_deinit(handle->pin);
+        (void)hal_gpio_deinit(handle->pin);
     }
     handle->initialized = false;
     handle->sampled = false;
@@ -182,10 +182,10 @@ int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = dht22_read_raw(handle, frame);
@@ -197,7 +197,7 @@ int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity)
     if (sum != frame[DHT22_IDX_CHECKSUM]) {
         LOG_E("dht22", "checksum fail 0x%02X != 0x%02X",
               (unsigned int)sum, (unsigned int)frame[DHT22_IDX_CHECKSUM]);
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     raw_humi = (uint16_t)(((uint16_t)frame[DHT22_IDX_HUMI_MSB] << 8) |

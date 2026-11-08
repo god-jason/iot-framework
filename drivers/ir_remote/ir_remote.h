@@ -25,14 +25,14 @@ typedef struct {
 } ir_remote_frame_t;
 
 typedef struct {
-    iot_pin_t tx_pin;          /* 可传 0（仅接收） */
-    iot_pin_t rx_pin;          /* 可传 0（仅发送） */
+    hal_pin_t tx_pin;          /* 可传 0（仅接收） */
+    hal_pin_t rx_pin;          /* 可传 0（仅发送） */
     uint16_t carrier_khz;
     uint32_t timeout_ms;
     bool initialized;
 } ir_remote_handle_t;
 
-int ir_remote_init(ir_remote_handle_t *handle, iot_pin_t tx_pin, iot_pin_t rx_pin);
+int ir_remote_init(ir_remote_handle_t *handle, hal_pin_t tx_pin, hal_pin_t rx_pin);
 int ir_remote_deinit(ir_remote_handle_t *handle);
 int ir_remote_set_carrier(ir_remote_handle_t *handle, uint16_t carrier_khz);
 

@@ -30,8 +30,8 @@ typedef enum {
 } cs1237_rate_t;
 
 typedef struct {
-    iot_pin_t sclk;        /* 时钟，主机输出 */
-    iot_pin_t dout;        /* DRDY/DOUT，芯片输出（低电平=就绪） */
+    hal_pin_t sclk;        /* 时钟，主机输出 */
+    hal_pin_t dout;        /* DRDY/DOUT，芯片输出（低电平=就绪） */
     cs1237_gain_t gain;     /* 当前增益档位 */
     cs1237_rate_t rate;     /* 当前输出速率档位 */
     int32_t offset;         /* 零点（皮重）原始值 */
@@ -44,9 +44,9 @@ typedef struct {
  * @param  handle  驱动句柄
  * @param  sclk    SCLK 引脚
  * @param  dout    DRDY/DOUT 引脚
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int cs1237_init(cs1237_handle_t *handle, iot_pin_t sclk, iot_pin_t dout);
+int cs1237_init(cs1237_handle_t *handle, hal_pin_t sclk, hal_pin_t dout);
 
 /** @brief 反初始化，释放引脚 */
 int cs1237_deinit(cs1237_handle_t *handle);

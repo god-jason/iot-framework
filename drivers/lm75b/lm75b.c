@@ -27,10 +27,10 @@ static uint16_t lm75b_encode(float celsius)
     return (uint16_t)((uint16_t)((int16_t)code) << LM75B_DATA_SHIFT);
 }
 
-int lm75b_init(lm75b_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int lm75b_init(lm75b_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -41,7 +41,7 @@ int lm75b_init(lm75b_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("lm75b", "probe failed, addr=0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     driver_delay_ms(LM75B_CONV_DELAY_MS);
@@ -54,10 +54,10 @@ int lm75b_init(lm75b_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int lm75b_deinit(lm75b_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -69,11 +69,11 @@ int lm75b_read_raw(lm75b_handle_t *handle, int16_t *raw)
     uint8_t buf[2];
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, LM75B_REG_TEMPERATURE, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *raw = (int16_t)(((uint16_t)buf[0] << 8) | (uint16_t)buf[1]);
     return DRIVER_OK;
@@ -85,7 +85,7 @@ int lm75b_read(lm75b_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = lm75b_read_raw(handle, &raw);
@@ -99,7 +99,7 @@ int lm75b_read(lm75b_handle_t *handle, float *celsius)
 int lm75b_get_config(lm75b_handle_t *handle, uint8_t *config)
 {
     if (handle == NULL || config == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, LM75B_REG_CONFIG, config, 1U);
 }
@@ -107,10 +107,10 @@ int lm75b_get_config(lm75b_handle_t *handle, uint8_t *config)
 int lm75b_set_config(lm75b_handle_t *handle, uint8_t config)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (driver_i2c_write_reg(&handle->i2c, LM75B_REG_CONFIG, &config, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     /* 从关断模式唤醒后需等待一次转换 */
     driver_delay_ms(LM75B_CONV_DELAY_MS);
@@ -123,14 +123,14 @@ static int lm75b_write_threshold(lm75b_handle_t *handle, uint8_t reg, float cels
     uint8_t buf[2];
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     code = lm75b_encode(celsius);
     buf[0] = (uint8_t)(code >> 8);
     buf[1] = (uint8_t)(code & 0xFFU);
     if (driver_i2c_write_reg(&handle->i2c, reg, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }

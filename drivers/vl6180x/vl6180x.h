@@ -29,14 +29,14 @@ typedef struct {
 } vl6180x_data_t;
 
 /** @param address 7 位地址，传 0 取 0x29 */
-int vl6180x_init(vl6180x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int vl6180x_init(vl6180x_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int vl6180x_deinit(vl6180x_handle_t *handle);
 
 /** 单次测距（阻塞，最长约 VL6180X_RANGE_TIMEOUT_MS） */
 int vl6180x_read(vl6180x_handle_t *handle, vl6180x_data_t *data);
 
-/** 仅取距离；range_status 非 0 时仍填充距离并返回 IOT_NOT_READY */
+/** 仅取距离；range_status 非 0 时仍填充距离并返回 HAL_NOT_READY */
 int vl6180x_read_distance(vl6180x_handle_t *handle, uint16_t *distance_mm);
 
 #ifdef __cplusplus

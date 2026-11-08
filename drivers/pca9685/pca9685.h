@@ -25,11 +25,11 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址（0x40~0x7F），传 0 使用 0x40
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  * @note   init 不改变 prescale；默认频率为芯片复位值（约 200Hz），
  *         需要其他频率请调用 pca9685_set_pwm_freq。
  */
-int pca9685_init(pca9685_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化：所有通道全关，不关闭总线 */
 int pca9685_deinit(pca9685_handle_t *handle);

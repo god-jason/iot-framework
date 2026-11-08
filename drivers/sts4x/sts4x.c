@@ -6,7 +6,7 @@
 static int sts4x_check(const sts4x_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -37,10 +37,10 @@ static uint32_t sts4x_measure_delay(const sts4x_handle_t *handle)
     }
 }
 
-int sts4x_init(sts4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int sts4x_init(sts4x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -52,7 +52,7 @@ int sts4x_init(sts4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(STS4X_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -64,7 +64,7 @@ int sts4x_init(sts4x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int sts4x_deinit(sts4x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -77,7 +77,7 @@ int sts4x_soft_reset(sts4x_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = driver_i2c_write(&handle->i2c, &cmd, 1U);
     driver_delay_ms(STS4X_RESET_DELAY_MS);
@@ -93,7 +93,7 @@ int sts4x_set_repeatability(sts4x_handle_t *handle, sts4x_repeatability_t repeat
     }
     if (repeatability != STS4X_REPEAT_HIGH && repeatability != STS4X_REPEAT_MEDIUM &&
         repeatability != STS4X_REPEAT_LOW) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->repeatability = repeatability;
     return DRIVER_OK;
@@ -117,7 +117,7 @@ int sts4x_read_raw(sts4x_handle_t *handle, uint16_t *raw)
     int ret;
 
     if (raw == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sts4x_check(handle);
     if (ret != DRIVER_OK) {
@@ -138,7 +138,7 @@ int sts4x_read_raw(sts4x_handle_t *handle, uint16_t *raw)
     if (handle->crc_enabled &&
         driver_crc8(buf, 2U, STS4X_CRC_POLY, STS4X_CRC_INIT) != buf[2]) {
         LOG_E(STS4X_TAG, "crc error");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     *raw = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
@@ -151,7 +151,7 @@ int sts4x_read(sts4x_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = sts4x_read_raw(handle, &raw);
@@ -170,7 +170,7 @@ int sts4x_read_serial(sts4x_handle_t *handle, uint8_t serial[6])
     int ret;
 
     if (serial == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sts4x_check(handle);
     if (ret != DRIVER_OK) {
@@ -192,7 +192,7 @@ int sts4x_read_serial(sts4x_handle_t *handle, uint8_t serial[6])
         if (handle->crc_enabled &&
             driver_crc8(&buf[i * 3U], 2U, STS4X_CRC_POLY, STS4X_CRC_INIT) != buf[(i * 3U) + 2U]) {
             LOG_E(STS4X_TAG, "serial crc error");
-            return (int)IOT_CRC_ERROR;
+            return (int)HAL_CRC_ERROR;
         }
         serial[i * 2U] = buf[i * 3U];
         serial[(i * 2U) + 1U] = buf[(i * 3U) + 1U];

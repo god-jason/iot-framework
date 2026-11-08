@@ -22,7 +22,7 @@ static int bmp388_bus_read(bmp388_handle_t *handle, uint8_t reg, uint8_t *data, 
         return driver_i2c_read_reg(&handle->i2c, reg, data, len);
     }
     if (data == NULL || len == 0U || (len + 1U) > BMP388_SPI_XFER_MAX) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     tx[0] = (uint8_t)(reg | 0x80U);              /* SPI 读：地址最高位置 1 */
@@ -52,7 +52,7 @@ static int bmp388_bus_write(bmp388_handle_t *handle, uint8_t reg,
         return driver_i2c_write_reg(&handle->i2c, reg, data, len);
     }
     if (data == NULL || len == 0U || (len + 1U) > BMP388_SPI_XFER_MAX) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     tx[0] = (uint8_t)(reg & 0x7FU);              /* SPI 写：地址最高位清 0 */
@@ -70,7 +70,7 @@ static int bmp388_read_calib(bmp388_handle_t *handle)
     bmp388_calib_t *c = &handle->calib;
 
     if (bmp388_bus_read(handle, BMP388_REG_CALIB, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 0x31 起：T1(u16) T2(u16) T3(i8) P1(i16) P2(i16) P3(i8) P4(i8)
@@ -127,11 +127,11 @@ static int bmp388_setup(bmp388_handle_t *handle)
     uint8_t value;
 
     if (bmp388_get_chip_id(handle, &chip_id) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (chip_id != BMP388_CHIP_ID) {
         LOG_E("bmp388", "chip id mismatch: 0x%02X", chip_id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     value = BMP388_CMD_SOFT_RESET;
@@ -140,24 +140,24 @@ static int bmp388_setup(bmp388_handle_t *handle)
 
     if (bmp388_read_calib(handle) != DRIVER_OK) {
         LOG_E("bmp388", "read calibration failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (handle->calib.t1 == 0.0 || handle->calib.t2 == 0.0 || handle->calib.p1 == 0.0) {
         LOG_E("bmp388", "invalid calibration data");
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     value = BMP388_CONFIG_DEFAULT;
     if (bmp388_bus_write(handle, BMP388_REG_CONFIG, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BMP388_OSR_DEFAULT;
     if (bmp388_bus_write(handle, BMP388_REG_OSR, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     value = BMP388_PWR_CTRL_NORMAL;
     if (bmp388_bus_write(handle, BMP388_REG_PWR_CTRL, &value, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->t_lin = 0.0;
@@ -178,10 +178,10 @@ static void bmp388_reset_bus(bmp388_handle_t *handle, bool use_spi)
     handle->initialized = false;
 }
 
-int bmp388_init(bmp388_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int bmp388_init(bmp388_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     bmp388_reset_bus(handle, false);
     handle->i2c.handle = i2c;
@@ -189,10 +189,10 @@ int bmp388_init(bmp388_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     return bmp388_setup(handle);
 }
 
-int bmp388_init_spi(bmp388_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
+int bmp388_init_spi(bmp388_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 {
     if (handle == NULL || spi == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     bmp388_reset_bus(handle, true);
     handle->spi.handle = spi;
@@ -205,7 +205,7 @@ int bmp388_deinit(bmp388_handle_t *handle)
     uint8_t value = 0x00U;   /* pwr_ctrl = sleep */
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)bmp388_bus_write(handle, BMP388_REG_PWR_CTRL, &value, 1U);
@@ -219,10 +219,10 @@ int bmp388_deinit(bmp388_handle_t *handle)
 int bmp388_get_chip_id(bmp388_handle_t *handle, uint8_t *chip_id)
 {
     if (handle == NULL || chip_id == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->use_spi ? (handle->spi.handle == NULL) : (handle->i2c.handle == NULL)) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return bmp388_bus_read(handle, BMP388_REG_CHIP_ID, chip_id, 1U);
 }
@@ -235,13 +235,13 @@ int bmp388_read_raw(bmp388_handle_t *handle, uint32_t *raw_temperature,
     uint32_t temp;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_pressure == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (bmp388_bus_read(handle, BMP388_REG_DATA_0, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 小端、XLSB 在前 */
@@ -265,7 +265,7 @@ int bmp388_read(bmp388_handle_t *handle, bmp388_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = bmp388_read_raw(handle, &raw_t, &raw_p);
     if (ret != DRIVER_OK) {
@@ -280,7 +280,7 @@ int bmp388_read(bmp388_handle_t *handle, bmp388_data_t *data)
     if (!(pressure >= (double)BMP388_PRESSURE_MIN_PA &&
           pressure <= (double)BMP388_PRESSURE_MAX_PA)) {
         LOG_W("bmp388", "pressure out of range");
-        return (int)IOT_ERROR;
+        return (int)HAL_ERROR;
     }
 
     data->temperature = (float)temperature;

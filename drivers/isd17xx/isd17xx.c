@@ -6,7 +6,7 @@
 static int isd17xx_check(const isd17xx_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -29,7 +29,7 @@ int isd17xx_write(isd17xx_handle_t *handle, uint8_t cmd, uint16_t address)
     size_t len;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     tx[0] = cmd;
@@ -51,7 +51,7 @@ int isd17xx_read(isd17xx_handle_t *handle, uint16_t *status)
     int ret;
 
     if (status == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = isd17xx_check(handle);
     if (ret != DRIVER_OK) {
@@ -91,7 +91,7 @@ int isd17xx_wait_ready(isd17xx_handle_t *handle, uint32_t timeout_ms)
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(ISD17XX_POLL_MS);
     }
@@ -103,7 +103,7 @@ int isd17xx_is_ready(isd17xx_handle_t *handle, bool *ready)
     int ret;
 
     if (ready == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = isd17xx_read(handle, &status);
     if (ret != DRIVER_OK) {
@@ -113,14 +113,14 @@ int isd17xx_is_ready(isd17xx_handle_t *handle, bool *ready)
     return DRIVER_OK;
 }
 
-int isd17xx_init(isd17xx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
+int isd17xx_init(isd17xx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 {
     uint8_t tx[3];
     uint8_t rx[3];
     int ret;
 
     if (handle == NULL || spi == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -131,9 +131,9 @@ int isd17xx_init(isd17xx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) {
+        if (driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
             LOG_E(ISD17XX_TAG, "cs gpio init failed");
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
     }
 
@@ -162,7 +162,7 @@ int isd17xx_init(isd17xx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
 int isd17xx_deinit(isd17xx_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)isd17xx_stop(handle);
@@ -178,7 +178,7 @@ int isd17xx_power_up(isd17xx_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->spi.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = isd17xx_transfer(handle, &cmd, NULL, 1U);
@@ -196,7 +196,7 @@ int isd17xx_power_down(isd17xx_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->spi.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = isd17xx_transfer(handle, &cmd, NULL, 1U);
@@ -215,7 +215,7 @@ int isd17xx_play(isd17xx_handle_t *handle, uint16_t address)
         return ret;
     }
     if (address > ISD17XX_MAX_ADDRESS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = isd17xx_write(handle, ISD17XX_CMD_PLAY_ADDR, address);
@@ -234,7 +234,7 @@ int isd17xx_record(isd17xx_handle_t *handle, uint16_t address)
         return ret;
     }
     if (address > ISD17XX_MAX_ADDRESS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = isd17xx_write(handle, ISD17XX_CMD_REC_ADDR, address);
@@ -253,7 +253,7 @@ int isd17xx_erase(isd17xx_handle_t *handle, uint16_t address)
         return ret;
     }
     if (address > ISD17XX_MAX_ADDRESS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = isd17xx_write(handle, ISD17XX_CMD_ERASE_ADDR, address);

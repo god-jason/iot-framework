@@ -2,8 +2,8 @@
 
 /* SX1268 与 SX1262 共用实现，仅 variant 不同（频段 410..810MHz） */
 
-int sx1268_init(sx1268_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
-                iot_pin_t busy, iot_pin_t reset, iot_pin_t dio1)
+int sx1268_init(sx1268_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
+                hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1)
 {
     return sx1262_init_variant(handle, spi, cs, busy, reset, dio1, SX1262_VARIANT_SX1268);
 }

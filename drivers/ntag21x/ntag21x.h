@@ -22,7 +22,7 @@ typedef struct {
     bool initialized;
 } ntag21x_handle_t;
 
-int ntag21x_init(ntag21x_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int ntag21x_init(ntag21x_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int ntag21x_deinit(ntag21x_handle_t *handle);
 
 /* 页对齐读写，len 可为任意值；写操作要求 len 为 page_size 的整数倍 */

@@ -32,7 +32,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_adc_t *adc;      /* 已初始化的 ADC 句柄 */
+    hal_adc_t *adc;      /* 已初始化的 ADC 句柄 */
     uint8_t channel;             /* ADC 通道号 */
     float vref_mv;               /* ADC 参考电压 mV */
     uint32_t adc_max;            /* ADC 满量程码值 */
@@ -45,9 +45,9 @@ typedef struct {
  * @brief  初始化驱动并配置 ADC 通道
  * @param  adc      已初始化的 ADC 句柄（不可为 NULL）
  * @param  channel  ADC 通道号
- * @return 0 成功；IOT_INVALID_PARAM 参数非法；IOT_IO_ERROR 通道配置失败
+ * @return 0 成功；HAL_INVALID_PARAM 参数非法；HAL_IO_ERROR 通道配置失败
  */
-int acs712_init(acs712_handle_t *handle, iot_adc_t *adc, uint8_t channel);
+int acs712_init(acs712_handle_t *handle, hal_adc_t *adc, uint8_t channel);
 
 /** @brief 反初始化（不关闭 ADC） */
 int acs712_deinit(acs712_handle_t *handle);
@@ -55,7 +55,7 @@ int acs712_deinit(acs712_handle_t *handle);
 /**
  * @brief  读取电流
  * @param  amps  电流，单位 A，正负表示方向
- * @return 0 成功；IOT_NOT_READY 未初始化；IOT_IO_ERROR ADC 读取失败
+ * @return 0 成功；HAL_NOT_READY 未初始化；HAL_IO_ERROR ADC 读取失败
  */
 int acs712_read(acs712_handle_t *handle, float *amps);
 
@@ -70,7 +70,7 @@ int acs712_read_raw(acs712_handle_t *handle, uint32_t *raw);
 int acs712_set_calibration(acs712_handle_t *handle, float sens_mv_per_a, float zero_mv);
 
 /**
- * @brief  覆盖 ADC 参考电压与满量程码值（默认取 iot_adc_get_max_value）
+ * @brief  覆盖 ADC 参考电压与满量程码值（默认取 hal_adc_get_max_value）
  */
 int acs712_set_reference(acs712_handle_t *handle, float vref_mv, uint32_t adc_max);
 

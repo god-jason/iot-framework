@@ -6,7 +6,7 @@
  *
  * 参考 libdriver 设计：
  *   - aht20_init / aht20_deinit / aht20_read 为公开 API
- *   - 所有总线访问经由 src/core 的 I2C 抽象
+ *   - 所有总线访问经由 hal 的 I2C 抽象
  *
  * 用法：
  *   aht20_handle_t aht20;
@@ -31,9 +31,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，通常为 0x38
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int aht20_init(aht20_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int aht20_init(aht20_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /**
  * @brief  反初始化（不关闭总线）

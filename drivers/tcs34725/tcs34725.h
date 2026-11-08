@@ -42,7 +42,7 @@ typedef struct {
 } tcs34725_handle_t;
 
 /** 初始化：probe + 校验 ID + 配置 ATIME/增益 + 使能 RGBC */
-int tcs34725_init(tcs34725_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int tcs34725_init(tcs34725_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int tcs34725_deinit(tcs34725_handle_t *handle);
 
 /** 设置积分时间寄存器值：越小积分时间越长（2.4ms ~ 614.4ms） */

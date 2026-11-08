@@ -13,7 +13,7 @@
 static int lan8720_check(const lan8720_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -22,14 +22,14 @@ static int lan8720_check(const lan8720_handle_t *handle)
 
 static void lan8720_mdio_drive(const lan8720_handle_t *handle, int level)
 {
-    (void)driver_gpio_write(handle->mdio, (level != 0) ? IOT_GPIO_HIGH : IOT_GPIO_LOW);
+    (void)driver_gpio_write(handle->mdio, (level != 0) ? HAL_GPIO_HIGH : HAL_GPIO_LOW);
 }
 
 static void lan8720_mdc_pulse(const lan8720_handle_t *handle)
 {
-    (void)driver_gpio_write(handle->mdc, IOT_GPIO_HIGH);
+    (void)driver_gpio_write(handle->mdc, HAL_GPIO_HIGH);
     driver_delay_us(LAN8720_MDIO_TURNAROUND_US);
-    (void)driver_gpio_write(handle->mdc, IOT_GPIO_LOW);
+    (void)driver_gpio_write(handle->mdc, HAL_GPIO_LOW);
     driver_delay_us(LAN8720_MDIO_TURNAROUND_US);
 }
 
@@ -45,10 +45,10 @@ static uint8_t lan8720_read_bit(const lan8720_handle_t *handle)
 {
     int level;
 
-    (void)driver_gpio_write(handle->mdc, IOT_GPIO_LOW);
+    (void)driver_gpio_write(handle->mdc, HAL_GPIO_LOW);
     driver_delay_us(LAN8720_MDIO_TURNAROUND_US);
     level = driver_gpio_read(handle->mdio);
-    (void)driver_gpio_write(handle->mdc, IOT_GPIO_HIGH);
+    (void)driver_gpio_write(handle->mdc, HAL_GPIO_HIGH);
     driver_delay_us(LAN8720_MDIO_TURNAROUND_US);
     return (level > 0) ? 1U : 0U;
 }
@@ -58,7 +58,7 @@ static void lan8720_send_header(const lan8720_handle_t *handle, uint8_t op, uint
 {
     uint8_t i;
 
-    (void)driver_gpio_output(handle->mdio, IOT_GPIO_HIGH);
+    (void)driver_gpio_output(handle->mdio, HAL_GPIO_HIGH);
     for (i = 0U; i < LAN8720_MDIO_PREAMBLE_BITS; i++) {
         lan8720_write_bit(handle, 1U);
     }
@@ -85,17 +85,17 @@ int lan8720_read_reg(lan8720_handle_t *handle, uint8_t reg, uint16_t *value)
         return ret;
     }
     if (value == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     lan8720_send_header(handle, LAN8720_MDIO_OP_READ, reg);
     /* 转向：释放 MDIO，PHY 输出数据 */
-    (void)driver_gpio_input(handle->mdio, IOT_GPIO_PULLUP);
+    (void)driver_gpio_input(handle->mdio, HAL_GPIO_PULLUP);
     (void)lan8720_read_bit(handle); /* TA bit */
     for (i = 0U; i < 16U; i++) {
         data = (uint16_t)((data << 1) | lan8720_read_bit(handle));
     }
-    (void)driver_gpio_output(handle->mdio, IOT_GPIO_HIGH);
+    (void)driver_gpio_output(handle->mdio, HAL_GPIO_HIGH);
 
     *value = data;
     return DRIVER_OK;
@@ -123,13 +123,13 @@ int lan8720_write_reg(lan8720_handle_t *handle, uint8_t reg, uint16_t value)
 int lan8720_read_id(lan8720_handle_t *handle, uint16_t *id1, uint16_t *id2)
 {
     if (id1 == NULL || id2 == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     LAN8720_TRY(lan8720_read_reg(handle, LAN8720_REG_PHYID1, id1));
     return lan8720_read_reg(handle, LAN8720_REG_PHYID2, id2);
 }
 
-int lan8720_init(lan8720_handle_t *handle, iot_pin_t mdc, iot_pin_t mdio,
+int lan8720_init(lan8720_handle_t *handle, hal_pin_t mdc, hal_pin_t mdio,
                  uint8_t phy_address)
 {
     uint16_t id1 = 0U;
@@ -137,10 +137,10 @@ int lan8720_init(lan8720_handle_t *handle, iot_pin_t mdc, iot_pin_t mdio,
     int ret;
 
     if (handle == NULL || mdc == 0U || mdio == 0U || mdc == mdio) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (phy_address > LAN8720_PHY_ADDRESS_MAX) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->mdc = mdc;
@@ -148,10 +148,10 @@ int lan8720_init(lan8720_handle_t *handle, iot_pin_t mdc, iot_pin_t mdio,
     handle->phy_address = phy_address;
     handle->initialized = false;
 
-    if (driver_gpio_output(mdc, IOT_GPIO_LOW) != DRIVER_OK ||
-        driver_gpio_output(mdio, IOT_GPIO_HIGH) != DRIVER_OK) {
+    if (driver_gpio_output(mdc, HAL_GPIO_LOW) != DRIVER_OK ||
+        driver_gpio_output(mdio, HAL_GPIO_HIGH) != DRIVER_OK) {
         LOG_E(LAN8720_TAG, "mdio gpio init failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(1U);
 
@@ -174,7 +174,7 @@ int lan8720_init(lan8720_handle_t *handle, iot_pin_t mdc, iot_pin_t mdio,
 int lan8720_deinit(lan8720_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)lan8720_set_power_down(handle, true);
@@ -202,7 +202,7 @@ int lan8720_reset(lan8720_handle_t *handle)
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > LAN8720_RESET_TIMEOUT_MS) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
     }
 }
@@ -217,7 +217,7 @@ int lan8720_link_status(lan8720_handle_t *handle, lan8720_link_t *link)
         return ret;
     }
     if (link == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* BMSR 的 link 位为 latching-low，连续读两次以获得稳定状态 */

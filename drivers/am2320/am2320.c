@@ -25,7 +25,7 @@ int am2320_read_raw(am2320_handle_t *handle, uint8_t frame[8])
     int ret;
 
     if (handle == NULL || frame == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     am2320_wakeup(handle);
@@ -48,25 +48,25 @@ int am2320_read_raw(am2320_handle_t *handle, uint8_t frame[8])
 
     if (frame[0] != AM2320_FUNC_READ || frame[1] != AM2320_REG_COUNT) {
         LOG_E("am2320", "bad frame head 0x%02X 0x%02X", frame[0], frame[1]);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* CRC16/Modbus 覆盖前 6 字节，低字节先发 */
     crc = driver_crc16_modbus(frame, AM2320_FRAME_LEN - 2U);
     if ((uint8_t)(crc & 0xFFU) != frame[6] || (uint8_t)(crc >> 8) != frame[7]) {
         LOG_E("am2320", "crc error");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     return DRIVER_OK;
 }
 
-int am2320_init(am2320_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int am2320_init(am2320_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t frame[AM2320_FRAME_LEN];
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -78,7 +78,7 @@ int am2320_init(am2320_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     am2320_wakeup(handle);
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("am2320", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -87,7 +87,7 @@ int am2320_init(am2320_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     if (am2320_read_raw(handle, frame) != DRIVER_OK) {
         handle->initialized = false;
         LOG_E("am2320", "first read failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     LOG_I("am2320", "init ok at 0x%02X", handle->i2c.address);
@@ -97,7 +97,7 @@ int am2320_init(am2320_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int am2320_deinit(am2320_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -113,10 +113,10 @@ int am2320_read(am2320_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = am2320_read_raw(handle, frame);

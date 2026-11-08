@@ -6,13 +6,13 @@
 static int wt5888e02_check(const wt5888e02_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->bus == WT5888E02_BUS_UART && handle->uart == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->bus == WT5888E02_BUS_ONELINE && handle->data_pin == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -31,7 +31,7 @@ static int wt5888e02_send_frame(wt5888e02_handle_t *handle, uint8_t cmd,
         return ret;
     }
     if (len > WT5888E02_CMD_DATA_MAX || (data == NULL && len > 0U)) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     frame[n++] = WT5888E02_FRAME_HEAD;
@@ -48,7 +48,7 @@ static int wt5888e02_send_frame(wt5888e02_handle_t *handle, uint8_t cmd,
     frame[n++] = WT5888E02_FRAME_TAIL;
 
     if (handle->bus == WT5888E02_BUS_UART) {
-        return (int)iot_uart_transmit(handle->uart, frame, n, handle->timeout_ms);
+        return (int)hal_uart_transmit(handle->uart, frame, n, handle->timeout_ms);
     }
 
     /* 一线串口固定 3 字节：cmd + 2 data（不足补 0） */
@@ -73,20 +73,20 @@ int wt5888e02_write(wt5888e02_handle_t *handle, const uint8_t *frame, size_t len
         return ret;
     }
     if (frame == NULL || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (handle->bus == WT5888E02_BUS_UART) {
-        return (int)iot_uart_transmit(handle->uart, frame, len, handle->timeout_ms);
+        return (int)hal_uart_transmit(handle->uart, frame, len, handle->timeout_ms);
     }
 
     /* 启动脉冲 */
-    if (driver_gpio_write(handle->data_pin, IOT_GPIO_LOW) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+    if (driver_gpio_write(handle->data_pin, HAL_GPIO_LOW) != DRIVER_OK) {
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_us(WT5888E02_ONELINE_LATCH_US);
-    if (driver_gpio_write(handle->data_pin, IOT_GPIO_HIGH) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+    if (driver_gpio_write(handle->data_pin, HAL_GPIO_HIGH) != DRIVER_OK) {
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_us(WT5888E02_ONELINE_BIT_GAP_US);
 
@@ -94,21 +94,21 @@ int wt5888e02_write(wt5888e02_handle_t *handle, const uint8_t *frame, size_t len
         for (bit = 0U; bit < 8U; bit++) {
             uint8_t value = (uint8_t)((frame[i] >> (7U - bit)) & 0x01U);
 
-            (void)driver_gpio_write(handle->data_pin, IOT_GPIO_LOW);
+            (void)driver_gpio_write(handle->data_pin, HAL_GPIO_LOW);
             driver_delay_us((value != 0U) ? WT5888E02_ONELINE_BIT1_LOW_US
                                           : WT5888E02_ONELINE_BIT0_LOW_US);
-            (void)driver_gpio_write(handle->data_pin, IOT_GPIO_HIGH);
+            (void)driver_gpio_write(handle->data_pin, HAL_GPIO_HIGH);
             driver_delay_us(WT5888E02_ONELINE_BIT_GAP_US);
         }
     }
     return DRIVER_OK;
 }
 
-int wt5888e02_init(wt5888e02_handle_t *handle, iot_uart_t *uart,
-                   iot_pin_t busy_pin)
+int wt5888e02_init(wt5888e02_handle_t *handle, hal_uart_t *uart,
+                   hal_pin_t busy_pin)
 {
     if (handle == NULL || uart == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->uart = uart;
@@ -119,9 +119,9 @@ int wt5888e02_init(wt5888e02_handle_t *handle, iot_uart_t *uart,
     handle->initialized = false;
 
     if (busy_pin != 0U) {
-        if (driver_gpio_input(busy_pin, IOT_GPIO_PULLUP) != DRIVER_OK) {
+        if (driver_gpio_input(busy_pin, HAL_GPIO_PULLUP) != DRIVER_OK) {
             LOG_E(WT5888E02_TAG, "busy gpio init failed");
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
     }
 
@@ -131,11 +131,11 @@ int wt5888e02_init(wt5888e02_handle_t *handle, iot_uart_t *uart,
     return DRIVER_OK;
 }
 
-int wt5888e02_init_oneline(wt5888e02_handle_t *handle, iot_pin_t data_pin,
-                           iot_pin_t busy_pin)
+int wt5888e02_init_oneline(wt5888e02_handle_t *handle, hal_pin_t data_pin,
+                           hal_pin_t busy_pin)
 {
     if (handle == NULL || data_pin == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->uart = NULL;
@@ -145,14 +145,14 @@ int wt5888e02_init_oneline(wt5888e02_handle_t *handle, iot_pin_t data_pin,
     handle->timeout_ms = WT5888E02_CMD_TIMEOUT_MS;
     handle->initialized = false;
 
-    if (driver_gpio_output(data_pin, IOT_GPIO_HIGH) != DRIVER_OK) {
+    if (driver_gpio_output(data_pin, HAL_GPIO_HIGH) != DRIVER_OK) {
         LOG_E(WT5888E02_TAG, "data gpio init failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (busy_pin != 0U) {
-        if (driver_gpio_input(busy_pin, IOT_GPIO_PULLUP) != DRIVER_OK) {
+        if (driver_gpio_input(busy_pin, HAL_GPIO_PULLUP) != DRIVER_OK) {
             LOG_E(WT5888E02_TAG, "busy gpio init failed");
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
     }
 
@@ -165,10 +165,10 @@ int wt5888e02_init_oneline(wt5888e02_handle_t *handle, iot_pin_t data_pin,
 int wt5888e02_deinit(wt5888e02_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->data_pin != 0U) {
-        (void)driver_gpio_write(handle->data_pin, IOT_GPIO_HIGH);
+        (void)driver_gpio_write(handle->data_pin, HAL_GPIO_HIGH);
     }
     handle->uart = NULL;
     handle->initialized = false;
@@ -192,7 +192,7 @@ int wt5888e02_stop(wt5888e02_handle_t *handle)
 int wt5888e02_set_volume(wt5888e02_handle_t *handle, uint8_t volume)
 {
     if (volume > WT5888E02_VOLUME_MAX) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return wt5888e02_send_frame(handle, WT5888E02_CMD_SET_VOLUME, &volume, 1U);
 }
@@ -213,15 +213,15 @@ int wt5888e02_busy(wt5888e02_handle_t *handle, bool *busy)
         return ret;
     }
     if (busy == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->busy_pin == 0U) {
-        return (int)IOT_NOT_SUPPORTED;
+        return (int)HAL_NOT_SUPPORTED;
     }
 
     level = driver_gpio_read(handle->busy_pin);
     if (level < 0) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
 #if WT5888E02_BUSY_ACTIVE_LOW

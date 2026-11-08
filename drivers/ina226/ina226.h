@@ -51,9 +51,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x40
- * @return 0 成功，负值为 iot_status_t（-11 表示 ID 不匹配）
+ * @return 0 成功，负值为 hal_status_t（-11 表示 ID 不匹配）
  */
-int ina226_init(ina226_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int ina226_init(ina226_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化：器件进入掉电模式，复位句柄状态（不关闭总线） */
 int ina226_deinit(ina226_handle_t *handle);

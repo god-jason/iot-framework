@@ -25,7 +25,7 @@ typedef struct {
  * @brief  初始化 DHT20（上电延时 + 软复位 + 必要校准）
  * @param  address  7 位从机地址，0 表示使用默认 0x38
  */
-int dht20_init(dht20_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int dht20_init(dht20_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int dht20_deinit(dht20_handle_t *handle);

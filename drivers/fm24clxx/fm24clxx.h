@@ -22,7 +22,7 @@ typedef struct {
     bool initialized;
 } fm24clxx_handle_t;
 
-int fm24clxx_init(fm24clxx_handle_t *handle, iot_i2c_t *i2c,
+int fm24clxx_init(fm24clxx_handle_t *handle, hal_i2c_t *i2c,
                   uint16_t address, uint32_t capacity);
 int fm24clxx_deinit(fm24clxx_handle_t *handle);
 

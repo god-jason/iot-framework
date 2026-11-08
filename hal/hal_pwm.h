@@ -1,0 +1,79 @@
+#ifndef HAL_PWM_H
+#define HAL_PWM_H
+
+/*
+ * PWM 输出：频率、占空比与极性配置，启停及运行期动态调整。
+ * 底层由定时器通道实现，通道号由平台在句柄中指定。
+ *
+ * 句柄由调用者静态分配，base 必须是首个成员。
+ * 所有接口在 handle 为 NULL 时返回 HAL_INVALID_PARAM。
+ */
+
+#include "hal_def.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* 输出极性 */
+typedef enum {
+    HAL_PWM_POLARITY_HIGH = 0, /* 高电平有效（占空比部分为高） */
+    HAL_PWM_POLARITY_LOW       /* 低电平有效 */
+} hal_pwm_polarity_t;
+
+/* PWM 配置 */
+typedef struct {
+    uint32_t frequency;         /* PWM 频率（Hz），必须大于 0 */
+    uint32_t duty;              /* 占空比，范围 0~10000，对应 0~100.00% */
+
+    hal_pwm_polarity_t polarity; /* 输出极性 */
+} hal_pwm_config_t;
+
+/* PWM 句柄 */
+typedef struct hal_pwm {
+    hal_handle_base_t base;        /* 通用句柄基类，勿移动位置 */
+
+    hal_pwm_config_t config;       /* 初始化时保存的配置副本 */
+
+    uint8_t channel;                /* 定时器通道号，由平台/调用者预先设置 */
+} hal_pwm_t;
+
+/*
+ * 初始化 PWM 通道。
+ * handle : 句柄，不可为 NULL，调用前需设置 channel。
+ * config : 配置，不可为 NULL；duty 超过 10000 视为 10000。
+ * 返回   : HAL_OK；HAL_INVALID_PARAM；频率不可达返回 HAL_NOT_SUPPORTED。
+ */
+hal_status_t hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config);
+
+/* 反初始化 PWM 通道并停止输出；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
+hal_status_t hal_pwm_deinit(hal_pwm_t *handle);
+
+/* 启动 PWM 输出；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
+hal_status_t hal_pwm_start(hal_pwm_t *handle);
+
+/* 停止 PWM 输出（通道保持无效电平）；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
+hal_status_t hal_pwm_stop(hal_pwm_t *handle);
+
+/*
+ * 运行期修改频率。
+ * frequency : 目标频率（Hz），必须大于 0；会同步重算占空比寄存器。
+ * 返回      : HAL_OK；HAL_INVALID_PARAM；不可达返回 HAL_NOT_SUPPORTED。
+ */
+hal_status_t hal_pwm_set_frequency(hal_pwm_t *handle, uint32_t frequency);
+
+/*
+ * 运行期修改占空比。
+ * duty : 0~10000 对应 0~100.00%，超过 10000 按 10000 处理。
+ * 返回 : HAL_OK；HAL_INVALID_PARAM（句柄为空）。
+ */
+hal_status_t hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty);
+
+/* 运行期修改输出极性；返回 HAL_OK / HAL_INVALID_PARAM */
+hal_status_t hal_pwm_set_polarity(hal_pwm_t *handle, hal_pwm_polarity_t polarity);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* HAL_PWM_H */

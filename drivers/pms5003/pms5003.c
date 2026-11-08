@@ -10,7 +10,7 @@ static uint16_t pms5003_u16(const uint8_t *p)
 int pms5003_init(pms5003_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = true;
     LOG_I("pms5003", "init ok");
@@ -20,7 +20,7 @@ int pms5003_init(pms5003_handle_t *handle)
 int pms5003_deinit(pms5003_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     return DRIVER_OK;
@@ -35,20 +35,20 @@ int pms5003_parse(pms5003_handle_t *handle, const uint8_t *buffer, size_t length
     size_t i;
 
     if (handle == NULL || !handle->initialized || buffer == NULL || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (length < PMS5003_FRAME_LEN) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (buffer[0] != PMS5003_HEAD0 || buffer[1] != PMS5003_HEAD1) {
         LOG_D("pms5003", "bad header");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     frame_len = pms5003_u16(&buffer[2]);
     if (frame_len != PMS5003_PAYLOAD_LEN) {
         LOG_D("pms5003", "unexpected length %u", (unsigned)frame_len);
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     for (i = 0U; i < PMS5003_CHECKSUM_INDEX; i++) {
@@ -57,7 +57,7 @@ int pms5003_parse(pms5003_handle_t *handle, const uint8_t *buffer, size_t length
     checksum = pms5003_u16(&buffer[PMS5003_CHECKSUM_INDEX]);
     if (sum != checksum) {
         LOG_D("pms5003", "checksum mismatch: %u != %u", (unsigned)sum, (unsigned)checksum);
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     data->pm1_atm = pms5003_u16(&buffer[PMS5003_OFF_PM1_ATM]);

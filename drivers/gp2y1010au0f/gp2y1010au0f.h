@@ -20,7 +20,7 @@
  * 用法：
  *   gp2y1010au0f_handle_t dust;
  *   gp2y1010au0f_init(&dust, &adc1, 7);
- *   gp2y1010au0f_set_led(&dust, IOT_PIN(0, 5));   （可选）
+ *   gp2y1010au0f_set_led(&dust, HAL_PIN(0, 5));   （可选）
  *   float ug;
  *   gp2y1010au0f_read(&dust, &ug);
  *
@@ -35,12 +35,12 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_adc_t *adc;      /* 已初始化的 ADC 句柄 */
+    hal_adc_t *adc;      /* 已初始化的 ADC 句柄 */
     uint8_t channel;             /* ADC 通道号 */
     float vref_mv;               /* ADC 参考电压 mV */
     uint32_t adc_max;            /* ADC 满量程码值 */
     float voff_mv;               /* 洁净空气基线 mV（标定参数） */
-    iot_pin_t led_pin;          /* IR LED 驱动引脚 */
+    hal_pin_t led_pin;          /* IR LED 驱动引脚 */
     bool led_enabled;            /* true：read 时自动产生 LED 脉冲 */
     bool initialized;
 } gp2y1010au0f_handle_t;
@@ -49,9 +49,9 @@ typedef struct {
  * @brief  初始化驱动并配置 ADC 通道
  * @param  adc      已初始化的 ADC 句柄（不可为 NULL）
  * @param  channel  ADC 通道号
- * @return 0 成功；IOT_INVALID_PARAM 参数非法；IOT_IO_ERROR 通道配置失败
+ * @return 0 成功；HAL_INVALID_PARAM 参数非法；HAL_IO_ERROR 通道配置失败
  */
-int gp2y1010au0f_init(gp2y1010au0f_handle_t *handle, iot_adc_t *adc, uint8_t channel);
+int gp2y1010au0f_init(gp2y1010au0f_handle_t *handle, hal_adc_t *adc, uint8_t channel);
 
 /** @brief 反初始化（不关闭 ADC，不释放 LED 引脚，LED 保持熄灭） */
 int gp2y1010au0f_deinit(gp2y1010au0f_handle_t *handle);
@@ -59,7 +59,7 @@ int gp2y1010au0f_deinit(gp2y1010au0f_handle_t *handle);
 /**
  * @brief  读取粉尘浓度
  * @param  density_ug_m3  浓度，单位 µg/m³（已扣除基线，负值钳位 0）
- * @return 0 成功；IOT_NOT_READY 未初始化；IOT_IO_ERROR ADC 或 GPIO 失败
+ * @return 0 成功；HAL_NOT_READY 未初始化；HAL_IO_ERROR ADC 或 GPIO 失败
  */
 int gp2y1010au0f_read(gp2y1010au0f_handle_t *handle, float *density_ug_m3);
 
@@ -68,9 +68,9 @@ int gp2y1010au0f_read_raw(gp2y1010au0f_handle_t *handle, uint32_t *raw);
 
 /**
  * @brief  指定 IR LED 驱动引脚（低电平点亮），并初始化为推挽输出高（熄灭）
- * @return 0 成功；IOT_INVALID_PARAM 参数非法；IOT_IO_ERROR GPIO 初始化失败
+ * @return 0 成功；HAL_INVALID_PARAM 参数非法；HAL_IO_ERROR GPIO 初始化失败
  */
-int gp2y1010au0f_set_led(gp2y1010au0f_handle_t *handle, iot_pin_t pin);
+int gp2y1010au0f_set_led(gp2y1010au0f_handle_t *handle, hal_pin_t pin);
 
 /** @brief 写入洁净空气基线电压（mV） */
 int gp2y1010au0f_set_voffset(gp2y1010au0f_handle_t *handle, float voff_mv);

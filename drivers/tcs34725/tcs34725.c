@@ -83,13 +83,13 @@ float tcs34725_get_integration_time_ms(const tcs34725_handle_t *handle)
     return (float)(256U - (uint32_t)handle->atime) * TCS34725_INTEGRATION_STEP_MS;
 }
 
-int tcs34725_init(tcs34725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int tcs34725_init(tcs34725_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -101,7 +101,7 @@ int tcs34725_init(tcs34725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("tcs34725", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = driver_i2c_read_reg(&handle->i2c, tcs34725_cmd(TCS34725_REG_ID, false), &id, 1U);
@@ -110,25 +110,25 @@ int tcs34725_init(tcs34725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     }
     if (id != TCS34725_ID_TCS34725 && id != TCS34725_ID_TCS34727) {
         LOG_E("tcs34725", "unexpected id 0x%02X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (tcs34725_write_reg8(handle, TCS34725_REG_ATIME, handle->atime) != DRIVER_OK ||
         tcs34725_write_reg8(handle, TCS34725_REG_CONTROL,
                             tcs34725_gain_code(handle->gain)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 先上电，等待振荡器稳定后再使能 RGBC */
     if (tcs34725_write_reg8(handle, TCS34725_REG_ENABLE,
                             tcs34725_enable_value(false)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(TCS34725_POWER_ON_DELAY_MS);
 
     if (tcs34725_write_reg8(handle, TCS34725_REG_ENABLE,
                             tcs34725_enable_value(true)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(tcs34725_integration_delay_ms(handle));
 
@@ -140,7 +140,7 @@ int tcs34725_init(tcs34725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int tcs34725_deinit(tcs34725_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
         (void)tcs34725_write_reg8(handle, TCS34725_REG_ENABLE, 0x00U);
@@ -153,11 +153,11 @@ int tcs34725_deinit(tcs34725_handle_t *handle)
 int tcs34725_set_atime(tcs34725_handle_t *handle, uint8_t atime)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (tcs34725_write_reg8(handle, TCS34725_REG_ATIME, atime) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->atime = atime;
     driver_delay_ms(tcs34725_integration_delay_ms(handle));
@@ -167,14 +167,14 @@ int tcs34725_set_atime(tcs34725_handle_t *handle, uint8_t atime)
 int tcs34725_set_gain(tcs34725_handle_t *handle, tcs34725_gain_t gain)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if ((unsigned int)gain > (unsigned int)TCS34725_GAIN_60X) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (tcs34725_write_reg8(handle, TCS34725_REG_CONTROL, tcs34725_gain_code(gain)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->gain = gain;
     driver_delay_ms(tcs34725_integration_delay_ms(handle));
@@ -187,7 +187,7 @@ int tcs34725_read_raw(tcs34725_handle_t *handle, tcs34725_rgbc_t *rgbc)
     int ret;
 
     if (handle == NULL || rgbc == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 等待一个完整积分周期后数据才有效 */
@@ -220,7 +220,7 @@ int tcs34725_read(tcs34725_handle_t *handle, tcs34725_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = tcs34725_read_raw(handle, &data->rgbc);

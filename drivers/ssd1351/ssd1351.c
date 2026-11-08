@@ -9,9 +9,9 @@ static int ssd1351_send(ssd1351_handle_t *handle, bool is_data,
 
     driver_spi_select(&handle->config.spi);
     if (driver_gpio_write(handle->config.dc,
-                          is_data ? IOT_GPIO_HIGH : IOT_GPIO_LOW) != DRIVER_OK) {
+                          is_data ? HAL_GPIO_HIGH : HAL_GPIO_LOW) != DRIVER_OK) {
         driver_spi_deselect(&handle->config.spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     ret = driver_spi_write(&handle->config.spi, data, len);
     driver_spi_deselect(&handle->config.spi);
@@ -27,10 +27,10 @@ static int ssd1351_cmd_arg(ssd1351_handle_t *handle, uint8_t cmd,
                            const uint8_t *arg, size_t len)
 {
     if (ssd1351_cmd(handle, cmd) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (ssd1351_send(handle, true, arg, len) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -43,7 +43,7 @@ static int ssd1351_set_window(ssd1351_handle_t *handle, uint8_t x0, uint8_t y0,
     uint8_t row[2] = { y0, y1 };
 
     if (ssd1351_cmd_arg(handle, SSD1351_CMD_SET_COLUMN, col, sizeof(col)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return ssd1351_cmd_arg(handle, SSD1351_CMD_SET_ROW, row, sizeof(row));
 }
@@ -58,16 +58,16 @@ static int ssd1351_push(ssd1351_handle_t *handle)
     if (ssd1351_set_window(handle, 0U, 0U,
                            (uint8_t)(SSD1351_WIDTH - 1U),
                            (uint8_t)(SSD1351_HEIGHT - 1U)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (ssd1351_cmd(handle, SSD1351_CMD_WRITE_RAM) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     driver_spi_select(&handle->config.spi);
-    if (driver_gpio_write(handle->config.dc, IOT_GPIO_HIGH) != DRIVER_OK) {
+    if (driver_gpio_write(handle->config.dc, HAL_GPIO_HIGH) != DRIVER_OK) {
         driver_spi_deselect(&handle->config.spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     for (row = 0U; row < SSD1351_HEIGHT; row++) {
         ret = driver_spi_write(&handle->config.spi,
@@ -77,7 +77,7 @@ static int ssd1351_push(ssd1351_handle_t *handle)
         }
     }
     driver_spi_deselect(&handle->config.spi);
-    return (ret == DRIVER_OK) ? DRIVER_OK : (int)IOT_IO_ERROR;
+    return (ret == DRIVER_OK) ? DRIVER_OK : (int)HAL_IO_ERROR;
 }
 
 static void ssd1351_gram_fill(ssd1351_handle_t *handle, uint16_t color)
@@ -114,13 +114,13 @@ int ssd1351_init(ssd1351_handle_t *handle, const ssd1351_config_t *config)
     uint8_t precharge_volt = SSD1351_PRECHARGE_VOLT_VAL;
 
     if (handle == NULL || config == NULL || config->gram == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (config->gram_len < SSD1351_GRAM_SIZE) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (config->spi.handle == NULL || config->dc == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->config = *config;
@@ -128,13 +128,13 @@ int ssd1351_init(ssd1351_handle_t *handle, const ssd1351_config_t *config)
     handle->height = (uint8_t)SSD1351_HEIGHT;
     handle->initialized = false;
 
-    if (driver_gpio_output(config->dc, IOT_GPIO_LOW) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+    if (driver_gpio_output(config->dc, HAL_GPIO_LOW) != DRIVER_OK) {
+        return (int)HAL_IO_ERROR;
     }
     if (config->res != 0U) {
-        (void)driver_gpio_output(config->res, IOT_GPIO_LOW);
+        (void)driver_gpio_output(config->res, HAL_GPIO_LOW);
         driver_delay_ms(SSD1351_RESET_LOW_MS);
-        (void)driver_gpio_write(config->res, IOT_GPIO_HIGH);
+        (void)driver_gpio_write(config->res, HAL_GPIO_HIGH);
         driver_delay_ms(SSD1351_RESET_WAIT_MS);
     }
 
@@ -164,13 +164,13 @@ int ssd1351_init(ssd1351_handle_t *handle, const ssd1351_config_t *config)
         ssd1351_cmd_arg(handle, SSD1351_CMD_CONTRAST_ABC, abc, sizeof(abc)) != DRIVER_OK ||
         ssd1351_cmd(handle, SSD1351_CMD_DISPLAY_ON) != DRIVER_OK) {
         LOG_E("ssd1351", "init sequence failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(SSD1351_DISPON_MS);
 
     ssd1351_gram_fill(handle, SSD1351_COLOR_BLACK);
     if (ssd1351_push(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
@@ -181,7 +181,7 @@ int ssd1351_init(ssd1351_handle_t *handle, const ssd1351_config_t *config)
 int ssd1351_deinit(ssd1351_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)ssd1351_cmd(handle, SSD1351_CMD_DISPLAY_OFF);
@@ -193,7 +193,7 @@ int ssd1351_deinit(ssd1351_handle_t *handle)
 int ssd1351_write_cmd(ssd1351_handle_t *handle, const uint8_t *cmd, size_t len)
 {
     if (handle == NULL || cmd == NULL || len == 0U || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ssd1351_send(handle, false, cmd, len);
 }
@@ -201,7 +201,7 @@ int ssd1351_write_cmd(ssd1351_handle_t *handle, const uint8_t *cmd, size_t len)
 int ssd1351_write_data(ssd1351_handle_t *handle, const uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ssd1351_send(handle, true, data, len);
 }
@@ -209,7 +209,7 @@ int ssd1351_write_data(ssd1351_handle_t *handle, const uint8_t *data, size_t len
 int ssd1351_fill_color(ssd1351_handle_t *handle, uint16_t color)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ssd1351_gram_fill(handle, color);
     return ssd1351_push(handle);
@@ -225,10 +225,10 @@ int ssd1351_draw_pixel(ssd1351_handle_t *handle, uint8_t x, uint8_t y, uint16_t 
     size_t index;
 
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (x >= handle->width || y >= handle->height) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->config.mirror_x) {
         x = (uint8_t)(handle->width - 1U - x);
@@ -246,7 +246,7 @@ int ssd1351_draw_pixel(ssd1351_handle_t *handle, uint8_t x, uint8_t y, uint16_t 
 int ssd1351_show(ssd1351_handle_t *handle)
 {
     if (handle == NULL || handle->config.gram == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ssd1351_push(handle);
 }
@@ -254,7 +254,7 @@ int ssd1351_show(ssd1351_handle_t *handle)
 int ssd1351_set_display(ssd1351_handle_t *handle, bool on)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ssd1351_cmd(handle, on ? SSD1351_CMD_DISPLAY_ON : SSD1351_CMD_DISPLAY_OFF);
 }
@@ -262,7 +262,7 @@ int ssd1351_set_display(ssd1351_handle_t *handle, bool on)
 int ssd1351_set_contrast(ssd1351_handle_t *handle, uint8_t contrast)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ssd1351_cmd_arg(handle, SSD1351_CMD_CONTRAST_MASTER, &contrast, 1U);
 }

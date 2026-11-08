@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_pin_t pin;
+    hal_pin_t pin;
     bool initialized;
 } hc_sr501_handle_t;
 
@@ -24,7 +24,7 @@ typedef struct {
  * @brief  初始化：引脚配置为下拉输入
  * @param  pin  输出脚逻辑编号，0 视为无效
  */
-int hc_sr501_init(hc_sr501_handle_t *handle, iot_pin_t pin);
+int hc_sr501_init(hc_sr501_handle_t *handle, hal_pin_t pin);
 
 int hc_sr501_deinit(hc_sr501_handle_t *handle);
 

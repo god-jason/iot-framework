@@ -6,7 +6,7 @@
  *
  * 参考 libdriver 设计：
  *   sht30_init / sht30_deinit / sht30_read / sht30_soft_reset
- * 所有总线访问经由 src/core 的 I2C 抽象。
+ * 所有总线访问经由 hal 的 I2C 抽象。
  */
 
 #include "common/driver_io.h"
@@ -38,7 +38,7 @@ typedef struct {
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址，通常 0x44
  */
-int sht30_init(sht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int sht30_init(sht30_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int sht30_deinit(sht30_handle_t *handle);
 

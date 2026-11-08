@@ -2,7 +2,7 @@
  * 模拟器下控制台使用标准输入/输出；STM32 下同一套 console API 走 UART1。 */
 #include "log.h"
 #include "console.h"
-#include "iot.h"
+#include "hal.h"
 #include "led.h"
 
 #include <stdio.h>
@@ -31,8 +31,8 @@ static int cmd_exit(int argc, char **argv)
 
 int main(void)
 {
-    iot_uart_t uart;
-    iot_uart_config_t uart_cfg;
+    hal_uart_t uart;
+    hal_uart_config_t uart_cfg;
     console_config_t cfg;
     shell_command_t cmd;
     led_t led;
@@ -46,13 +46,13 @@ int main(void)
     memset(&uart_cfg, 0, sizeof(uart_cfg));
     uart.base.instance = (void *)1;
     uart_cfg.baudrate = 115200;
-    uart_cfg.word_length = IOT_UART_WORD_8BIT;
-    uart_cfg.parity = IOT_UART_PARITY_NONE;
-    uart_cfg.stop_bits = IOT_UART_STOP_1;
-    uart_cfg.flow_control = IOT_UART_FLOW_NONE;
-    uart_cfg.mode = IOT_UART_MODE_TX_RX;
+    uart_cfg.word_length = HAL_UART_WORD_8BIT;
+    uart_cfg.parity = HAL_UART_PARITY_NONE;
+    uart_cfg.stop_bits = HAL_UART_STOP_1;
+    uart_cfg.flow_control = HAL_UART_FLOW_NONE;
+    uart_cfg.mode = HAL_UART_MODE_TX_RX;
     uart_cfg.oversampling = false;
-    if (iot_uart_init(&uart, &uart_cfg) != IOT_OK) {
+    if (hal_uart_init(&uart, &uart_cfg) != HAL_OK) {
         printf("uart init failed\n");
         return 1;
     }
@@ -86,7 +86,7 @@ int main(void)
         LOG_I("demo", "tick %d (输入 hello / exit)", i);
         for (j = 0; j < 50 && !s_exit; j++) {
             console_process();
-            iot_delay_ms(100);
+            hal_delay_ms(100);
         }
     }
 

@@ -8,7 +8,7 @@
  * ECHO 高电平时长与距离成正比：distance_m = echo_us / 5800。
  *
  * 说明：driver_io 层暂无输入捕获抽象，测量用 driver_delay_us + GPIO 轮询
- * 近似计时，精度受调度/中断影响；高精度场合应改用 iot_capture。
+ * 近似计时，精度受调度/中断影响；高精度场合应改用 hal_capture。
  */
 
 #include "common/driver_io.h"
@@ -19,8 +19,8 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_pin_t trig;
-    iot_pin_t echo;
+    hal_pin_t trig;
+    hal_pin_t echo;
     uint32_t timeout_us;
     bool initialized;
 } jsn_sr04t_handle_t;
@@ -30,11 +30,11 @@ typedef struct {
  * @param  trig  TRIG 引脚逻辑编号，0 视为无效
  * @param  echo  ECHO 引脚逻辑编号，0 视为无效
  */
-int jsn_sr04t_init(jsn_sr04t_handle_t *handle, iot_pin_t trig, iot_pin_t echo);
+int jsn_sr04t_init(jsn_sr04t_handle_t *handle, hal_pin_t trig, hal_pin_t echo);
 
 int jsn_sr04t_deinit(jsn_sr04t_handle_t *handle);
 
-/** 单次测量，返回距离（m）；超出 JSN_SR04T_MAX_RANGE_M 返回 IOT_OVERFLOW */
+/** 单次测量，返回距离（m）；超出 JSN_SR04T_MAX_RANGE_M 返回 HAL_OVERFLOW */
 int jsn_sr04t_read(jsn_sr04t_handle_t *handle, float *distance_m);
 
 /** 单次测量，返回 ECHO 高电平时长（us），便于上层自行换算/滤波 */

@@ -44,7 +44,7 @@ typedef struct {
 } spl06_001_data_t;
 
 /** 初始化：校验产品 ID 0x10，读校准系数并启动连续温压测量 */
-int spl06_001_init(spl06_001_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int spl06_001_init(spl06_001_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** 反初始化（停止测量，不关闭总线） */
 int spl06_001_deinit(spl06_001_handle_t *handle);

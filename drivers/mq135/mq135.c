@@ -14,7 +14,7 @@ static float mq135_rs_from_mv(uint16_t adc_mv, uint16_t vc_mv, uint16_t rl_ohm)
 static int mq135_check(const mq135_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -22,7 +22,7 @@ static int mq135_check(const mq135_handle_t *handle)
 int mq135_init(mq135_handle_t *handle, uint16_t vc_mv, uint16_t rl_ohm)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->vc_mv = (vc_mv != 0U) ? vc_mv : MQ135_DEFAULT_VC_MV;
     handle->rl_ohm = (rl_ohm != 0U) ? rl_ohm : MQ135_DEFAULT_RL_OHM;
@@ -37,7 +37,7 @@ int mq135_init(mq135_handle_t *handle, uint16_t vc_mv, uint16_t rl_ohm)
 int mq135_deinit(mq135_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->r0_ohm = 0U;
@@ -54,15 +54,15 @@ int mq135_calibrate_r0(mq135_handle_t *handle, uint16_t adc_mv, float clean_air_
         return ret;
     }
     if (clean_air_ratio <= 0.0f || adc_mv < MQ135_MIN_VALID_MV || adc_mv >= handle->vc_mv) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     rs = mq135_rs_from_mv(adc_mv, handle->vc_mv, handle->rl_ohm);
     if (rs <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->r0_ohm = (uint32_t)(rs / clean_air_ratio + 0.5f);
     if (handle->r0_ohm == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     LOG_I("mq135", "R0 calibrated: %luohm", (unsigned long)handle->r0_ohm);
     return DRIVER_OK;
@@ -76,7 +76,7 @@ int mq135_set_ppm_scale(mq135_handle_t *handle, float ppm_scale)
         return ret;
     }
     if (ppm_scale < 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->ppm_scale = ppm_scale;
     return DRIVER_OK;
@@ -87,7 +87,7 @@ int mq135_read(mq135_handle_t *handle, uint16_t adc_mv, mq135_data_t *data)
     int ret = mq135_check(handle);
 
     if (ret != DRIVER_OK || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     data->mv = adc_mv;
     data->rs_ohm = 0.0f;
@@ -97,7 +97,7 @@ int mq135_read(mq135_handle_t *handle, uint16_t adc_mv, mq135_data_t *data)
 
     if (adc_mv < MQ135_MIN_VALID_MV || adc_mv >= handle->vc_mv) {
         LOG_W("mq135", "adc %umV out of range", (unsigned)adc_mv);
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     data->rs_ohm = mq135_rs_from_mv(adc_mv, handle->vc_mv, handle->rl_ohm);
     if (handle->r0_ohm == 0U) {

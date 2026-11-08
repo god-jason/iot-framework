@@ -32,9 +32,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，通常 0x40（0 表示使用默认值）
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int htu21d_init(htu21d_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int htu21d_init(htu21d_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int htu21d_deinit(htu21d_handle_t *handle);

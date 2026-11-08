@@ -50,7 +50,7 @@ static int lis2dh12_write_ctrl1(lis2dh12_handle_t *handle)
 {
     if (lis2dh12_write_reg(handle, LIS2DH12_REG_CTRL_REG1, lis2dh12_ctrl1_value(handle))
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -59,17 +59,17 @@ static int lis2dh12_write_ctrl4(lis2dh12_handle_t *handle)
 {
     if (lis2dh12_write_reg(handle, LIS2DH12_REG_CTRL_REG4, lis2dh12_ctrl4_value(handle))
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
 
-int lis2dh12_init(lis2dh12_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int lis2dh12_init(lis2dh12_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -82,15 +82,15 @@ int lis2dh12_init(lis2dh12_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_read_reg(&handle->i2c, LIS2DH12_REG_WHO_AM_I, &id, 1U) != DRIVER_OK) {
         LOG_E(LIS2DH12_TAG, "read who_am_i failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (id != LIS2DH12_WHO_AM_I_VALUE) {
         LOG_E(LIS2DH12_TAG, "who_am_i mismatch: 0x%02X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (lis2dh12_write_ctrl4(handle) != DRIVER_OK || lis2dh12_write_ctrl1(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(5U);
 
@@ -102,7 +102,7 @@ int lis2dh12_init(lis2dh12_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int lis2dh12_deinit(lis2dh12_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         (void)lis2dh12_write_reg(handle, LIS2DH12_REG_CTRL_REG1, LIS2DH12_CTRL1_LPEN_HR);
@@ -117,10 +117,10 @@ int lis2dh12_read_raw(lis2dh12_handle_t *handle, int16_t accel[3])
     uint8_t d[6];
 
     if (handle == NULL || accel == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (driver_i2c_read_reg(&handle->i2c, LIS2DH12_REG_OUT_X_L, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     accel[0] = driver_le16(&d[0]);
@@ -135,7 +135,7 @@ int lis2dh12_read(lis2dh12_handle_t *handle, lis2dh12_accel_t *accel)
     int ret;
 
     if (accel == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = lis2dh12_read_raw(handle, raw);
@@ -155,14 +155,14 @@ int lis2dh12_set_range(lis2dh12_handle_t *handle, lis2dh12_range_t range)
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)LIS2DH12_RANGE_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old = handle->range;
     handle->range = range;
     if (lis2dh12_write_ctrl4(handle) != DRIVER_OK) {
         handle->range = old;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->g_per_lsb = s_g_per_lsb[range];
     return DRIVER_OK;
@@ -173,14 +173,14 @@ int lis2dh12_set_output_rate(lis2dh12_handle_t *handle, lis2dh12_odr_t odr)
     lis2dh12_odr_t old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)LIS2DH12_ODR_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old = handle->odr;
     handle->odr = odr;
     if (lis2dh12_write_ctrl1(handle) != DRIVER_OK) {
         handle->odr = old;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }

@@ -22,8 +22,8 @@ typedef enum {
 
 typedef struct {
     driver_spi_t spi;
-    iot_pin_t ce;              /* 必需 */
-    iot_pin_t irq;             /* 可传 0（不使用中断） */
+    hal_pin_t ce;              /* 必需 */
+    hal_pin_t irq;             /* 可传 0（不使用中断） */
     uint8_t channel;            /* 0..125 -> 2400..2525MHz */
     uint8_t payload_size;       /* 1..32 */
     uint8_t address_width;      /* 3..5 */
@@ -31,8 +31,8 @@ typedef struct {
     bool initialized;
 } nrf24l01_handle_t;
 
-int nrf24l01_init(nrf24l01_handle_t *handle, iot_spi_t *spi,
-                  iot_pin_t cs, iot_pin_t ce, iot_pin_t irq);
+int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
+                  hal_pin_t cs, hal_pin_t ce, hal_pin_t irq);
 int nrf24l01_deinit(nrf24l01_handle_t *handle);
 
 /* 频率单位 kHz，范围 2400000..2525000 */
@@ -44,7 +44,7 @@ int nrf24l01_set_address(nrf24l01_handle_t *handle, const uint8_t *address,
 
 /* 发送一帧，len <= payload_size */
 int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len);
-/* 非阻塞取一帧；无数据返回 IOT_NOT_READY，received 可为 NULL */
+/* 非阻塞取一帧；无数据返回 HAL_NOT_READY，received 可为 NULL */
 int nrf24l01_poll(nrf24l01_handle_t *handle, uint8_t *data, size_t len,
                   size_t *received);
 /* 阻塞等待一帧 */

@@ -1,10 +1,10 @@
 #include "led.h"
-#include "iot.h"
+#include "hal.h"
 #include "log.h"
 
 int led_init(led_t *led, uint8_t pin, uint8_t active_level)
 {
-    iot_gpio_config_t cfg;
+    hal_gpio_config_t cfg;
 
     if (led == NULL) {
         return -1;
@@ -13,13 +13,13 @@ int led_init(led_t *led, uint8_t pin, uint8_t active_level)
     led->active_level = active_level;
     led->state = 0;
 
-    cfg.mode = IOT_GPIO_MODE_OUTPUT;
-    cfg.output = IOT_GPIO_OUTPUT_PP;
-    cfg.pull = IOT_GPIO_NOPULL;
-    cfg.speed = IOT_GPIO_SPEED_LOW;
+    cfg.mode = HAL_GPIO_MODE_OUTPUT;
+    cfg.output = HAL_GPIO_OUTPUT_PP;
+    cfg.pull = HAL_GPIO_NOPULL;
+    cfg.speed = HAL_GPIO_SPEED_LOW;
     cfg.alternate = 0;
-    cfg.initial_level = (active_level != 0) ? IOT_GPIO_LOW : IOT_GPIO_HIGH;
-    if (iot_gpio_init(IOT_PIN(0, pin), &cfg) != IOT_OK) {
+    cfg.initial_level = (active_level != 0) ? HAL_GPIO_LOW : HAL_GPIO_HIGH;
+    if (hal_gpio_init(HAL_PIN(0, pin), &cfg) != HAL_OK) {
         return -1;
     }
     return led_off(led);
@@ -31,8 +31,8 @@ int led_on(led_t *led)
         return -1;
     }
     led->state = 1;
-    return (iot_gpio_write(IOT_PIN(0, led->pin),
-                            (led->active_level != 0) ? IOT_GPIO_HIGH : IOT_GPIO_LOW) == IOT_OK)
+    return (hal_gpio_write(HAL_PIN(0, led->pin),
+                            (led->active_level != 0) ? HAL_GPIO_HIGH : HAL_GPIO_LOW) == HAL_OK)
            ? 0 : -1;
 }
 
@@ -42,8 +42,8 @@ int led_off(led_t *led)
         return -1;
     }
     led->state = 0;
-    return (iot_gpio_write(IOT_PIN(0, led->pin),
-                            (led->active_level != 0) ? IOT_GPIO_LOW : IOT_GPIO_HIGH) == IOT_OK)
+    return (hal_gpio_write(HAL_PIN(0, led->pin),
+                            (led->active_level != 0) ? HAL_GPIO_LOW : HAL_GPIO_HIGH) == HAL_OK)
            ? 0 : -1;
 }
 

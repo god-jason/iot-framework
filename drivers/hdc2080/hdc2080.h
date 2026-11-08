@@ -25,7 +25,7 @@ typedef struct {
  * @brief  初始化 HDC2080（probe + 校验器件 ID 0x07D0）
  * @param  address  7 位从机地址，0 表示使用默认 0x41
  */
-int hdc2080_init(hdc2080_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int hdc2080_init(hdc2080_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不关闭总线） */
 int hdc2080_deinit(hdc2080_handle_t *handle);

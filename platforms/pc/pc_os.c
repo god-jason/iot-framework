@@ -1,10 +1,10 @@
 /*
- * 主机模拟平台 —— 系统级接口（iot_os.h 实现）。
+ * 主机模拟平台 —— 系统级接口（hal_os.h 实现）。
  *
  * tick 由软件推进，中断/复位/睡眠仅记录状态，便于在 PC 上做单元测试：
- *   - 默认 iot_delay_ms/us 只累加 tick，不真正等待，保证测试快速；
- *   - 定义 IOT_PC_REAL_DELAY 时，iot_delay_ms 会真实等待（用于 demo/交互程序）；
- *   - iot_system_reset 只置标记，可由 iot_test_reset_called() 查询；
+ *   - 默认 hal_delay_ms/us 只累加 tick，不真正等待，保证测试快速；
+ *   - 定义 IOT_PC_REAL_DELAY 时，hal_delay_ms 会真实等待（用于 demo/交互程序）；
+ *   - hal_system_reset 只置标记，可由 iot_test_reset_called() 查询；
  *   - sleep/deepsleep 只置标记，立即返回。
  */
 
@@ -28,12 +28,12 @@ static bool s_deepsleep_called;         /* 是否进入过深度睡眠 */
 
 /* ============================== 时基与延时 ============================== */
 
-uint32_t iot_tick_get(void)
+uint32_t hal_tick_get(void)
 {
     return s_tick;
 }
 
-void iot_delay_ms(uint32_t ms)
+void hal_delay_ms(uint32_t ms)
 {
 #if defined(IOT_PC_REAL_DELAY)
 #if defined(_WIN32)
@@ -49,7 +49,7 @@ void iot_delay_ms(uint32_t ms)
     s_tick += ms;
 }
 
-void iot_delay_us(uint32_t us)
+void hal_delay_us(uint32_t us)
 {
     if (us > 0U) {
         s_tick += (us + 999U) / 1000U;
@@ -58,27 +58,27 @@ void iot_delay_us(uint32_t us)
 
 /* ============================== 中断与复位 ============================== */
 
-void iot_irq_enable(void)
+void hal_irq_enable(void)
 {
     s_irq_enabled = true;
 }
 
-void iot_irq_disable(void)
+void hal_irq_disable(void)
 {
     s_irq_enabled = false;
 }
 
-void iot_system_reset(void)
+void hal_system_reset(void)
 {
     s_reset_called = true;
 }
 
-void iot_system_sleep(void)
+void hal_system_sleep(void)
 {
     s_sleep_called = true;
 }
 
-void iot_system_deepsleep(void)
+void hal_system_deepsleep(void)
 {
     s_deepsleep_called = true;
 }

@@ -5,7 +5,7 @@
 static int mcp4725_write_frame(mcp4725_handle_t *handle, const uint8_t *buf, size_t len)
 {
     if (driver_i2c_write(&handle->i2c, buf, len) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -18,7 +18,7 @@ static int mcp4725_fast_write(mcp4725_handle_t *handle, uint16_t value)
     buf[0] = (uint8_t)((value >> 8) & 0x0FU);
     buf[1] = (uint8_t)(value & 0xFFU);
     if (mcp4725_write_frame(handle, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->dac_value = (uint16_t)(value & MCP4725_FULL_SCALE);
     return DRIVER_OK;
@@ -34,19 +34,19 @@ static int mcp4725_cmd_write(mcp4725_handle_t *handle, uint8_t cmd,
     buf[1] = (uint8_t)((value >> MCP4725_DATA_SHIFT) & 0xFFU);
     buf[2] = (uint8_t)((value & MCP4725_DATA_LOW_MASK) << MCP4725_DATA_SHIFT);
     if (mcp4725_write_frame(handle, buf, sizeof(buf)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->dac_value = (uint16_t)(value & MCP4725_FULL_SCALE);
     return DRIVER_OK;
 }
 
-int mcp4725_init(mcp4725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int mcp4725_init(mcp4725_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t buf[MCP4725_READ_LEN] = { 0U };
     uint16_t value;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -57,17 +57,17 @@ int mcp4725_init(mcp4725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     handle->initialized = false;
 
     if (handle->i2c.address > MCP4725_ADDRESS_MAX) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("mcp4725", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 读回 5 字节：状态 + DAC 寄存器 + EEPROM 内容（EEPROM 内容不解析） */
     if (driver_i2c_read(&handle->i2c, buf, MCP4725_READ_LEN) != DRIVER_OK) {
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* buf[0]: bit3..0 为 D11..D8，bit5:4 为掉电模式；buf[1] 为 D7..D0 */
@@ -83,7 +83,7 @@ int mcp4725_init(mcp4725_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int mcp4725_deinit(mcp4725_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -93,7 +93,7 @@ int mcp4725_deinit(mcp4725_handle_t *handle)
 int mcp4725_set_vref(mcp4725_handle_t *handle, uint16_t vref_mv)
 {
     if (handle == NULL || !handle->initialized || vref_mv == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->vref_mv = vref_mv;
     return DRIVER_OK;
@@ -102,7 +102,7 @@ int mcp4725_set_vref(mcp4725_handle_t *handle, uint16_t vref_mv)
 int mcp4725_write(mcp4725_handle_t *handle, uint16_t value)
 {
     if (handle == NULL || !handle->initialized || value > MCP4725_FULL_SCALE) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return mcp4725_fast_write(handle, value);
 }
@@ -116,7 +116,7 @@ int mcp4725_write_dac(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_t pd)
 {
     if (handle == NULL || !handle->initialized || value > MCP4725_FULL_SCALE ||
         (uint16_t)pd > (uint16_t)MCP4725_PD_500K_TO_GND) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return mcp4725_cmd_write(handle, MCP4725_CMD_WRITE_DAC, value, pd);
 }
@@ -127,7 +127,7 @@ int mcp4725_save(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_t pd)
 
     if (handle == NULL || !handle->initialized || value > MCP4725_FULL_SCALE ||
         (uint16_t)pd > (uint16_t)MCP4725_PD_500K_TO_GND) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = mcp4725_cmd_write(handle, MCP4725_CMD_WRITE_DAC_EE, value, pd);
@@ -145,7 +145,7 @@ int mcp4725_set_voltage(mcp4725_handle_t *handle, float volts)
     float code;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     full_scale = (float)handle->vref_mv / 1000.0f;
@@ -169,14 +169,14 @@ int mcp4725_read(mcp4725_handle_t *handle, uint16_t *value, mcp4725_pd_t *pd)
     uint16_t dac;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (value == NULL && pd == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (driver_i2c_read(&handle->i2c, buf, MCP4725_READ_LEN) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     dac = (uint16_t)(((uint16_t)(buf[0] & 0x0FU) << 8) | (uint16_t)buf[1]);

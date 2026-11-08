@@ -11,7 +11,7 @@
  * 已知限制：AOX4000 的 UART 帧布局在不同固件/资料中存在差异，本驱动采用
  * 9 字节定长帧 + 累加和校验的约定实现，字段偏移与量纲集中在
  * aox4000_register.h 中，**使用前必须按实际 datasheet 核对**，
- * 因此解析失败时返回 IOT_CRC_ERROR / IOT_INVALID_PARAM 而不做猜测性容错。
+ * 因此解析失败时返回 HAL_CRC_ERROR / HAL_INVALID_PARAM 而不做猜测性容错。
  */
 
 #include "common/driver_io.h"
@@ -40,7 +40,7 @@ int aox4000_deinit(aox4000_handle_t *handle);
  * @param  buffer 帧数据
  * @param  length 可用字节数，需 ≥ AOX4000_FRAME_LEN
  * @param  data   输出结果
- * @retval IOT_CRC_ERROR 帧头或校验错误
+ * @retval HAL_CRC_ERROR 帧头或校验错误
  */
 int aox4000_parse(aox4000_handle_t *handle, const uint8_t *buffer, size_t length,
                   aox4000_data_t *data);

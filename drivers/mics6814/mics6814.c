@@ -14,7 +14,7 @@ static float mics6814_rs_from_mv(uint16_t adc_mv, uint16_t vc_mv, uint16_t rl_oh
 static int mics6814_check(const mics6814_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -29,7 +29,7 @@ int mics6814_init(mics6814_handle_t *handle, uint16_t vc_mv, uint16_t rl_ohm)
     uint8_t i;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->vc_mv = (vc_mv != 0U) ? vc_mv : MICS6814_DEFAULT_VC_MV;
     rl_ohm = (rl_ohm != 0U) ? rl_ohm : MICS6814_DEFAULT_RL_OHM;
@@ -49,7 +49,7 @@ int mics6814_deinit(mics6814_handle_t *handle)
     uint8_t i;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     for (i = 0U; i < MICS6814_CH_COUNT; i++) {
         handle->r0_ohm[i] = 0U;
@@ -64,7 +64,7 @@ int mics6814_set_rl(mics6814_handle_t *handle, mics6814_channel_t ch, uint16_t r
     int ret = mics6814_check(handle);
 
     if (ret != DRIVER_OK || !mics6814_ch_valid(ch) || rl_ohm == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->rl_ohm[ch] = rl_ohm;
     return DRIVER_OK;
@@ -77,19 +77,19 @@ int mics6814_calibrate_r0(mics6814_handle_t *handle, mics6814_channel_t ch,
     int ret = mics6814_check(handle);
 
     if (ret != DRIVER_OK || !mics6814_ch_valid(ch)) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (clean_air_ratio <= 0.0f || adc_mv < MICS6814_MIN_VALID_MV ||
         adc_mv >= handle->vc_mv) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     rs = mics6814_rs_from_mv(adc_mv, handle->vc_mv, handle->rl_ohm[ch]);
     if (rs <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->r0_ohm[ch] = (uint32_t)(rs / clean_air_ratio + 0.5f);
     if (handle->r0_ohm[ch] == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     LOG_I("mics6814", "ch%u R0=%luohm", (unsigned)ch,
           (unsigned long)handle->r0_ohm[ch]);
@@ -102,7 +102,7 @@ int mics6814_set_ppm_scale(mics6814_handle_t *handle, mics6814_channel_t ch,
     int ret = mics6814_check(handle);
 
     if (ret != DRIVER_OK || !mics6814_ch_valid(ch) || ppm_scale < 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->ppm_scale[ch] = ppm_scale;
     return DRIVER_OK;
@@ -115,7 +115,7 @@ int mics6814_read(mics6814_handle_t *handle, const uint16_t *adc_mv,
     int ret = mics6814_check(handle);
 
     if (ret != DRIVER_OK || adc_mv == NULL || data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     for (i = 0U; i < MICS6814_CH_COUNT; i++) {

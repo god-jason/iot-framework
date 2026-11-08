@@ -80,14 +80,14 @@ static float mlx90640_raw_to_celsius(int16_t raw)
            MLX90640_KELVIN_OFFSET;
 }
 
-int mlx90640_init(mlx90640_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int mlx90640_init(mlx90640_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint16_t control2 = 0U;
     uint16_t check = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -99,7 +99,7 @@ int mlx90640_init(mlx90640_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("mlx90640", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 只改刷新率（CONTROL2[2:0]），分辨率与 Chess 模式保持出厂值 */
@@ -119,7 +119,7 @@ int mlx90640_init(mlx90640_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     }
     if ((check & MLX90640_CONTROL2_RATE_MASK) != MLX90640_REFRESH_RATE_8HZ) {
         LOG_E("mlx90640", "refresh rate readback 0x%04X", (unsigned)check);
-        return (int)IOT_HW_ERROR;
+        return (int)HAL_HW_ERROR;
     }
 
     /* 上电后器件自由运行，等两帧以上让 RAM 内容稳定 */
@@ -133,7 +133,7 @@ int mlx90640_init(mlx90640_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int mlx90640_deinit(mlx90640_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -143,7 +143,7 @@ int mlx90640_deinit(mlx90640_handle_t *handle)
 int mlx90640_get_status(mlx90640_handle_t *handle, uint16_t *status)
 {
     if (handle == NULL || status == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return mlx90640_read_reg(handle, MLX90640_REG_STATUS, status);
 }
@@ -153,10 +153,10 @@ int mlx90640_read_raw(mlx90640_handle_t *handle, int16_t *raw, size_t len)
     int ret;
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (len == 0U || len > MLX90640_PIXELS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     driver_delay_ms(handle->frame_period_ms);
@@ -177,10 +177,10 @@ int mlx90640_read(mlx90640_handle_t *handle, float *temperatures, size_t len)
     int ret;
 
     if (handle == NULL || temperatures == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (len == 0U || len > MLX90640_PIXELS) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     driver_delay_ms(handle->frame_period_ms);

@@ -35,7 +35,7 @@ int cs100_deinit(cs100_handle_t *handle);
  * @param  buffer 帧数据
  * @param  length 可用字节数，需 ≥ CS100_FRAME_LEN
  * @param  data   输出结果
- * @retval IOT_CRC_ERROR 帧头或校验错误
+ * @retval HAL_CRC_ERROR 帧头或校验错误
  */
 int cs100_parse(cs100_handle_t *handle, const uint8_t *buffer, size_t length,
                 cs100_data_t *data);

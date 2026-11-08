@@ -15,13 +15,13 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_pin_t pin;
+    hal_pin_t pin;
     uint8_t rom[8];
     bool rom_valid;
     bool initialized;
 } ds2431_handle_t;
 
-int ds2431_init(ds2431_handle_t *handle, iot_pin_t pin);
+int ds2431_init(ds2431_handle_t *handle, hal_pin_t pin);
 int ds2431_deinit(ds2431_handle_t *handle);
 
 /* 读 8 字节 ROM（family=0x2D），含 CRC8 校验 */

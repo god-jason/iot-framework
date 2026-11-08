@@ -17,7 +17,7 @@
  *   bmp388_read(&bmp388, &d);
  *
  * 用法（SPI）：
- *   bmp388_init_spi(&bmp388, &spi1, IOT_PIN(0, 4));
+ *   bmp388_init_spi(&bmp388, &spi1, HAL_PIN(0, 4));
  */
 
 #include "common/driver_io.h"
@@ -58,10 +58,10 @@ typedef struct {
 } bmp388_data_t;
 
 /** 初始化（I2C）：校验 chip id 0x50、软复位、读校准、配置过采样 */
-int bmp388_init(bmp388_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int bmp388_init(bmp388_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** 初始化（SPI，4 线模式，cs 为片选引脚） */
-int bmp388_init_spi(bmp388_handle_t *handle, iot_spi_t *spi, iot_pin_t cs);
+int bmp388_init_spi(bmp388_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
 
 /** 反初始化（切回 sleep，不关闭总线） */
 int bmp388_deinit(bmp388_handle_t *handle);

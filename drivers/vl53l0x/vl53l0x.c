@@ -48,7 +48,7 @@ static int vl53l0x_wait_range_ready(vl53l0x_handle_t *handle)
         }
         if ((driver_tick_ms() - start) >= VL53L0X_RANGE_TIMEOUT_MS) {
             LOG_W("vl53l0x", "range timeout, int status=0x%02X", (unsigned)status);
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(VL53L0X_POLL_INTERVAL_MS);
     }
@@ -75,14 +75,14 @@ static int vl53l0x_soft_reset(vl53l0x_handle_t *handle)
     return DRIVER_OK;
 }
 
-int vl53l0x_init(vl53l0x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int vl53l0x_init(vl53l0x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     uint8_t revision = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -93,7 +93,7 @@ int vl53l0x_init(vl53l0x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("vl53l0x", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = vl53l0x_soft_reset(handle);
@@ -109,7 +109,7 @@ int vl53l0x_init(vl53l0x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     }
     if (id != VL53L0X_MODEL_ID_VALUE) {
         LOG_E("vl53l0x", "unexpected model id 0x%02X", (unsigned)id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (vl53l0x_read_u8(handle, VL53L0X_REG_REVISION_ID, &revision) == DRIVER_OK) {
@@ -126,7 +126,7 @@ int vl53l0x_init(vl53l0x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int vl53l0x_deinit(vl53l0x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -139,7 +139,7 @@ int vl53l0x_read(vl53l0x_handle_t *handle, vl53l0x_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = vl53l0x_write_u8(handle, VL53L0X_REG_SYSRANGE_START,
@@ -182,7 +182,7 @@ int vl53l0x_read_distance(vl53l0x_handle_t *handle, uint16_t *distance_mm)
     int ret;
 
     if (distance_mm == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = vl53l0x_read(handle, &data);
@@ -191,5 +191,5 @@ int vl53l0x_read_distance(vl53l0x_handle_t *handle, uint16_t *distance_mm)
     }
 
     *distance_mm = data.distance_mm;
-    return (data.range_status == 0U) ? DRIVER_OK : (int)IOT_NOT_READY;
+    return (data.range_status == 0U) ? DRIVER_OK : (int)HAL_NOT_READY;
 }

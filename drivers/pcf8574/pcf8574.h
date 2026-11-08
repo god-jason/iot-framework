@@ -23,7 +23,7 @@ typedef struct {
     bool initialized;
 } pcf8574_handle_t;
 
-int pcf8574_init(pcf8574_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int pcf8574_init(pcf8574_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int pcf8574_deinit(pcf8574_handle_t *handle);
 
 /** 写整个端口 */

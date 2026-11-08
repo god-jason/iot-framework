@@ -41,7 +41,7 @@ static int qmc5883l_write_ctrl1(qmc5883l_handle_t *handle, uint8_t value)
     if (check != value) {
         LOG_E("qmc5883l", "ctrl1 readback 0x%02X != 0x%02X",
               (unsigned)check, (unsigned)value);
-        return (int)IOT_HW_ERROR;
+        return (int)HAL_HW_ERROR;
     }
     return DRIVER_OK;
 }
@@ -51,7 +51,7 @@ int qmc5883l_soft_reset(qmc5883l_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* CTRL2.SOFT_RST 复位全部寄存器，复位后必须重新下发配置 */
@@ -76,7 +76,7 @@ int qmc5883l_set_range(qmc5883l_handle_t *handle, qmc5883l_range_t range)
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)QMC5883L_RANGE_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old_ctrl1 = handle->ctrl1;
@@ -102,18 +102,18 @@ int qmc5883l_set_range(qmc5883l_handle_t *handle, qmc5883l_range_t range)
 int qmc5883l_get_status(qmc5883l_handle_t *handle, uint8_t *status)
 {
     if (handle == NULL || status == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return qmc5883l_read_regs(handle, QMC5883L_REG_STATUS, status, 1U);
 }
 
-int qmc5883l_init(qmc5883l_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int qmc5883l_init(qmc5883l_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -126,7 +126,7 @@ int qmc5883l_init(qmc5883l_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("qmc5883l", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = qmc5883l_soft_reset(handle);
@@ -152,7 +152,7 @@ int qmc5883l_init(qmc5883l_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int qmc5883l_deinit(qmc5883l_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         uint8_t standby = (uint8_t)(handle->ctrl1 & (uint8_t)~QMC5883L_CTRL1_MODE_MASK);
@@ -171,7 +171,7 @@ int qmc5883l_read_raw(qmc5883l_handle_t *handle, int16_t xyz[3])
     int ret;
 
     if (handle == NULL || xyz == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 等一次转换完成：数据手册要求 DRDY 置位后再读 */
@@ -185,7 +185,7 @@ int qmc5883l_read_raw(qmc5883l_handle_t *handle, int16_t xyz[3])
             break;
         }
         if ((uint32_t)(driver_tick_ms() - start) > QMC5883L_DATA_TIMEOUT_MS) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
@@ -208,7 +208,7 @@ int qmc5883l_read(qmc5883l_handle_t *handle, qmc5883l_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = qmc5883l_read_raw(handle, xyz);

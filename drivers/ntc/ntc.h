@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_adc_t *adc;   /* 已初始化的 ADC 句柄 */
+    hal_adc_t *adc;   /* 已初始化的 ADC 句柄 */
     uint8_t channel;          /* ADC 通道号 */
     uint32_t r_series;        /* 分压串联电阻，单位 Ω */
     float r25;                /* 25℃ 标称电阻，单位 Ω */
@@ -46,7 +46,7 @@ typedef struct {
  * @param  vref_mv   参考电压（mV，>0）
  * @param  adc_max   满量程码值（>0）
  */
-int ntc_init(ntc_handle_t *handle, iot_adc_t *adc, uint8_t channel,
+int ntc_init(ntc_handle_t *handle, hal_adc_t *adc, uint8_t channel,
              uint32_t r_series, float r25, float beta,
              float vref_mv, uint32_t adc_max);
 
@@ -56,7 +56,7 @@ int ntc_deinit(ntc_handle_t *handle);
 /**
  * @brief  读取温度
  * @param  temperature  温度，单位 ℃
- * @return 0 成功；IOT_HW_ERROR 表示 v=0（短路）或开路/超量程
+ * @return 0 成功；HAL_HW_ERROR 表示 v=0（短路）或开路/超量程
  */
 int ntc_read(ntc_handle_t *handle, float *temperature);
 

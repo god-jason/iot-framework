@@ -13,7 +13,7 @@
 static int wm8978_check(const wm8978_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -30,10 +30,10 @@ int wm8978_write(wm8978_handle_t *handle, uint8_t reg, uint16_t value)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (!wm8978_reg_valid(reg) || (value & 0xFE00U) != 0U) {
-        return (int)IOT_INVALID_PARAM; /* 地址 7 位、数据 9 位 */
+        return (int)HAL_INVALID_PARAM; /* 地址 7 位、数据 9 位 */
     }
 
     word = (uint16_t)(((uint16_t)(reg & 0x7FU) << 9) | (value & 0x01FFU));
@@ -54,14 +54,14 @@ int wm8978_read(wm8978_handle_t *handle, uint8_t reg, uint16_t *value)
     int ret;
 
     if (value == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = wm8978_check(handle);
     if (ret != DRIVER_OK) {
         return ret;
     }
     if (!wm8978_reg_valid(reg)) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 控制口写-only，返回影子寄存器（上电后未写过的寄存器读到 0） */
@@ -69,13 +69,13 @@ int wm8978_read(wm8978_handle_t *handle, uint8_t reg, uint16_t *value)
     return DRIVER_OK;
 }
 
-int wm8978_init(wm8978_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int wm8978_init(wm8978_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t reg;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -90,7 +90,7 @@ int wm8978_init(wm8978_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(WM8978_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -119,7 +119,7 @@ int wm8978_init(wm8978_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int wm8978_deinit(wm8978_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)wm8978_play_stop(handle);
@@ -183,7 +183,7 @@ int wm8978_set_volume(wm8978_handle_t *handle, uint8_t volume)
         return ret;
     }
     if (volume > WM8978_VOL_MASK) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     value = (uint16_t)(WM8978_VOL_UPDATE | (uint16_t)(volume & WM8978_VOL_MASK));
@@ -269,7 +269,7 @@ int wm8978_set_interface(wm8978_handle_t *handle, bool i2s, uint8_t word_length)
             return wm8978_write(handle, WM8978_REG_AUDIO_IFACE, value);
         }
     }
-    return (int)IOT_INVALID_PARAM;
+    return (int)HAL_INVALID_PARAM;
 }
 
 int wm8978_set_sample_rate(wm8978_handle_t *handle, uint32_t sample_rate)
@@ -296,5 +296,5 @@ int wm8978_set_sample_rate(wm8978_handle_t *handle, uint32_t sample_rate)
             return wm8978_write(handle, WM8978_REG_CLOCKING, table[i].code);
         }
     }
-    return (int)IOT_INVALID_PARAM;
+    return (int)HAL_INVALID_PARAM;
 }

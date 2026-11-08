@@ -1,17 +1,17 @@
 /*
  * AVR 内存后端：使用 avr-libc 的 malloc/free。
  */
-#include "iot_mem.h"
+#include "hal_mem.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-void *iot_malloc(size_t size)
+void *hal_malloc(size_t size)
 {
     return malloc(size);
 }
 
-void *iot_calloc(size_t count, size_t size)
+void *hal_calloc(size_t count, size_t size)
 {
     void *ptr;
     size_t total;
@@ -27,12 +27,12 @@ void *iot_calloc(size_t count, size_t size)
     return ptr;
 }
 
-void *iot_realloc(void *ptr, size_t size)
+void *hal_realloc(void *ptr, size_t size)
 {
     return realloc(ptr, size);
 }
 
-void iot_free(void *ptr)
+void hal_free(void *ptr)
 {
     free(ptr);
 }

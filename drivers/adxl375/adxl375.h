@@ -59,10 +59,10 @@ typedef struct {
  * @param  cs       片选引脚，总线自带片选时传 0
  * @param  address  7 位从机地址，0 表示默认 0x53（SPI 模式忽略）
  * @param  odr      输出率
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int adxl375_init(adxl375_handle_t *handle, iot_i2c_t *i2c,
-                 iot_spi_t *spi, iot_pin_t cs, uint16_t address,
+int adxl375_init(adxl375_handle_t *handle, hal_i2c_t *i2c,
+                 hal_spi_t *spi, hal_pin_t cs, uint16_t address,
                  adxl375_odr_t odr);
 
 /** @brief 反初始化：进入待机模式 */

@@ -14,7 +14,7 @@
 static int max30102_check(const max30102_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -22,7 +22,7 @@ static int max30102_check(const max30102_handle_t *handle)
 int max30102_write(max30102_handle_t *handle, uint8_t reg, const uint8_t *data, size_t len)
 {
     if (handle == NULL || handle->i2c.handle == NULL || data == NULL || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_write_reg(&handle->i2c, reg, data, len);
 }
@@ -30,7 +30,7 @@ int max30102_write(max30102_handle_t *handle, uint8_t reg, const uint8_t *data, 
 int max30102_read_reg(max30102_handle_t *handle, uint8_t reg, uint8_t *data, size_t len)
 {
     if (handle == NULL || handle->i2c.handle == NULL || data == NULL || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, reg, data, len);
 }
@@ -59,7 +59,7 @@ int max30102_reset(max30102_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = max30102_write_u8(handle, MAX30102_REG_MODE_CONFIG, MAX30102_MODE_RESET);
     if (ret != DRIVER_OK) {
@@ -77,7 +77,7 @@ int max30102_reset(max30102_handle_t *handle)
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > 50U) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
@@ -92,7 +92,7 @@ int max30102_set_mode(max30102_handle_t *handle, max30102_mode_t mode)
     }
     if (mode != MAX30102_MODE_HR_ONLY && mode != MAX30102_MODE_SPO2 &&
         mode != MAX30102_MODE_MULTI_LED) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = max30102_write_u8(handle, MAX30102_REG_MODE_CONFIG, (uint8_t)mode);
@@ -116,7 +116,7 @@ int max30102_set_fifo(max30102_handle_t *handle, max30102_sample_avg_t average,
         return ret;
     }
     if ((uint8_t)average > (uint8_t)MAX30102_AVG_32 || almost_full > 0x0FU) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     value = (uint8_t)(((uint8_t)average << 5) & 0xE0U);
@@ -140,14 +140,14 @@ int max30102_set_led_current(max30102_handle_t *handle, uint8_t red, uint8_t ir)
     return max30102_write_u8(handle, MAX30102_REG_LED2_PA, ir);
 }
 
-int max30102_init(max30102_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int max30102_init(max30102_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t part_id = 0U;
     uint8_t spo2;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -159,7 +159,7 @@ int max30102_init(max30102_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(MAX30102_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     if (driver_i2c_read_reg(&handle->i2c, MAX30102_REG_PART_ID, &part_id, 1U) == DRIVER_OK &&
         part_id != MAX30102_PART_ID_VALUE) {
@@ -176,7 +176,7 @@ int max30102_init(max30102_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     /* FIFO：4 次平均、回绕使能、almost full = 15 */
     if (max30102_set_fifo(handle, MAX30102_AVG_4, true, MAX30102_FIFO_A_FULL_15) != DRIVER_OK) {
         handle->initialized = false;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* SpO2 配置：4096nA、100Hz、411us/18bit */
@@ -201,7 +201,7 @@ int max30102_init(max30102_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int max30102_deinit(max30102_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)max30102_write_u8(handle, MAX30102_REG_MODE_CONFIG, MAX30102_MODE_SHUTDOWN);
@@ -224,7 +224,7 @@ int max30102_read(max30102_handle_t *handle, max30102_sample_t *samples,
     int ret;
 
     if (samples == NULL || count == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     *count = 0U;
     ret = max30102_check(handle);
@@ -232,7 +232,7 @@ int max30102_read(max30102_handle_t *handle, max30102_sample_t *samples,
         return ret;
     }
     if (capacity == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     MAX30102_TRY(max30102_read_reg(handle, MAX30102_REG_FIFO_WR_PTR, ptr, sizeof(ptr)));
@@ -266,7 +266,7 @@ int max30102_read_temperature(max30102_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = max30102_check(handle);
     if (ret != DRIVER_OK) {

@@ -9,7 +9,7 @@ static int ina226_read_reg16(ina226_handle_t *handle, uint8_t reg, uint16_t *val
     uint8_t d[2];
 
     if (driver_i2c_read_reg(&handle->i2c, reg, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *value = (uint16_t)(((uint16_t)d[0] << 8) | (uint16_t)d[1]);
     return DRIVER_OK;
@@ -31,7 +31,7 @@ static int ina226_apply_calibration(ina226_handle_t *handle, float shunt_ohm, fl
     float cal;
 
     if (shunt_ohm <= 0.0f || max_current_a <= 0.0f) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     current_lsb = max_current_a / INA226_CURRENT_LSB_DIVISOR;
@@ -45,7 +45,7 @@ static int ina226_apply_calibration(ina226_handle_t *handle, float shunt_ohm, fl
 
     handle->calibration = (uint16_t)(cal + 0.5f);
     if (ina226_write_reg16(handle, INA226_REG_CALIBRATION, handle->calibration) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->shunt_ohm = shunt_ohm;
@@ -55,13 +55,13 @@ static int ina226_apply_calibration(ina226_handle_t *handle, float shunt_ohm, fl
     return DRIVER_OK;
 }
 
-int ina226_init(ina226_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int ina226_init(ina226_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint16_t id = 0U;
     uint16_t manuf = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -76,29 +76,29 @@ int ina226_init(ina226_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(INA226_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     if (ina226_read_reg16(handle, INA226_REG_DIE_ID, &id) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (id != INA226_DIE_ID_VALUE) {
         LOG_E(INA226_TAG, "die id mismatch: 0x%04X", (unsigned)id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     if (ina226_read_reg16(handle, INA226_REG_MANUFACTURER_ID, &manuf) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (manuf != INA226_MANUFACTURER_ID_VALUE) {
         LOG_E(INA226_TAG, "manufacturer id mismatch: 0x%04X", (unsigned)manuf);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (ina226_write_reg16(handle, INA226_REG_CONFIG, INA226_CONFIG_DEFAULT) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (ina226_apply_calibration(handle, INA226_DEFAULT_SHUNT_OHM, INA226_DEFAULT_MAX_CURRENT_A)
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(2U);
 
@@ -111,7 +111,7 @@ int ina226_init(ina226_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int ina226_deinit(ina226_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         /* MODE = 0：关机，停止转换 */
@@ -125,7 +125,7 @@ int ina226_deinit(ina226_handle_t *handle)
 int ina226_set_calibration(ina226_handle_t *handle, float shunt_ohm, float max_current_a)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return ina226_apply_calibration(handle, shunt_ohm, max_current_a);
 }
@@ -136,15 +136,15 @@ int ina226_read_raw(ina226_handle_t *handle, int16_t *shunt_raw, uint16_t *bus_r
     uint8_t d[8];
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (shunt_raw == NULL && bus_raw == NULL && current_raw == NULL && power_raw == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 0x01~0x04 连续读取：分流 / 总线 / 功率 / 电流，均为大端 */
     if (driver_i2c_read_reg(&handle->i2c, INA226_REG_SHUNT_VOLTAGE, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     if (shunt_raw != NULL) {
@@ -167,10 +167,10 @@ int ina226_read_bus_voltage(ina226_handle_t *handle, float *voltage)
     uint16_t raw = 0U;
 
     if (handle == NULL || voltage == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina226_read_reg16(handle, INA226_REG_BUS_VOLTAGE, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 总线电压：16 位全部有效，1 LSB = 1.25 mV，不做移位 */
@@ -183,10 +183,10 @@ int ina226_read_shunt_voltage(ina226_handle_t *handle, float *voltage)
     uint16_t raw = 0U;
 
     if (handle == NULL || voltage == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina226_read_reg16(handle, INA226_REG_SHUNT_VOLTAGE, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     *voltage = (float)(int16_t)raw * INA226_SHUNT_LSB_V;
@@ -198,10 +198,10 @@ int ina226_read_current(ina226_handle_t *handle, float *current)
     uint16_t raw = 0U;
 
     if (handle == NULL || current == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina226_read_reg16(handle, INA226_REG_CURRENT, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     *current = (float)(int16_t)raw * handle->current_lsb_a;
@@ -213,10 +213,10 @@ int ina226_read_power(ina226_handle_t *handle, float *power)
     uint16_t raw = 0U;
 
     if (handle == NULL || power == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (ina226_read_reg16(handle, INA226_REG_POWER, &raw) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     *power = (float)raw * handle->power_lsb_w;
@@ -232,7 +232,7 @@ int ina226_read(ina226_handle_t *handle, ina226_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ina226_read_raw(handle, &shunt_raw, &bus_raw, &current_raw, &power_raw);

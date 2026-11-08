@@ -1,10 +1,10 @@
 /*
- * 驱动层测试：验证驱动与 src/core 抽象、simulator 的闭环。
+ * 驱动层测试：验证驱动与 hal 抽象、simulator 的闭环。
  * 覆盖参数校验、I2C 寄存器注入、显存操作与 SPI 初始化路径。
  */
 #include "test.h"
 
-#include "iot.h"
+#include "hal.h"
 #include "common/driver_io.h"
 #include "aht20/aht20.h"
 #include "bmp280/bmp280.h"
@@ -14,31 +14,31 @@
 #include "ssd1306/ssd1306_register.h"
 #include "max7219/max7219.h"
 
-static iot_i2c_t s_i2c;
-static iot_spi_t s_spi;
+static hal_i2c_t s_i2c;
+static hal_spi_t s_spi;
 
 static int drivers_port_setup(void)
 {
-    iot_i2c_config_t i2c_config;
-    iot_spi_config_t spi_config;
+    hal_i2c_config_t i2c_config;
+    hal_spi_config_t spi_config;
 
-    i2c_config.mode = IOT_I2C_MODE_MASTER;
-    i2c_config.speed = IOT_I2C_SPEED_FAST;
-    i2c_config.address_mode = IOT_I2C_ADDR_7BIT;
+    i2c_config.mode = HAL_I2C_MODE_MASTER;
+    i2c_config.speed = HAL_I2C_SPEED_FAST;
+    i2c_config.address_mode = HAL_I2C_ADDR_7BIT;
     i2c_config.own_address = 0U;
 
-    spi_config.mode = IOT_SPI_MODE_MASTER;
-    spi_config.direction = IOT_SPI_DIRECTION_2LINES;
+    spi_config.mode = HAL_SPI_MODE_MASTER;
+    spi_config.direction = HAL_SPI_DIRECTION_2LINES;
     spi_config.baudrate = 1000000U;
-    spi_config.cpol = IOT_SPI_CPOL_LOW;
-    spi_config.cpha = IOT_SPI_CPHA_1EDGE;
-    spi_config.bit_order = IOT_SPI_BITORDER_MSB;
+    spi_config.cpol = HAL_SPI_CPOL_LOW;
+    spi_config.cpha = HAL_SPI_CPHA_1EDGE;
+    spi_config.bit_order = HAL_SPI_BITORDER_MSB;
     spi_config.data_bits = 8U;
 
-    if (iot_i2c_init(&s_i2c, &i2c_config) != IOT_OK) {
+    if (hal_i2c_init(&s_i2c, &i2c_config) != HAL_OK) {
         return -1;
     }
-    if (iot_spi_init(&s_spi, &spi_config) != IOT_OK) {
+    if (hal_spi_init(&s_spi, &spi_config) != HAL_OK) {
         return -1;
     }
     return 0;
@@ -60,9 +60,9 @@ static void drivers_inject_bmp280(void)
     calib[6] = 0x3DU; calib[7] = 0x8EU;   /* p1 */
     calib[8] = 0x1EU; calib[9] = 0x92U;   /* p2 */
 
-    (void)iot_i2c_mem_write(&s_i2c, BMP280_DEFAULT_ADDRESS, BMP280_REG_CHIP_ID, 1U,
+    (void)hal_i2c_mem_write(&s_i2c, BMP280_DEFAULT_ADDRESS, BMP280_REG_CHIP_ID, 1U,
                              &chip_id, 1U, 100U);
-    (void)iot_i2c_mem_write(&s_i2c, BMP280_DEFAULT_ADDRESS, BMP280_REG_CALIB_00, 1U,
+    (void)hal_i2c_mem_write(&s_i2c, BMP280_DEFAULT_ADDRESS, BMP280_REG_CALIB_00, 1U,
                              calib, sizeof(calib), 100U);
 }
 
@@ -72,10 +72,10 @@ void ut_drivers(void)
     TF_CHECK_INT(drivers_port_setup(), 0);
 
     /* ---- 参数校验：空句柄/空总线必须被拒绝 ---- */
-    TF_CHECK_INT(aht20_init(NULL, &s_i2c, 0x38U), IOT_INVALID_PARAM);
-    TF_CHECK_INT(bmp280_init(NULL, &s_i2c, 0x76U), IOT_INVALID_PARAM);
-    TF_CHECK_INT(pcf8574_init(NULL, &s_i2c, 0x20U), IOT_INVALID_PARAM);
-    TF_CHECK_INT(ssd1306_init(NULL, NULL), IOT_INVALID_PARAM);
+    TF_CHECK_INT(aht20_init(NULL, &s_i2c, 0x38U), HAL_INVALID_PARAM);
+    TF_CHECK_INT(bmp280_init(NULL, &s_i2c, 0x76U), HAL_INVALID_PARAM);
+    TF_CHECK_INT(pcf8574_init(NULL, &s_i2c, 0x20U), HAL_INVALID_PARAM);
+    TF_CHECK_INT(ssd1306_init(NULL, NULL), HAL_INVALID_PARAM);
 
     /* ---- 数据格式工具 ---- */
     {
@@ -107,7 +107,7 @@ void ut_drivers(void)
 
         memset(&bmp, 0, sizeof(bmp));
         drivers_inject_bmp280();
-        TF_CHECK_INT(bmp280_get_chip_id(&bmp, &chip_id), IOT_INVALID_PARAM);
+        TF_CHECK_INT(bmp280_get_chip_id(&bmp, &chip_id), HAL_INVALID_PARAM);
         TF_CHECK_INT(bmp280_init(&bmp, &s_i2c, BMP280_DEFAULT_ADDRESS), DRIVER_OK);
         TF_CHECK_INT(bmp280_get_chip_id(&bmp, &chip_id), DRIVER_OK);
         TF_CHECK_INT(chip_id, 0x58);
@@ -133,7 +133,7 @@ void ut_drivers(void)
         TF_CHECK_INT(gram[0], 0x01);
         TF_CHECK_INT(ssd1306_draw_pixel(&oled, 127U, 63U, true), DRIVER_OK);
         TF_CHECK_INT(gram[SSD1306_GRAM_SIZE - 1U], 0x80);
-        TF_CHECK_INT(ssd1306_draw_pixel(&oled, 128U, 0U, true), IOT_INVALID_PARAM);
+        TF_CHECK_INT(ssd1306_draw_pixel(&oled, 128U, 0U, true), HAL_INVALID_PARAM);
         TF_CHECK_INT(ssd1306_clear(&oled), DRIVER_OK);
         TF_CHECK_INT(gram[0], 0x00);
     }
@@ -144,7 +144,7 @@ void ut_drivers(void)
 
         TF_CHECK_INT(max7219_init(&led, &s_spi, 0U, 2U), DRIVER_OK);
         TF_CHECK_INT(max7219_set_intensity(&led, 0x0FU), DRIVER_OK);
-        TF_CHECK_INT(max7219_set_digit(&led, 8U, 0x01U), IOT_INVALID_PARAM);
+        TF_CHECK_INT(max7219_set_digit(&led, 8U, 0x01U), HAL_INVALID_PARAM);
         TF_CHECK_INT(max7219_clear(&led), DRIVER_OK);
         TF_CHECK_INT(max7219_deinit(&led), DRIVER_OK);
     }

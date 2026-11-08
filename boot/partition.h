@@ -3,7 +3,7 @@
 
 /*
  * 固件分区表：描述 Boot / APP / OTA / 配置等分区的地址、大小与可写性。
- * host 环境下用内置 RAM 模拟 Flash；真实平台应委托给 iot_flash_t。
+ * host 环境下用内置 RAM 模拟 Flash；真实平台应委托给 hal_flash_t。
  */
 
 #include <stdint.h>

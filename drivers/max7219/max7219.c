@@ -20,7 +20,7 @@ int max7219_write_index(max7219_handle_t *handle, uint8_t index,
     uint8_t i;
 
     if (handle == NULL || !handle->initialized || index >= handle->chain_length) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     len = (size_t)handle->chain_length * 2U;
@@ -44,7 +44,7 @@ int max7219_write(max7219_handle_t *handle, uint8_t reg, uint8_t data)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     for (i = 0U; i < handle->chain_length; i++) {
@@ -56,12 +56,12 @@ int max7219_write(max7219_handle_t *handle, uint8_t reg, uint8_t data)
     return DRIVER_OK;
 }
 
-int max7219_init(max7219_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
+int max7219_init(max7219_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
                  uint8_t chain_length)
 {
     if (handle == NULL || spi == NULL || chain_length == 0U ||
         chain_length > MAX7219_DIGIT_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -71,8 +71,8 @@ int max7219_init(max7219_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+        if (driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
+            return (int)HAL_IO_ERROR;
         }
     }
 
@@ -86,7 +86,7 @@ int max7219_init(max7219_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
         max7219_clear(handle) != DRIVER_OK) {
         handle->initialized = false;
         LOG_E("max7219", "init sequence failed");
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     LOG_I("max7219", "init ok, chain=%u", (unsigned)chain_length);
@@ -96,7 +96,7 @@ int max7219_init(max7219_handle_t *handle, iot_spi_t *spi, iot_pin_t cs,
 int max7219_deinit(max7219_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
         (void)max7219_set_shutdown(handle, true);
@@ -141,7 +141,7 @@ int max7219_display_test(max7219_handle_t *handle, bool enable)
 int max7219_set_digit(max7219_handle_t *handle, uint8_t digit, uint8_t value)
 {
     if (digit >= MAX7219_DIGIT_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return max7219_write(handle, (uint8_t)(MAX7219_REG_DIGIT0 + digit), value);
 }
@@ -152,7 +152,7 @@ int max7219_clear(max7219_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     for (digit = 0U; digit < MAX7219_DIGIT_COUNT; digit++) {
         ret = max7219_set_digit(handle, digit, 0x00U);

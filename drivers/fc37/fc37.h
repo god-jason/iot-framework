@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    iot_adc_t *adc;      /* 已初始化的 ADC 句柄 */
+    hal_adc_t *adc;      /* 已初始化的 ADC 句柄 */
     uint8_t channel;             /* ADC 通道号 */
     float vref_mv;               /* ADC 参考电压 mV */
     uint32_t adc_max;            /* ADC 满量程码值 */
@@ -39,9 +39,9 @@ typedef struct {
  * @brief  初始化驱动并配置 ADC 通道
  * @param  adc      已初始化的 ADC 句柄（不可为 NULL）
  * @param  channel  ADC 通道号
- * @return 0 成功；IOT_INVALID_PARAM 参数非法；IOT_IO_ERROR 通道配置失败
+ * @return 0 成功；HAL_INVALID_PARAM 参数非法；HAL_IO_ERROR 通道配置失败
  */
-int fc37_init(fc37_handle_t *handle, iot_adc_t *adc, uint8_t channel);
+int fc37_init(fc37_handle_t *handle, hal_adc_t *adc, uint8_t channel);
 
 /** @brief 反初始化（不关闭 ADC） */
 int fc37_deinit(fc37_handle_t *handle);
@@ -49,7 +49,7 @@ int fc37_deinit(fc37_handle_t *handle);
 /**
  * @brief  读取润湿程度
  * @param  percent  0~100%，0 为干燥
- * @return 0 成功；IOT_NOT_READY 未初始化；IOT_IO_ERROR ADC 读取失败
+ * @return 0 成功；HAL_NOT_READY 未初始化；HAL_IO_ERROR ADC 读取失败
  */
 int fc37_read(fc37_handle_t *handle, float *percent);
 

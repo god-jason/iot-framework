@@ -45,7 +45,7 @@ static int sgp30_read_words(sgp30_handle_t *handle, uint8_t *raw, uint8_t words)
     for (i = 0U; i < words; i++) {
         if (sgp30_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
             LOG_E("sgp30", "crc error on word %u", (unsigned)i);
-            return (int)IOT_CRC_ERROR;
+            return (int)HAL_CRC_ERROR;
         }
     }
     return DRIVER_OK;
@@ -58,14 +58,14 @@ static uint16_t sgp30_word_at(const uint8_t *raw, uint8_t index)
     return (uint16_t)(((uint16_t)raw[off] << 8) | raw[off + 1U]);
 }
 
-int sgp30_init(sgp30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int sgp30_init(sgp30_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t raw[3];
     uint16_t feature;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -75,7 +75,7 @@ int sgp30_init(sgp30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sgp30", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = sgp30_write_cmd(handle, SGP30_CMD_SOFT_RESET);
@@ -104,7 +104,7 @@ int sgp30_init(sgp30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     feature = sgp30_word_at(raw, 0U);
     if (feature != SGP30_FEATURE_SET_A && feature != SGP30_FEATURE_SET_B) {
         LOG_E("sgp30", "unexpected feature set 0x%04X", (unsigned)feature);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -115,7 +115,7 @@ int sgp30_init(sgp30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int sgp30_deinit(sgp30_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -128,7 +128,7 @@ int sgp30_read(sgp30_handle_t *handle, sgp30_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = sgp30_write_cmd(handle, SGP30_CMD_MEASURE_IAQ);
@@ -152,7 +152,7 @@ int sgp30_get_baseline(sgp30_handle_t *handle, uint16_t *eco2_base, uint16_t *tv
     int ret;
 
     if (handle == NULL || eco2_base == NULL || tvoc_base == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sgp30_write_cmd(handle, SGP30_CMD_GET_BASELINE);
     if (ret != DRIVER_OK) {
@@ -173,7 +173,7 @@ int sgp30_set_baseline(sgp30_handle_t *handle, uint16_t eco2_base, uint16_t tvoc
     uint8_t buf[9];
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     /* 一次事务：命令(2)+CRC + eCO2 基线(2)+CRC + TVOC 基线(2)+CRC */
@@ -194,7 +194,7 @@ int sgp30_set_humidity(sgp30_handle_t *handle, uint32_t humidity_mg_m3)
     uint16_t value;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     value = (uint16_t)((humidity_mg_m3 > 0xFFFFU) ? 0xFFFFU : humidity_mg_m3);
     return sgp30_write_cmd_u16(handle, SGP30_CMD_SET_HUMIDITY, value);

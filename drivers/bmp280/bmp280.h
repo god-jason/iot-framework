@@ -44,7 +44,7 @@ typedef struct {
     float pressure;      /* Pa */
 } bmp280_data_t;
 
-int bmp280_init(bmp280_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int bmp280_init(bmp280_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int bmp280_deinit(bmp280_handle_t *handle);
 
 /** 读取一次温压（内部完成转换等待） */

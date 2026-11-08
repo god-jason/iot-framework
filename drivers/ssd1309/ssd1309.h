@@ -29,8 +29,8 @@ typedef struct {
 
     /* SPI 模式 */
     driver_spi_t spi;
-    iot_pin_t dc;      /* 数据/命令选择，SPI 模式必填 */
-    iot_pin_t res;     /* 复位，可为 0（不使用） */
+    hal_pin_t dc;      /* 数据/命令选择，SPI 模式必填 */
+    hal_pin_t res;     /* 复位，可为 0（不使用） */
 
     uint8_t *gram;      /* 显存，长度必须 >= SSD1309_GRAM_SIZE */
     size_t gram_len;    /* 显存字节数，用于长度校验 */

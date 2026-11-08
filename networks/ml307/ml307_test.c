@@ -8,7 +8,7 @@
  */
 #include "test.h"
 #include "ml307.h"
-#include "iot.h"
+#include "hal.h"
 #include "pc.h"
 
 #include <string.h>
@@ -16,7 +16,7 @@
 #define TX_MAX 2048
 #define RESP_QMAX 8
 
-static iot_uart_t s_uart;
+static hal_uart_t s_uart;
 
 static uint8_t s_tx[TX_MAX + 1];
 static uint32_t s_tx_len;
@@ -39,7 +39,7 @@ static void set_rx(const char *resp)
 }
 
 /* 每次发送后按旧 mock 语义回放一条响应；命令尾部的 CRLF 不消耗响应。 */
-static void uart_tx_hook(void *handle, iot_uart_event_t event,
+static void uart_tx_hook(void *handle, hal_uart_event_t event,
                          size_t length, void *user)
 {
     uint32_t total;
@@ -51,7 +51,7 @@ static void uart_tx_hook(void *handle, iot_uart_event_t event,
     s_tx_len = total;
     s_tx[total] = '\0';
 
-    if (event != IOT_UART_EVENT_TX_COMPLETE) {
+    if (event != HAL_UART_EVENT_TX_COMPLETE) {
         return;
     }
     if (length == 2 && total >= 2U &&
@@ -70,19 +70,19 @@ static void uart_tx_hook(void *handle, iot_uart_event_t event,
 
 static void uart_fixture_reset(void)
 {
-    iot_uart_config_t cfg;
+    hal_uart_config_t cfg;
 
     iot_test_reset_state();
     memset(&s_uart, 0, sizeof(s_uart));
     memset(&cfg, 0, sizeof(cfg));
     cfg.baudrate = 115200;
-    cfg.word_length = IOT_UART_WORD_8BIT;
-    cfg.parity = IOT_UART_PARITY_NONE;
-    cfg.stop_bits = IOT_UART_STOP_1;
-    cfg.flow_control = IOT_UART_FLOW_NONE;
-    cfg.mode = IOT_UART_MODE_TX_RX;
-    (void)iot_uart_init(&s_uart, &cfg);
-    (void)iot_uart_register_callback(&s_uart, uart_tx_hook, NULL);
+    cfg.word_length = HAL_UART_WORD_8BIT;
+    cfg.parity = HAL_UART_PARITY_NONE;
+    cfg.stop_bits = HAL_UART_STOP_1;
+    cfg.flow_control = HAL_UART_FLOW_NONE;
+    cfg.mode = HAL_UART_MODE_TX_RX;
+    (void)hal_uart_init(&s_uart, &cfg);
+    (void)hal_uart_register_callback(&s_uart, uart_tx_hook, NULL);
     s_tx_len = 0;
     s_tx[0] = '\0';
 }

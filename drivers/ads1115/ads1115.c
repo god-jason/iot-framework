@@ -18,7 +18,7 @@ static int ads1115_write_config(ads1115_handle_t *handle, uint16_t config)
     buf[0] = (uint8_t)(config >> 8);
     buf[1] = (uint8_t)(config & 0xFFU);
     if (driver_i2c_write_reg(&handle->i2c, ADS1115_REG_CONFIG, buf, 2U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -28,7 +28,7 @@ static int ads1115_read_config(ads1115_handle_t *handle, uint16_t *config)
     uint8_t buf[2];
 
     if (driver_i2c_read_reg(&handle->i2c, ADS1115_REG_CONFIG, buf, 2U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *config = (uint16_t)(((uint16_t)buf[0] << 8) | (uint16_t)buf[1]);
     return DRIVER_OK;
@@ -49,13 +49,13 @@ static uint16_t ads1115_build_config(const ads1115_handle_t *handle,
     return config;
 }
 
-int ads1115_init(ads1115_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint16_t written;
     uint16_t readback = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -66,12 +66,12 @@ int ads1115_init(ads1115_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     handle->initialized = false;
 
     if (handle->i2c.address > ADS1115_ADDRESS_MAX) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("ads1115", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 比较器阈值置为无效范围，避免 ALERT 引脚误动作；该寄存器只写，忽略写失败 */
@@ -89,16 +89,16 @@ int ads1115_init(ads1115_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     written = ads1115_build_config(handle, ADS1115_MUX_SINGLE_0, false);
     if (ads1115_write_config(handle, written) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 回读配置校验（OS 位为转换状态，不参与比较） */
     if (ads1115_read_config(handle, &readback) != DRIVER_OK) {
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     if ((readback & (uint16_t)~ADS1115_CFG_OS) != (written & (uint16_t)~ADS1115_CFG_OS)) {
         LOG_E("ads1115", "config readback mismatch: 0x%04X", (unsigned)readback);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -109,7 +109,7 @@ int ads1115_init(ads1115_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int ads1115_deinit(ads1115_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -119,7 +119,7 @@ int ads1115_deinit(ads1115_handle_t *handle)
 int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_t pga)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)pga > (uint16_t)ADS1115_PGA_0V256) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->pga = pga;
     return DRIVER_OK;
@@ -128,7 +128,7 @@ int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_t pga)
 int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_t data_rate)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)data_rate > (uint16_t)ADS1115_DR_860) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->data_rate = data_rate;
     return DRIVER_OK;
@@ -142,35 +142,35 @@ int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_t mux, int16_t *raw)
     uint8_t buf[2];
 
     if (handle == NULL || raw == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if ((uint16_t)mux > (uint16_t)ADS1115_MUX_SINGLE_3) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     config = ads1115_build_config(handle, mux, true);
     if (ads1115_write_config(handle, config) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     timeout_ms = (uint32_t)ads1115_conv_ms[handle->data_rate] + ADS1115_CONV_EXTRA_MS;
     start = driver_tick_ms();
     for (;;) {
         if (ads1115_read_config(handle, &config) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         if ((config & ADS1115_CFG_OS) != 0U) {
             break;   /* 转换完成，OS 自动置 1 */
         }
         if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
             LOG_E("ads1115", "conversion timeout");
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
 
     if (driver_i2c_read_reg(&handle->i2c, ADS1115_REG_CONVERSION, buf, 2U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     *raw = driver_be16(buf);
     return DRIVER_OK;
@@ -182,7 +182,7 @@ int ads1115_read_voltage(ads1115_handle_t *handle, uint8_t channel, float *volts
     int ret;
 
     if (handle == NULL || volts == NULL || !handle->initialized || channel > 3U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ads1115_read_raw(handle, (ads1115_mux_t)((uint16_t)ADS1115_MUX_SINGLE_0 + channel), &raw);
@@ -198,10 +198,10 @@ int ads1115_read(ads1115_handle_t *handle, int16_t *values, size_t count)
     size_t i;
 
     if (handle == NULL || values == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (count == 0U || count > 4U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     for (i = 0U; i < count; i++) {

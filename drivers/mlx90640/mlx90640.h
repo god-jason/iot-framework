@@ -37,9 +37,9 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示默认 0x33
- * @return 0 成功，负值为 iot_status_t
+ * @return 0 成功，负值为 hal_status_t
  */
-int mlx90640_init(mlx90640_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int mlx90640_init(mlx90640_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief 反初始化（不向器件下发停止命令，避免误改控制寄存器） */
 int mlx90640_deinit(mlx90640_handle_t *handle);
@@ -48,7 +48,7 @@ int mlx90640_deinit(mlx90640_handle_t *handle);
  * @brief  读取一帧温度矩阵
  * @param  temperatures  调用方缓冲区，长度 >= len
  * @param  len           像素个数，1~768（32x24 行优先），单位 ℃
- * @return 0 成功；len 越界或缓冲区为 NULL 返回 IOT_INVALID_PARAM
+ * @return 0 成功；len 越界或缓冲区为 NULL 返回 HAL_INVALID_PARAM
  */
 int mlx90640_read(mlx90640_handle_t *handle, float *temperatures, size_t len);
 

@@ -54,7 +54,7 @@ static uint8_t ns2520_ctrl4_value(ns2520_handle_t *handle)
 static int ns2520_write_ctrl1(ns2520_handle_t *handle)
 {
     if (ns2520_write_reg(handle, NS2520_REG_CTRL_REG1, ns2520_ctrl1_value(handle)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -62,7 +62,7 @@ static int ns2520_write_ctrl1(ns2520_handle_t *handle)
 static int ns2520_write_ctrl4(ns2520_handle_t *handle)
 {
     if (ns2520_write_reg(handle, NS2520_REG_CTRL_REG4, ns2520_ctrl4_value(handle)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -73,27 +73,27 @@ static int ns2520_verify_config(ns2520_handle_t *handle)
     uint8_t value = 0U;
 
     if (ns2520_read_reg(handle, NS2520_REG_CTRL_REG1, &value) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (value != ns2520_ctrl1_value(handle)) {
         LOG_E(NS2520_TAG, "ctrl_reg1 verify failed: 0x%02X", value);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (ns2520_read_reg(handle, NS2520_REG_CTRL_REG4, &value) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (value != ns2520_ctrl4_value(handle)) {
         LOG_E(NS2520_TAG, "ctrl_reg4 verify failed: 0x%02X", value);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     return DRIVER_OK;
 }
 
-int ns2520_init(ns2520_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int ns2520_init(ns2520_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -106,14 +106,14 @@ int ns2520_init(ns2520_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(NS2520_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (ns2520_write_ctrl4(handle) != DRIVER_OK || ns2520_write_ctrl1(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (ns2520_verify_config(handle) != DRIVER_OK) {
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     driver_delay_ms(5U);
 
@@ -125,7 +125,7 @@ int ns2520_init(ns2520_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int ns2520_deinit(ns2520_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         (void)ns2520_write_reg(handle, NS2520_REG_CTRL_REG1, NS2520_CTRL1_LPEN_NORMAL);
@@ -140,10 +140,10 @@ int ns2520_read_raw(ns2520_handle_t *handle, int16_t accel[3])
     uint8_t d[6];
 
     if (handle == NULL || accel == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (driver_i2c_read_reg(&handle->i2c, NS2520_REG_OUT_X_L, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     accel[0] = driver_le16(&d[0]);
@@ -158,7 +158,7 @@ int ns2520_read(ns2520_handle_t *handle, ns2520_accel_t *accel)
     int ret;
 
     if (accel == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ns2520_read_raw(handle, raw);
@@ -178,14 +178,14 @@ int ns2520_set_range(ns2520_handle_t *handle, ns2520_range_t range)
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)NS2520_RANGE_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old = handle->range;
     handle->range = range;
     if (ns2520_write_ctrl4(handle) != DRIVER_OK) {
         handle->range = old;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->g_per_lsb = s_g_per_lsb[range];
     return DRIVER_OK;
@@ -196,14 +196,14 @@ int ns2520_set_output_rate(ns2520_handle_t *handle, ns2520_odr_t odr)
     ns2520_odr_t old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)NS2520_ODR_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old = handle->odr;
     handle->odr = odr;
     if (ns2520_write_ctrl1(handle) != DRIVER_OK) {
         handle->odr = old;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }

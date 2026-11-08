@@ -44,7 +44,7 @@ static int sfa30_read_words(sfa30_handle_t *handle, uint8_t *raw, uint16_t words
     for (i = 0U; i < words; i++) {
         if (sfa30_crc(&raw[(size_t)i * 3U]) != raw[(size_t)i * 3U + 2U]) {
             LOG_E("sfa30", "crc error on word %u", (unsigned)i);
-            return (int)IOT_CRC_ERROR;
+            return (int)HAL_CRC_ERROR;
         }
     }
     return DRIVER_OK;
@@ -57,13 +57,13 @@ static uint16_t sfa30_word_at(const uint8_t *raw, uint16_t index)
     return (uint16_t)(((uint16_t)raw[off] << 8) | raw[off + 1U]);
 }
 
-int sfa30_init(sfa30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int sfa30_init(sfa30_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint64_t serial = 0U;
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -74,7 +74,7 @@ int sfa30_init(sfa30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sfa30", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     ret = sfa30_send_cmd(handle, SFA30_CMD_DEVICE_RESET);
@@ -86,7 +86,7 @@ int sfa30_init(sfa30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     /* ID 校验：序列号 + CRC */
     if (sfa30_get_serial(handle, &serial) != DRIVER_OK || serial == 0U) {
         LOG_E("sfa30", "serial read failed");
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -104,7 +104,7 @@ int sfa30_init(sfa30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int sfa30_deinit(sfa30_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->measuring) {
         (void)sfa30_send_cmd(handle, SFA30_CMD_STOP_CONTINUOUS);
@@ -120,7 +120,7 @@ int sfa30_start(sfa30_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     /* 参数 0x0000 表示使用器件默认测量周期 */
     ret = sfa30_send_cmd_arg(handle, SFA30_CMD_START_CONTINUOUS, 0x00U, 0x00U);
@@ -136,7 +136,7 @@ int sfa30_stop(sfa30_handle_t *handle)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sfa30_send_cmd(handle, SFA30_CMD_STOP_CONTINUOUS);
     if (ret == DRIVER_OK) {
@@ -153,7 +153,7 @@ int sfa30_get_serial(sfa30_handle_t *handle, uint64_t *serial)
     int ret;
 
     if (handle == NULL || serial == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sfa30_send_cmd(handle, SFA30_CMD_READ_SERIAL);
     if (ret != DRIVER_OK) {
@@ -178,7 +178,7 @@ int sfa30_read(sfa30_handle_t *handle, sfa30_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (!handle->measuring) {
         ret = sfa30_start(handle);

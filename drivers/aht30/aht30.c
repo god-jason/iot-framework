@@ -5,7 +5,7 @@
 int aht30_get_status(aht30_handle_t *handle, uint8_t *status)
 {
     if (handle == NULL || status == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, AHT30_CMD_STATUS, status, 1U);
 }
@@ -18,19 +18,19 @@ static int aht30_wait_ready(aht30_handle_t *handle)
 
     for (;;) {
         if (driver_i2c_read_reg(&handle->i2c, AHT30_CMD_STATUS, &status, 1U) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         if ((status & AHT30_STATUS_BUSY) == 0U) {
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > AHT30_MEASURE_DELAY_MS * 3U) {
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
 }
 
-int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int aht30_init(aht30_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t status = 0U;
     uint8_t calibrate[2] = { 0x08U, 0x00U };
@@ -38,7 +38,7 @@ int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
     int ret;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -50,7 +50,7 @@ int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("aht30", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 软复位；部分模组不支持该命令，失败不视为致命 */
@@ -62,11 +62,11 @@ int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (aht30_wait_ready(handle) != DRIVER_OK) {
         LOG_E("aht30", "device not ready");
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
 
     if (driver_i2c_read_reg(&handle->i2c, AHT30_CMD_STATUS, &status, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if ((status & AHT30_STATUS_CALIBRATED) == 0U) {
         uint8_t cmd = AHT30_CMD_CALIBRATE;
@@ -74,7 +74,7 @@ int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
         if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK ||
             driver_i2c_write(&handle->i2c, calibrate, sizeof(calibrate)) != DRIVER_OK) {
             LOG_E("aht30", "calibrate failed");
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         driver_delay_ms(AHT30_CALIBRATE_DELAY_MS);
     }
@@ -87,7 +87,7 @@ int aht30_init(aht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int aht30_deinit(aht30_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -104,10 +104,10 @@ int aht30_read(aht30_handle_t *handle, float *temperature, float *humidity)
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = driver_i2c_write(&handle->i2c, cmd, sizeof(cmd));
@@ -119,7 +119,7 @@ int aht30_read(aht30_handle_t *handle, float *temperature, float *humidity)
     driver_delay_ms(AHT30_MEASURE_DELAY_MS);
 
     if (aht30_wait_ready(handle) != DRIVER_OK) {
-        return (int)IOT_TIMEOUT;
+        return (int)HAL_TIMEOUT;
     }
 
     driver_delay_ms(AHT30_READ_DELAY_MS);
@@ -129,7 +129,7 @@ int aht30_read(aht30_handle_t *handle, float *temperature, float *humidity)
     }
 
     if ((data[0] & AHT30_STATUS_BUSY) != 0U) {
-        return (int)IOT_BUSY;
+        return (int)HAL_BUSY;
     }
 
     /* 20 位无符号原始值：湿度 [1..3] 高 20 位，温度从 data[3] 低 4 位开始 */

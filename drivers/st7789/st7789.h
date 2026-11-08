@@ -17,9 +17,9 @@ extern "C" {
 
 typedef struct {
     driver_spi_t spi;
-    iot_pin_t dc;          /* 命令/数据选择，必填 */
-    iot_pin_t res;         /* 复位，可为 0 */
-    iot_pin_t bl;          /* 背光，可为 0 */
+    hal_pin_t dc;          /* 命令/数据选择，必填 */
+    hal_pin_t res;         /* 复位，可为 0 */
+    hal_pin_t bl;          /* 背光，可为 0 */
 
     uint8_t *gram;          /* RGB565 显存 */
     size_t gram_len;

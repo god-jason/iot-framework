@@ -7,7 +7,7 @@
  * 控制接口：I2C（7 位地址 0x1A），每个寄存器为 16 位控制字：
  *   bit15..bit9 = 寄存器地址，bit8..bit0 = 数据
  * 即线上为 2 字节大端：(addr << 1) | (data >> 8)，然后 data & 0xFF。
- * PCM 数据通路为 I2S，由调用方通过 iot_i2s 配置与收发。
+ * PCM 数据通路为 I2S，由调用方通过 hal_i2s 配置与收发。
  */
 
 #define WM8978_ADDRESS_DEFAULT          0x1AU

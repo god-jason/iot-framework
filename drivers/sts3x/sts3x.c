@@ -6,7 +6,7 @@
 static int sts3x_check(const sts3x_handle_t *handle)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return DRIVER_OK;
 }
@@ -46,10 +46,10 @@ static uint32_t sts3x_measure_delay(const sts3x_handle_t *handle)
     }
 }
 
-int sts3x_init(sts3x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int sts3x_init(sts3x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -61,7 +61,7 @@ int sts3x_init(sts3x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(STS3X_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
@@ -73,7 +73,7 @@ int sts3x_init(sts3x_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int sts3x_deinit(sts3x_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -85,7 +85,7 @@ int sts3x_soft_reset(sts3x_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sts3x_write_cmd(handle, STS3X_CMD_SOFT_RESET);
     driver_delay_ms(STS3X_RESET_DELAY_MS);
@@ -101,7 +101,7 @@ int sts3x_set_repeatability(sts3x_handle_t *handle, sts3x_repeatability_t repeat
     }
     if (repeatability != STS3X_REPEAT_HIGH && repeatability != STS3X_REPEAT_MEDIUM &&
         repeatability != STS3X_REPEAT_LOW) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->repeatability = repeatability;
     return DRIVER_OK;
@@ -124,7 +124,7 @@ int sts3x_read_status(sts3x_handle_t *handle, uint16_t *status)
     int ret;
 
     if (status == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sts3x_check(handle);
     if (ret != DRIVER_OK) {
@@ -142,7 +142,7 @@ int sts3x_read_status(sts3x_handle_t *handle, uint16_t *status)
     }
     if (handle->crc_enabled) {
         if (driver_crc8(buf, 2U, STS3X_CRC_POLY, STS3X_CRC_INIT) != buf[2]) {
-            return (int)IOT_CRC_ERROR;
+            return (int)HAL_CRC_ERROR;
         }
     }
     *status = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
@@ -155,7 +155,7 @@ int sts3x_read_raw(sts3x_handle_t *handle, uint16_t *raw)
     int ret;
 
     if (raw == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sts3x_check(handle);
     if (ret != DRIVER_OK) {
@@ -175,7 +175,7 @@ int sts3x_read_raw(sts3x_handle_t *handle, uint16_t *raw)
     if (handle->crc_enabled &&
         driver_crc8(buf, 2U, STS3X_CRC_POLY, STS3X_CRC_INIT) != buf[2]) {
         LOG_E(STS3X_TAG, "crc error");
-        return (int)IOT_CRC_ERROR;
+        return (int)HAL_CRC_ERROR;
     }
 
     *raw = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
@@ -188,7 +188,7 @@ int sts3x_read(sts3x_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = sts3x_read_raw(handle, &raw);

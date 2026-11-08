@@ -44,29 +44,29 @@ static int bmi270_write_conf(bmi270_handle_t *handle)
     uint8_t gyr_conf = BMI270_GYR_CONF_VALUE(BMI270_GYR_BWP_NORMAL, s_odr_code[handle->odr]);
 
     if (bmi270_write_reg(handle, BMI270_REG_ACC_CONF, acc_conf) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (bmi270_write_reg(handle, BMI270_REG_ACC_RANGE, s_accel_range_code[handle->accel_range])
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (bmi270_write_reg(handle, BMI270_REG_GYR_CONF, gyr_conf) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (bmi270_write_reg(handle, BMI270_REG_GYR_RANGE, s_gyro_range_code[handle->gyro_range])
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
 
-int bmi270_init(bmi270_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int bmi270_init(bmi270_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
     uint8_t status = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -81,29 +81,29 @@ int bmi270_init(bmi270_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E(BMI270_TAG, "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
     if (driver_i2c_read_reg(&handle->i2c, BMI270_REG_CHIP_ID, &id, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (id != BMI270_CHIP_ID_VALUE) {
         LOG_E(BMI270_TAG, "chip id mismatch: 0x%02X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* 关闭高级省电模式，进入性能模式；写后需等待 450us 才能继续配置 */
     if (bmi270_write_reg(handle, BMI270_REG_PWR_CONF, BMI270_PWR_CONF_PERF) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_us(BMI270_POWER_UP_DELAY_US);
 
     if (bmi270_write_conf(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     /* 使能加速度计与陀螺仪 */
     if (bmi270_write_reg(handle, BMI270_REG_PWR_CTRL, BMI270_PWR_CTRL_ACC_GYR) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(BMI270_START_UP_DELAY_MS);
 
@@ -123,7 +123,7 @@ int bmi270_init(bmi270_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int bmi270_deinit(bmi270_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         (void)bmi270_write_reg(handle, BMI270_REG_PWR_CTRL, 0x00U);
@@ -138,10 +138,10 @@ int bmi270_read_raw(bmi270_handle_t *handle, int16_t accel[3], int16_t gyro[3])
     uint8_t d[12];
 
     if (handle == NULL || accel == NULL || gyro == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (driver_i2c_read_reg(&handle->i2c, BMI270_REG_ACC_X_L, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     accel[0] = driver_le16(&d[0]);
@@ -160,7 +160,7 @@ int bmi270_read(bmi270_handle_t *handle, bmi270_data_t *data)
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = bmi270_read_raw(handle, accel, gyro);
@@ -182,10 +182,10 @@ int bmi270_set_accel_range(bmi270_handle_t *handle, bmi270_accel_range_t range)
 {
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)BMI270_ACCEL_RANGE_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (bmi270_write_reg(handle, BMI270_REG_ACC_RANGE, s_accel_range_code[range]) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->accel_range = range;
@@ -197,10 +197,10 @@ int bmi270_set_gyro_range(bmi270_handle_t *handle, bmi270_gyro_range_t range)
 {
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)BMI270_GYRO_RANGE_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (bmi270_write_reg(handle, BMI270_REG_GYR_RANGE, s_gyro_range_code[range]) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->gyro_range = range;
@@ -214,17 +214,17 @@ int bmi270_set_output_rate(bmi270_handle_t *handle, bmi270_odr_t odr)
     uint8_t gyr_conf;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)BMI270_ODR_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     acc_conf = BMI270_ACC_CONF_VALUE(BMI270_ACC_BWP_NORMAL, s_odr_code[odr]);
     gyr_conf = BMI270_GYR_CONF_VALUE(BMI270_GYR_BWP_NORMAL, s_odr_code[odr]);
 
     if (bmi270_write_reg(handle, BMI270_REG_ACC_CONF, acc_conf) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (bmi270_write_reg(handle, BMI270_REG_GYR_CONF, gyr_conf) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     handle->odr = odr;
@@ -236,10 +236,10 @@ int bmi270_get_internal_status(bmi270_handle_t *handle, uint8_t *msg)
     uint8_t status = 0U;
 
     if (handle == NULL || msg == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (driver_i2c_read_reg(&handle->i2c, BMI270_REG_INTERNAL_STATUS, &status, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     *msg = (uint8_t)(status & BMI270_INTERNAL_STATUS_MSG_MASK);

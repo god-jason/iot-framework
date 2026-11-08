@@ -2,10 +2,10 @@
 #include "ba111_register.h"
 #include "log.h"
 
-int ba111_init(ba111_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int ba111_init(ba111_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -16,7 +16,7 @@ int ba111_init(ba111_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("ba111", "probe failed, addr=0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     driver_delay_ms(BA111_POWER_ON_DELAY_MS);
@@ -29,10 +29,10 @@ int ba111_init(ba111_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int ba111_deinit(ba111_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (!handle->initialized) {
-        return (int)IOT_NOT_READY;
+        return (int)HAL_NOT_READY;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -42,7 +42,7 @@ int ba111_deinit(ba111_handle_t *handle)
 int ba111_read_reg(ba111_handle_t *handle, uint8_t reg, uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || !handle->initialized || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_read_reg(&handle->i2c, reg, data, len);
 }
@@ -50,7 +50,7 @@ int ba111_read_reg(ba111_handle_t *handle, uint8_t reg, uint8_t *data, size_t le
 int ba111_write_reg(ba111_handle_t *handle, uint8_t reg, const uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || !handle->initialized || len == 0U) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return driver_i2c_write_reg(&handle->i2c, reg, data, len);
 }
@@ -61,7 +61,7 @@ int ba111_read_raw(ba111_handle_t *handle, int16_t *raw)
     int ret;
 
     if (handle == NULL || raw == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ba111_read_reg(handle, BA111_REG_TEMPERATURE, buf, sizeof(buf));
@@ -78,7 +78,7 @@ int ba111_read(ba111_handle_t *handle, float *celsius)
     int ret;
 
     if (celsius == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = ba111_read_raw(handle, &raw);

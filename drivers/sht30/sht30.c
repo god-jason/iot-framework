@@ -27,13 +27,13 @@ static uint16_t sht30_measure_command(sht30_handle_t *handle)
 static int sht30_check_crc(const uint8_t *data, uint8_t crc)
 {
     return (driver_crc8(data, 2U, SHT30_CRC_POLY, SHT30_CRC_INIT) == crc) ? DRIVER_OK
-                                                                          : (int)IOT_CRC_ERROR;
+                                                                          : (int)HAL_CRC_ERROR;
 }
 
-int sht30_init(sht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int sht30_init(sht30_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -45,7 +45,7 @@ int sht30_init(sht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
         LOG_E("sht30", "probe failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     (void)sht30_soft_reset(handle);
@@ -57,7 +57,7 @@ int sht30_init(sht30_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int sht30_deinit(sht30_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
@@ -69,7 +69,7 @@ int sht30_soft_reset(sht30_handle_t *handle)
     int ret;
 
     if (handle == NULL || handle->i2c.handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     ret = sht30_write_cmd(handle, SHT30_CMD_SOFT_RESET);
     driver_delay_ms(SHT30_RESET_DELAY_MS);
@@ -79,7 +79,7 @@ int sht30_soft_reset(sht30_handle_t *handle)
 int sht30_set_heater(sht30_handle_t *handle, bool enable)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     return sht30_write_cmd(handle,
                            enable ? SHT30_CMD_HEATER_ENABLE : SHT30_CMD_HEATER_DISABLE);
@@ -91,7 +91,7 @@ int sht30_read_raw(sht30_handle_t *handle, uint16_t *raw_temperature, uint16_t *
     int ret;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = sht30_write_cmd(handle, sht30_measure_command(handle));
@@ -110,7 +110,7 @@ int sht30_read_raw(sht30_handle_t *handle, uint16_t *raw_temperature, uint16_t *
         if (sht30_check_crc(&data[0], data[2]) != DRIVER_OK ||
             sht30_check_crc(&data[3], data[5]) != DRIVER_OK) {
             LOG_E("sht30", "crc error");
-            return (int)IOT_CRC_ERROR;
+            return (int)HAL_CRC_ERROR;
         }
     }
 
@@ -130,7 +130,7 @@ int sht30_read(sht30_handle_t *handle, sht30_data_t *data)
     int ret;
 
     if (data == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = sht30_read_raw(handle, &raw_t, &raw_h);

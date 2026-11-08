@@ -50,7 +50,7 @@ static int sc7a20h_write_ctrl1(sc7a20h_handle_t *handle)
 {
     if (sc7a20h_write_reg(handle, SC7A20H_REG_CTRL_REG1, sc7a20h_ctrl1_value(handle))
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
@@ -59,17 +59,17 @@ static int sc7a20h_write_ctrl4(sc7a20h_handle_t *handle)
 {
     if (sc7a20h_write_reg(handle, SC7A20H_REG_CTRL_REG4, sc7a20h_ctrl4_value(handle))
         != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }
 
-int sc7a20h_init(sc7a20h_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
+int sc7a20h_init(sc7a20h_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 {
     uint8_t id = 0U;
 
     if (handle == NULL || i2c == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->i2c.handle = i2c;
@@ -82,15 +82,15 @@ int sc7a20h_init(sc7a20h_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 
     if (driver_i2c_read_reg(&handle->i2c, SC7A20H_REG_WHO_AM_I, &id, 1U) != DRIVER_OK) {
         LOG_E(SC7A20H_TAG, "read who_am_i failed at 0x%02X", handle->i2c.address);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (id != SC7A20H_WHO_AM_I_VALUE) {
         LOG_E(SC7A20H_TAG, "who_am_i mismatch: 0x%02X", id);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     if (sc7a20h_write_ctrl4(handle) != DRIVER_OK || sc7a20h_write_ctrl1(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_delay_ms(5U);
 
@@ -102,7 +102,7 @@ int sc7a20h_init(sc7a20h_handle_t *handle, iot_i2c_t *i2c, uint16_t address)
 int sc7a20h_deinit(sc7a20h_handle_t *handle)
 {
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized && handle->i2c.handle != NULL) {
         (void)sc7a20h_write_reg(handle, SC7A20H_REG_CTRL_REG1, SC7A20H_CTRL1_LPEN_NORMAL);
@@ -117,10 +117,10 @@ int sc7a20h_read_raw(sc7a20h_handle_t *handle, int16_t accel[3])
     uint8_t d[6];
 
     if (handle == NULL || accel == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (driver_i2c_read_reg(&handle->i2c, SC7A20H_REG_OUT_X_L, d, sizeof(d)) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     accel[0] = driver_le16(&d[0]);
@@ -135,7 +135,7 @@ int sc7a20h_read(sc7a20h_handle_t *handle, sc7a20h_accel_t *accel)
     int ret;
 
     if (accel == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     ret = sc7a20h_read_raw(handle, raw);
@@ -155,14 +155,14 @@ int sc7a20h_set_range(sc7a20h_handle_t *handle, sc7a20h_range_t range)
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)SC7A20H_RANGE_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old = handle->range;
     handle->range = range;
     if (sc7a20h_write_ctrl4(handle) != DRIVER_OK) {
         handle->range = old;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     handle->g_per_lsb = s_g_per_lsb[range];
     return DRIVER_OK;
@@ -173,14 +173,14 @@ int sc7a20h_set_output_rate(sc7a20h_handle_t *handle, sc7a20h_odr_t odr)
     sc7a20h_odr_t old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)SC7A20H_ODR_COUNT) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     old = handle->odr;
     handle->odr = odr;
     if (sc7a20h_write_ctrl1(handle) != DRIVER_OK) {
         handle->odr = old;
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return DRIVER_OK;
 }

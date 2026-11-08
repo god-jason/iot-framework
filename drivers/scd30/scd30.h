@@ -32,7 +32,7 @@ typedef struct {
  * @brief  初始化并启动连续测量
  * @param  address 7 位地址，传 0 取 0x61
  */
-int scd30_init(scd30_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int scd30_init(scd30_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 int scd30_deinit(scd30_handle_t *handle);
 
@@ -55,7 +55,7 @@ int scd30_set_forced_recalibration(scd30_handle_t *handle, uint16_t reference_pp
 int scd30_get_firmware_version(scd30_handle_t *handle, uint16_t *version);
 
 /**
- * @brief  读取一次测量结果（数据未就绪返回 IOT_NOT_READY）
+ * @brief  读取一次测量结果（数据未就绪返回 HAL_NOT_READY）
  * @note   连续测量模式下器件每 interval_s 更新一次；调用方可用
  *         driver_tick_ms() 自行控制轮询节拍。
  */

@@ -32,9 +32,9 @@ typedef struct {
 /**
  * @brief  初始化并探测从机
  * @param  address  7 位地址，0 表示使用 0x68
- * @return 0 成功，IOT_NOT_FOUND 表示无应答
+ * @return 0 成功，HAL_NOT_FOUND 表示无应答
  */
-int ds1307_init(ds1307_handle_t *handle, iot_i2c_t *i2c, uint16_t address);
+int ds1307_init(ds1307_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
 /** @brief  反初始化（不关闭总线） */
 int ds1307_deinit(ds1307_handle_t *handle);

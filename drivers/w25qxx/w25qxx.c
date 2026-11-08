@@ -25,14 +25,14 @@ static int w25qxx_read_status(w25qxx_handle_t *handle, uint8_t *status)
     uint8_t cmd = W25QXX_CMD_READ_STATUS1;
 
     if (status == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     driver_spi_select(&handle->spi);
     if (driver_spi_write(&handle->spi, &cmd, 1U) != DRIVER_OK ||
         driver_spi_read(&handle->spi, status, 1U) != DRIVER_OK) {
         driver_spi_deselect(&handle->spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_spi_deselect(&handle->spi);
     return DRIVER_OK;
@@ -44,20 +44,20 @@ int w25qxx_wait_busy(w25qxx_handle_t *handle, uint32_t timeout_ms)
     uint8_t status = 0U;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     start = driver_tick_ms();
     for (;;) {
         if (w25qxx_read_status(handle, &status) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         if ((status & W25QXX_STATUS_BUSY) == 0U) {
             return DRIVER_OK;
         }
         if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
             LOG_E("w25qxx", "busy timeout");
-            return (int)IOT_TIMEOUT;
+            return (int)HAL_TIMEOUT;
         }
         driver_delay_ms(1U);
     }
@@ -69,14 +69,14 @@ int w25qxx_read_id(w25qxx_handle_t *handle, w25qxx_id_t *id)
     uint8_t buf[3];
 
     if (handle == NULL || id == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     driver_spi_select(&handle->spi);
     if (driver_spi_write(&handle->spi, &cmd, 1U) != DRIVER_OK ||
         driver_spi_read(&handle->spi, buf, sizeof(buf)) != DRIVER_OK) {
         driver_spi_deselect(&handle->spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_spi_deselect(&handle->spi);
 
@@ -86,13 +86,13 @@ int w25qxx_read_id(w25qxx_handle_t *handle, w25qxx_id_t *id)
     return DRIVER_OK;
 }
 
-int w25qxx_init(w25qxx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
+int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 {
     uint8_t status = 0U;
     uint8_t cmd = W25QXX_CMD_RELEASE_PD;
 
     if (handle == NULL || spi == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
 
     handle->spi.handle = spi;
@@ -102,8 +102,8 @@ int w25qxx_init(w25qxx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, IOT_GPIO_HIGH) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+        if (driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
+            return (int)HAL_IO_ERROR;
         }
     }
 
@@ -111,11 +111,11 @@ int w25qxx_init(w25qxx_handle_t *handle, iot_spi_t *spi, iot_pin_t cs)
     driver_delay_ms(1U);
 
     if (w25qxx_read_id(handle, &handle->id) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (handle->id.manufacturer != 0xEFU) {
         LOG_E("w25qxx", "unknown manufacturer 0x%02X", handle->id.manufacturer);
-        return (int)IOT_NOT_FOUND;
+        return (int)HAL_NOT_FOUND;
     }
 
     /* capacity_id 为 2 的幂次（字节） */
@@ -137,7 +137,7 @@ int w25qxx_deinit(w25qxx_handle_t *handle)
     uint8_t cmd = W25QXX_CMD_POWER_DOWN;
 
     if (handle == NULL) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (handle->spi.handle != NULL) {
         (void)driver_spi_write_cs(&handle->spi, &cmd, 1U);
@@ -149,17 +149,17 @@ int w25qxx_deinit(w25qxx_handle_t *handle)
 int w25qxx_read(w25qxx_handle_t *handle, uint32_t address, void *data, size_t len)
 {
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (address >= handle->capacity || len > handle->capacity - address) {
-        return (int)IOT_OVERFLOW;
+        return (int)HAL_OVERFLOW;
     }
 
     driver_spi_select(&handle->spi);
     if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_READ_DATA, address) != DRIVER_OK ||
         driver_spi_read(&handle->spi, (uint8_t *)data, len) != DRIVER_OK) {
         driver_spi_deselect(&handle->spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_spi_deselect(&handle->spi);
     return DRIVER_OK;
@@ -171,10 +171,10 @@ int w25qxx_write(w25qxx_handle_t *handle, uint32_t address, const void *data, si
     size_t written = 0U;
 
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (address >= handle->capacity || len > handle->capacity - address) {
-        return (int)IOT_OVERFLOW;
+        return (int)HAL_OVERFLOW;
     }
 
     while (written < len) {
@@ -188,14 +188,14 @@ int w25qxx_write(w25qxx_handle_t *handle, uint32_t address, const void *data, si
         }
 
         if (w25qxx_write_enable(handle) != DRIVER_OK) {
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
 
         driver_spi_select(&handle->spi);
         if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_PAGE_PROGRAM, current) != DRIVER_OK ||
             driver_spi_write(&handle->spi, &src[written], chunk) != DRIVER_OK) {
             driver_spi_deselect(&handle->spi);
-            return (int)IOT_IO_ERROR;
+            return (int)HAL_IO_ERROR;
         }
         driver_spi_deselect(&handle->spi);
 
@@ -211,21 +211,21 @@ int w25qxx_write(w25qxx_handle_t *handle, uint32_t address, const void *data, si
 int w25qxx_erase_sector(w25qxx_handle_t *handle, uint32_t address)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (address >= handle->capacity) {
-        return (int)IOT_OVERFLOW;
+        return (int)HAL_OVERFLOW;
     }
     address &= ~(uint32_t)(W25QXX_SECTOR_SIZE - 1U);
 
     if (w25qxx_write_enable(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     driver_spi_select(&handle->spi);
     if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_SECTOR_ERASE, address) != DRIVER_OK) {
         driver_spi_deselect(&handle->spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_spi_deselect(&handle->spi);
 
@@ -235,21 +235,21 @@ int w25qxx_erase_sector(w25qxx_handle_t *handle, uint32_t address)
 int w25qxx_erase_block(w25qxx_handle_t *handle, uint32_t address)
 {
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (address >= handle->capacity) {
-        return (int)IOT_OVERFLOW;
+        return (int)HAL_OVERFLOW;
     }
     address &= ~(uint32_t)(W25QXX_BLOCK_SIZE - 1U);
 
     if (w25qxx_write_enable(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
 
     driver_spi_select(&handle->spi);
     if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_BLOCK_ERASE_64K, address) != DRIVER_OK) {
         driver_spi_deselect(&handle->spi);
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     driver_spi_deselect(&handle->spi);
 
@@ -261,13 +261,13 @@ int w25qxx_erase_chip(w25qxx_handle_t *handle)
     uint8_t cmd = W25QXX_CMD_CHIP_ERASE;
 
     if (handle == NULL || !handle->initialized) {
-        return (int)IOT_INVALID_PARAM;
+        return (int)HAL_INVALID_PARAM;
     }
     if (w25qxx_write_enable(handle) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     if (driver_spi_write_cs(&handle->spi, &cmd, 1U) != DRIVER_OK) {
-        return (int)IOT_IO_ERROR;
+        return (int)HAL_IO_ERROR;
     }
     return w25qxx_wait_busy(handle, W25QXX_CHIP_ERASE_MS);
 }
