@@ -1,14 +1,12 @@
 /*
  * iot_queue_test.c - 消息队列测试（对应 iot_queue.c）
  *
- * 覆盖：FIFO、满/空超时、阻塞收发、发送阻塞超时，
- *       以及队列 + 信号量 + 调度的生产消费综合场景。
+ * 覆盖：初始化校验、FIFO、满/空超时、阻塞收发、发送阻塞超时、
+ *       FromISR 非阻塞、生产消费综合。
  */
 
 #include "test.h"
 #include "iot.h"
-
-/* ============================== 静态对象 ============================== */
 
 static iot_queue_t s_q;
 static uint8_t s_qbuf[4 * sizeof(uint32_t)];
@@ -23,12 +21,9 @@ static uint8_t s_prod_stack1[2048];
 static uint8_t s_prod_stack2[2048];
 static uint8_t s_consumer_stack[2048];
 
-static volatile uint32_t s_consumer_total;
-static volatile uint32_t s_consumer_count;
+static volatile uint32_t s_total;
+static volatile uint32_t s_count;
 
-/* ============================== 辅助任务 ============================== */
-
-/* 队列阻塞发送：1..8 */
 static void producer_entry(void *arg)
 {
     uint32_t i;
@@ -39,7 +34,6 @@ static void producer_entry(void *arg)
     }
 }
 
-/* 综合场景：两个生产者各发送 1..5 */
 static void prod1_entry(void *arg)
 {
     uint32_t i;
@@ -60,7 +54,6 @@ static void prod2_entry(void *arg)
     }
 }
 
-/* 综合场景：消费者接收 10 条并累加 */
 static void consumer_entry(void *arg)
 {
     uint32_t i;
@@ -70,27 +63,30 @@ static void consumer_entry(void *arg)
     for (i = 0U; i < 10U; i++) {
         v = 0U;
         if (iot_queue_recv(&s_q, &v, 1000U) == IOT_OK) {
-            s_consumer_total += v;
-            s_consumer_count++;
+            s_total += v;
+            s_count++;
         }
     }
     (void)iot_sem_give(&s_done);
 }
 
-/* ============================== 单项测试 ============================== */
-
-/* 1. FIFO、满/空超时 */
-static void test_queue_basic(void)
+static void test_queue_init(void)
 {
-    uint32_t v;
+    uint32_t v = 0U;
 
-    tf_begin("iot/队列-基本");
+    tf_begin("iot/队列-初始化与 FIFO");
 
+    TF_CHECK_INT(iot_queue_init(NULL, s_qbuf, 4U, 3U), IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_queue_init(&s_q, NULL, 4U, 3U), IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, 0U, 3U), IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, 4U, 0U), IOT_INVALID_PARAM);
     TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, sizeof(uint32_t), 3U), IOT_OK);
+    TF_CHECK_INT(s_q.depth, 3);
 
     v = 1U; TF_CHECK_INT(iot_queue_send(&s_q, &v, IOT_TIMEOUT_NONE), IOT_OK);
     v = 2U; TF_CHECK_INT(iot_queue_send(&s_q, &v, IOT_TIMEOUT_NONE), IOT_OK);
     v = 3U; TF_CHECK_INT(iot_queue_send(&s_q, &v, IOT_TIMEOUT_NONE), IOT_OK);
+    /* 满：非阻塞发送立即失败 */
     v = 4U; TF_CHECK_INT(iot_queue_send(&s_q, &v, IOT_TIMEOUT_NONE), IOT_TIMEOUT);
 
     v = 0U;
@@ -100,12 +96,28 @@ static void test_queue_basic(void)
     TF_CHECK_INT(v, 2U);
     TF_CHECK_INT(iot_queue_recv(&s_q, &v, IOT_TIMEOUT_NONE), IOT_OK);
     TF_CHECK_INT(v, 3U);
+    /* 空：非阻塞接收立即失败 */
     TF_CHECK_INT(iot_queue_recv(&s_q, &v, IOT_TIMEOUT_NONE), IOT_TIMEOUT);
 
     tf_end();
 }
 
-/* 2. 小深度阻塞收发（发送满/接收空都会阻塞） */
+static void test_queue_invalid(void)
+{
+    uint32_t v = 0U;
+    iot_queue_t bad;
+
+    tf_begin("iot/队列-非法参数");
+
+    memset(&bad, 0, sizeof(bad));
+    TF_CHECK_INT(iot_queue_send(&bad, &v, IOT_TIMEOUT_NONE), IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_queue_recv(&bad, &v, IOT_TIMEOUT_NONE), IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_queue_send(&s_q, NULL, IOT_TIMEOUT_NONE), IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_queue_recv(&s_q, NULL, IOT_TIMEOUT_NONE), IOT_INVALID_PARAM);
+
+    tf_end();
+}
+
 static void test_queue_blocking(void)
 {
     uint32_t v;
@@ -114,10 +126,9 @@ static void test_queue_blocking(void)
     tf_begin("iot/队列-阻塞收发");
 
     TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, sizeof(uint32_t), 2U), IOT_OK);
-    TF_CHECK_INT(iot_task_create(&s_producer, "producer", 2,
-                                  producer_entry, NULL,
-                                  s_producer_stack, sizeof(s_producer_stack)),
-                 IOT_OK);
+    TF_CHECK_INT(iot_task_create(&s_producer, "producer", 2, producer_entry,
+                                 NULL, s_producer_stack,
+                                 sizeof(s_producer_stack)), IOT_OK);
 
     for (i = 1; i <= 8; i++) {
         v = 0U;
@@ -128,16 +139,14 @@ static void test_queue_blocking(void)
     tf_end();
 }
 
-/* 3. 满时阻塞发送超时 */
 static void test_queue_send_timeout(void)
 {
-    uint32_t v;
+    uint32_t v = 0U;
     uint32_t t0;
 
     tf_begin("iot/队列-发送超时");
 
     TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, sizeof(uint32_t), 1U), IOT_OK);
-    v = 0U;
     TF_CHECK_INT(iot_queue_send(&s_q, &v, IOT_TIMEOUT_NONE), IOT_OK);
 
     t0 = iot_tick_get();
@@ -148,46 +157,59 @@ static void test_queue_send_timeout(void)
     tf_end();
 }
 
-/*
- * 4. 多任务综合：
- *   - 两个生产者（prio 3）向深度 2 的队列阻塞发送 1..5；
- *   - 消费者（prio 2）接收 10 条并累加，完成后释放信号量；
- *   - driver（prio 0）等待完成信号量并校验总数。
- */
-static void test_multi_task(void)
+static void test_queue_from_isr(void)
 {
-    tf_begin("iot/多任务-生产消费综合");
+    uint32_t msg = 0x1234U;
+    uint32_t out = 0U;
+    uint32_t i;
 
-    s_consumer_total = 0U;
-    s_consumer_count = 0U;
+    tf_begin("iot/队列-FromISR");
 
-    TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, sizeof(uint32_t), 2U), IOT_OK);
-    TF_CHECK_INT(iot_sem_init(&s_done, 0U), IOT_OK);
+    TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, sizeof(uint32_t), 4U), IOT_OK);
+    TF_CHECK_INT(iot_queue_send_from_isr(&s_q, &msg, NULL), IOT_OK);
+    TF_CHECK_INT(iot_queue_recv(&s_q, &out, IOT_TIMEOUT_NONE), IOT_OK);
+    TF_CHECK_INT(out, 0x1234);
 
-    TF_CHECK_INT(iot_task_create(&s_consumer, "consumer", 2,
-                                  consumer_entry, NULL,
-                                  s_consumer_stack, sizeof(s_consumer_stack)),
-                 IOT_OK);
-    TF_CHECK_INT(iot_task_create(&s_prod1, "prod1", 3, prod1_entry, NULL,
-                                  s_prod_stack1, sizeof(s_prod_stack1)),
-                 IOT_OK);
-    TF_CHECK_INT(iot_task_create(&s_prod2, "prod2", 3, prod2_entry, NULL,
-                                  s_prod_stack2, sizeof(s_prod_stack2)),
-                 IOT_OK);
-
-    TF_CHECK_INT(iot_sem_take(&s_done, 3000U), IOT_OK);
-    TF_CHECK_INT((int)s_consumer_count, 10);
-    TF_CHECK_INT((int)s_consumer_total, 30);   /* (1+2+3+4+5) * 2 */
+    for (i = 0U; i < 4U; i++) {
+        TF_CHECK_INT(iot_queue_send_from_isr(&s_q, &msg, NULL), IOT_OK);
+    }
+    /* 满时绝不阻塞 */
+    TF_CHECK_INT(iot_queue_send_from_isr(&s_q, &msg, NULL), IOT_TIMEOUT);
 
     tf_end();
 }
 
-/* ============================== 对外入口 ============================== */
+static void test_queue_multi_task(void)
+{
+    tf_begin("iot/队列-生产消费综合");
+
+    s_total = 0U;
+    s_count = 0U;
+
+    TF_CHECK_INT(iot_queue_init(&s_q, s_qbuf, sizeof(uint32_t), 2U), IOT_OK);
+    TF_CHECK_INT(iot_sem_init(&s_done, 0U), IOT_OK);
+
+    TF_CHECK_INT(iot_task_create(&s_consumer, "consumer", 2, consumer_entry,
+                                 NULL, s_consumer_stack,
+                                 sizeof(s_consumer_stack)), IOT_OK);
+    TF_CHECK_INT(iot_task_create(&s_prod1, "prod1", 3, prod1_entry, NULL,
+                                 s_prod_stack1, sizeof(s_prod_stack1)), IOT_OK);
+    TF_CHECK_INT(iot_task_create(&s_prod2, "prod2", 3, prod2_entry, NULL,
+                                 s_prod_stack2, sizeof(s_prod_stack2)), IOT_OK);
+
+    TF_CHECK_INT(iot_sem_take(&s_done, 3000U), IOT_OK);
+    TF_CHECK_INT((int)s_count, 10);
+    TF_CHECK_INT((int)s_total, 30);      /* (1+2+3+4+5) * 2 */
+
+    tf_end();
+}
 
 void iot_test_queue(void)
 {
-    test_queue_basic();
+    test_queue_init();
+    test_queue_invalid();
     test_queue_blocking();
     test_queue_send_timeout();
-    test_multi_task();
+    test_queue_from_isr();
+    test_queue_multi_task();
 }

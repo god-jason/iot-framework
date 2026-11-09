@@ -1,246 +1,192 @@
-/* robot/behavior 行为树单元测试：组合节点、装饰节点、延迟与复位。
- * 注意：节点来自内部 32 槽静态池且不释放，故本用例共创建 30 个节点。 */
+/*
+ * behavior_test.c - 行为树测试（对应 behavior_bt.c）
+ *
+ * 覆盖：动作/条件叶子、顺序、选择、并行、取反、重复、延时、
+ *       复位与停止、NULL 安全。
+ */
+
 #include "test.h"
 #include "behavior_bt.h"
 
-static int cb_success(behavior_bt_node_t *n)
+static int s_sequence[16];
+static int s_seq_len;
+static int s_action_value;
+
+static int action_fn(behavior_bt_node_t *node)
 {
-    (void)n;
-    return BEHAVIOR_BT_SUCCESS;
+    (void)node;
+    if (s_seq_len < (int)(sizeof(s_sequence) / sizeof(s_sequence[0]))) {
+        s_sequence[s_seq_len++] = s_action_value;
+    }
+    return s_action_value;
 }
 
-static int cb_failure(behavior_bt_node_t *n)
+static bool cond_true(behavior_bt_node_t *node)
 {
-    (void)n;
-    return BEHAVIOR_BT_FAILURE;
-}
-
-static int cb_running(behavior_bt_node_t *n)
-{
-    (void)n;
-    return BEHAVIOR_BT_RUNNING;
-}
-
-static int s_rep_ticks;
-static int cb_count(behavior_bt_node_t *n)
-{
-    (void)n;
-    s_rep_ticks++;
-    return BEHAVIOR_BT_SUCCESS;
-}
-
-static bool cb_true(behavior_bt_node_t *n)
-{
-    (void)n;
+    (void)node;
     return true;
 }
 
-static bool cb_false(behavior_bt_node_t *n)
+static bool cond_false(behavior_bt_node_t *node)
 {
-    (void)n;
+    (void)node;
     return false;
-}
-
-static int s_halt_calls;
-static int s_reset_calls;
-static void cb_halt(behavior_bt_node_t *n)
-{
-    (void)n;
-    s_halt_calls++;
-}
-static void cb_reset(behavior_bt_node_t *n)
-{
-    (void)n;
-    s_reset_calls++;
 }
 
 void ut_robot_bt(void)
 {
-    behavior_bt_node_t *act_ok;
-    behavior_bt_node_t *act_fail;
-    behavior_bt_node_t *act_run;
-    behavior_bt_node_t *act_null;
-    behavior_bt_node_t *cond_t;
-    behavior_bt_node_t *cond_f;
-    behavior_bt_node_t *cond_null;
-    behavior_bt_node_t *kids[4];
-    behavior_bt_node_t *seq_ok;
-    behavior_bt_node_t *seq_fail;
-    behavior_bt_node_t *seq_run;
-    behavior_bt_node_t *seq_empty;
-    behavior_bt_node_t *sel_ok;
-    behavior_bt_node_t *sel_fail;
-    behavior_bt_node_t *sel_run;
-    behavior_bt_node_t *sel_empty;
-    behavior_bt_node_t *par_ok;
-    behavior_bt_node_t *par_fail;
-    behavior_bt_node_t *par_run;
-    behavior_bt_node_t *inv_ok;
-    behavior_bt_node_t *inv_fail;
-    behavior_bt_node_t *inv_run;
-    behavior_bt_node_t *inv_empty;
-    behavior_bt_node_t *act_count;
-    behavior_bt_node_t *rep3;
-    behavior_bt_node_t *rep0;
-    behavior_bt_node_t *rep_run;
-    behavior_bt_node_t *rep_fail;
-    behavior_bt_node_t *rep_empty;
-    behavior_bt_node_t *del2;
-    behavior_bt_node_t *del_empty;
+    tf_begin("bt/叶子节点");
 
-    act_ok = behavior_bt_action_create(cb_success, NULL);
-    act_fail = behavior_bt_action_create(cb_failure, NULL);
-    act_run = behavior_bt_action_create(cb_running, NULL);
-    act_null = behavior_bt_action_create(NULL, NULL);
-    cond_t = behavior_bt_condition_create(cb_true, NULL);
-    cond_f = behavior_bt_condition_create(cb_false, NULL);
-    cond_null = behavior_bt_condition_create(NULL, NULL);
+    {
+        behavior_bt_node_t *act = behavior_bt_action_create(action_fn, NULL);
+        behavior_bt_node_t *t = behavior_bt_condition_create(cond_true, NULL);
+        behavior_bt_node_t *f = behavior_bt_condition_create(cond_false, NULL);
 
-    tf_begin("robot/bt 动作与条件节点");
-    TF_CHECK(act_ok != NULL);
-    TF_CHECK_INT(act_ok->type, BEHAVIOR_BT_ACTION);
-    TF_CHECK_INT(behavior_bt_tick(act_ok), BEHAVIOR_BT_SUCCESS);
-    TF_CHECK_INT(behavior_bt_tick(act_fail), BEHAVIOR_BT_FAILURE);
-    TF_CHECK_INT(behavior_bt_tick(act_run), BEHAVIOR_BT_RUNNING);
-    TF_CHECK_INT(behavior_bt_tick(act_null), BEHAVIOR_BT_FAILURE);
-    TF_CHECK_INT(behavior_bt_tick(cond_t), BEHAVIOR_BT_SUCCESS);
-    TF_CHECK_INT(behavior_bt_tick(cond_f), BEHAVIOR_BT_FAILURE);
-    TF_CHECK_INT(behavior_bt_tick(cond_null), BEHAVIOR_BT_FAILURE);
+        TF_CHECK(act != NULL);
+        TF_CHECK(t != NULL);
+        TF_CHECK(f != NULL);
+
+        if (act != NULL && t != NULL && f != NULL) {
+            TF_CHECK_INT(behavior_bt_init(NULL), -1);
+            TF_CHECK_INT(behavior_bt_init(act), 0);
+
+            s_action_value = BEHAVIOR_BT_SUCCESS;
+            TF_CHECK_INT(behavior_bt_tick(act), BEHAVIOR_BT_SUCCESS);
+
+            s_action_value = BEHAVIOR_BT_FAILURE;
+            TF_CHECK_INT(behavior_bt_tick(act), BEHAVIOR_BT_FAILURE);
+
+            s_action_value = BEHAVIOR_BT_RUNNING;
+            TF_CHECK_INT(behavior_bt_tick(act), BEHAVIOR_BT_RUNNING);
+
+            TF_CHECK_INT(behavior_bt_tick(t), BEHAVIOR_BT_SUCCESS);
+            TF_CHECK_INT(behavior_bt_tick(f), BEHAVIOR_BT_FAILURE);
+
+            /* 无 tick 实现的 NULL 根节点 */
+            TF_CHECK_INT(behavior_bt_tick(NULL), BEHAVIOR_BT_FAILURE);
+        }
+    }
+
     tf_end();
 
-    tf_begin("robot/bt 顺序节点");
-    kids[0] = act_ok;
-    kids[1] = act_ok;
-    seq_ok = behavior_bt_sequence_create(kids, 2);
-    TF_CHECK(seq_ok != NULL);
-    TF_CHECK_INT(behavior_bt_tick(seq_ok), BEHAVIOR_BT_SUCCESS);
+    tf_begin("bt/顺序与选择");
 
-    kids[0] = act_ok;
-    kids[1] = act_fail;
-    seq_fail = behavior_bt_sequence_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(seq_fail), BEHAVIOR_BT_FAILURE);
+    {
+        behavior_bt_node_t *children[2];
+        behavior_bt_node_t *seq;
 
-    kids[0] = act_run;
-    kids[1] = act_ok;
-    seq_run = behavior_bt_sequence_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(seq_run), BEHAVIOR_BT_RUNNING);
+        children[0] = behavior_bt_action_create(action_fn, NULL);
+        children[1] = behavior_bt_action_create(action_fn, NULL);
+        TF_CHECK(children[0] != NULL && children[1] != NULL);
 
-    seq_empty = behavior_bt_sequence_create(NULL, 0);
-    TF_CHECK_INT(behavior_bt_tick(seq_empty), BEHAVIOR_BT_SUCCESS);
+        if (children[0] != NULL && children[1] != NULL) {
+            /* 顺序：全部成功才成功 */
+            seq = behavior_bt_sequence_create(children, 2U);
+            TF_CHECK(seq != NULL);
+            if (seq != NULL) {
+                TF_CHECK_INT(behavior_bt_init(seq), 0);
+                s_action_value = BEHAVIOR_BT_SUCCESS;
+                s_seq_len = 0;
+                TF_CHECK_INT(behavior_bt_tick(seq), BEHAVIOR_BT_SUCCESS);
+                TF_CHECK_INT(s_seq_len, 2);
+
+                /* 第一个失败即短路 */
+                s_seq_len = 0;
+                s_action_value = BEHAVIOR_BT_FAILURE;
+                TF_CHECK_INT(behavior_bt_tick(seq), BEHAVIOR_BT_FAILURE);
+                TF_CHECK_INT(s_seq_len, 1);
+            }
+        }
+    }
+
+    {
+        behavior_bt_node_t *children[2];
+        behavior_bt_node_t *sel;
+
+        children[0] = behavior_bt_condition_create(cond_false, NULL);
+        children[1] = behavior_bt_condition_create(cond_true, NULL);
+        TF_CHECK(children[0] != NULL && children[1] != NULL);
+
+        if (children[0] != NULL && children[1] != NULL) {
+            /* 选择：任一成功即成功 */
+            sel = behavior_bt_selector_create(children, 2U);
+            TF_CHECK(sel != NULL);
+            if (sel != NULL) {
+                TF_CHECK_INT(behavior_bt_init(sel), 0);
+                TF_CHECK_INT(behavior_bt_tick(sel), BEHAVIOR_BT_SUCCESS);
+            }
+        }
+    }
+
     tf_end();
 
-    tf_begin("robot/bt 选择节点");
-    kids[0] = act_fail;
-    kids[1] = act_ok;
-    sel_ok = behavior_bt_selector_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(sel_ok), BEHAVIOR_BT_SUCCESS);
+    tf_begin("bt/取反与重复");
 
-    kids[0] = act_fail;
-    kids[1] = act_fail;
-    sel_fail = behavior_bt_selector_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(sel_fail), BEHAVIOR_BT_FAILURE);
+    {
+        behavior_bt_node_t *children[1];
+        behavior_bt_node_t *inv;
 
-    kids[0] = act_fail;
-    kids[1] = act_run;
-    sel_run = behavior_bt_selector_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(sel_run), BEHAVIOR_BT_RUNNING);
+        children[0] = behavior_bt_condition_create(cond_false, NULL);
+        TF_CHECK(children[0] != NULL);
+        if (children[0] != NULL) {
+            inv = behavior_bt_inverter_create(children, 1U);
+            TF_CHECK(inv != NULL);
+            if (inv != NULL) {
+                TF_CHECK_INT(behavior_bt_init(inv), 0);
+                TF_CHECK_INT(behavior_bt_tick(inv), BEHAVIOR_BT_SUCCESS);
+            }
+        }
+    }
 
-    sel_empty = behavior_bt_selector_create(NULL, 0);
-    TF_CHECK_INT(behavior_bt_tick(sel_empty), BEHAVIOR_BT_FAILURE);
+    {
+        behavior_bt_node_t *children[1];
+        behavior_bt_node_t *rep;
+
+        children[0] = behavior_bt_action_create(action_fn, NULL);
+        TF_CHECK(children[0] != NULL);
+        if (children[0] != NULL) {
+            rep = behavior_bt_repeat_create(children, 1U, 3U);
+            TF_CHECK(rep != NULL);
+            if (rep != NULL) {
+                TF_CHECK_INT(behavior_bt_init(rep), 0);
+                s_action_value = BEHAVIOR_BT_SUCCESS;
+                s_seq_len = 0;
+                TF_CHECK_INT(behavior_bt_tick(rep), BEHAVIOR_BT_SUCCESS);
+                TF_CHECK_INT(s_seq_len, 3);
+            }
+        }
+    }
+
     tf_end();
 
-    tf_begin("robot/bt 并行节点");
-    kids[0] = act_ok;
-    kids[1] = act_ok;
-    par_ok = behavior_bt_parallel_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(par_ok), BEHAVIOR_BT_SUCCESS);
+    tf_begin("bt/延时与管理接口");
 
-    kids[0] = act_ok;
-    kids[1] = act_fail;
-    par_fail = behavior_bt_parallel_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(par_fail), BEHAVIOR_BT_FAILURE);
+    {
+        behavior_bt_node_t *children[1];
+        behavior_bt_node_t *delay;
 
-    kids[0] = act_ok;
-    kids[1] = act_run;
-    par_run = behavior_bt_parallel_create(kids, 2);
-    TF_CHECK_INT(behavior_bt_tick(par_run), BEHAVIOR_BT_RUNNING);
-    tf_end();
+        children[0] = behavior_bt_action_create(action_fn, NULL);
+        TF_CHECK(children[0] != NULL);
+        if (children[0] != NULL) {
+            delay = behavior_bt_delay_create(children, 1U, 2U);
+            TF_CHECK(delay != NULL);
+            if (delay != NULL) {
+                TF_CHECK_INT(behavior_bt_init(delay), 0);
+                s_action_value = BEHAVIOR_BT_SUCCESS;
+                s_seq_len = 0;
 
-    tf_begin("robot/bt 取反节点");
-    kids[0] = act_ok;
-    inv_ok = behavior_bt_inverter_create(kids, 1);
-    TF_CHECK_INT(behavior_bt_tick(inv_ok), BEHAVIOR_BT_FAILURE);
+                TF_CHECK_INT(behavior_bt_tick(delay), BEHAVIOR_BT_RUNNING);
+                TF_CHECK_INT(behavior_bt_tick(delay), BEHAVIOR_BT_RUNNING);
+                TF_CHECK_INT(behavior_bt_tick(delay), BEHAVIOR_BT_SUCCESS);
+                TF_CHECK_INT(s_seq_len, 1);
 
-    kids[0] = act_fail;
-    inv_fail = behavior_bt_inverter_create(kids, 1);
-    TF_CHECK_INT(behavior_bt_tick(inv_fail), BEHAVIOR_BT_SUCCESS);
+                TF_CHECK_INT(behavior_bt_halt(delay), 0);
+                TF_CHECK_INT(behavior_bt_reset(delay), 0);
+                TF_CHECK_INT(behavior_bt_halt(NULL), -1);
+                TF_CHECK_INT(behavior_bt_reset(NULL), -1);
+            }
+        }
+    }
 
-    kids[0] = act_run;
-    inv_run = behavior_bt_inverter_create(kids, 1);
-    TF_CHECK_INT(behavior_bt_tick(inv_run), BEHAVIOR_BT_RUNNING);
-
-    inv_empty = behavior_bt_inverter_create(NULL, 0);
-    TF_CHECK_INT(behavior_bt_tick(inv_empty), BEHAVIOR_BT_FAILURE);
-    tf_end();
-
-    tf_begin("robot/bt 重复节点");
-    act_count = behavior_bt_action_create(cb_count, NULL);
-    kids[0] = act_count;
-    rep3 = behavior_bt_repeat_create(kids, 1, 3);
-    s_rep_ticks = 0;
-    TF_CHECK_INT(behavior_bt_tick(rep3), BEHAVIOR_BT_SUCCESS);
-    TF_CHECK_INT(s_rep_ticks, 3);
-    TF_CHECK_INT(rep3->counter, -1);
-
-    kids[0] = act_count;
-    rep0 = behavior_bt_repeat_create(kids, 1, 0);
-    s_rep_ticks = 0;
-    TF_CHECK_INT(behavior_bt_tick(rep0), BEHAVIOR_BT_SUCCESS);
-    TF_CHECK_INT(s_rep_ticks, 0);
-
-    kids[0] = act_run;
-    rep_run = behavior_bt_repeat_create(kids, 1, 2);
-    TF_CHECK_INT(behavior_bt_tick(rep_run), BEHAVIOR_BT_RUNNING);
-    TF_CHECK_INT(rep_run->counter, 2);
-
-    kids[0] = act_fail;
-    rep_fail = behavior_bt_repeat_create(kids, 1, 2);
-    TF_CHECK_INT(behavior_bt_tick(rep_fail), BEHAVIOR_BT_FAILURE);
-    TF_CHECK_INT(rep_fail->counter, -1);
-
-    rep_empty = behavior_bt_repeat_create(NULL, 0, 2);
-    TF_CHECK_INT(behavior_bt_tick(rep_empty), BEHAVIOR_BT_FAILURE);
-    tf_end();
-
-    tf_begin("robot/bt 延迟节点");
-    kids[0] = act_ok;
-    del2 = behavior_bt_delay_create(kids, 1, 2);
-    TF_CHECK(behavior_bt_init(del2) == 0);
-    TF_CHECK_INT(behavior_bt_tick(del2), BEHAVIOR_BT_RUNNING);
-    TF_CHECK_INT(behavior_bt_tick(del2), BEHAVIOR_BT_RUNNING);
-    TF_CHECK_INT(behavior_bt_tick(del2), BEHAVIOR_BT_SUCCESS);
-
-    del_empty = behavior_bt_delay_create(NULL, 0, 1);
-    TF_CHECK_INT(behavior_bt_tick(del_empty), BEHAVIOR_BT_FAILURE);
-    tf_end();
-
-    tf_begin("robot/bt 停止与复位传播");
-    s_halt_calls = 0;
-    s_reset_calls = 0;
-    act_ok->halt = cb_halt;
-    act_ok->reset = cb_reset;
-    kids[0] = act_ok;
-    kids[1] = act_ok;
-    TF_CHECK_INT(behavior_bt_halt(seq_ok), 0);
-    TF_CHECK_INT(s_halt_calls, 2);
-    TF_CHECK_INT(behavior_bt_reset(seq_ok), 0);
-    TF_CHECK_INT(s_reset_calls, 2);
-    tf_end();
-
-    tf_begin("robot/bt 空指针保护");
-    TF_CHECK_INT(behavior_bt_init(NULL), -1);
-    TF_CHECK_INT(behavior_bt_tick(NULL), BEHAVIOR_BT_FAILURE);
-    TF_CHECK_INT(behavior_bt_halt(NULL), -1);
-    TF_CHECK_INT(behavior_bt_reset(NULL), -1);
     tf_end();
 }

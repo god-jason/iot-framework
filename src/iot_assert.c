@@ -1,8 +1,9 @@
 /*
  * iot_assert.c - 断言失败处理
  *
- * 默认行为：
- *   - 打印断言位置；
+ * 行为：
+ *   - 先把断言位置写入崩溃记录（.noinit，复位后仍可读取）；
+ *   - 打印完整现场（原因/任务/寄存器/固件版本）；
  *   - PC 模拟端退出进程（便于 CI 直接判定失败）；
  *   - MCU 端关中断后死循环，保留现场给调试器。
  */
@@ -12,15 +13,24 @@
 #if IOT_ASSERT_ENABLE
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "iot_types.h"
 #include "iot_port.h"
-#include "log.h"
+#include "iot_crash.h"
 
 void iot_assert_fail(const char *file, int line, const char *expr)
 {
-    LOG_E(IOT_TAG, "ASSERT FAILED: %s:%d: %s",
-              (file != NULL) ? file : "?", line, (expr != NULL) ? expr : "?");
+    iot_crash_context_t ctx;
+
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.file = file;
+    ctx.line = (uint32_t)line;
+    ctx.expr = expr;
+
+    /* 同一次启动内只保留第一次现场，后续断言不会覆盖根因 */
+    (void)iot_crash_record(IOT_CRASH_ASSERT, &ctx);
+    iot_crash_print(iot_crash_get());
 
     iot_port_critical_enter();
 

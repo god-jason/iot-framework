@@ -63,6 +63,18 @@ SECTIONS
         _ebss = .;
     } > RAM
 
+    /*
+     * 复位不清零段：崩溃现场记录（iot_crash）放在这里，
+     * HardFault/断言后复位，下次启动仍能读到现场并上报。
+     * 必须位于 .bss 之后、堆栈保留区之前，且不能被 _sbrk 覆盖。
+     */
+    .noinit (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.noinit .noinit.*)
+        . = ALIGN(4);
+    } > RAM
+
     ._user_heap_stack (NOLOAD) :
     {
         . = ALIGN(8);

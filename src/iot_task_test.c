@@ -1,14 +1,12 @@
 /*
  * iot_task_test.c - 任务测试（对应 iot_task.c）
  *
- * 覆盖：任务创建参数校验、tick 推进与睡眠、同优先级轮转、
- *       优先级调度、任务入口返回后自动退出、多任务并行输出。
+ * 覆盖：创建参数校验、tick 与睡眠、同优先级轮转、优先级调度、
+ *       任务退出、并行输出、任务通知、优先级动态调整。
  */
 
 #include "test.h"
 #include "iot.h"
-
-#include <string.h>
 
 /* ============================== 静态对象 ============================== */
 
@@ -18,6 +16,7 @@ static iot_task_t s_worker_b;
 static iot_task_t s_worker_high;
 static iot_task_t s_worker_low;
 static iot_task_t s_exit_task;
+static iot_task_t s_prio_task;
 static iot_task_t s_par1;
 static iot_task_t s_par2;
 static iot_task_t s_par3;
@@ -28,6 +27,7 @@ static uint8_t s_worker_stack_b[2048];
 static uint8_t s_worker_stack_h[2048];
 static uint8_t s_worker_stack_l[2048];
 static uint8_t s_exit_stack[2048];
+static uint8_t s_prio_stack[2048];
 static uint8_t s_par_stack1[3072];
 static uint8_t s_par_stack2[3072];
 static uint8_t s_par_stack3[3072];
@@ -49,7 +49,6 @@ static void record(char c)
     }
 }
 
-/* 长期睡眠，占位但不再干扰后续测试 */
 static void dummy_entry(void *arg)
 {
     (void)arg;
@@ -84,67 +83,72 @@ static void worker_low_entry(void *arg)
     iot_sleep_ms(100000);
 }
 
-/* 任务入口返回即退出 */
 static void exit_entry(void *arg)
 {
     (void)arg;
     s_exit_ran = 1;
 }
 
-/* 并行输出任务：打印并记录自己的执行轮次，然后让出 CPU */
+static void prio_entry(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        iot_sleep_ms(1000);
+    }
+}
+
 static void parallel_entry(void *arg)
 {
     int id = (int)(intptr_t)arg;
     int round;
 
     for (round = 1; round <= 3; round++) {
-        printf("[vtask] P%d round %d\n", id, round);
         if (s_parallel_len < (int)sizeof(s_parallel_log) - 1) {
             s_parallel_log[s_parallel_len++] = (char)('0' + id);
         }
-        iot_yield();       /* 让同优先级任务交替运行 */
+        iot_yield();
     }
 }
 
-/* ============================== 单项测试 ============================== */
+/* ============================== 用例 ============================== */
 
-/* 1. 任务创建参数与当前任务 */
 static void test_task_create(void)
 {
-    tf_begin("iot/任务创建与当前任务");
+    tf_begin("iot/任务创建参数校验");
 
     TF_CHECK(iot_current() != NULL);
     TF_CHECK_STR(iot_current()->name, "driver");
 
     TF_CHECK_INT(iot_task_create(NULL, "x", 1, dummy_entry, NULL,
-                                  s_dummy_stack, sizeof(s_dummy_stack)),
+                                 s_dummy_stack, sizeof(s_dummy_stack)),
                  IOT_INVALID_PARAM);
     TF_CHECK_INT(iot_task_create(&s_dummy, "x", 1, NULL, NULL,
-                                  s_dummy_stack, sizeof(s_dummy_stack)),
+                                 s_dummy_stack, sizeof(s_dummy_stack)),
                  IOT_INVALID_PARAM);
     TF_CHECK_INT(iot_task_create(&s_dummy, "x", 1, dummy_entry, NULL,
-                                  NULL, sizeof(s_dummy_stack)),
+                                 NULL, sizeof(s_dummy_stack)),
                  IOT_INVALID_PARAM);
     TF_CHECK_INT(iot_task_create(&s_dummy, "x", 1, dummy_entry, NULL,
-                                  s_dummy_stack, 0U),
+                                 s_dummy_stack, 0U),
                  IOT_INVALID_PARAM);
     TF_CHECK_INT(iot_task_create(&s_dummy, "x", IOT_PRIORITY_IDLE,
-                                  dummy_entry, NULL,
-                                  s_dummy_stack, sizeof(s_dummy_stack)),
+                                 dummy_entry, NULL,
+                                 s_dummy_stack, sizeof(s_dummy_stack)),
                  IOT_INVALID_PARAM);
-
     TF_CHECK_INT(iot_task_create(&s_dummy, "dummy", 5, dummy_entry, NULL,
-                                  s_dummy_stack, sizeof(s_dummy_stack)),
+                                 s_dummy_stack, sizeof(s_dummy_stack)),
                  IOT_OK);
+    TF_CHECK(s_dummy.created);
+    TF_CHECK_INT(s_dummy.priority, 5);
+
     tf_end();
 }
 
-/* 2. tick 推进与睡眠 */
 static void test_tick_sleep(void)
 {
     uint32_t t0;
 
-    tf_begin("iot/tick与睡眠");
+    tf_begin("iot/tick 与睡眠");
 
     t0 = iot_tick_get();
     iot_tick_increment(10U);
@@ -161,42 +165,45 @@ static void test_tick_sleep(void)
     iot_sleep_until(t0 + 3U);
     TF_CHECK((iot_tick_get() - t0) >= 3U);
 
+    /* 已到期时刻不应睡眠 */
+    t0 = iot_tick_get();
+    iot_sleep_until(t0);
+    TF_CHECK_INT((int)(iot_tick_get() - t0), 0);
+
     tf_end();
 }
 
-/* 3. 同优先级轮转 */
 static void test_round_robin(void)
 {
     tf_begin("iot/同优先级轮转");
 
     s_order_len = 0;
     TF_CHECK_INT(iot_task_create(&s_worker_a, "a", 5, worker_a_entry, NULL,
-                                  s_worker_stack_a, sizeof(s_worker_stack_a)),
+                                 s_worker_stack_a, sizeof(s_worker_stack_a)),
                  IOT_OK);
     TF_CHECK_INT(iot_task_create(&s_worker_b, "b", 5, worker_b_entry, NULL,
-                                  s_worker_stack_b, sizeof(s_worker_stack_b)),
+                                 s_worker_stack_b, sizeof(s_worker_stack_b)),
                  IOT_OK);
 
-    iot_sleep_ms(1U);              /* 让出，让同优先级任务依次运行 */
+    iot_sleep_ms(1U);
     s_order[s_order_len] = '\0';
     TF_CHECK_STR(s_order, "AB");
 
     tf_end();
 }
 
-/* 4. 优先级调度（值小者先运行） */
 static void test_priority(void)
 {
     tf_begin("iot/优先级调度");
 
     s_order_len = 0;
     TF_CHECK_INT(iot_task_create(&s_worker_high, "high", 1,
-                                  worker_high_entry, NULL,
-                                  s_worker_stack_h, sizeof(s_worker_stack_h)),
+                                 worker_high_entry, NULL,
+                                 s_worker_stack_h, sizeof(s_worker_stack_h)),
                  IOT_OK);
     TF_CHECK_INT(iot_task_create(&s_worker_low, "low", 5,
-                                  worker_low_entry, NULL,
-                                  s_worker_stack_l, sizeof(s_worker_stack_l)),
+                                 worker_low_entry, NULL,
+                                 s_worker_stack_l, sizeof(s_worker_stack_l)),
                  IOT_OK);
 
     iot_sleep_ms(1U);
@@ -206,22 +213,21 @@ static void test_priority(void)
     tf_end();
 }
 
-/* 5. 任务入口返回后自动退出 */
 static void test_task_exit(void)
 {
     tf_begin("iot/任务退出");
 
     s_exit_ran = 0;
     TF_CHECK_INT(iot_task_create(&s_exit_task, "exit", 5, exit_entry, NULL,
-                                  s_exit_stack, sizeof(s_exit_stack)),
+                                 s_exit_stack, sizeof(s_exit_stack)),
                  IOT_OK);
     iot_sleep_ms(1U);
     TF_CHECK_INT(s_exit_ran, 1);
+    TF_CHECK_INT(s_exit_task.state, IOT_TASK_TERMINATED);
 
     tf_end();
 }
 
-/* 6. 多任务并行输出（同优先级交替打印） */
 static void test_parallel_output(void)
 {
     tf_begin("iot/多任务并行输出");
@@ -230,34 +236,21 @@ static void test_parallel_output(void)
     memset(s_parallel_log, 0, sizeof(s_parallel_log));
 
     TF_CHECK_INT(iot_task_create(&s_par1, "P1", 4, parallel_entry,
-                                  (void *)(intptr_t)1,
-                                  s_par_stack1, sizeof(s_par_stack1)), IOT_OK);
+                                 (void *)(intptr_t)1,
+                                 s_par_stack1, sizeof(s_par_stack1)), IOT_OK);
     TF_CHECK_INT(iot_task_create(&s_par2, "P2", 4, parallel_entry,
-                                  (void *)(intptr_t)2,
-                                  s_par_stack2, sizeof(s_par_stack2)), IOT_OK);
+                                 (void *)(intptr_t)2,
+                                 s_par_stack2, sizeof(s_par_stack2)), IOT_OK);
     TF_CHECK_INT(iot_task_create(&s_par3, "P3", 4, parallel_entry,
-                                  (void *)(intptr_t)3,
-                                  s_par_stack3, sizeof(s_par_stack3)), IOT_OK);
+                                 (void *)(intptr_t)3,
+                                 s_par_stack3, sizeof(s_par_stack3)), IOT_OK);
 
-    iot_sleep_ms(1U);          /* 让三个任务交替执行 */
+    iot_sleep_ms(1U);
 
     s_parallel_log[s_parallel_len] = '\0';
     TF_CHECK_STR(s_parallel_log, "123123123");
 
     tf_end();
-}
-
-/* ============================== 通知与优先级 ============================== */
-
-static iot_task_t s_prio_task;
-static uint8_t s_prio_stack[2048];
-
-static void prio_entry(void *arg)
-{
-    (void)arg;
-    for (;;) {
-        iot_sleep_ms(1000);
-    }
 }
 
 static void test_notify(void)
@@ -267,19 +260,27 @@ static void test_notify(void)
 
     tf_begin("iot/任务通知");
 
+    TF_CHECK_INT(iot_task_notify(NULL, 1U), IOT_INVALID_PARAM);
+
     TF_CHECK_INT(iot_task_notify(self, 0x5A5AU), IOT_OK);
     TF_CHECK_INT(iot_task_wait_notify(self, IOT_TIMEOUT_NONE, &value), IOT_OK);
     TF_CHECK_INT(value, 0x5A5A);
 
-    /* 已消费：再次等待应立即超时 */
+    /* 已消费：再次等待应超时 */
     TF_CHECK_INT(iot_task_wait_notify(self, IOT_TIMEOUT_NONE, &value), IOT_TIMEOUT);
+
+#if IOT_USE_NOTIFY
+    TF_CHECK_INT(iot_task_notify(self, 0x11U), IOT_OK);
+    iot_task_notify_clear(self);
+    TF_CHECK_INT(iot_task_wait_notify(self, IOT_TIMEOUT_NONE, &value), IOT_TIMEOUT);
+#endif
 
     tf_end();
 }
 
 static void test_priority_set(void)
 {
-    tf_begin("iot/优先级调整");
+    tf_begin("iot/优先级动态调整");
 
     TF_CHECK_INT(iot_task_create(&s_prio_task, "prio", 5U, prio_entry, NULL,
                                  s_prio_stack, sizeof(s_prio_stack)), IOT_OK);
@@ -288,9 +289,9 @@ static void test_priority_set(void)
     TF_CHECK_INT(s_prio_task.priority, 8);
     TF_CHECK_INT(s_prio_task.base_priority, 8);
 
-    /* 空闲优先级保留，不允许设置 */
     TF_CHECK_INT(iot_task_set_priority(&s_prio_task, IOT_PRIORITY_IDLE),
                  IOT_INVALID_PARAM);
+    TF_CHECK_INT(iot_task_set_priority(NULL, 3U), IOT_INVALID_PARAM);
 
     TF_CHECK_INT(iot_task_set_priority(&s_prio_task, 5U), IOT_OK);
     TF_CHECK_INT(s_prio_task.priority, 5);
@@ -298,7 +299,7 @@ static void test_priority_set(void)
     tf_end();
 }
 
-/* ============================== 对外入口 ============================== */
+/* ============================== 入口 ============================== */
 
 void iot_test_task(void)
 {

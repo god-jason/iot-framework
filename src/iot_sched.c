@@ -19,6 +19,8 @@
 #include "iot_port.h"
 #include "iot_assert.h"
 
+#include <string.h>
+
 /* 调度器拥有的全局状态 */
 iot_task_t *iot_current_task = NULL;
 
@@ -184,6 +186,13 @@ static void iot_stack_guard(const iot_task_t *task)
 
     base = (const uint32_t *)task->stack_mem;
     if (*base != IOT_STACK_MAGIC) {
+        iot_crash_context_t ctx;
+
+        /* 先记录专用原因，随后 IOT_ASSERT 不会覆盖它（只保留第一次） */
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.expr = "stack overflow";
+        (void)iot_crash_record(IOT_CRASH_STACK_OVERFLOW, &ctx);
+
         LOG_E(IOT_TAG, "stack overflow detected: task=%s size=%u",
                   task->name != NULL ? task->name : "?", (unsigned)task->stack_size);
         IOT_ASSERT(0);

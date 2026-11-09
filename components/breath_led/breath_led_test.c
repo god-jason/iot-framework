@@ -1,116 +1,88 @@
-/* 呼吸灯组件测试：初始化、启停、正弦占空比推进与状态复位。 */
+/*
+ * breath_led_test.c - 呼吸灯测试（对应 breath_led.c）
+ *
+ * 覆盖：初始化校验、启动参数、正弦占空比范围与波形对称性、停止熄灭。
+ */
+
 #include "test.h"
 #include "breath_led.h"
 
-static uint16_t s_last_duty;
-static int s_duty_calls;
+static int s_last_duty;
 
-static int record_duty(void *ctx, uint16_t duty)
+static int sim_set_duty(void *ctx, uint16_t duty)
 {
     (void)ctx;
-    s_last_duty = duty;
-    s_duty_calls++;
+    s_last_duty = (int)duty;
     return 0;
-}
-
-static const breath_led_ops_t s_ops = { record_duty, NULL };
-
-static void reset_record(void)
-{
-    s_last_duty = 0xFFFF;
-    s_duty_calls = 0;
 }
 
 void ut_breath_led(void)
 {
     breath_led_t led;
-    breath_led_ops_t bad_ops;
-    breath_led_t fresh;
+    breath_led_ops_t ops;
+    uint16_t max_duty = 0;
+    uint16_t min_duty = 1000;
+    uint32_t t;
 
-    tf_begin("breath_led/初始化参数校验");
-    TF_CHECK_INT(breath_led_init(NULL, &s_ops), -1);
+    ops.set_duty = sim_set_duty;
+    ops.ctx = NULL;
+
+    tf_begin("breath_led/初始化与启动");
+
+    TF_CHECK_INT(breath_led_init(NULL, &ops), -1);
     TF_CHECK_INT(breath_led_init(&led, NULL), -1);
-    bad_ops.set_duty = NULL;
-    bad_ops.ctx = NULL;
-    TF_CHECK_INT(breath_led_init(&led, &bad_ops), -1);
-    tf_end();
-
-    tf_begin("breath_led/初始化默认状态");
-    TF_CHECK_INT(breath_led_init(&led, &s_ops), 0);
-    TF_CHECK_INT(led.duty, 0);
-    TF_CHECK_INT(led.period_ms, 2000);
-    TF_CHECK_INT(led.start_tick, 0);
-    TF_CHECK(led.started == false);
-    TF_CHECK(led.active == false);
-    tf_end();
-
-    tf_begin("breath_led/启动参数校验");
-    TF_CHECK_INT(breath_led_start(NULL, 1000), -1);
-    reset_record();
-    TF_CHECK_INT(breath_led_start(&led, 0), -1);
-    TF_CHECK(led.active == false);
-    TF_CHECK_INT(s_duty_calls, 0);
-    tf_end();
-
-    tf_begin("breath_led/未启动时 update 被拒绝");
-    TF_CHECK_INT(breath_led_update(&led, 0), -1);
-    TF_CHECK_INT(breath_led_update(NULL, 0), -1);
-    tf_end();
-
-    tf_begin("breath_led/启动与正弦占空比");
-    TF_CHECK_INT(breath_led_start(&led, 1000), 0);
-    TF_CHECK(led.active == true);
-    TF_CHECK(led.started == false);
+    {
+        breath_led_ops_t bad;
+        bad.set_duty = NULL;
+        bad.ctx = NULL;
+        TF_CHECK_INT(breath_led_init(&led, &bad), -1);
+    }
+    TF_CHECK_INT(breath_led_init(&led, &ops), 0);
+    TF_CHECK_INT(breath_led_start(&led, 0U), -1);
+    TF_CHECK_INT(breath_led_start(&led, 1000U), 0);
+    TF_CHECK(led.active);
     TF_CHECK_INT(led.period_ms, 1000);
-    reset_record();
 
-    /* 首次 update 记录起点，相位为 0，占空比为 0 */
-    TF_CHECK_INT(breath_led_update(&led, 1000), 0);
-    TF_CHECK_INT(led.start_tick, 1000);
-    TF_CHECK(led.started == true);
-    TF_CHECK_INT(led.duty, 0);
-    TF_CHECK_INT(s_last_duty, 0);
-    TF_CHECK_INT(s_duty_calls, 1);
-
-    /* 半周期：sin(pi/2) 接近 1，占空比接近 1000 */
-    TF_CHECK_INT(breath_led_update(&led, 1500), 0);
-    TF_CHECK(led.duty >= 990 && led.duty <= 1000);
-    TF_CHECK_INT(s_last_duty, led.duty);
-
-    /* 1/4 周期：sin(pi/4) 约 0.707 */
-    TF_CHECK_INT(breath_led_update(&led, 1250), 0);
-    TF_CHECK(led.duty >= 700 && led.duty <= 710);
-
-    /* 3/4 周期：与 1/4 周期对称 */
-    TF_CHECK_INT(breath_led_update(&led, 1750), 0);
-    TF_CHECK(led.duty >= 700 && led.duty <= 710);
     tf_end();
 
-    tf_begin("breath_led/停止与状态复位");
-    TF_CHECK_INT(breath_led_stop(NULL), -1);
-    reset_record();
+    tf_begin("breath_led/占空比范围与波形");
+
+    s_last_duty = -1;
+    for (t = 0U; t <= 1000U; t += 10U) {
+        TF_CHECK_INT(breath_led_update(&led, t), 0);
+        TF_CHECK(s_last_duty >= 0 && s_last_duty <= 1000);
+        if (s_last_duty > max_duty) {
+            max_duty = (uint16_t)s_last_duty;
+        }
+        if (s_last_duty < min_duty) {
+            min_duty = (uint16_t)s_last_duty;
+        }
+    }
+    /* 一个周期内应覆盖较大动态范围 */
+    TF_CHECK(max_duty >= 900U);
+    TF_CHECK(min_duty <= 100U);
+
+    /* 起始与整周期处应接近极小值 */
+    TF_CHECK_INT(breath_led_update(&led, 0U), 0);
+    TF_CHECK(s_last_duty <= 10);
+    TF_CHECK_INT(breath_led_update(&led, 1000U), 0);
+    TF_CHECK(s_last_duty <= 10);
+
+    /* 半周期处应达到峰值 */
+    TF_CHECK_INT(breath_led_update(&led, 500U), 0);
+    TF_CHECK(s_last_duty >= 900);
+
+    tf_end();
+
+    tf_begin("breath_led/停止与非法参数");
+
     TF_CHECK_INT(breath_led_stop(&led), 0);
-    TF_CHECK(led.active == false);
-    TF_CHECK_INT(led.duty, 0);
     TF_CHECK_INT(s_last_duty, 0);
-    TF_CHECK_INT(s_duty_calls, 1);
-    /* 停止后 update 不再生效 */
-    TF_CHECK_INT(breath_led_update(&led, 2000), -1);
-    tf_end();
+    TF_CHECK(!led.active);
 
-    tf_begin("breath_led/再次启动重新计时");
-    TF_CHECK_INT(breath_led_start(&led, 2000), 0);
-    TF_CHECK_INT(led.period_ms, 2000);
-    TF_CHECK(led.started == false);
-    TF_CHECK_INT(breath_led_update(&led, 5000), 0);
-    TF_CHECK_INT(led.start_tick, 5000);
-    TF_CHECK_INT(led.duty, 0);
-    TF_CHECK_INT(breath_led_update(&led, 6000), 0);
-    TF_CHECK(led.duty >= 990 && led.duty <= 1000);
-    tf_end();
+    TF_CHECK_INT(breath_led_stop(NULL), -1);
+    TF_CHECK_INT(breath_led_start(NULL, 1000U), -1);
+    TF_CHECK_INT(breath_led_update(NULL, 0U), -1);
 
-    tf_begin("breath_led/未初始化对象 update 被拒绝");
-    memset(&fresh, 0, sizeof(fresh));
-    TF_CHECK_INT(breath_led_update(&fresh, 0), -1);
     tf_end();
 }

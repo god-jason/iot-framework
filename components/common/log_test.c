@@ -1,4 +1,10 @@
-/* log.c 单元测试：宏日志调用与十六进制转储边界（不断言 stdout 内容）。 */
+/*
+ * log_test.c - 日志宏测试（对应 log.c）
+ *
+ * 只验证宏能正常展开、等级可读写、hexdump 对 NULL/零长度安全，
+ * 不断言 stdout 内容。
+ */
+
 #include "test.h"
 #include "log.h"
 
@@ -10,25 +16,41 @@ void ut_log(void)
         0x10
     };
 
-    tf_begin("log/等级宏调用");
+    tf_begin("log/等级读写");
+
     TF_CHECK_INT(log_get_level(), LOG_LEVEL);
+
     log_set_level(LOG_LEVEL_DEBUG);
     TF_CHECK_INT(log_get_level(), LOG_LEVEL_DEBUG);
+
+    log_set_level(LOG_LEVEL_ERROR);
+    TF_CHECK_INT(log_get_level(), LOG_LEVEL_ERROR);
+
+    log_set_level(LOG_LEVEL);
+    TF_CHECK_INT(log_get_level(), LOG_LEVEL);
+
+    tf_end();
+
+    tf_begin("log/宏展开");
+
     LOG_D("TST", "debug %d", 1);
-    LOG_I("TST", "info");
+    LOG_I("TST", "info %s", "msg");
     LOG_W("TST", "warn");
     LOG_E("TST", "error");
     LOG_F("TST", "fatal");
     LOG_EF("TST", "fatal alias");
-    log_set_level(LOG_LEVEL);
-    TF_CHECK(1);   /* 编译期过滤后仍可正常展开与调用 */
+    TF_CHECK(1);
+
     tf_end();
 
-    tf_begin("log/hexdump 与边界");
+    tf_begin("log/hexdump 边界");
+
     LOG_HEXDUMP(LOG_LEVEL_INFO, "HD", data, sizeof(data));
-    log_hexdump(LOG_LEVEL_DEBUG, NULL, data, 3);
-    log_hexdump(LOG_LEVEL_INFO, "HD", NULL, 8);
-    log_hexdump(LOG_LEVEL_INFO, "HD", data, 0);
-    TF_CHECK(1);   /* NULL/零长度不得崩溃 */
+    log_hexdump(LOG_LEVEL_DEBUG, NULL, data, 3U);
+    log_hexdump(LOG_LEVEL_INFO, "HD", NULL, 8U);
+    log_hexdump(LOG_LEVEL_INFO, "HD", data, 0U);
+    log_hexdump(LOG_LEVEL_NONE, "HD", data, sizeof(data));
+    TF_CHECK(1);   /* NULL / 零长度不得崩溃 */
+
     tf_end();
 }

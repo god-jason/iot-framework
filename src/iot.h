@@ -28,6 +28,7 @@
 
 #include "iot_types.h"
 #include "iot_assert.h"
+#include "iot_crash.h"
 #include "iot_task.h"
 #include "iot_sem.h"
 #include "iot_mutex.h"

@@ -1,111 +1,186 @@
-/* bytes 单元测试：比较、相等、拷贝、填充、反转。 */
+/*
+ * bytes_test.c - 字节工具测试（bytes / bcd / endian / hex）
+ *
+ * 覆盖：比较/拷贝/填充/反转、BCD 编解码与合法性、
+ *       大小端读写与字节序翻转、十六进制编解码边界。
+ */
+
 #include "test.h"
 #include "bytes.h"
-
-#include <stdint.h>
-
-static void test_compare_equal(void)
-{
-    static const uint8_t a[] = {1, 2, 3, 4};
-    static const uint8_t b[] = {1, 2, 3, 4};
-    static const uint8_t less[] = {1, 2, 3, 0};
-    static const uint8_t greater[] = {1, 2, 3, 5};
-
-    tf_begin("bytes: compare 相等/大小关系");
-    TF_CHECK_INT(bytes_compare(a, b, sizeof(a)), 0);
-    TF_CHECK_INT(bytes_compare(a, less, sizeof(a)), 1);
-    TF_CHECK_INT(bytes_compare(a, greater, sizeof(a)), -1);
-    TF_CHECK_INT(bytes_compare(a, b, 0), 0);
-    tf_end();
-
-    tf_begin("bytes: equal");
-    TF_CHECK(bytes_equal(a, b, sizeof(a)) == true);
-    TF_CHECK(bytes_equal(a, less, sizeof(a)) == false);
-    TF_CHECK(bytes_equal(a, b, 0) == true);
-    tf_end();
-
-    tf_begin("bytes: compare 空指针");
-    TF_CHECK_INT(bytes_compare(NULL, NULL, 4), 0);
-    TF_CHECK_INT(bytes_compare(NULL, b, 4), -1);
-    TF_CHECK_INT(bytes_compare(a, NULL, 4), 1);
-    TF_CHECK_INT(bytes_compare(NULL, b, 0), 0);
-    tf_end();
-}
-
-static void test_copy_fill(void)
-{
-    static const uint8_t src[] = {9, 8, 7, 6, 5};
-    uint8_t buf[8];
-
-    tf_begin("bytes: copy");
-    memset(buf, 0xAA, sizeof(buf));
-    bytes_copy(buf, src, sizeof(src));
-    TF_CHECK_MEM(buf, src, sizeof(src));
-    TF_CHECK_INT(buf[5], 0xAA);
-    bytes_copy(buf, src, 0);
-    TF_CHECK_INT(buf[5], 0xAA);
-    tf_end();
-
-    tf_begin("bytes: copy 非法参数不崩溃");
-    bytes_copy(NULL, src, 4);
-    bytes_copy(buf, NULL, 4);
-    TF_CHECK(1);
-    tf_end();
-
-    tf_begin("bytes: fill");
-    memset(buf, 0, sizeof(buf));
-    bytes_fill(buf, 0x5A, 3);
-    TF_CHECK_INT(buf[0], 0x5A);
-    TF_CHECK_INT(buf[1], 0x5A);
-    TF_CHECK_INT(buf[2], 0x5A);
-    TF_CHECK_INT(buf[3], 0);
-    bytes_fill(buf, 0xFF, sizeof(buf));
-    TF_CHECK_INT(buf[7], 0xFF);
-    bytes_fill(buf, 0x00, 0);
-    TF_CHECK_INT(buf[0], 0xFF);
-    tf_end();
-
-    tf_begin("bytes: fill 空指针/零长度");
-    bytes_fill(NULL, 0x11, 4);
-    bytes_fill(buf, 0x22, 0);
-    TF_CHECK(1);
-    tf_end();
-}
-
-static void test_reverse(void)
-{
-    uint8_t odd[] = {1, 2, 3, 4, 5};
-    uint8_t even[] = {1, 2, 3, 4};
-    uint8_t one[] = {0x42};
-    uint8_t zero[] = {0x42, 0x43};
-    static const uint8_t exp_odd[] = {5, 4, 3, 2, 1};
-    static const uint8_t exp_even[] = {4, 3, 2, 1};
-
-    tf_begin("bytes: reverse 奇偶长度");
-    bytes_reverse(odd, sizeof(odd));
-    TF_CHECK_MEM(odd, exp_odd, sizeof(odd));
-    bytes_reverse(even, sizeof(even));
-    TF_CHECK_MEM(even, exp_even, sizeof(even));
-    bytes_reverse(odd, sizeof(odd));
-    TF_CHECK_MEM(odd, "\x01\x02\x03\x04\x05", sizeof(odd));
-    tf_end();
-
-    tf_begin("bytes: reverse 边界长度 0/1");
-    bytes_reverse(one, sizeof(one));
-    TF_CHECK_INT(one[0], 0x42);
-    bytes_reverse(zero, 0);
-    TF_CHECK_MEM(zero, "\x42\x43", 2);
-    tf_end();
-
-    tf_begin("bytes: reverse 空指针");
-    bytes_reverse(NULL, 4);
-    TF_CHECK(1);
-    tf_end();
-}
+#include "bcd.h"
+#include "endian.h"
+#include "hex.h"
 
 void ut_bytes(void)
 {
-    test_compare_equal();
-    test_copy_fill();
-    test_reverse();
+    uint8_t a[4] = { 1, 2, 3, 4 };
+    uint8_t b[4] = { 1, 2, 3, 4 };
+    uint8_t c[4] = { 1, 2, 3, 5 };
+    uint8_t dst[4];
+
+    tf_begin("bytes/比较与判等");
+
+    TF_CHECK_INT(bytes_compare(a, b, 4U), 0);
+    TF_CHECK(bytes_compare(a, c, 4U) < 0);
+    TF_CHECK(bytes_compare(c, a, 4U) > 0);
+    TF_CHECK_INT(bytes_compare(a, b, 0U), 0);
+    TF_CHECK_INT(bytes_compare(NULL, b, 4U), -1);
+    TF_CHECK_INT(bytes_compare(a, NULL, 4U), 1);
+
+    TF_CHECK(bytes_equal(a, b, 4U));
+    TF_CHECK(!bytes_equal(a, c, 4U));
+    TF_CHECK(!bytes_equal(NULL, b, 4U));
+    TF_CHECK(bytes_equal(a, a, 4U));
+
+    tf_end();
+
+    tf_begin("bytes/拷贝、填充与反转");
+
+    memset(dst, 0, sizeof(dst));
+    bytes_copy(dst, a, sizeof(a));
+    TF_CHECK_MEM(dst, a, sizeof(a));
+    bytes_copy(NULL, a, 4U);          /* 安全空操作 */
+    bytes_copy(dst, NULL, 4U);
+
+    bytes_fill(dst, 0x5A, 4U);
+    TF_CHECK_INT(dst[0], 0x5A);
+    TF_CHECK_INT(dst[3], 0x5A);
+
+    bytes_copy(dst, a, 4U);
+    bytes_reverse(dst, 4U);
+    TF_CHECK_INT(dst[0], 4);
+    TF_CHECK_INT(dst[3], 1);
+    bytes_reverse(dst, 1U);           /* len < 2 无操作 */
+    TF_CHECK_INT(dst[0], 4);
+
+    tf_end();
+}
+
+void ut_bcd(void)
+{
+    uint8_t buf[2];
+    uint32_t value;
+
+    tf_begin("bcd/编解码");
+
+    TF_CHECK_INT(bcd_encode(12U, buf, 1U), 0);
+    TF_CHECK_INT(buf[0], 0x12);
+
+    TF_CHECK_INT(bcd_encode(1234U, buf, 2U), 0);
+    TF_CHECK_INT(buf[0], 0x12);
+    TF_CHECK_INT(buf[1], 0x34);
+
+    TF_CHECK_INT(bcd_decode(buf, 2U, &value), 0);
+    TF_CHECK_INT(value, 1234);
+
+    /* 右对齐：1 位数字放在低半字节 */
+    TF_CHECK_INT(bcd_encode(7U, buf, 1U), 0);
+    TF_CHECK_INT(buf[0], 0x07);
+    TF_CHECK_INT(bcd_decode(buf, 1U, &value), 0);
+    TF_CHECK_INT(value, 7);
+
+    tf_end();
+
+    tf_begin("bcd/边界与非法值");
+
+    TF_CHECK_INT(bcd_encode(1234U, buf, 1U), -1);    /* 容量不足 */
+    TF_CHECK_INT(bcd_encode(1U, NULL, 1U), -1);
+    TF_CHECK_INT(bcd_encode(1U, buf, 0U), -1);
+
+    buf[0] = 0x1A;                                   /* 非法半字节 */
+    TF_CHECK_INT(bcd_decode(buf, 1U, &value), -1);
+    TF_CHECK_INT(bcd_is_valid(buf, 1U), -1);
+
+    buf[0] = 0x99;
+    TF_CHECK_INT(bcd_is_valid(buf, 1U), 0);
+    TF_CHECK_INT(bcd_is_valid(NULL, 0U), 0);
+    TF_CHECK_INT(bcd_is_valid(NULL, 1U), -1);
+    TF_CHECK_INT(bcd_decode(NULL, 1U, &value), -1);
+    TF_CHECK_INT(bcd_decode(buf, 1U, NULL), -1);
+
+    tf_end();
+}
+
+void ut_endian(void)
+{
+    uint8_t buf[8];
+
+    tf_begin("endian/翻转与读写");
+
+    TF_CHECK_INT(bswap16(0x1234U), 0x3412);
+    TF_CHECK_INT(bswap32(0x12345678UL), 0x78563412UL);
+    TF_CHECK(bswap64(0x0102030405060708ULL) == 0x0807060504030201ULL);
+
+    write_le16(buf, 0x1234U);
+    TF_CHECK_INT(buf[0], 0x34);
+    TF_CHECK_INT(buf[1], 0x12);
+    TF_CHECK_INT(read_le16(buf), 0x1234);
+
+    write_be16(buf, 0x1234U);
+    TF_CHECK_INT(buf[0], 0x12);
+    TF_CHECK_INT(buf[1], 0x34);
+    TF_CHECK_INT(read_be16(buf), 0x1234);
+
+    write_le32(buf, 0x12345678UL);
+    TF_CHECK_INT(read_le32(buf), 0x12345678UL);
+    write_be32(buf, 0x12345678UL);
+    TF_CHECK_INT(read_be32(buf), 0x12345678UL);
+
+    write_le64(buf, 0x0102030405060708ULL);
+    TF_CHECK(read_le64(buf) == 0x0102030405060708ULL);
+    write_be64(buf, 0x0102030405060708ULL);
+    TF_CHECK(read_be64(buf) == 0x0102030405060708ULL);
+
+    tf_end();
+
+    tf_begin("endian/NULL 安全");
+
+    TF_CHECK_INT(read_le16(NULL), 0);
+    TF_CHECK_INT(read_be32(NULL), 0);
+    TF_CHECK(read_le64(NULL) == 0U);
+    write_le16(NULL, 1U);
+    write_be32(NULL, 1U);
+    write_le64(NULL, 1U);
+    TF_CHECK(1);
+
+    tf_end();
+}
+
+void ut_hex(void)
+{
+    char out[16];
+    uint8_t bin[8];
+    size_t written = 0;
+    const uint8_t src[3] = { 0xDE, 0xAD, 0xBE };
+
+    tf_begin("hex/编码");
+
+    TF_CHECK_INT(hex_encode(src, 3U, out, sizeof(out), true), 0);
+    TF_CHECK_STR(out, "DEADBE");
+    TF_CHECK_INT(hex_encode(src, 3U, out, sizeof(out), false), 0);
+    TF_CHECK_STR(out, "deadbe");
+
+    /* 空间不足：需要 3*2+1 = 7 字节 */
+    TF_CHECK_INT(hex_encode(src, 3U, out, 6U, true), -1);
+    TF_CHECK_INT(hex_encode(NULL, 1U, out, sizeof(out), true), -1);
+    TF_CHECK_INT(hex_encode(src, 0U, out, sizeof(out), true), 0);
+    TF_CHECK_STR(out, "");
+
+    tf_end();
+
+    tf_begin("hex/解码");
+
+    TF_CHECK_INT(hex_decode("DEADBE", 6U, bin, sizeof(bin), &written), 0);
+    TF_CHECK_INT(written, 3);
+    TF_CHECK_MEM(bin, src, 3U);
+
+    TF_CHECK_INT(hex_decode("de", 2U, bin, sizeof(bin), NULL), 0);
+    TF_CHECK_INT(bin[0], 0xDE);
+
+    TF_CHECK_INT(hex_decode("ABC", 3U, bin, sizeof(bin), &written), -1);
+    TF_CHECK_INT(hex_decode("ZZ", 2U, bin, sizeof(bin), &written), -1);
+    TF_CHECK_INT(hex_decode("AABB", 4U, bin, 1U, &written), -1);
+    TF_CHECK_INT(hex_decode(NULL, 2U, bin, sizeof(bin), &written), -1);
+
+    tf_end();
 }

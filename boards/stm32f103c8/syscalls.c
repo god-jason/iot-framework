@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-extern char _ebss[];
+extern char end[];        /* 链接脚本 PROVIDE(end)：.noinit 之后的堆起点 */
 extern char _estack[];
 
 /* 主栈预留 2KB，与链接脚本 _Min_Stack_Size 一致 */
@@ -25,12 +25,13 @@ void *_sbrk(ptrdiff_t incr)
     char *limit = (char *)((uintptr_t)_estack - BOARD_STACK_RESERVE);
 
     if (heap_cur == NULL) {
-        heap_cur = _ebss;
+        /* 从 end 开始，避开 .noinit（崩溃记录必须跨复位保留） */
+        heap_cur = end;
     }
 
     prev = heap_cur;
     if ((incr > 0 && heap_cur + incr > limit) ||
-        (incr < 0 && heap_cur + incr < _ebss)) {
+        (incr < 0 && heap_cur + incr < end)) {
         errno = ENOMEM;
         return (void *)-1;
     }

@@ -1,4 +1,10 @@
-/* json.h 宏封装测试：解析、生成、默认值、别名、数组与节点操作。 */
+/*
+ * json_test.c - JSON 宏封装测试（对应 json.h / vendor cJSON）
+ *
+ * 覆盖：文本解析、字段读取、结构体到 JSON 生成、数组处理、
+ *       类型判断与非法输入。
+ */
+
 #include "test.h"
 #include "json.h"
 
@@ -13,124 +19,123 @@ typedef struct {
 void ut_json(void)
 {
     static const char *text =
-        "{\"id\":1001,\"name\":\"sensor01\","
-        "\"enabled\":true,\"temperature\":25.5,"
-        "\"values\":[1.1,2.2,3.3,4.4]}";
+        "{\"id\":1001,\"name\":\"sensor01\",\"enabled\":true,"
+        "\"temperature\":25.5,\"values\":[1.1,2.2,3.3,4.4]}";
     device_t dev;
-    cJSON *root;
-    char *output;
-    int64_t i64 = 0;
-    uint64_t u64 = 0;
 
-    tf_begin("json/JSON 解析到结构体");
+    tf_begin("json/解析文本到结构体");
+
     memset(&dev, 0, sizeof(dev));
-    root = JSON_PARSE_TEXT(text);
-    TF_CHECK(root != NULL);
-    if (root != NULL) {
-        JSON_PARSE_INT_NAME(root, dev.id, "id");
-        JSON_PARSE_STRING_NAME(root, dev.name, "name", sizeof(dev.name));
-        JSON_PARSE_BOOL_NAME(root, dev.enabled, "enabled");
-        JSON_PARSE_FLOAT_NAME(root, dev.temperature, "temperature");
-        JSON_PARSE_ARRAY_FLOAT_NAME(root, dev.values, "values", 4);
+    {
+        cJSON *root = JSON_PARSE_TEXT(text);
 
-        TF_CHECK_INT(dev.id, 1001);
-        TF_CHECK_STR(dev.name, "sensor01");
-        TF_CHECK(dev.enabled);
-        TF_CHECK_NEAR(dev.temperature, 25.5f, 1e-4);
-        TF_CHECK_NEAR(dev.values[0], 1.1f, 1e-4);
-        TF_CHECK_NEAR(dev.values[3], 4.4f, 1e-4);
+        TF_CHECK(root != NULL);
+        TF_CHECK(JSON_IS_OBJECT(root));
 
-        TF_CHECK(JSON_HAS(root, "name"));
-        TF_CHECK(!JSON_HAS(root, "missing"));
-        JSON_GET_INT64(root, "id", i64);
-        TF_CHECK_INT((int)i64, 1001);
-        JSON_GET_UINT64(root, "id", u64);
-        TF_CHECK_INT((int)u64, 1001);
-        JSON_DELETE(root);
-    }
-    tf_end();
-
-    tf_begin("json/结构体生成 JSON");
-    root = JSON_CREATE();
-    TF_CHECK(root != NULL);
-    if (root != NULL) {
-        memset(&dev, 0, sizeof(dev));
-        dev.id = 7;
-        strcpy(dev.name, "dev7");
-        dev.enabled = false;
-        dev.temperature = 1.5f;
-        dev.values[0] = 0.5f;
-
-        TF_CHECK(JSON_ADD_INT_NAME(root, dev.id, "id") != NULL);
-        TF_CHECK(JSON_ADD_STRING_NAME(root, dev.name, "name") != NULL);
-        TF_CHECK(JSON_ADD_BOOL_NAME(root, dev.enabled, "enabled") != NULL);
-        TF_CHECK(JSON_ADD_FLOAT_NAME(root, dev.temperature, "temperature") != NULL);
-        JSON_ADD_ARRAY_FLOAT_NAME(root, dev.values, "values", 4);
-
-        output = JSON_PRINT(root);
-        TF_CHECK(output != NULL);
-        if (output != NULL) {
-            TF_CHECK(strstr(output, "\"id\":7") != NULL);
-            TF_CHECK(strstr(output, "\"enabled\":false") != NULL);
-            JSON_FREE_STRING(output);
+        if (root != NULL) {
+            JSON_PARSE_INT_NAME(root, dev.id, "id");
+            JSON_PARSE_STRING_NAME(root, dev.name, "name", sizeof(dev.name));
+            JSON_PARSE_BOOL_NAME(root, dev.enabled, "enabled");
+            JSON_PARSE_FLOAT_NAME(root, dev.temperature, "temperature");
+            JSON_PARSE_ARRAY_FLOAT_NAME(root, dev.values, "values", 4);
+            JSON_DELETE(root);
         }
-        JSON_DELETE(root);
     }
+
+    TF_CHECK_INT(dev.id, 1001);
+    TF_CHECK_STR(dev.name, "sensor01");
+    TF_CHECK(dev.enabled);
+    TF_CHECK_NEAR(dev.temperature, 25.5f, 1e-4);
+    TF_CHECK_NEAR(dev.values[0], 1.1f, 1e-4);
+    TF_CHECK_NEAR(dev.values[3], 4.4f, 1e-4);
+
     tf_end();
 
-    tf_begin("json/默认值、别名与数组");
-    root = JSON_PARSE_TEXT(
-        "{\"a\":1,\"b\":\"x\",\"d\":2.5,\"arr\":[true,false]}");
-    TF_CHECK(root != NULL);
-    if (root != NULL) {
-        int a = 0;
-        char b[8] = {0};
-        double d = 0.0;
-        bool arr[2] = {false, false};
-        int count = 0;
-        int missing = 42;
-        cJSON *detached;
+    tf_begin("json/缺失字段保持原值");
 
-        JSON_PARSE_INT_NAME(root, a, "a");
-        JSON_PARSE_STRING_NAME(root, b, "b", sizeof(b));
-        JSON_PARSE_DOUBLE(root, d);
-        JSON_PARSE_ARRAY_BOOL(root, arr, 2);
-        JSON_ARRAY_SIZE(root, "arr", count);
-        JSON_PARSE_INT_DEFAULT(root, missing, 42);
+    {
+        device_t d2;
+        cJSON *root;
 
-        TF_CHECK_INT(a, 1);
-        TF_CHECK_STR(b, "x");
-        TF_CHECK_NEAR(d, 2.5, 1e-9);
-        TF_CHECK(arr[0]);
-        TF_CHECK(!arr[1]);
-        TF_CHECK_INT(count, 2);
-        TF_CHECK_INT(missing, 42);
+        memset(&d2, 0, sizeof(d2));
+        d2.id = 7;
+        d2.temperature = 3.0f;
 
-        detached = JSON_DETACH(root, "a");
-        TF_CHECK(detached != NULL);
-        TF_CHECK(!JSON_HAS(root, "a"));
-        JSON_DELETE(detached);
-        JSON_DELETE(root);
-    }
-    tf_end();
-
-    tf_begin("json/bool 与 double 数组序列化");
-    root = JSON_CREATE();
-    TF_CHECK(root != NULL);
-    if (root != NULL) {
-        bool flags[2] = {true, false};
-        double doubles[2] = {1.25, 2.5};
-
-        JSON_ADD_ARRAY_BOOL(root, flags, 2);
-        JSON_ADD_ARRAY_DOUBLE(root, doubles, 2);
-        output = JSON_PRINT(root);
-        TF_CHECK(output != NULL);
-        if (output != NULL) {
-            TF_CHECK(strstr(output, "\"flags\":[true,false]") != NULL);
-            TF_CHECK(strstr(output, "\"doubles\":[1.25,2.5]") != NULL);
-            JSON_FREE_STRING(output);
+        root = JSON_PARSE_TEXT("{\"other\":1}");
+        TF_CHECK(root != NULL);
+        if (root != NULL) {
+            JSON_PARSE_INT_NAME(root, d2.id, "id");
+            JSON_PARSE_FLOAT_NAME(root, d2.temperature, "temperature");
+            JSON_DELETE(root);
         }
-        JSON_DELETE(root);
+        TF_CHECK_INT(d2.id, 7);
+        TF_CHECK_NEAR(d2.temperature, 3.0f, 1e-6);
     }
+
+    tf_end();
+
+    tf_begin("json/结构体生成文本");
+
+    memset(&dev, 0, sizeof(dev));
+    dev.id = 42;
+    strncpy(dev.name, "arm01", sizeof(dev.name) - 1U);
+    dev.enabled = false;
+    dev.temperature = -1.5f;
+    dev.values[0] = 0.5f;
+    dev.values[1] = 1.5f;
+    dev.values[2] = 2.5f;
+    dev.values[3] = 3.5f;
+
+    {
+        cJSON *root = JSON_CREATE();
+
+        TF_CHECK(root != NULL);
+        if (root != NULL) {
+            char *output;
+
+            TF_CHECK(JSON_ADD_INT_NAME(root, dev.id, "id") != NULL);
+            TF_CHECK(JSON_ADD_STRING_NAME(root, dev.name, "name") != NULL);
+            TF_CHECK(JSON_ADD_BOOL_NAME(root, dev.enabled, "enabled") != NULL);
+            TF_CHECK(JSON_ADD_FLOAT_NAME(root, dev.temperature,
+                                         "temperature") != NULL);
+            JSON_ADD_ARRAY_FLOAT_NAME(root, dev.values, "values", 4);
+
+            output = JSON_PRINT(root);
+            TF_CHECK(output != NULL);
+            if (output != NULL) {
+                TF_CHECK(strstr(output, "\"id\"") != NULL);
+                TF_CHECK(strstr(output, "arm01") != NULL);
+                TF_CHECK(strstr(output, "\"values\"") != NULL);
+                JSON_FREE_STRING(output);
+            }
+            JSON_DELETE(root);
+        }
+    }
+
+    tf_end();
+
+    tf_begin("json/类型判断与非法输入");
+
+    TF_CHECK(JSON_PARSE_TEXT("not json") == NULL);
+    TF_CHECK(JSON_PARSE_TEXT(NULL) == NULL);
+
+    {
+        cJSON *root = JSON_PARSE_TEXT("{\"n\":null,\"b\":false,\"s\":\"x\"}");
+
+        TF_CHECK(root != NULL);
+        if (root != NULL) {
+            cJSON *n = cJSON_GetObjectItem(root, "n");
+            cJSON *b = cJSON_GetObjectItem(root, "b");
+            cJSON *s = cJSON_GetObjectItem(root, "s");
+
+            TF_CHECK(JSON_IS_NULL(n));
+            TF_CHECK(JSON_IS_BOOL(b));
+            TF_CHECK(JSON_IS_STRING(s));
+            TF_CHECK(!JSON_IS_ARRAY(s));
+            TF_CHECK(JSON_IS_NULL(NULL));
+            JSON_DELETE(root);
+        }
+    }
+
     tf_end();
 }

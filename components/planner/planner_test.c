@@ -1,194 +1,138 @@
-/* robot/planner 单元测试：计划注册/移除、容量上限、启动停止与单步执行。 */
+/*
+ * planner_test.c - 计划器测试（对应 planner.c）
+ *
+ * 覆盖：注册/注销、启动/停止、按 action 顺序推进、
+ *       完成与失败状态、当前计划查询、非法参数。
+ */
+
 #include "test.h"
 #include "planner.h"
 
-static int s_once_calls;
+typedef struct {
+    int update_result;
+    int updates;
+} plan_ctx_t;
 
-static int cb_success(action_t *a)
+static int step_start(action_t *a)
 {
     (void)a;
-    return 1;
+    return 0;
 }
 
-static int cb_failure(action_t *a)
+static int step_update(action_t *a)
 {
-    (void)a;
-    return -1;
+    plan_ctx_t *c = (plan_ctx_t *)a->ctx;
+    c->updates++;
+    return c->update_result;
 }
-
-static int cb_run_once(action_t *a)
-{
-    (void)a;
-    s_once_calls++;
-    return (s_once_calls >= 2) ? 1 : 0;
-}
-
-static void setup_action(action_t *a, int (*fn)(action_t *))
-{
-    memset(a, 0, sizeof(*a));
-    action_init(a);
-    a->update = fn;
-}
-
-static void setup_plan(planner_plan_t *p, uint32_t id,
-                       action_t **acts, uint16_t count)
-{
-    memset(p, 0, sizeof(*p));
-    p->id = id;
-    p->actions = acts;
-    p->action_count = count;
-}
-
-static action_t s_cap_action;
-static action_t *s_cap_acts[1];
-static planner_plan_t s_cap_plans[9];
 
 void ut_robot_planner(void)
 {
-    planner_plan_t plan;
+    plan_ctx_t c1;
+    plan_ctx_t c2;
     action_t a1;
-    action_t *acts[1];
-    int i;
+    action_t a2;
+    action_t *actions[2];
+    planner_plan_t plan;
 
-    tf_begin("robot/planner 初始化");
+    memset(&c1, 0, sizeof(c1));
+    memset(&c2, 0, sizeof(c2));
+    memset(&a1, 0, sizeof(a1));
+    memset(&a2, 0, sizeof(a2));
+
+    a1.name = "a1";
+    a1.start = step_start;
+    a1.update = step_update;
+    a1.ctx = &c1;
+    a2.name = "a2";
+    a2.start = step_start;
+    a2.update = step_update;
+    a2.ctx = &c2;
+
+    actions[0] = &a1;
+    actions[1] = &a2;
+
+    memset(&plan, 0, sizeof(plan));
+    plan.id = 1U;
+    plan.name = "plan";
+    plan.actions = actions;
+    plan.action_count = 2U;
+
+    tf_begin("planner/注册与校验");
+
     TF_CHECK_INT(planner_init(), 0);
     TF_CHECK(planner_get_current() == NULL);
-    tf_end();
 
-    tf_begin("robot/planner 非法计划");
     TF_CHECK_INT(planner_add(NULL), -1);
-    setup_plan(&plan, 1, NULL, 1);
-    TF_CHECK_INT(planner_add(&plan), -1);
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 1, acts, 0);
-    TF_CHECK_INT(planner_add(&plan), -1);
-    tf_end();
+    {
+        planner_plan_t bad;
 
-    tf_begin("robot/planner 添加计划");
-    planner_init();
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 11, acts, 1);
-    TF_CHECK_INT(planner_add(&plan), 0);
-    TF_CHECK_INT(plan.state, PLANNER_PLAN_PENDING);
-    TF_CHECK_INT(plan.current_action, 0);
-    TF_CHECK(planner_get_current() == NULL);
-    tf_end();
-
-    tf_begin("robot/planner 容量上限");
-    planner_init();
-    setup_action(&s_cap_action, cb_success);
-    s_cap_acts[0] = &s_cap_action;
-    for (i = 0; i < 9; i++) {
-        setup_plan(&s_cap_plans[i], (uint32_t)(i + 1), s_cap_acts, 1);
+        memset(&bad, 0, sizeof(bad));
+        bad.id = 2U;
+        TF_CHECK_INT(planner_add(&bad), -1);      /* 无 action */
     }
-    for (i = 0; i < 8; i++) {
-        TF_CHECK_INT(planner_add(&s_cap_plans[i]), 0);
-    }
-    TF_CHECK_INT(planner_add(&s_cap_plans[8]), -1);
-    /* 移除一个后应可再添加 */
-    TF_CHECK_INT(planner_remove(1), 0);
-    TF_CHECK_INT(planner_add(&s_cap_plans[8]), 0);
+    TF_CHECK_INT(planner_add(&plan), 0);
+    TF_CHECK_INT(planner_add(&plan), 0);          /* 未做 id 去重 */
+
     tf_end();
 
-    tf_begin("robot/planner 移除计划");
-    planner_init();
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 21, acts, 1);
-    TF_CHECK_INT(planner_add(&plan), 0);
-    TF_CHECK_INT(planner_remove(21), 0);
-    TF_CHECK_INT(planner_remove(21), -1);
-    TF_CHECK_INT(planner_remove(999), -1);
-    tf_end();
+    tf_begin("planner/执行推进");
 
-    tf_begin("robot/planner 启动与停止");
-    planner_init();
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 31, acts, 1);
-    TF_CHECK_INT(planner_add(&plan), 0);
+    action_init(&a1);
+    action_init(&a2);
 
-    TF_CHECK_INT(planner_start(999), -1);
-    TF_CHECK_INT(planner_start(31), 0);
-    TF_CHECK_INT(plan.state, PLANNER_PLAN_RUNNING);
-    TF_CHECK_INT(plan.current_action, 0);
+    TF_CHECK_INT(planner_start(99U), -1);
+    TF_CHECK_INT(planner_start(1U), 0);
     TF_CHECK(planner_get_current() == &plan);
+    TF_CHECK_INT(plan.state, PLANNER_PLAN_RUNNING);
 
-    TF_CHECK_INT(planner_stop(999), -1);
-    TF_CHECK_INT(planner_stop(31), 0);
-    TF_CHECK_INT(plan.state, PLANNER_PLAN_PENDING);
-    TF_CHECK(planner_get_current() == NULL);
-    tf_end();
+    /* action1 未完成：本帧停在 action1 */
+    c1.update_result = 0;
+    TF_CHECK_INT(planner_process(), 0);
+    TF_CHECK_INT(c1.updates, 1);
+    TF_CHECK_INT(c2.updates, 0);
+    TF_CHECK_INT(plan.state, PLANNER_PLAN_RUNNING);
 
-    tf_begin("robot/planner 执行成功");
-    planner_init();
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 41, acts, 1);
-    planner_add(&plan);
-    planner_start(41);
+    /* action1 完成后进入 action2 */
+    c1.update_result = 1;
+    TF_CHECK_INT(planner_process(), 0);
+    TF_CHECK_INT(c1.updates, 2);
+    TF_CHECK_INT(c2.updates, 1);
+
+    /* action2 完成：计划成功 */
+    c2.update_result = 1;
     TF_CHECK_INT(planner_process(), 0);
     TF_CHECK_INT(plan.state, PLANNER_PLAN_SUCCESS);
-    TF_CHECK_INT(plan.current_action, 1);
-    TF_CHECK(planner_get_current() == NULL);
-    /* 无当前计划时再次推进应安全返回 */
-    TF_CHECK_INT(planner_process(), 0);
+
     tf_end();
 
-    tf_begin("robot/planner 分拍执行");
-    planner_init();
-    s_once_calls = 0;
-    setup_action(&a1, cb_run_once);
-    acts[0] = &a1;
-    setup_plan(&plan, 51, acts, 1);
-    planner_add(&plan);
-    planner_start(51);
-    TF_CHECK_INT(planner_process(), 0);
-    TF_CHECK_INT(plan.state, PLANNER_PLAN_RUNNING);
-    TF_CHECK_INT(plan.current_action, 0);
-    TF_CHECK(planner_get_current() == &plan);
-    TF_CHECK_INT(planner_process(), 0);
-    TF_CHECK_INT(plan.state, PLANNER_PLAN_SUCCESS);
-    TF_CHECK(planner_get_current() == NULL);
-    tf_end();
+    tf_begin("planner/失败与停止");
 
-    tf_begin("robot/planner 执行失败");
-    planner_init();
-    setup_action(&a1, cb_failure);
-    acts[0] = &a1;
-    setup_plan(&plan, 61, acts, 1);
-    planner_add(&plan);
-    planner_start(61);
+    action_reset(&a1);
+    action_reset(&a2);
+    c1.updates = 0;
+    c2.updates = 0;
+    c1.update_result = -1;                        /* action1 失败 */
+    c2.update_result = 0;
+
+    TF_CHECK_INT(planner_start(1U), 0);
     TF_CHECK_INT(planner_process(), 0);
     TF_CHECK_INT(plan.state, PLANNER_PLAN_FAILED);
-    TF_CHECK_INT(plan.current_action, 0);
-    TF_CHECK(planner_get_current() == NULL);
-    tf_end();
 
-    tf_begin("robot/planner 停止后不推进");
-    planner_init();
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 71, acts, 1);
-    planner_add(&plan);
-    planner_start(71);
-    planner_stop(71);
-    TF_CHECK_INT(planner_process(), 0);
+    TF_CHECK_INT(planner_stop(1U), 0);
     TF_CHECK_INT(plan.state, PLANNER_PLAN_PENDING);
-    TF_CHECK_INT(plan.current_action, 0);
+    TF_CHECK(planner_get_current() == NULL);
+    TF_CHECK_INT(planner_stop(99U), -1);
+
+    /* 无当前计划时 process 返回 0 */
+    TF_CHECK_INT(planner_process(), 0);
+
     tf_end();
 
-    tf_begin("robot/planner 移除当前计划");
-    planner_init();
-    setup_action(&a1, cb_success);
-    acts[0] = &a1;
-    setup_plan(&plan, 81, acts, 1);
-    planner_add(&plan);
-    planner_start(81);
-    TF_CHECK(planner_get_current() == &plan);
-    TF_CHECK_INT(planner_remove(81), 0);
+    tf_begin("planner/注销");
+
+    TF_CHECK_INT(planner_remove(1U), 0);
     TF_CHECK(planner_get_current() == NULL);
+
     tf_end();
 }

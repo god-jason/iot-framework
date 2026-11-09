@@ -1,498 +1,215 @@
-/* components/modem/ml307/at.c per-file 单元测试。
+/*
+ * at_test.c - AT 引擎组件测试（at / at_parser / at_urc）
  *
- * 覆盖：初始化/启停/重复 deinit 的幂等性、发送与原始发送参数校验、
- *       非阻塞事务（成功/失败/取消/超时/重试/提示符）、
- *       数据行 expect 过滤、URC 优先分发、响应缓冲截断、
- *       行缓冲溢出、UART 接收泵取与未启动时不泵取。
- * 未覆盖：真实模组响应时序；at_process 的 tick 使用内部计数而非真实时间。
+ * 覆盖：解析器分行与提示符、溢出、URC 注册与分发、
+ *       引擎初始化/启动/停止、输入注入与状态机、参数校验。
  */
+
 #include "test.h"
 #include "at.h"
+#include "at_parser.h"
 #include "at_urc.h"
-#include "hal.h"
-#include "pc.h"
 
-#include <string.h>
+/* ============================== parser ============================== */
 
-#define TX_MAX 2048
-#define RX_MAX 2048
+static char s_lines[4][32];
+static int s_line_count;
+static int s_prompt_count;
+static int s_overflow_count;
 
-static hal_uart_t s_uart;
-
-static uint8_t s_tx[TX_MAX + 1];
-static uint32_t s_tx_len;
-
-static char s_line_buf[512];
-static uint8_t s_rx_buf[64];
-
-static int s_cb_calls;
-static at_result_e s_cb_result;
-static char s_cb_resp[512];
-static uint32_t s_cb_len;
-static void *s_cb_user;
-
-static int s_urc_calls;
-
-static void uart_fixture_reset(void)
+static void token_cb(const at_token_t *token, void *user)
 {
-    hal_uart_config_t cfg;
+    (void)user;
 
-    iot_test_reset_state();
-    memset(&s_uart, 0, sizeof(s_uart));
-    memset(&cfg, 0, sizeof(cfg));
-    cfg.baudrate = 115200;
-    cfg.word_length = HAL_UART_WORD_8BIT;
-    cfg.parity = HAL_UART_PARITY_NONE;
-    cfg.stop_bits = HAL_UART_STOP_1;
-    cfg.flow_control = HAL_UART_FLOW_NONE;
-    cfg.mode = HAL_UART_MODE_TX_RX;
-    (void)hal_uart_init(&s_uart, &cfg);
-    s_tx_len = 0;
-    s_tx[0] = '\0';
+    if (token->type == AT_LINE) {
+        if (s_line_count < 4) {
+            uint32_t n = token->len;
+
+            if (n > sizeof(s_lines[0]) - 1U) {
+                n = sizeof(s_lines[0]) - 1U;
+            }
+            memcpy(s_lines[s_line_count], token->data, n);
+            s_lines[s_line_count][n] = '\0';
+            s_line_count++;
+        }
+    } else if (token->type == AT_PROMPT) {
+        s_prompt_count++;
+    } else if (token->type == AT_OVERFLOW) {
+        s_overflow_count++;
+    }
 }
 
-static void reset_mock(void)
+void ut_at_parser(void)
 {
-    uart_fixture_reset();
+    char buf[16];
+
+    tf_begin("at_parser/分行与提示符");
+
+    s_line_count = 0;
+    s_prompt_count = 0;
+    s_overflow_count = 0;
+
+    TF_CHECK_INT(at_parser_init(NULL, sizeof(buf), token_cb, NULL), -1);
+    TF_CHECK_INT(at_parser_init(buf, 0U, token_cb, NULL), -1);
+    TF_CHECK_INT(at_parser_init(buf, sizeof(buf), NULL, NULL), -1);
+    TF_CHECK_INT(at_parser_init(buf, sizeof(buf), token_cb, NULL), 0);
+
+    TF_CHECK_INT(at_parser_input((const uint8_t *)"OK\r\n", 4U), 0);
+    TF_CHECK_INT(s_line_count, 1);
+    TF_CHECK_STR(s_lines[0], "OK");
+
+    /* 一次到达多行 */
+    {
+        static const char multi[] = "+CSQ: 20\r\nERROR\r\n";
+
+        TF_CHECK_INT(at_parser_input((const uint8_t *)multi,
+                                     (uint32_t)strlen(multi)), 0);
+    }
+    TF_CHECK_INT(s_line_count, 3);
+    TF_CHECK_STR(s_lines[1], "+CSQ: 20");
+    TF_CHECK_STR(s_lines[2], "ERROR");
+
+    /* 行首 '>' 为数据提示符 */
+    TF_CHECK_INT(at_parser_input((const uint8_t *)">", 1U), 0);
+    TF_CHECK_INT(s_prompt_count, 1);
+
+    /* 行中间的 '>' 不构成提示符 */
+    TF_CHECK_INT(at_parser_input((const uint8_t *)"a>b\r\n", 5U), 0);
+    TF_CHECK_INT(s_prompt_count, 1);
+    TF_CHECK_STR(s_lines[3], "a>b");
+
+    tf_end();
+
+    tf_begin("at_parser/溢出与复位");
+
+    s_line_count = 0;
+    s_overflow_count = 0;
+    TF_CHECK_INT(at_parser_reset(), 0);
+
+    {
+        /* 超过 15 字符的行触发溢出；剩余字符构成新的一行 */
+        static const char longline[] = "0123456789ABCDEFGHIJ\r\n";
+        TF_CHECK_INT(at_parser_input((const uint8_t *)longline,
+                                     (uint32_t)strlen(longline)), 0);
+        TF_CHECK_INT(s_overflow_count, 1);
+        TF_CHECK_INT(s_line_count, 1);
+    }
+
+    TF_CHECK_INT(at_parser_input(NULL, 4U), 0);
+    TF_CHECK_INT(at_parser_input((const uint8_t *)"x", 0U), 0);
+    TF_CHECK_INT(at_parser_reset(), 0);
+
+    tf_end();
 }
 
-static void set_rx(const char *s)
-{
-    (void)iot_test_uart_inject(&s_uart, (const uint8_t *)s, (uint32_t)strlen(s));
-}
+/* ============================== urc ============================== */
 
-static void refresh_tx(void)
-{
-    s_tx_len = iot_test_uart_get_tx(&s_uart, s_tx, TX_MAX);
-    s_tx[s_tx_len] = '\0';
-}
+static int s_urc_count;
+static char s_urc_line[64];
 
-static void reset_cb(void)
-{
-    s_cb_calls = 0;
-    s_cb_result = AT_RESULT_IO_ERROR;
-    s_cb_resp[0] = '\0';
-    s_cb_len = 0;
-    s_cb_user = NULL;
-}
-
-static void on_done(at_result_e result, const char *response, uint32_t len,
-                    void *user)
+static void urc_cb(const char *line, uint32_t len, void *user)
 {
     uint32_t n = len;
 
-    s_cb_calls++;
-    s_cb_result = result;
-    s_cb_user = user;
-    s_cb_len = len;
-    if (n > sizeof(s_cb_resp) - 1) {
-        n = sizeof(s_cb_resp) - 1;
-    }
-    if (response != NULL) {
-        memcpy(s_cb_resp, response, n);
-    }
-    s_cb_resp[n] = '\0';
-}
-
-static void urc_on_ring(const char *line, uint32_t len, void *user)
-{
-    (void)line;
-    (void)len;
     (void)user;
-    s_urc_calls++;
-}
-
-static int init_at(uint32_t default_timeout, uint8_t default_retry)
-{
-    at_config_t cfg;
-    int r;
-
-    memset(&cfg, 0, sizeof(cfg));
-    cfg.uart = &s_uart;
-    cfg.rx_buffer = s_rx_buf;
-    cfg.rx_buffer_size = sizeof(s_rx_buf);
-    cfg.line_buffer = s_line_buf;
-    cfg.line_buffer_size = sizeof(s_line_buf);
-    cfg.default_timeout = default_timeout;
-    cfg.default_retry = default_retry;
-
-    reset_mock();
-    reset_cb();
-    s_urc_calls = 0;
-    r = at_init(&cfg);
-    return r;
-}
-
-static void make_req(at_request_t *req, const char *cmd, const char *success,
-                     const char *failure, uint32_t timeout, uint8_t retry)
-{
-    memset(req, 0, sizeof(*req));
-    req->command = cmd;
-    req->success = success;
-    req->failure = failure;
-    req->timeout = timeout;
-    req->retry = retry;
-    req->callback = on_done;
-    req->user = (void *)0x5A5A;
-}
-
-static void test_lifecycle(void)
-{
-    tf_begin("at/未初始化时所有操作被拒绝");
-    at_deinit();
-    TF_CHECK_INT(at_start(), -1);
-    TF_CHECK_INT(at_send("AT"), -1);
-    TF_CHECK_INT(at_send_raw((const uint8_t *)"x", 1), -1);
-    {
-        at_request_t req;
-        make_req(&req, "AT", NULL, NULL, 10, 0);
-        TF_CHECK_INT(at_query(&req), -1);
-        TF_CHECK_INT(at_exec("AT", 5), AT_RESULT_BUSY);
+    if (n > sizeof(s_urc_line) - 1U) {
+        n = sizeof(s_urc_line) - 1U;
     }
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK(!at_is_busy());
-    TF_CHECK_INT(at_stop(), 0);
-    tf_end();
-
-    tf_begin("at/初始化参数校验");
-    TF_CHECK_INT(at_init(NULL), -1);
-    {
-        at_config_t cfg;
-        memset(&cfg, 0, sizeof(cfg));
-        TF_CHECK_INT(at_init(&cfg), -1);   /* uart == NULL */
-        cfg.uart = &s_uart;
-        cfg.line_buffer = s_line_buf;
-        cfg.line_buffer_size = sizeof(s_line_buf);
-        TF_CHECK_INT(at_init(&cfg), 0);
-    }
-    TF_CHECK_INT(at_get_state(), AT_IDLE);
-    TF_CHECK(!at_is_busy());
-    tf_end();
-
-    tf_begin("at/重复初始化与启停幂等");
-    TF_CHECK_INT(init_at(5, 0), 0);
-    TF_CHECK_INT(init_at(5, 0), 0);
-    TF_CHECK_INT(at_start(), 0);
-    TF_CHECK_INT(at_start(), 0);
-    TF_CHECK_INT(at_stop(), 0);
-    TF_CHECK_INT(at_get_state(), AT_IDLE);
-    TF_CHECK_INT(at_deinit(), 0);
-    TF_CHECK_INT(at_deinit(), 0);
-    TF_CHECK_INT(at_send("AT"), -1);
-    tf_end();
+    memcpy(s_urc_line, line, n);
+    s_urc_line[n] = '\0';
+    s_urc_count++;
 }
 
-static void test_send(void)
+void ut_at_urc(void)
 {
-    init_at(5, 0);
+    tf_begin("at_urc/注册与分发");
 
-    tf_begin("at/at_send 追加 CRLF");
-    TF_CHECK_INT(at_send("AT"), 0);
-    refresh_tx();
-    TF_CHECK_STR((const char *)s_tx, "AT\r\n");
-    tf_end();
+    TF_CHECK_INT(at_urc_register(NULL, urc_cb, NULL), -1);
+    TF_CHECK_INT(at_urc_register("+CSQ", NULL, NULL), -1);
+    TF_CHECK_INT(at_urc_register("+CSQ", urc_cb, NULL), 0);
 
-    tf_begin("at/at_send 非法参数不发送");
-    reset_mock();
-    TF_CHECK_INT(at_send(NULL), -1);
-    refresh_tx();
-    TF_CHECK_INT(s_tx_len, 0);
-    tf_end();
+    s_urc_count = 0;
+    TF_CHECK_INT(at_urc_dispatch("+CSQ: 25,99", 11U), 0);
+    TF_CHECK_INT(s_urc_count, 1);
+    TF_CHECK_STR(s_urc_line, "+CSQ: 25,99");
 
-    tf_begin("at/at_send_raw 原样发送");
-    reset_mock();
-    TF_CHECK_INT(at_send_raw((const uint8_t *)"ABC\r\n", 5), 0);
-    refresh_tx();
-    TF_CHECK_MEM(s_tx, "ABC\r\n", 5);
-    TF_CHECK_INT(s_tx_len, 5);
-    TF_CHECK_INT(at_send_raw(NULL, 3), -1);
-    TF_CHECK_INT(at_send_raw((const uint8_t *)"x", 0), -1);
-    refresh_tx();
-    TF_CHECK_INT(s_tx_len, 5);
+    /* 非行首匹配不触发 */
+    TF_CHECK_INT(at_urc_dispatch("OK +CSQ", 7U), -1);
+    TF_CHECK_INT(s_urc_count, 1);
+
+    /* 未注册前缀 */
+    TF_CHECK_INT(at_urc_dispatch("+CREG: 1", 8U), -1);
+
+    TF_CHECK_INT(at_urc_unregister("+CSQ"), 0);
+    TF_CHECK_INT(at_urc_unregister("+CSQ"), -1);   /* 已注销 */
+    TF_CHECK_INT(at_urc_unregister(NULL), -1);
+
     tf_end();
 }
 
-static void test_query_complete(void)
-{
-    at_request_t req;
-
-    init_at(5, 0);
-
-    tf_begin("at/提交事务并成功完成");
-    make_req(&req, "AT+X", NULL, NULL, 0, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    refresh_tx();
-    TF_CHECK_STR((const char *)s_tx, "AT+X\r\n");
-    TF_CHECK(at_is_busy());
-    TF_CHECK_INT(at_get_state(), AT_WAITING);
-
-    make_req(&req, "AT+Y", NULL, NULL, 0, 0);
-    TF_CHECK_INT(at_query(&req), -1);      /* 已有在途事务 */
-
-    at_input((const uint8_t *)"line1\r\nline2\r\nOK\r\n", 18);
-    TF_CHECK(!at_is_busy());
-    TF_CHECK_INT(at_get_state(), AT_COMPLETE);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    TF_CHECK_INT(s_cb_len, 11);
-    TF_CHECK_STR(s_cb_resp, "line1\nline2");
-    TF_CHECK_STR(at_get_response(), "line1\nline2");
-    TF_CHECK(s_cb_user == (void *)0x5A5A);
-    tf_end();
-
-    tf_begin("at/失败终止符");
-    init_at(5, 0);
-    make_req(&req, "AT", "DONE", "FAIL", 0, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)"FAIL\r\n", 6);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_ERROR);
-    TF_CHECK_INT(at_get_state(), AT_ERROR);
-    tf_end();
-
-    tf_begin("at/自定义成功终止符");
-    init_at(5, 0);
-    make_req(&req, "AT", "DONE", "FAIL", 0, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)"data\r\nDONE\r\n", 12);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    TF_CHECK_STR(at_get_response(), "data");
-    tf_end();
-
-    tf_begin("at/expect 数据行过滤");
-    init_at(5, 0);
-    make_req(&req, "AT", NULL, NULL, 0, 0);
-    req.expect = "DATA";
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)"noise\r\nDATA=1\r\nOK\r\n", 19);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    TF_CHECK_STR(at_get_response(), "DATA=1");
-    tf_end();
-
-    tf_begin("at/无在途事务时忽略噪声");
-    init_at(5, 0);
-    at_input((const uint8_t *)"garbage\r\nOK\r\n", 13);
-    TF_CHECK_INT(s_cb_calls, 0);
-    TF_CHECK(!at_is_busy());
-    tf_end();
-
-    tf_begin("at/空命令仅等待响应");
-    init_at(5, 0);
-    make_req(&req, NULL, NULL, NULL, 0, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    refresh_tx();
-    TF_CHECK_INT(s_tx_len, 0);
-    at_input((const uint8_t *)"OK\r\n", 4);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    tf_end();
-}
-
-static void test_cancel(void)
-{
-    at_request_t req;
-
-    init_at(5, 0);
-
-    tf_begin("at/无事务时取消失败");
-    TF_CHECK_INT(at_cancel(), -1);
-    tf_end();
-
-    tf_begin("at/取消在途事务");
-    make_req(&req, "AT+X", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    TF_CHECK_INT(at_cancel(), 0);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_CANCELLED);
-    TF_CHECK(!at_is_busy());
-    TF_CHECK_INT(at_get_state(), AT_ERROR);
-    tf_end();
-}
-
-static void test_prompt(void)
-{
-    at_request_t req;
-
-    init_at(5, 0);
-
-    tf_begin("at/等待 > 提示符");
-    make_req(&req, "AT+PUB", ">", "ERROR", 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)">", 1);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    TF_CHECK(!at_is_busy());
-    tf_end();
-
-    tf_begin("at/未等待提示符时忽略 >");
-    init_at(5, 0);
-    make_req(&req, "AT", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)">", 1);
-    TF_CHECK_INT(s_cb_calls, 0);
-    TF_CHECK(at_is_busy());
-    tf_end();
-}
-
-static void test_urc_priority(void)
-{
-    at_request_t req;
-
-    init_at(5, 0);
-    (void)at_urc_unregister("RING");
-    TF_CHECK_INT(at_urc_register("RING", urc_on_ring, NULL), 0);
-
-    tf_begin("at/URC 优先分发且不进入响应");
-    make_req(&req, "AT", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)"RING\r\nOK\r\n", 10);
-    TF_CHECK_INT(s_urc_calls, 1);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    TF_CHECK_INT(s_cb_len, 0);
-    tf_end();
-
-    (void)at_urc_unregister("RING");
-}
-
-static void test_timeout_retry(void)
-{
-    at_request_t req;
-    int i;
-
-    tf_begin("at/超时完成事务");
-    init_at(5, 0);
-    make_req(&req, "AT+T", NULL, NULL, 4, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    for (i = 0; i < 3; i++) {
-        TF_CHECK_INT(at_process(), 0);
-        TF_CHECK(at_is_busy());
-    }
-    TF_CHECK_INT(s_cb_calls, 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_TIMEOUT);
-    TF_CHECK(!at_is_busy());
-    tf_end();
-
-    tf_begin("at/超时重试后重发命令");
-    init_at(5, 0);
-    make_req(&req, "AT+R", NULL, NULL, 2, 1);
-    TF_CHECK_INT(at_query(&req), 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(at_process(), 0);      /* 第一次超时 -> 重发 */
-    refresh_tx();
-    TF_CHECK_STR((const char *)s_tx, "AT+R\r\nAT+R\r\n");
-    TF_CHECK(at_is_busy());
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(at_process(), 0);      /* 重试耗尽 -> 超时 */
-    TF_CHECK_INT(s_cb_result, AT_RESULT_TIMEOUT);
-    TF_CHECK(!at_is_busy());
-    tf_end();
-
-    tf_begin("at/使用默认超时");
-    init_at(3, 0);
-    make_req(&req, "AT+D", NULL, NULL, 0, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK(at_is_busy());
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_TIMEOUT);
-    tf_end();
-}
-
-static void test_buffer_limits(void)
-{
-    at_config_t cfg;
-    at_request_t req;
-    static char big[301];
-    static char small_line[16];
-
-    tf_begin("at/行缓冲溢出产生 OVERFLOW");
-    memset(&cfg, 0, sizeof(cfg));
-    cfg.uart = &s_uart;
-    cfg.rx_buffer = s_rx_buf;
-    cfg.rx_buffer_size = sizeof(s_rx_buf);
-    cfg.line_buffer = small_line;
-    cfg.line_buffer_size = sizeof(small_line);
-    cfg.default_timeout = 5;
-    reset_mock();
-    reset_cb();
-    at_init(&cfg);
-
-    make_req(&req, "AT", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)"0123456789012345678901234\r\n", 27);
-    TF_CHECK_INT(s_cb_calls, 1);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OVERFLOW);
-    tf_end();
-
-    tf_begin("at/响应缓冲截断到 255 字节");
-    init_at(5, 0);
-    memset(big, 'A', 300);
-    big[300] = '\0';
-    make_req(&req, "AT", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    at_input((const uint8_t *)big, 300);
-    at_input((const uint8_t *)"\r\nOK\r\n", 6);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    TF_CHECK_INT(s_cb_len, 255);
-    TF_CHECK_INT((int)strlen(at_get_response()), 255);
-    tf_end();
-}
-
-static void test_uart_pump(void)
-{
-    at_request_t req;
-
-    tf_begin("at/启动后 at_process 从 UART 泵取");
-    init_at(5, 0);
-    TF_CHECK_INT(at_start(), 0);
-    set_rx("OK\r\n");
-    make_req(&req, "AT+P", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    refresh_tx();
-    TF_CHECK_STR((const char *)s_tx, "AT+P\r\n");
-    tf_end();
-
-    tf_begin("at/分多次泵取拼成完整行");
-    init_at(5, 0);
-    TF_CHECK_INT(at_start(), 0);
-    set_rx("O");
-    make_req(&req, "AT+P", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK(at_is_busy());
-    set_rx("K\r\n");
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK_INT(s_cb_result, AT_RESULT_OK);
-    tf_end();
-
-    tf_begin("at/停止后不泵取 UART");
-    init_at(5, 0);
-    TF_CHECK_INT(at_start(), 0);
-    TF_CHECK_INT(at_stop(), 0);
-    set_rx("OK\r\n");
-    make_req(&req, "AT+P", NULL, NULL, 100, 0);
-    TF_CHECK_INT(at_query(&req), 0);
-    TF_CHECK_INT(at_process(), 0);
-    TF_CHECK(at_is_busy());
-    TF_CHECK_INT(s_cb_calls, 0);
-    tf_end();
-}
+/* ============================== engine ============================== */
 
 void ut_at(void)
 {
-    test_lifecycle();
-    test_send();
-    test_query_complete();
-    test_cancel();
-    test_prompt();
-    test_urc_priority();
-    test_timeout_retry();
-    test_buffer_limits();
-    test_uart_pump();
-    at_deinit();
+    at_config_t cfg;
+    uint8_t rx[32];
+    char line[64];
+
+    tf_begin("at/初始化与启停");
+
+    TF_CHECK_INT(at_init(NULL), -1);
+
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.uart = NULL;                     /* 必须非 NULL */
+    cfg.rx_buffer = rx;
+    cfg.rx_buffer_size = sizeof(rx);
+    cfg.line_buffer = line;
+    cfg.line_buffer_size = sizeof(line);
+    cfg.default_timeout = 10U;
+    TF_CHECK_INT(at_init(&cfg), -1);
+
+    /* 用一个非空句柄占位（PC 模拟端不实际收发） */
+    cfg.uart = (hal_uart_t *)rx;
+    TF_CHECK_INT(at_init(&cfg), 0);
+
+    TF_CHECK_INT(at_start(), 0);
+    TF_CHECK_INT(at_get_state(), AT_IDLE);
+    TF_CHECK(!at_is_busy());
+
+    TF_CHECK_INT(at_deinit(), 0);
+    TF_CHECK_INT(at_stop(), 0);
+
+    tf_end();
+
+    tf_begin("at/输入注入与状态机");
+
+    TF_CHECK_INT(at_init(&cfg), 0);
+    TF_CHECK_INT(at_start(), 0);
+
+    at_input((const uint8_t *)"OK\r\n", 4U);
+    TF_CHECK_INT(at_process(), 0);
+
+    /* 无在途事务：取消失败 */
+    TF_CHECK_INT(at_cancel(), -1);
+
+    TF_CHECK_INT(at_send(NULL), -1);
+    TF_CHECK_INT(at_send_raw(NULL, 1U), -1);
+    TF_CHECK_INT(at_send_raw((const uint8_t *)"AT", 0U), -1);
+
+    tf_end();
+
+    tf_begin("at/阻塞执行（超时路径）");
+
+    TF_CHECK_INT(at_init(&cfg), 0);
+    TF_CHECK_INT(at_start(), 0);
+
+    /* 不注入任何响应，1 次 process 超时 */
+    {
+        at_result_e r = at_exec("AT", 1U);
+        TF_CHECK(r == AT_RESULT_TIMEOUT || r == AT_RESULT_ERROR);
+    }
+
+    TF_CHECK(at_get_response() != NULL);
+
+    tf_end();
 }

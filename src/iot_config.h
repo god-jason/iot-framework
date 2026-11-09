@@ -19,6 +19,27 @@
 #  endif
 #endif
 
+/* ------------------------------ 崩溃记录 ------------------------------ */
+
+/* 崩溃现场记录：断言/硬件异常/栈溢出时写入 .noinit，复位后可读取上报 */
+#ifndef IOT_CRASH_ENABLE
+#define IOT_CRASH_ENABLE 1
+#endif
+
+/* 崩溃后是否自动复位（1 = 复位并保留现场，0 = 停机等待调试器） */
+#ifndef IOT_CRASH_REBOOT
+#define IOT_CRASH_REBOOT 1
+#endif
+
+/*
+ * Cortex-M 故障处理函数是否由框架提供（1 = 提供）。
+ * 应用已在自己的中断文件里实现 HardFault_Handler 等时置 0，
+ * 并在自己的处理函数里转发到 iot_crash_fault_entry()。
+ */
+#ifndef IOT_CRASH_OWN_HANDLERS
+#define IOT_CRASH_OWN_HANDLERS 1
+#endif
+
 /* ------------------------------ 调度 ------------------------------ */
 
 /* 同优先级时间片轮转：每 N 个 tick 把当前任务放回同优先级队尾 */

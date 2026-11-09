@@ -14,6 +14,9 @@
 
 void iot_init(void)
 {
+    /* 0. 校验上次复位留下的崩溃现场并安装异常捕获钩子 */
+    iot_crash_init();
+
     /* 1. 移植层初始化（PC 端把主线程转换为 Fiber） */
     iot_port_init();
 
