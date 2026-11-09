@@ -19,7 +19,7 @@
  *   - 未实现“运行中的子节点记忆”，sequence/selector 每帧都从第 0 个重新评估。
  */
 #include "behavior_bt.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 #include <string.h>
 
 /* 节点池容量：创建节点总数上限，超出后 bt_alloc 返回 NULL */
@@ -39,14 +39,14 @@ static int bt_ensure(void)
         return 0;
     }
     if (s_nodes == NULL) {
-        s_nodes = (behavior_bt_node_t *)hal_calloc(BEHAVIOR_BT_MAX_NODES, sizeof(*s_nodes));
+        s_nodes = (behavior_bt_node_t *)iot_mem_calloc(BEHAVIOR_BT_MAX_NODES, sizeof(*s_nodes));
     }
     if (s_used == NULL) {
-        s_used = (bool *)hal_calloc(BEHAVIOR_BT_MAX_NODES, sizeof(*s_used));
+        s_used = (bool *)iot_mem_calloc(BEHAVIOR_BT_MAX_NODES, sizeof(*s_used));
     }
     if (s_nodes == NULL || s_used == NULL) {
-        hal_free(s_nodes);
-        hal_free(s_used);
+        iot_mem_free(s_nodes);
+        iot_mem_free(s_used);
         s_nodes = NULL;
         s_used = NULL;
         return -1;                  /* 分配失败：清空便于后续重试 */

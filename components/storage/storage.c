@@ -16,7 +16,7 @@
  *   - 注册成功会立即调用一次 ops->init（若存在）。
  */
 #include "storage.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 #include <string.h>
 
 /* 注册表容量：同时存在的存储后端上限 */
@@ -40,7 +40,7 @@ static int storage_ensure(void)
     if (s_nodes != NULL) {
         return 0;
     }
-    s_nodes = (storage_node_t *)hal_calloc(STORAGE_MAX, sizeof(*s_nodes));
+    s_nodes = (storage_node_t *)iot_mem_calloc(STORAGE_MAX, sizeof(*s_nodes));
     return (s_nodes != NULL) ? 0 : -1;
 }
 

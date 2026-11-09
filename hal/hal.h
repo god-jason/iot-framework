@@ -16,7 +16,6 @@
 #include "hal_def.h"
 #include "hal_config.h"
 
-#include "hal_os.h"
 #include "hal_clock.h"
 #include "hal_pin.h"
 

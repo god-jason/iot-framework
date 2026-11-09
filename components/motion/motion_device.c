@@ -1,6 +1,6 @@
 #include "motion_device.h"
 #include "motion_error.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 
 /*
  * motion_device.c —— 设备操作抽象层实现。
@@ -32,14 +32,14 @@ static bool *s_pwm_active;                /* PWM 设备占用位图（惰性分�
 static int ensure_tables(void)
 {
     if (s_step_active == NULL) {
-        s_step_active = (bool *)hal_calloc(MOTION_MAX_DEVICES,
+        s_step_active = (bool *)iot_mem_calloc(MOTION_MAX_DEVICES,
                                             sizeof(*s_step_active));
         if (s_step_active == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_pwm_active == NULL) {
-        s_pwm_active = (bool *)hal_calloc(MOTION_MAX_DEVICES,
+        s_pwm_active = (bool *)iot_mem_calloc(MOTION_MAX_DEVICES,
                                            sizeof(*s_pwm_active));
         if (s_pwm_active == NULL) {
             return MOTION_ERR_MEMORY;

@@ -18,6 +18,7 @@
  *   iot_tick.h    tick/延时     iot_sched.h   调度器     iot_wait.h    等待队列
  *   iot_idle.h    空闲任务      iot_stats.h   运行时统计 iot_assert.h  断言
  *   iot_isr.h     中断上下文 API                         iot_port.h    移植层接口
+ *   iot_crash.h   崩溃现场记录  iot_mem.h     内存分配
  *   iot_types.h   公共常量/状态码/前向声明  iot_config.h 编译期裁剪开关
  *
  * 典型使用顺序：
@@ -27,6 +28,7 @@
  */
 
 #include "iot_types.h"
+#include "iot_mem.h"
 #include "iot_assert.h"
 #include "iot_crash.h"
 #include "iot_task.h"

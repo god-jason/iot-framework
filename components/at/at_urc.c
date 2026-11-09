@@ -17,7 +17,7 @@
  *   - 先注册者优先，前缀存在包含关系时应把更长的前缀先注册。
  */
 #include "at_urc.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 #include <string.h>
 
 /* URC 注册表容量 */
@@ -37,7 +37,7 @@ static at_urc_node_t *s_nodes = NULL;
 static bool at_urc_ensure(void)
 {
     if (s_nodes == NULL) {
-        s_nodes = (at_urc_node_t *)hal_calloc(AT_URC_MAX,
+        s_nodes = (at_urc_node_t *)iot_mem_calloc(AT_URC_MAX,
                                                sizeof(at_urc_node_t));
     }
     return (s_nodes != NULL);

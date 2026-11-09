@@ -10,9 +10,9 @@
 
 #include "driver_types.h"
 
-/* 延时、时基、临界区统一来自 hal/hal_os.h（hal_delay_ms/us、hal_tick_get、
+/* 延时、时基、临界区统一来自 hal/hal_mcu.h（hal_delay_ms/us、hal_tick_get、
  * hal_irq_disable/enable），驱动不得直接调用 HAL 或自行忙等。 */
-#include "hal_os.h"
+#include "hal_mcu.h"
 
 #ifdef __cplusplus
 extern "C" {

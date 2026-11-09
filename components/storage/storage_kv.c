@@ -18,7 +18,7 @@
  *   - 全局表在首次使用时分配，非线程安全，需由单一上下文串行访问。
  */
 #include "storage_kv.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 #include <string.h>
 
 /* 条目数量上限 */
@@ -49,7 +49,7 @@ static int storage_kv_ensure(void)
     if (s_kv != NULL) {
         return 0;
     }
-    s_kv = (storage_kv_entry_t *)hal_calloc(STORAGE_KV_MAX, sizeof(*s_kv));
+    s_kv = (storage_kv_entry_t *)iot_mem_calloc(STORAGE_KV_MAX, sizeof(*s_kv));
     return (s_kv != NULL) ? 0 : -1;
 }
 
@@ -81,7 +81,7 @@ int storage_kv_init(void)
 {
     int i;
 
-    hal_free(s_kv);
+    iot_mem_free(s_kv);
     s_kv = NULL;
     if (storage_kv_ensure() != 0) {
         return -1;

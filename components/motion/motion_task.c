@@ -3,7 +3,7 @@
 #include "motion_error.h"
 #include "motion_parser.h"
 #include "motion_source.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -59,21 +59,21 @@ static int16_t *s_pwm_owner;                 /* PWM 设备占用表（惰性分�
 static int ensure_tables(void)
 {
     if (s_jobs == NULL) {
-        s_jobs = (motion_job_t *)hal_calloc(MOTION_MAX_JOBS,
+        s_jobs = (motion_job_t *)iot_mem_calloc(MOTION_MAX_JOBS,
                                              sizeof(*s_jobs));
         if (s_jobs == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_step_owner == NULL) {
-        s_step_owner = (int16_t *)hal_calloc(MOTION_MAX_DEVICES,
+        s_step_owner = (int16_t *)iot_mem_calloc(MOTION_MAX_DEVICES,
                                               sizeof(*s_step_owner));
         if (s_step_owner == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_pwm_owner == NULL) {
-        s_pwm_owner = (int16_t *)hal_calloc(MOTION_MAX_DEVICES,
+        s_pwm_owner = (int16_t *)iot_mem_calloc(MOTION_MAX_DEVICES,
                                              sizeof(*s_pwm_owner));
         if (s_pwm_owner == NULL) {
             return MOTION_ERR_MEMORY;

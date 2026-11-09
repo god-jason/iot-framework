@@ -1,5 +1,5 @@
 /*
- * STM32 平台 —— 系统级接口（hal_os.h 实现）。
+ * STM32 平台 —— 系统级接口（hal_mcu.h 实现）。
  *
  * 时基与毫秒延时由 HAL 提供（SysTick），微秒延时使用 DWT 周期计数器；
  * DWT 在首次调用 hal_delay_us() 时惰性初始化。

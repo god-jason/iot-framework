@@ -19,7 +19,7 @@
 
 #include "console.h"
 #include "log.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -136,11 +136,11 @@ static uint32_t s_line_len;
 static bool shell_ensure(void)
 {
     if (s_cmds == NULL) {
-        s_cmds = (shell_cmd_t *)hal_calloc(SHELL_MAX_CMD,
+        s_cmds = (shell_cmd_t *)iot_mem_calloc(SHELL_MAX_CMD,
                                             sizeof(shell_cmd_t));
     }
     if (s_line == NULL) {
-        s_line = (char *)hal_calloc(SHELL_LINE_MAX, sizeof(char));
+        s_line = (char *)iot_mem_calloc(SHELL_LINE_MAX, sizeof(char));
     }
     return (s_cmds != NULL && s_line != NULL);
 }
@@ -153,14 +153,14 @@ static bool shell_ensure(void)
  */
 int shell_init(void)
 {
-    hal_free(s_cmds);
-    hal_free(s_line);
-    s_cmds = (shell_cmd_t *)hal_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
-    s_line = (char *)hal_calloc(SHELL_LINE_MAX, sizeof(char));
+    iot_mem_free(s_cmds);
+    iot_mem_free(s_line);
+    s_cmds = (shell_cmd_t *)iot_mem_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
+    s_line = (char *)iot_mem_calloc(SHELL_LINE_MAX, sizeof(char));
     s_line_len = 0;
     if (s_cmds == NULL || s_line == NULL) {
-        hal_free(s_cmds);
-        hal_free(s_line);
+        iot_mem_free(s_cmds);
+        iot_mem_free(s_line);
         s_cmds = NULL;
         s_line = NULL;
         return -1;

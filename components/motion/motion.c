@@ -5,7 +5,7 @@
 #include "motion_source.h"
 #include "motion_task.h"
 #include "motion_vm.h"
-#include "hal_mem.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -38,7 +38,7 @@ static bool s_loaded;                      /* 是否已成功加载脚本 */
 static int ensure_program(void)
 {
     if (s_program == NULL) {
-        s_program = (char *)hal_malloc(MOTION_MAX_PROGRAM);
+        s_program = (char *)iot_mem_malloc(MOTION_MAX_PROGRAM);
         if (s_program == NULL) {
             return MOTION_ERR_MEMORY;
         }

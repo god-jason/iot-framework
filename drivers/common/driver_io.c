@@ -1,5 +1,5 @@
 #include "common/driver_io.h"
-#include "hal_os.h"
+#include "hal_mcu.h"
 
 /* ---------------- I2C ---------------- */
 

@@ -4,7 +4,7 @@
  * 堆大小可通过编译选项 IOT_MEM_HEAP_SIZE 覆盖；
  * 首次分配时惰性创建 TLSF 控制结构与初始内存池。
  */
-#include "hal_mem.h"
+#include "iot_mem.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -26,13 +26,13 @@ static void iot_mem_ensure(void)
     }
 }
 
-void *hal_malloc(size_t size)
+void *iot_mem_malloc(size_t size)
 {
     iot_mem_ensure();
     return (s_tlsf != NULL) ? tlsf_malloc(s_tlsf, size) : NULL;
 }
 
-void *hal_calloc(size_t count, size_t size)
+void *iot_mem_calloc(size_t count, size_t size)
 {
     void *ptr;
     size_t total;
@@ -41,20 +41,20 @@ void *hal_calloc(size_t count, size_t size)
         return NULL;
     }
     total = count * size;
-    ptr = hal_malloc(total);
+    ptr = iot_mem_malloc(total);
     if (ptr != NULL) {
         memset(ptr, 0, total);
     }
     return ptr;
 }
 
-void *hal_realloc(void *ptr, size_t size)
+void *iot_mem_realloc(void *ptr, size_t size)
 {
     iot_mem_ensure();
     return (s_tlsf != NULL) ? tlsf_realloc(s_tlsf, ptr, size) : NULL;
 }
 
-void hal_free(void *ptr)
+void iot_mem_free(void *ptr)
 {
     if (s_tlsf != NULL) {
         tlsf_free(s_tlsf, ptr);
