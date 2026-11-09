@@ -106,6 +106,20 @@ void ut_eth_net(void);
 void ut_eth_http(void);
 void ut_eth_mqtt(void);
 
+/* ---------------- robotics ---------------- */
+void ut_kinematics(void);
+void ut_odometry(void);
+void ut_trajectory(void);
+void ut_drive(void);
+void ut_imu(void);
+void ut_perception(void);
+void ut_localization(void);
+void ut_safety(void);
+void ut_params(void);
+void ut_robot_proto(void);
+void ut_can_proto(void);
+void ut_alog(void);
+
 /* ---------------- iot ---------------- */
 void ut_iot(void);
 
@@ -208,6 +222,20 @@ int main(void)
     ut_eth_net();
     ut_eth_http();
     ut_eth_mqtt();
+
+    printf("\n--- robotics ---\n");
+    ut_kinematics();
+    ut_odometry();
+    ut_trajectory();
+    ut_drive();
+    ut_imu();
+    ut_perception();
+    ut_localization();
+    ut_safety();
+    ut_params();
+    ut_robot_proto();
+    ut_can_proto();
+    ut_alog();
 
     printf("\n--- iot ---\n");
     ut_iot();

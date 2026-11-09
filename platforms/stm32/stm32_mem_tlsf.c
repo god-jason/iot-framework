@@ -6,6 +6,7 @@
  */
 #include "hal_mem.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "tlsf.h"

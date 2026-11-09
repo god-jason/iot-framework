@@ -1,5 +1,5 @@
 /*
- * iot_test_task.c - 任务相关测试
+ * iot_task_test.c - 任务测试（对应 iot_task.c）
  *
  * 覆盖：任务创建参数校验、tick 推进与睡眠、同优先级轮转、
  *       优先级调度、任务入口返回后自动退出、多任务并行输出。
@@ -247,6 +247,57 @@ static void test_parallel_output(void)
     tf_end();
 }
 
+/* ============================== 通知与优先级 ============================== */
+
+static iot_task_t s_prio_task;
+static uint8_t s_prio_stack[2048];
+
+static void prio_entry(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        iot_sleep_ms(1000);
+    }
+}
+
+static void test_notify(void)
+{
+    iot_task_t *self = iot_current();
+    uint32_t value = 0U;
+
+    tf_begin("iot/任务通知");
+
+    TF_CHECK_INT(iot_task_notify(self, 0x5A5AU), IOT_OK);
+    TF_CHECK_INT(iot_task_wait_notify(self, IOT_TIMEOUT_NONE, &value), IOT_OK);
+    TF_CHECK_INT(value, 0x5A5A);
+
+    /* 已消费：再次等待应立即超时 */
+    TF_CHECK_INT(iot_task_wait_notify(self, IOT_TIMEOUT_NONE, &value), IOT_TIMEOUT);
+
+    tf_end();
+}
+
+static void test_priority_set(void)
+{
+    tf_begin("iot/优先级调整");
+
+    TF_CHECK_INT(iot_task_create(&s_prio_task, "prio", 5U, prio_entry, NULL,
+                                 s_prio_stack, sizeof(s_prio_stack)), IOT_OK);
+
+    TF_CHECK_INT(iot_task_set_priority(&s_prio_task, 8U), IOT_OK);
+    TF_CHECK_INT(s_prio_task.priority, 8);
+    TF_CHECK_INT(s_prio_task.base_priority, 8);
+
+    /* 空闲优先级保留，不允许设置 */
+    TF_CHECK_INT(iot_task_set_priority(&s_prio_task, IOT_PRIORITY_IDLE),
+                 IOT_INVALID_PARAM);
+
+    TF_CHECK_INT(iot_task_set_priority(&s_prio_task, 5U), IOT_OK);
+    TF_CHECK_INT(s_prio_task.priority, 5);
+
+    tf_end();
+}
+
 /* ============================== 对外入口 ============================== */
 
 void iot_test_task(void)
@@ -257,4 +308,6 @@ void iot_test_task(void)
     test_priority();
     test_task_exit();
     test_parallel_output();
+    test_notify();
+    test_priority_set();
 }

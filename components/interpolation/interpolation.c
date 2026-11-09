@@ -11,6 +11,8 @@
  */
 #include "interpolation.h"
 
+#include <stddef.h>   /* NULL：newlib 等交叉 C 库不会经其它头间接提供 */
+
 /* 将 x 限制在 [lo, hi] 内（参数区间钳位） */
 static float interpolation_clamp(float x, float lo, float hi)
 {

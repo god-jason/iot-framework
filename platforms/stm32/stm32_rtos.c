@@ -138,20 +138,46 @@ int iot_port_stack_init(iot_task_t *task)
     return IOT_OK;
 }
 
-__attribute__((naked)) void iot_port_start_first(iot_task_t *task)
+/*
+ * 首个任务的栈指针，由 SVC_Handler 读取。必须是全局符号：
+ * naked 汇编用 movw/movt 取地址，不依赖 literal pool。
+ */
+void *iot_first_task_sp = NULL;
+
+/*
+ * 启动第一个任务：触发 SVC，在异常上下文中切换到 PSP 并异常返回。
+ * 不能用线程模式下的 `bx 0xFFFFFFFD` —— EXC_RETURN 只在 Handler 模式有效，
+ * 在线程模式执行会直接触发 HardFault。
+ */
+void iot_port_start_first(iot_task_t *task)
 {
-    (void)task;
+    iot_first_task_sp = task->stack_ptr;
+    __asm volatile ("svc #0" ::: "memory");
+    for (;;) {
+        /* SVC 异常返回后已进入任务上下文，不会回到这里 */
+    }
+}
+
+/*
+ * SVC_Handler：恢复首个任务的 r4-r11，令 PSP 指向其硬件异常帧，
+ * 再以 EXC_RETURN=0xFFFFFFFD 返回线程模式（使用 PSP），
+ * 由硬件自动弹出 r0-r3/r12/lr/PC/xPSR 跳入任务入口。
+ */
+__attribute__((weak, naked)) void SVC_Handler(void)
+{
     __asm volatile(
-        "ldr   r0, [r0]        \n"   /* r0 = task->stack_ptr（偏移 0） */
-        "msr   psp, r0         \n"
-        "mov   r1, #2          \n"
-        "msr   control, r1     \n"   /* CONTROL.SPSEL=1：线程模式使用 PSP */
-        "isb                  \n"
-        "ldmia r0!, {r4-r11}   \n"   /* 恢复 r4-r11 */
-        "msr   psp, r0         \n"   /* PSP 指向硬件返回帧 */
-        "movw  r1, #0xFFFD     \n"
-        "movt  r1, #0xFFFF     \n"   /* EXC_RETURN = 0xFFFFFFFD */
-        "bx    r1              \n"
+        "movw  r0, #:lower16:iot_first_task_sp \n"
+        "movt  r0, #:upper16:iot_first_task_sp \n"
+        "ldr   r0, [r0]                       \n"
+        "ldmia r0!, {r4-r11}                  \n"
+        "msr   psp, r0                        \n"
+        "mov   r1, #2                         \n"
+        "msr   control, r1                   \n"   /* 线程模式改用 PSP */
+        "isb                                  \n"
+        "movw  r1, #0xFFFD                    \n"
+        "movt  r1, #0xFFFF                    \n"
+        "mov   lr, r1                         \n"   /* EXC_RETURN */
+        "bx    lr                             \n"
     );
 }
 

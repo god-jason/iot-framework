@@ -1,5 +1,5 @@
 /*
- * iot_test_timer.c - 软件定时器测试
+ * iot_timers_test.c - 软件定时器测试（对应 iot_timers.c）
  *
  * 覆盖：单次/周期/停止、多周期并行、运行中重启、
  *       同一时刻按启动顺序回调。

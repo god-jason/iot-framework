@@ -12,6 +12,8 @@
  */
 #include "pid.h"
 
+#include <stddef.h>   /* NULL：交叉 C 库不会经其它头间接提供 */
+
 /* 将 x 限制在 [min, max] 区间内，用于输出限幅 */
 static float clampf(float x, float min, float max)
 {

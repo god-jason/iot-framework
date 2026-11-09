@@ -1,5 +1,5 @@
 /*
- * iot_test_mutex.c - 轻量互斥量测试
+ * iot_mutex_test.c - 互斥量测试（对应 iot_mutex.c）
  *
  * 覆盖：基本加锁/解锁、非递归语义、所有权校验（非持有者解锁）、
  *       多任务并发保护（临界区内让出仍不丢更新）。
@@ -114,6 +114,78 @@ static void test_mutex_mutual_exclusion(void)
     tf_end();
 }
 
+/* ============================== 优先级继承 ============================== */
+
+static iot_mutex_t s_inherit_mutex;
+static iot_sem_t s_inherit_locked;
+static iot_task_t s_inherit_low;
+static iot_task_t s_inherit_high;
+static uint8_t s_inherit_low_stack[4096];
+static uint8_t s_inherit_high_stack[4096];
+
+/* 低优先级任务：持锁后睡眠，制造优先级反转场景 */
+static void inherit_low_entry(void *arg)
+{
+    (void)arg;
+
+    (void)iot_mutex_lock(&s_inherit_mutex, IOT_TIMEOUT_NONE);
+    (void)iot_sem_give(&s_inherit_locked);
+
+    iot_sleep_ms(50);
+    (void)iot_mutex_unlock(&s_inherit_mutex);
+
+    for (;;) {
+        iot_sleep_ms(1000);
+    }
+}
+
+/* 高优先级任务：等低优先级持锁后尝试加锁，触发优先级继承 */
+static void inherit_high_entry(void *arg)
+{
+    (void)arg;
+
+    iot_sleep_ms(10);
+    (void)iot_mutex_lock(&s_inherit_mutex, IOT_TIMEOUT_NONE);
+
+    for (;;) {
+        iot_sleep_ms(1000);
+    }
+}
+
+/* 低优先级持有者应被临时提升到等待者优先级，解锁后回落 */
+static void test_priority_inherit(void)
+{
+    tf_begin("iot/优先级继承");
+
+    TF_CHECK_INT(iot_mutex_init(&s_inherit_mutex), IOT_OK);
+    TF_CHECK_INT(iot_sem_init(&s_inherit_locked, 0U), IOT_OK);
+
+    TF_CHECK_INT(iot_task_create(&s_inherit_low, "low", 5U, inherit_low_entry,
+                                 NULL, s_inherit_low_stack,
+                                 sizeof(s_inherit_low_stack)), IOT_OK);
+    TF_CHECK_INT(iot_task_create(&s_inherit_high, "high", 2U, inherit_high_entry,
+                                 NULL, s_inherit_high_stack,
+                                 sizeof(s_inherit_high_stack)), IOT_OK);
+
+    /* 等低优先级任务拿到锁 */
+    TF_CHECK_INT(iot_sem_take(&s_inherit_locked, IOT_TIMEOUT_FOREVER), IOT_OK);
+
+    /* 给高优先级任务一次加锁机会 */
+    iot_sleep_ms(20);
+
+    TF_CHECK(s_inherit_mutex.owner == &s_inherit_low);
+    TF_CHECK_INT(s_inherit_low.base_priority, 5);
+    TF_CHECK_INT(s_inherit_low.priority, 2);          /* 被提升到等待者优先级 */
+
+    /* 等低优先级任务解锁并回落 */
+    iot_sleep_ms(100);
+
+    TF_CHECK(s_inherit_mutex.owner == NULL);
+    TF_CHECK_INT(s_inherit_low.priority, 5);          /* 恢复原始优先级 */
+
+    tf_end();
+}
+
 /* ============================== 对外入口 ============================== */
 
 void iot_test_mutex(void)
@@ -121,4 +193,5 @@ void iot_test_mutex(void)
     test_mutex_basic();
     test_mutex_owner();
     test_mutex_mutual_exclusion();
+    test_priority_inherit();
 }
