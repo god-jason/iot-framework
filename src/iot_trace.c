@@ -358,6 +358,33 @@ int iot_trace_export_json(char *buf, uint32_t max)
     return (int)pos;
 }
 
+#if defined(IOT_PLATFORM_PC)
+/* 把 JSON 直接落盘，chrome://tracing 或 Perfetto UI 可直接加载 */
+int iot_trace_dump_json_file(const char *path)
+{
+    static char buf[32768];
+    FILE *fp;
+    int n;
+
+    if (path == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+
+    n = iot_trace_export_json(buf, (uint32_t)sizeof(buf));
+    if (n < 0) {
+        return n;
+    }
+
+    fp = fopen(path, "wb");
+    if (fp == NULL) {
+        return IOT_ERROR;
+    }
+    (void)fwrite(buf, 1U, (size_t)n, fp);
+    (void)fclose(fp);
+    return IOT_OK;
+}
+#endif
+
 #else /* IOT_USE_TRACE */
 
 /* 编译期裁剪：保留符号，保证引用方链接不失败 */
@@ -404,6 +431,13 @@ const char *iot_trace_event_name(uint16_t id)
     (void)id;
     return "trace_off";
 }
+#if defined(IOT_PLATFORM_PC)
+int iot_trace_dump_json_file(const char *path)
+{
+    (void)path;
+    return IOT_NOT_READY;
+}
+#endif
 
 /* 后端桥接的桩统一由 iot_trace_barectf.c 提供，避免重复定义 */
 

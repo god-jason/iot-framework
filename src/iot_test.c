@@ -19,6 +19,7 @@ void iot_test_stats(void);
 void iot_test_wait(void);
 void iot_test_isr(void);
 void iot_test_sched(void);
+void iot_test_suspend(void);
 
 static iot_task_t s_driver;
 static uint8_t s_driver_stack[8192];
@@ -37,6 +38,7 @@ static void driver_entry(void *arg)
     iot_test_wait();
     iot_test_isr();
     iot_test_sched();
+    iot_test_suspend();
 
     iot_stop();     /* 返回 main */
 }

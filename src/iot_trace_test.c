@@ -174,6 +174,70 @@ void ut_trace(void)
     }
     TF_CHECK_INT(iot_trace_dropped(), 0);
 
+    /* 9. 名称映射：BEGIN + ceil(len/4) 个 CHUNK */
+    iot_trace_reset();
+    iot_trace_enable();
+    iot_trace_name((const void *)(uintptr_t)0x1234U,
+                   IOT_TRACE_NAME_TASK, "blink");
+    TF_CHECK_INT(iot_trace_count(), 3U);   /* 5 字节名字 -> 2 个分片 */
+    ev = iot_trace_at(0U);
+    TF_CHECK(ev != NULL);
+    if (ev != NULL) {
+        TF_CHECK_INT(ev->id, IOT_EVT_NAME_BEGIN);
+        TF_CHECK_INT(ev->value, 0x1234U);
+        TF_CHECK_INT(ev->arg & 0xFFU, IOT_TRACE_NAME_TASK);
+        TF_CHECK_INT(ev->arg >> 8, 5);
+    }
+
+    /* 10. 崩溃冻结：冻结后事件被丢弃且快照不再被覆盖 */
+    iot_trace_reset();
+    iot_trace_freeze();
+    TF_CHECK(iot_trace_is_frozen());
+    IOT_TRACE(IOT_EVT_MARKER, 1U, 2U);
+    TF_CHECK_INT(iot_trace_count(), 0);
+    TF_CHECK_INT(iot_trace_dropped(), 1);
+    iot_trace_unfreeze();
+    TF_CHECK(!iot_trace_is_frozen());
+    IOT_TRACE(IOT_EVT_MARKER, 1U, 2U);
+    TF_CHECK_INT(iot_trace_count(), 1);
+
+    /* 11. ISR 标记编码 / 事件名表 */
+    TF_CHECK(IOT_TRACE_IN_ISR(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR));
+    TF_CHECK(!IOT_TRACE_IN_ISR(IOT_EVT_SWITCH));
+    TF_CHECK_INT(IOT_TRACE_SEQ(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR), 0);
+    TF_CHECK_INT(IOT_TRACE_GROUP(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR),
+                 IOT_TRACE_GRP_CORE);
+    TF_CHECK_INT(strcmp(iot_trace_event_name(IOT_EVT_SWITCH), "switch"), 0);
+    TF_CHECK_INT(strcmp(iot_trace_event_name(IOT_EVT_TASK_SUSPEND),
+                        "task_suspend"), 0);
+
+    /* 12. Perfetto / Chrome Trace JSON 导出 */
+    {
+        char json[4096];
+        uint8_t head[2] = {0U, 0U};
+        FILE *fp;
+        int n;
+
+        iot_trace_reset();
+        IOT_TRACE(IOT_EVT_SWITCH, 0xAAU, 0xBBU);
+        n = iot_trace_export_json(json, (uint32_t)sizeof(json));
+        TF_CHECK(n > 0);
+        TF_CHECK_INT(json[0], '[');
+        TF_CHECK(strstr(json, "\"name\":\"switch\"") != NULL);
+        TF_CHECK(strstr(json, "\"ph\":\"i\"") != NULL);
+        TF_CHECK(strstr(json, "\"isr\":0") != NULL);
+
+        TF_CHECK_INT(iot_trace_dump_json_file("iot_trace_test.json"), IOT_OK);
+        fp = fopen("iot_trace_test.json", "rb");
+        TF_CHECK(fp != NULL);
+        if (fp != NULL) {
+            TF_CHECK_INT(fread(head, 1U, sizeof(head), fp), 2);
+            (void)fclose(fp);
+        }
+        (void)remove("iot_trace_test.json");
+        TF_CHECK_INT(head[0], '[');
+    }
+
     /* 收尾：恢复默认关闭，避免影响后续测试 */
     iot_trace_disable();
     iot_trace_reset();
