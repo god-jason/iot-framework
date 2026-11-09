@@ -2,12 +2,12 @@
 #define IOT_SCHED_H
 
 /*
- * sched.h - 就绪表与调度器（sched.c）
+ * iot_sched.h - 就绪表与调度器（sched.c）
  *
  * 固定优先级：就绪位图 + 每优先级一条环形链表，取值最小者为最高优先级。
  */
 
-#include "types.h"
+#include "iot_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +39,37 @@ void iot_sched_switch(iot_task_t *next);
 
 /* 执行一次调度：选择最高优先级任务并切换 */
 void iot_sched(void);
+
+/*
+ * 中断/PendSV 上下文调度：只做状态迁移并返回要切入的任务。
+ * 返回 NULL 表示无需切换；实际寄存器切换由移植层完成。
+ */
+iot_task_t *iot_sched_from_isr(void);
+
+/*
+ * 在临界区内调整任务优先级（优先级继承使用）。
+ * 调用者必须已持有临界区；任务在就绪表上时会同步换链并维护位图。
+ */
+void iot_sched_change_priority_locked(iot_task_t *task, uint8_t new_prio);
+
+/* 带临界区保护的优先级调整 */
+void iot_sched_change_priority(iot_task_t *task, uint8_t new_prio);
+
+#if IOT_USE_TIME_SLICING
+/* tick 内调用（临界区内）：按 delta 消耗当前任务时间片，耗尽时置切换标志 */
+void iot_sched_tick_slice(uint32_t delta);
+#endif
+
+/* 时间片是否已耗尽（移植层据此触发 PendSV） */
+bool iot_sched_slice_expired(void);
+
+#if IOT_USE_STATS
+/* 上下文切换总次数 */
+uint32_t iot_sched_switch_count(void);
+
+/* 清零上下文切换计数 */
+void iot_sched_reset_switch_count(void);
+#endif
 
 #ifdef __cplusplus
 }

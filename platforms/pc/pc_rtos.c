@@ -7,7 +7,7 @@
  *   - iot_port_switch     : SwitchToFiber；
  *   - iot_port_return     : 切回主 Fiber（供 iot_stop 返回 main）。
  *
- * 协作式模型下没有硬件抢占，时间推进由空闲任务调用 iot_port_idle()，
+ * 协作式模型下没有硬件抢占，时间推进由空闲任务调用 iot_port_idle_timeout()，
  * 通过 iot_tick_increment() 批量推进到下一个唤醒/定时截止点。
  */
 
@@ -17,8 +17,7 @@
 #include <windows.h>
 
 #include "iot.h"
-#include "port.h"
-#include "iot.h"
+#include "iot_port.h"
 
 static LPVOID s_main_fiber;
 
@@ -40,10 +39,23 @@ void iot_port_init(void)
     }
 }
 
-void iot_port_stack_init(iot_task_t *task)
+int iot_port_stack_init(iot_task_t *task)
 {
-    task->stack_ptr = CreateFiber((SIZE_T)task->stack_size,
-                                  fiber_proc, (LPVOID)task);
+    void *fiber;
+
+    if (task == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+
+    fiber = CreateFiber((SIZE_T)task->stack_size, fiber_proc, (LPVOID)task);
+    if (fiber == NULL) {
+        LOG_E(IOT_TAG, "CreateFiber failed, stack_size=%u",
+                  (unsigned)task->stack_size);
+        return IOT_NO_MEMORY;
+    }
+
+    task->stack_ptr = fiber;
+    return IOT_OK;
 }
 
 void iot_port_start_first(iot_task_t *task)
@@ -84,6 +96,30 @@ void iot_port_idle(void)
     } else {
         iot_tick_increment(1U);
     }
+}
+
+/*
+ * tickless 空闲：直接把模拟时间推进到最近的截止点。
+ * ms 为 UINT32_MAX 表示没有截止点，推进 1 tick 避免空转停滞。
+ */
+void iot_port_idle_timeout(uint32_t ms)
+{
+    if (ms == 0U || ms == UINT32_MAX) {
+        iot_tick_increment(1U);
+    } else {
+        iot_tick_increment(ms);
+    }
+}
+
+void iot_port_request_switch(void)
+{
+    /* 协作式无抢占：时间片轮转在下一次 iot_yield() 生效 */
+}
+
+bool iot_port_in_isr(void)
+{
+    /* PC 模拟端全部逻辑都跑在 Fiber（任务）上下文 */
+    return false;
 }
 
 void iot_port_critical_enter(void)

@@ -1,44 +1,77 @@
 /*
- * stm32_rtos.c - RTOS 的 Cortex-M 移植层（参考实现，未在当前 Windows 构建编译）
+ * stm32_rtos.c - RTOS 的 Cortex-M 移植层（参考实现）
  *
- * 适用于 Cortex-M3/M4/M7（ARMv7-M）。任务使用 PSP，内核使用 MSP。
- * 协作式上下文切换 iot_port_switch 直接保存/恢复 r4-r11；
- * 抢占式（SysTick -> PendSV 延迟切换）需与目标工程的向量表集成，
- * 用户可在 SysTick_Handler 中调用 iot_tick()，并在需要抢占处触发 PendSV。
+ * 适用 Cortex-M3/M4/M7（ARMv7-M）。任务使用 PSP，内核/异常使用 MSP。
  *
- * 注意：
- *   - 本文件通过 IOT_PLATFORM_STM32 门控，仅在交叉编译 STM32 目标时编译；
- *   - 首次启动通过 EXC_RETURN(0xFFFFFFFD, 线程模式 + PSP) 恢复任务帧。
+ * 编译期契约：iot_task.h 中的静态断言保证 iot_task_t.stack_ptr 位于偏移 0，
+ * 本文件的汇编直接用 [tcb] 读写栈指针；布局变化会导致编译失败而非运行时错乱。
+ *
+ * 两条切换路径：
+ *   1) 任务上下文主动切换（阻塞/让出/退出）：
+ *      iot_port_switch() 保存 r4-r11 与 PSP，屏蔽中断完成寄存器交换；
+ *   2) 中断抢占（ISR 唤醒高优先级任务或时间片耗尽）：
+ *      iot_port_request_switch() 置位 PendSV，PendSV 全程关中断调用
+ *      iot_sched_from_isr() 选出下一个任务后恢复其上下文。
+ *
+ * 临界区使用 PRIMASK 保存/恢复 + 嵌套计数：
+ *   保存最外层进入时的 PRIMASK，退出到最外层时原样恢复，
+ *   因此在中断上下文中嵌套调用也不会误开中断。
+ *
+ * 注意：本文件通过 IOT_PLATFORM_STM32 门控，仅在交叉编译 STM32 时编译。
  */
 
 #if defined(IOT_PLATFORM_STM32)
 
 #include "iot.h"
-#include "port.h"
-#include "iot.h"
+#include "iot_port.h"
 
 #include <stdint.h>
 
-static volatile uint32_t s_critical_nesting;
+/* ------------------------- Cortex-M 内核寄存器 ------------------------- */
 
-static inline void iot_irq_disable(void)
+#define IOT_SCB_ICSR            (*(volatile uint32_t *)0xE000ED04UL)
+#define IOT_SCB_ICSR_PENDSVSET  (1UL << 28)
+#define IOT_SCB_SHPR3           (*(volatile uint32_t *)0xE000ED20UL)
+#define IOT_PENDSV_PRIO_LOWEST  (0xFFUL << 16)   /* PendSV 设为最低优先级 */
+
+static volatile uint32_t s_critical_nesting;
+static uint32_t s_critical_primask;
+
+/* ------------------------- 临界区（PRIMASK） ------------------------- */
+
+static inline uint32_t iot_irq_save(void)
 {
-    __asm volatile("cpsid i" ::: "memory");
+    uint32_t primask;
+
+    __asm volatile ("mrs %0, primask" : "=r" (primask) :: "memory");
+    __asm volatile ("cpsid i" ::: "memory");
+    return primask;
 }
 
-static inline void iot_irq_enable(void)
+static inline void iot_irq_restore(uint32_t primask)
 {
-    __asm volatile("cpsie i" ::: "memory");
+    /* 只有进入前中断是打开的，才在退出时重新打开 */
+    if ((primask & 1U) == 0U) {
+        __asm volatile ("cpsie i" ::: "memory");
+    }
 }
 
 void iot_port_init(void)
 {
     s_critical_nesting = 0U;
+    s_critical_primask = 0U;
+
+    /* PendSV 设为最低优先级，保证不会打断其它 ISR */
+    IOT_SCB_SHPR3 |= IOT_PENDSV_PRIO_LOWEST;
 }
 
 void iot_port_critical_enter(void)
 {
-    iot_irq_disable();
+    uint32_t primask = iot_irq_save();
+
+    if (s_critical_nesting == 0U) {
+        s_critical_primask = primask;   /* 只记录最外层状态 */
+    }
     s_critical_nesting++;
 }
 
@@ -47,10 +80,21 @@ void iot_port_critical_exit(void)
     if (s_critical_nesting > 0U) {
         s_critical_nesting--;
     }
+
     if (s_critical_nesting == 0U) {
-        iot_irq_enable();
+        iot_irq_restore(s_critical_primask);
     }
 }
+
+bool iot_port_in_isr(void)
+{
+    uint32_t ipsr;
+
+    __asm volatile ("mrs %0, ipsr" : "=r" (ipsr) :: "memory");
+    return (ipsr & 0x1FFUL) != 0U;   /* 异常号 0 = 线程模式 */
+}
+
+/* ------------------------- 任务栈与上下文 ------------------------- */
 
 /* 任务入口返回后跳到这里退出任务 */
 __attribute__((naked)) static void iot_task_trampoline(void)
@@ -61,16 +105,24 @@ __attribute__((naked)) static void iot_task_trampoline(void)
     );
 }
 
-void iot_port_stack_init(iot_task_t *task)
+int iot_port_stack_init(iot_task_t *task)
 {
-    uint8_t *top = (uint8_t *)task->stack_mem + task->stack_size;
-    uint32_t *sp = (uint32_t *)((uintptr_t)top & ~7UL);   /* 8 字节对齐 */
+    uint8_t *top;
+    uint32_t *sp;
     int i;
+
+    if (task == NULL || task->stack_mem == NULL ||
+        task->stack_size < (16U * sizeof(uint32_t))) {
+        return IOT_INVALID_PARAM;
+    }
+
+    top = (uint8_t *)task->stack_mem + task->stack_size;
+    sp = (uint32_t *)((uintptr_t)top & ~7UL);   /* 8 字节对齐 */
 
     /* 硬件异常返回帧（高地址 → 低地址） */
     *--sp = 0x01000000UL;                   /* xPSR（Thumb 位） */
     *--sp = (uint32_t)task->entry;          /* PC */
-    *--sp = (uint32_t)iot_task_trampoline; /* LR */
+    *--sp = (uint32_t)iot_task_trampoline;  /* LR */
     *--sp = 0UL;                            /* R12 */
     *--sp = 0UL;                            /* R3 */
     *--sp = 0UL;                            /* R2 */
@@ -83,13 +135,14 @@ void iot_port_stack_init(iot_task_t *task)
     }
 
     task->stack_ptr = sp;
+    return IOT_OK;
 }
 
 __attribute__((naked)) void iot_port_start_first(iot_task_t *task)
 {
     (void)task;
     __asm volatile(
-        "ldr   r0, [r0]        \n"   /* r0 = task->stack_ptr */
+        "ldr   r0, [r0]        \n"   /* r0 = task->stack_ptr（偏移 0） */
         "msr   psp, r0         \n"
         "mov   r1, #2          \n"
         "msr   control, r1     \n"   /* CONTROL.SPSEL=1：线程模式使用 PSP */
@@ -102,17 +155,24 @@ __attribute__((naked)) void iot_port_start_first(iot_task_t *task)
     );
 }
 
+/*
+ * 任务上下文主动切换。
+ * 进入时关中断，避免 ISR 在 PSP 切换过程中压栈；切到目标任务后开中断。
+ * 所有调用点都在临界区之外，因此 PRIMASK 在每个任务内是平衡的。
+ */
 __attribute__((naked)) void iot_port_switch(iot_task_t *from, iot_task_t *to)
 {
     (void)from;
     (void)to;
     __asm volatile(
+        "cpsid i              \n"
         "mrs   r2, psp         \n"   /* r2 = 当前 PSP */
         "stmdb r2!, {r4-r11}   \n"   /* 保存 r4-r11，r2 递减 */
         "str   r2, [r0]        \n"   /* from->stack_ptr = r2 */
         "ldr   r2, [r1]        \n"   /* r2 = to->stack_ptr */
         "ldmia r2!, {r4-r11}   \n"   /* 恢复 r4-r11 */
         "msr   psp, r2         \n"
+        "cpsie i              \n"   /* 新任务从这里恢复并开中断 */
         "bx    lr              \n"
     );
 }
@@ -124,9 +184,76 @@ void iot_port_return(void)
     }
 }
 
-/* 空闲处理：等待下一个中断（SysTick 或外设）唤醒 CPU */
+/* ------------------------- 抢占（PendSV） ------------------------- */
+
+void iot_port_request_switch(void)
+{
+    IOT_SCB_ICSR = IOT_SCB_ICSR_PENDSVSET;
+}
+
+/*
+ * PendSV：全程屏蔽中断，保存被打断任务的 r4-r11 与 PSP，
+ * 调用 iot_sched_from_isr() 选择下一个任务，再恢复其上下文。
+ * 因此 iot_sched_from_isr() 不再自行开关临界区（避免异常中途 cpsie i
+ * 导致 PendSV 被嵌套、PSP 半成品状态被别的 ISR 看到）。
+ * 硬件在异常返回时自动弹出 r0-r3/r12/lr/pc/xPSR。
+ */
+__attribute__((weak, naked)) void PendSV_Handler(void)
+{
+    __asm volatile(
+        "cpsid i                            \n"
+        "mrs   r1, psp                      \n"
+        "stmdb r1!, {r4-r11}                \n"   /* 保存到被打断任务的栈 */
+
+        "movw  r2, #:lower16:iot_current_task \n"
+        "movt  r2, #:upper16:iot_current_task \n"
+        "ldr   r2, [r2]                     \n"   /* r2 = 被打断的任务 */
+        "str   r1, [r2]                     \n"   /* task->stack_ptr = r1 */
+
+        "push  {r2, lr}                     \n"   /* 保护 lr 与当前任务指针 */
+        "bl    iot_sched_from_isr           \n"   /* 返回下一个任务或 NULL */
+        "pop   {r2, lr}                     \n"
+
+        "cmp   r0, #0                       \n"
+        "bne   1f                           \n"
+        "mov   r0, r2                       \n"   /* 不切换：恢复当前任务 */
+        "1:                                 \n"
+        "ldr   r0, [r0]                     \n"   /* r0 = task->stack_ptr */
+        "ldmia r0!, {r4-r11}                \n"
+        "msr   psp, r0                      \n"
+        "cpsie i                            \n"
+        "bx    lr                           \n"
+    );
+}
+
+/*
+ * SysTick 默认处理：推进 tick。tick 内部会在时间片耗尽或
+ * iot_task_wake() 唤醒高优先级任务时调用 iot_port_request_switch()。
+ * 工程若已有 SysTick_Handler，本弱符号被覆盖（需自行调用 iot_tick()）。
+ */
+__attribute__((weak)) void SysTick_Handler(void)
+{
+    iot_tick();
+}
+
+/* ------------------------- 空闲 ------------------------- */
+
 void iot_port_idle(void)
 {
+    __asm volatile ("wfi");
+}
+
+/*
+ * tickless 空闲：参数为距离下一个截止点的 tick 数。
+ *
+ * 参考实现仅进入 WFI，由 SysTick 周期唤醒（ms 暂未用于重装低功耗定时器）。
+ * 完整 tickless 需要按 SoC 把 RTC/LPTIM 设为 ms 后唤醒，并在唤醒后用
+ * iot_tick_increment(elapsed) 补偿内核 tick 计数；这依赖具体板级时钟源，
+ * 由接入工程实现。此处保留接口与语义，不伪装成已实现。
+ */
+void iot_port_idle_timeout(uint32_t ms)
+{
+    (void)ms;
     __asm volatile ("wfi");
 }
 

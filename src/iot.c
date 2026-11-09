@@ -2,16 +2,15 @@
  * iot.c - 内核生命周期
  *
  * 只负责内核初始化与启动/停止，具体实现拆分到：
- *   sched.c  就绪表与调度
- *   wait.c   阻塞/唤醒
- *   tick.c   tick 与延时链表
- *   idle.c   空闲任务
- *   task.c   任务管理
- *   sem.c / mutex.c / queue.c / timers.c
+ *   iot_sched.c   就绪表与调度      iot_wait.c    O(1) 等待队列与阻塞/唤醒
+ *   iot_tick.c    tick 与延时链表    iot_timers.c  软件定时器
+ *   iot_task.c    任务/通知/注册表   iot_idle.c    空闲任务
+ *   iot_sem.c / iot_mutex.c / iot_queue.c / iot_event.c
+ *   iot_stats.c / iot_isr.c / iot_assert.c
  */
 
 #include "iot.h"
-#include "port.h"
+#include "iot_port.h"
 
 void iot_init(void)
 {
@@ -22,6 +21,7 @@ void iot_init(void)
     iot_sched_init();
     iot_tick_init();
     iot_timers_init();
+    iot_task_module_init();    /* 任务注册表 + 通知等待队列 */
 
     /* 3. 创建空闲任务（依赖移植层栈初始化） */
     iot_idle_init();

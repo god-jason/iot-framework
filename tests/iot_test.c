@@ -20,6 +20,7 @@ void iot_test_sem(void);
 void iot_test_mutex(void);
 void iot_test_queue(void);
 void iot_test_timer(void);
+void iot_test_ext(void);
 
 static iot_task_t s_driver;
 static uint8_t s_driver_stack[8192];
@@ -33,6 +34,7 @@ static void driver_entry(void *arg)
     iot_test_mutex();
     iot_test_queue();
     iot_test_timer();
+    iot_test_ext();
 
     iot_stop();     /* 返回 main */
 }

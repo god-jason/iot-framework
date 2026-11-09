@@ -2,13 +2,13 @@
 #define IOT_IDLE_H
 
 /*
- * idle.h - 内置空闲任务（idle.c）
+ * iot_idle.h - 内置空闲任务（idle.c）
  *
  * 固定为最低优先级，永远就绪；无其它任务可运行时调用
  * iot_port_idle() 推进模拟时间或进入低功耗。
  */
 
-#include "types.h"
+#include "iot_types.h"
 
 #ifdef __cplusplus
 extern "C" {

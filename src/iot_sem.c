@@ -1,5 +1,5 @@
 /*
- * sem.c - 计数信号量
+ * iot_sem.c - 计数信号量
  *
  * 语义：
  *   - iot_sem_take：计数 > 0 立即减一并返回；否则按 timeout 阻塞；
@@ -8,7 +8,7 @@
  */
 
 #include "iot.h"
-#include "port.h"
+#include "iot_port.h"
 
 int iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
 {
@@ -18,7 +18,7 @@ int iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
     }
 
     sem->count = initial_count;
-    list_init(&sem->wait);
+    iot_wait_queue_init(&sem->wait);
     sem->initialized = true;
 
     LOG_D(IOT_TAG, "sem init: count=%u", (unsigned)initial_count);
@@ -60,7 +60,7 @@ int iot_sem_give(iot_sem_t *sem)
     }
 
     iot_port_critical_enter();
-    task = iot_wait_pop_highest(&sem->wait);
+    task = iot_wait_queue_pop_highest(&sem->wait);
     if (task != NULL) {
         /* 有等待者：令牌直接转交，计数不变 */
         iot_task_wake(task, IOT_OK);
@@ -69,6 +69,13 @@ int iot_sem_give(iot_sem_t *sem)
                   task->name != NULL ? task->name : "?");
         return IOT_OK;
     }
+    if (sem->count >= IOT_SEM_MAX_COUNT) {
+        iot_port_critical_exit();
+        LOG_W(IOT_TAG, "sem give: count overflow, max=%u",
+                  (unsigned)IOT_SEM_MAX_COUNT);
+        return IOT_OVERFLOW;
+    }
+
     sem->count++;
     iot_port_critical_exit();
 

@@ -1,5 +1,5 @@
 /*
- * timers.c - 软件定时器（单次 / 周期）
+ * iot_timers.c - 软件定时器（单次 / 周期）
  *
  * 定时器按 deadline 升序挂入 s_timers，由 iot_tick_increment() 触发。
  * 回调执行上下文：
@@ -9,11 +9,27 @@
  */
 
 #include "iot.h"
-#include "port.h"
+#include "iot_port.h"
 
 #include <string.h>
 
 static list_t s_timers;
+
+/*
+ * 按 deadline 插入。常见场景是新 deadline 晚于队尾，直接尾插 O(1)；
+ * 只有乱序（重启短周期定时器等）才回退到线性有序插入。
+ */
+static void iot_timer_insert(list_node_t *node)
+{
+    list_node_t *tail = s_timers.head.prev;
+
+    if (tail == &s_timers.head ||
+        !IOT_TICK_AFTER(tail->sort_key, node->sort_key)) {
+        list_add_tail(&s_timers, node);
+        return;
+    }
+    list_insert_sorted(&s_timers, node);
+}
 
 void iot_timers_init(void)
 {
@@ -57,7 +73,7 @@ int iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
     timer->period = period_ms;
     timer->deadline = iot_tick_count + period_ms;
     timer->node.sort_key = timer->deadline;
-    list_insert_sorted(&s_timers, &timer->node);
+    iot_timer_insert(&timer->node);
     timer->running = true;
     iot_port_critical_exit();
 
@@ -118,7 +134,7 @@ void iot_timer_tick(uint32_t now)
                 timer->deadline = now + timer->period;
             }
             timer->node.sort_key = timer->deadline;
-            list_insert_sorted(&s_timers, &timer->node);
+            iot_timer_insert(&timer->node);
         } else {
             timer->running = false;
         }

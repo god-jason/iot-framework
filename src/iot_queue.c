@@ -1,5 +1,5 @@
 /*
- * queue.c - 定长消息队列
+ * iot_queue.c - 定长消息队列
  *
  * 环形缓冲：
  *   head 为下一个写入位置，tail 为下一个读取位置，count 单独维护，
@@ -12,9 +12,24 @@
  */
 
 #include "iot.h"
-#include "port.h"
+#include "iot_port.h"
 
 #include <string.h>
+
+/* depth 是否为 2 的幂（用于把取模换成掩码） */
+static bool iot_queue_is_pow2(uint32_t v)
+{
+    return (v != 0U) && ((v & (v - 1U)) == 0U);
+}
+
+/* 环形下标前进一格：2 的幂用掩码，否则回退到取模 */
+static uint32_t iot_queue_next(const iot_queue_t *queue, uint32_t index)
+{
+    if (queue->depth_mask != 0U) {
+        return (index + 1U) & queue->depth_mask;
+    }
+    return (index + 1U) % queue->depth;
+}
 
 int iot_queue_init(iot_queue_t *queue, void *buffer,
                               uint32_t item_size, uint32_t depth)
@@ -24,14 +39,22 @@ int iot_queue_init(iot_queue_t *queue, void *buffer,
         return IOT_INVALID_PARAM;
     }
 
+#if IOT_QUEUE_REQUIRE_POW2
+    if (!iot_queue_is_pow2(depth)) {
+        LOG_E(IOT_TAG, "queue_init: depth %u must be power of two", (unsigned)depth);
+        return IOT_INVALID_PARAM;
+    }
+#endif
+
     queue->buffer = (uint8_t *)buffer;
     queue->item_size = item_size;
     queue->depth = depth;
+    queue->depth_mask = iot_queue_is_pow2(depth) ? (depth - 1U) : 0U;
     queue->head = 0U;
     queue->tail = 0U;
     queue->count = 0U;
-    list_init(&queue->send_wait);
-    list_init(&queue->recv_wait);
+    iot_wait_queue_init(&queue->send_wait);
+    iot_wait_queue_init(&queue->recv_wait);
     queue->initialized = true;
 
     LOG_D(IOT_TAG, "queue init: item=%u depth=%u",
@@ -52,7 +75,7 @@ int iot_queue_send(iot_queue_t *queue, const void *item,
     iot_port_critical_enter();
 
     /* 1) 有接收者在等待：直接交付到其缓冲，避免入队再出队 */
-    receiver = iot_wait_pop_highest(&queue->recv_wait);
+    receiver = iot_wait_queue_pop_highest(&queue->recv_wait);
     if (receiver != NULL) {
         if (receiver->wait_ptr != NULL) {
             memcpy(receiver->wait_ptr, item, queue->item_size);
@@ -68,7 +91,7 @@ int iot_queue_send(iot_queue_t *queue, const void *item,
     if (queue->count < queue->depth) {
         memcpy(queue->buffer + queue->head * queue->item_size,
                item, queue->item_size);
-        queue->head = (queue->head + 1U) % queue->depth;
+        queue->head = iot_queue_next(queue, queue->head);
         queue->count++;
         iot_port_critical_exit();
         LOG_D(IOT_TAG, "queue send: queued, count=%u", (unsigned)queue->count);
@@ -103,17 +126,17 @@ int iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
         /* 1) 有数据：取出队首 */
         memcpy(item, queue->buffer + queue->tail * queue->item_size,
                queue->item_size);
-        queue->tail = (queue->tail + 1U) % queue->depth;
+        queue->tail = iot_queue_next(queue, queue->tail);
         queue->count--;
 
         /* 腾出一个空位：若有发送者等待，立即把其数据转入队列 */
-        sender = iot_wait_pop_highest(&queue->send_wait);
+        sender = iot_wait_queue_pop_highest(&queue->send_wait);
         if (sender != NULL) {
             if (sender->wait_ptr != NULL) {
                 memcpy(queue->buffer + queue->head * queue->item_size,
                        sender->wait_ptr, queue->item_size);
             }
-            queue->head = (queue->head + 1U) % queue->depth;
+            queue->head = iot_queue_next(queue, queue->head);
             queue->count++;
             iot_task_wake(sender, IOT_OK);
         }
