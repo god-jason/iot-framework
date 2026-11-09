@@ -29,12 +29,12 @@ typedef enum {
     CH9121_NET_TCP_CLIENT,
     CH9121_NET_UDP_SERVER,
     CH9121_NET_UDP_CLIENT
-} ch9121_net_mode_t;
+} ch9121_net_mode_e;
 
 typedef struct {
     hal_uart_t *uart;
     uint32_t timeout_ms;
-    ch9121_net_mode_t mode;
+    ch9121_net_mode_e mode;
     bool initialized;
 } ch9121_handle_t;
 
@@ -66,7 +66,7 @@ int ch9121_set_gateway(ch9121_handle_t *handle, const uint8_t gateway[4]);
 int ch9121_set_local_port(ch9121_handle_t *handle, uint16_t port);
 int ch9121_set_dest_ip(ch9121_handle_t *handle, const uint8_t ip[4]);
 int ch9121_set_dest_port(ch9121_handle_t *handle, uint16_t port);
-int ch9121_set_mode(ch9121_handle_t *handle, ch9121_net_mode_t mode);
+int ch9121_set_mode(ch9121_handle_t *handle, ch9121_net_mode_e mode);
 int ch9121_set_baudrate(ch9121_handle_t *handle, uint32_t baudrate);
 
 /** 保存参数并重启芯片 */

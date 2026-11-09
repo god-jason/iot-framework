@@ -189,7 +189,7 @@ int amg8833_read_thermistor(amg8833_handle_t *handle, float *celsius)
     return DRIVER_OK;
 }
 
-int amg8833_set_frame_rate(amg8833_handle_t *handle, amg8833_frame_rate_t rate)
+int amg8833_set_frame_rate(amg8833_handle_t *handle, amg8833_frame_rate_e rate)
 {
     uint8_t value;
     int ret;

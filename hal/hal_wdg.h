@@ -19,11 +19,11 @@ extern "C" {
 typedef enum {
     HAL_WDG_INDEPENDENT = 0,   /* 独立看门狗，使用独立时钟，可配置为不可停止 */
     HAL_WDG_WINDOW             /* 窗口看门狗，喂狗必须落在窗口内 */
-} hal_wdg_type_t;
+} hal_wdg_type_e;
 
 /* 看门狗配置 */
 typedef struct {
-    hal_wdg_type_t type;   /* 看门狗类型 */
+    hal_wdg_type_e type;   /* 看门狗类型 */
     uint32_t timeout_ms;    /* 超时时间（毫秒），必须大于 0 */
     uint32_t window_ms;     /* 窗口下界（毫秒），仅窗口看门狗有效；0 表示无窗口限制 */
 } hal_wdg_config_t;
@@ -41,20 +41,20 @@ typedef struct hal_wdg {
  * 返回   : HAL_OK；HAL_INVALID_PARAM；超时值不可达返回 HAL_NOT_SUPPORTED。
  * 注意   : 部分平台在初始化时即启动看门狗，之后无法关闭。
  */
-hal_status_t hal_wdg_init(hal_wdg_t *handle, const hal_wdg_config_t *config);
+int hal_wdg_init(hal_wdg_t *handle, const hal_wdg_config_t *config);
 
 /* 启动看门狗计数；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_wdg_start(hal_wdg_t *handle);
+int hal_wdg_start(hal_wdg_t *handle);
 
 /*
  * 喂狗（刷新计数器）。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；未启动返回 HAL_NOT_READY；
  *        窗口看门狗在窗口外喂狗返回 HAL_PERMISSION。
  */
-hal_status_t hal_wdg_refresh(hal_wdg_t *handle);
+int hal_wdg_refresh(hal_wdg_t *handle);
 
 /* 停止看门狗；仅部分平台的独立看门狗可停止，否则返回 HAL_NOT_SUPPORTED */
-hal_status_t hal_wdg_stop(hal_wdg_t *handle);
+int hal_wdg_stop(hal_wdg_t *handle);
 
 /*
  * 查询本次启动是否由看门狗复位引起。

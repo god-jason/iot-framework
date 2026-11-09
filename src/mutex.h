@@ -13,9 +13,9 @@
 extern "C" {
 #endif
 
-iot_status_t iot_mutex_init(iot_mutex_t *mutex);
-iot_status_t iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout);
-iot_status_t iot_mutex_unlock(iot_mutex_t *mutex);
+int iot_mutex_init(iot_mutex_t *mutex);
+int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout);
+int iot_mutex_unlock(iot_mutex_t *mutex);
 
 #ifdef __cplusplus
 }

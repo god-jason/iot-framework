@@ -22,7 +22,7 @@
 /* 通用工具                                                                   */
 /* ========================================================================== */
 
-static hal_status_t f1_hal_status(HAL_StatusTypeDef status)
+static int f1_hal_status(HAL_StatusTypeDef status)
 {
     switch (status) {
     case HAL_OK:
@@ -78,7 +78,7 @@ static uint16_t f1_pin_mask(uint32_t index)
     return (uint16_t)(1UL << index);
 }
 
-static uint32_t f1_gpio_speed(hal_gpio_speed_t speed)
+static uint32_t f1_gpio_speed(hal_gpio_speed_e speed)
 {
     switch (speed) {
     case HAL_GPIO_SPEED_LOW:
@@ -92,7 +92,7 @@ static uint32_t f1_gpio_speed(hal_gpio_speed_t speed)
     }
 }
 
-static uint32_t f1_gpio_pull(hal_gpio_pull_t pull)
+static uint32_t f1_gpio_pull(hal_gpio_pull_e pull)
 {
     switch (pull) {
     case HAL_GPIO_PULLUP:
@@ -105,7 +105,7 @@ static uint32_t f1_gpio_pull(hal_gpio_pull_t pull)
     }
 }
 
-hal_status_t hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
+int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
 {
     GPIO_InitTypeDef init;
     GPIO_TypeDef *port;
@@ -154,7 +154,7 @@ hal_status_t hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t hal_gpio_deinit(hal_pin_t pin)
+int hal_gpio_deinit(hal_pin_t pin)
 {
     GPIO_TypeDef *port = f1_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -166,7 +166,7 @@ hal_status_t hal_gpio_deinit(hal_pin_t pin)
     return HAL_OK;
 }
 
-hal_status_t hal_gpio_write(hal_pin_t pin, hal_gpio_level_t level)
+int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
 {
     GPIO_TypeDef *port = f1_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -179,7 +179,7 @@ hal_status_t hal_gpio_write(hal_pin_t pin, hal_gpio_level_t level)
     return HAL_OK;
 }
 
-hal_status_t hal_gpio_read(hal_pin_t pin, hal_gpio_level_t *level)
+int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
 {
     GPIO_TypeDef *port = f1_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -192,7 +192,7 @@ hal_status_t hal_gpio_read(hal_pin_t pin, hal_gpio_level_t *level)
     return HAL_OK;
 }
 
-hal_status_t hal_gpio_toggle(hal_pin_t pin)
+int hal_gpio_toggle(hal_pin_t pin)
 {
     GPIO_TypeDef *port = f1_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -204,17 +204,17 @@ hal_status_t hal_gpio_toggle(hal_pin_t pin)
     return HAL_OK;
 }
 
-hal_status_t hal_gpio_set(hal_pin_t pin)
+int hal_gpio_set(hal_pin_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_HIGH);
 }
 
-hal_status_t hal_gpio_reset(hal_pin_t pin)
+int hal_gpio_reset(hal_pin_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_LOW);
 }
 
-hal_status_t hal_pin_init(const hal_pin_config_t *config)
+int hal_pin_init(const hal_pin_config_t *config)
 {
     GPIO_InitTypeDef init;
     GPIO_TypeDef *port;
@@ -253,7 +253,7 @@ hal_status_t hal_pin_init(const hal_pin_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t hal_pin_deinit(hal_pin_t pin)
+int hal_pin_deinit(hal_pin_t pin)
 {
     return hal_gpio_deinit(pin);
 }
@@ -282,7 +282,7 @@ static IRQn_Type f1_exti_irqn(uint32_t index)
     return EXTI15_10_IRQn;
 }
 
-hal_status_t hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
+int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
 {
     GPIO_InitTypeDef init;
     GPIO_TypeDef *port;
@@ -333,7 +333,7 @@ hal_status_t hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t hal_exti_enable(hal_pin_t pin)
+int hal_exti_enable(hal_pin_t pin)
 {
     uint32_t index = HAL_PIN_GET_INDEX(pin);
     uint16_t mask;
@@ -347,7 +347,7 @@ hal_status_t hal_exti_enable(hal_pin_t pin)
     return HAL_OK;
 }
 
-hal_status_t hal_exti_disable(hal_pin_t pin)
+int hal_exti_disable(hal_pin_t pin)
 {
     uint32_t index = HAL_PIN_GET_INDEX(pin);
     uint16_t mask;
@@ -361,7 +361,7 @@ hal_status_t hal_exti_disable(hal_pin_t pin)
     return HAL_OK;
 }
 
-hal_status_t hal_exti_clear(hal_pin_t pin)
+int hal_exti_clear(hal_pin_t pin)
 {
     uint32_t index = HAL_PIN_GET_INDEX(pin);
 
@@ -373,7 +373,7 @@ hal_status_t hal_exti_clear(hal_pin_t pin)
     return HAL_OK;
 }
 
-hal_status_t hal_exti_deinit(hal_pin_t pin)
+int hal_exti_deinit(hal_pin_t pin)
 {
     GPIO_TypeDef *port = f1_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -413,7 +413,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 /* DMA                                                                        */
 /* ========================================================================== */
 
-static uint32_t f1_dma_width(hal_dma_width_t width)
+static uint32_t f1_dma_width(hal_dma_width_e width)
 {
     switch (width) {
     case HAL_DMA_WIDTH_16BIT:
@@ -426,7 +426,7 @@ static uint32_t f1_dma_width(hal_dma_width_t width)
     }
 }
 
-static uint32_t f1_dma_priority(hal_dma_priority_t priority)
+static uint32_t f1_dma_priority(hal_dma_priority_e priority)
 {
     switch (priority) {
     case HAL_DMA_PRIORITY_MEDIUM:
@@ -441,7 +441,7 @@ static uint32_t f1_dma_priority(hal_dma_priority_t priority)
     }
 }
 
-hal_status_t hal_dma_init(hal_dma_t *handle,
+int hal_dma_init(hal_dma_t *handle,
                             const hal_dma_config_t *config)
 {
     DMA_HandleTypeDef *hdma;
@@ -517,7 +517,7 @@ hal_status_t hal_dma_init(hal_dma_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_dma_deinit(hal_dma_t *handle)
+int hal_dma_deinit(hal_dma_t *handle)
 {
     DMA_HandleTypeDef *hdma;
 
@@ -535,7 +535,7 @@ hal_status_t hal_dma_deinit(hal_dma_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_dma_start(hal_dma_t *handle, uintptr_t src,
+int hal_dma_start(hal_dma_t *handle, uintptr_t src,
                              uintptr_t dst, size_t length)
 {
     DMA_HandleTypeDef *hdma;
@@ -571,7 +571,7 @@ hal_status_t hal_dma_start(hal_dma_t *handle, uintptr_t src,
     return HAL_OK;
 }
 
-hal_status_t hal_dma_stop(hal_dma_t *handle)
+int hal_dma_stop(hal_dma_t *handle)
 {
     DMA_HandleTypeDef *hdma;
     HAL_StatusTypeDef status;
@@ -590,13 +590,13 @@ hal_status_t hal_dma_stop(hal_dma_t *handle)
     return f1_hal_status(status);
 }
 
-hal_status_t hal_dma_suspend(hal_dma_t *handle)
+int hal_dma_suspend(hal_dma_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_dma_resume(hal_dma_t *handle)
+int hal_dma_resume(hal_dma_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
@@ -617,7 +617,7 @@ size_t hal_dma_get_remaining(hal_dma_t *handle)
 /* UART                                                                       */
 /* ========================================================================== */
 
-static uint32_t f1_uart_mode(hal_uart_mode_t mode)
+static uint32_t f1_uart_mode(hal_uart_mode_e mode)
 {
     switch (mode) {
     case HAL_UART_MODE_TX:
@@ -630,7 +630,7 @@ static uint32_t f1_uart_mode(hal_uart_mode_t mode)
     }
 }
 
-hal_status_t hal_uart_init(hal_uart_t *handle,
+int hal_uart_init(hal_uart_t *handle,
                              const hal_uart_config_t *config)
 {
     UART_HandleTypeDef *huart;
@@ -700,7 +700,7 @@ hal_status_t hal_uart_init(hal_uart_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_uart_deinit(hal_uart_t *handle)
+int hal_uart_deinit(hal_uart_t *handle)
 {
     UART_HandleTypeDef *huart;
 
@@ -718,7 +718,7 @@ hal_status_t hal_uart_deinit(hal_uart_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
+int hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
                                  size_t length, uint32_t timeout)
 {
     UART_HandleTypeDef *huart;
@@ -748,7 +748,7 @@ hal_status_t hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_uart_receive(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive(hal_uart_t *handle, uint8_t *data,
                                 size_t length, uint32_t timeout)
 {
     UART_HandleTypeDef *huart;
@@ -778,7 +778,7 @@ hal_status_t hal_uart_receive(hal_uart_t *handle, uint8_t *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_uart_transmit_it(hal_uart_t *handle,
+int hal_uart_transmit_it(hal_uart_t *handle,
                                     const uint8_t *data, size_t length)
 {
     UART_HandleTypeDef *huart;
@@ -804,7 +804,7 @@ hal_status_t hal_uart_transmit_it(hal_uart_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_uart_receive_it(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive_it(hal_uart_t *handle, uint8_t *data,
                                    size_t length)
 {
     UART_HandleTypeDef *huart;
@@ -830,7 +830,7 @@ hal_status_t hal_uart_receive_it(hal_uart_t *handle, uint8_t *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_uart_transmit_dma(hal_uart_t *handle,
+int hal_uart_transmit_dma(hal_uart_t *handle,
                                      const uint8_t *data, size_t length)
 {
     UART_HandleTypeDef *huart;
@@ -856,7 +856,7 @@ hal_status_t hal_uart_transmit_dma(hal_uart_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data,
                                     size_t length)
 {
     UART_HandleTypeDef *huart;
@@ -882,9 +882,9 @@ hal_status_t hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_uart_receive_to_idle(hal_uart_t *handle,
+int hal_uart_receive_to_idle(hal_uart_t *handle,
                                         uint8_t *data, size_t length,
-                                        hal_transfer_mode_t mode)
+                                        hal_transfer_mode_e mode)
 {
     HAL_UNUSED(handle);
     HAL_UNUSED(data);
@@ -908,7 +908,7 @@ size_t hal_uart_get_rx_count(hal_uart_t *handle)
     return 0U;
 }
 
-hal_status_t hal_uart_abort_tx(hal_uart_t *handle)
+int hal_uart_abort_tx(hal_uart_t *handle)
 {
     UART_HandleTypeDef *huart;
 
@@ -923,7 +923,7 @@ hal_status_t hal_uart_abort_tx(hal_uart_t *handle)
     return f1_hal_status(HAL_UART_AbortTransmit(huart));
 }
 
-hal_status_t hal_uart_abort_rx(hal_uart_t *handle)
+int hal_uart_abort_rx(hal_uart_t *handle)
 {
     UART_HandleTypeDef *huart;
 
@@ -938,7 +938,7 @@ hal_status_t hal_uart_abort_rx(hal_uart_t *handle)
     return f1_hal_status(HAL_UART_AbortReceive(huart));
 }
 
-hal_status_t hal_uart_abort(hal_uart_t *handle)
+int hal_uart_abort(hal_uart_t *handle)
 {
     UART_HandleTypeDef *huart;
 
@@ -953,17 +953,17 @@ hal_status_t hal_uart_abort(hal_uart_t *handle)
     return f1_hal_status(HAL_UART_Abort(huart));
 }
 
-hal_state_t hal_uart_get_state(hal_uart_t *handle)
+hal_state_e hal_uart_get_state(hal_uart_t *handle)
 {
     return (handle != NULL) ? handle->base.state : HAL_STATE_RESET;
 }
 
-hal_status_t hal_uart_get_error(hal_uart_t *handle)
+int hal_uart_get_error(hal_uart_t *handle)
 {
     return (handle != NULL) ? handle->base.error : HAL_INVALID_PARAM;
 }
 
-hal_status_t hal_uart_register_callback(hal_uart_t *handle,
+int hal_uart_register_callback(hal_uart_t *handle,
                                           hal_uart_callback_t callback,
                                           void *user_data)
 {
@@ -983,7 +983,7 @@ hal_status_t hal_uart_register_callback(hal_uart_t *handle,
 void iot_stm32_uart_irq_handler(hal_uart_t *handle)
 {
     UART_HandleTypeDef *huart;
-    hal_state_t previous;
+    hal_state_e previous;
 
     if ((handle == NULL) || (handle->base.instance == NULL)) {
         return;
@@ -1063,7 +1063,7 @@ static uint32_t f1_spi_prescaler(SPI_TypeDef *instance, uint32_t baudrate)
     return SPI_BAUDRATEPRESCALER_256;
 }
 
-hal_status_t hal_spi_init(hal_spi_t *handle,
+int hal_spi_init(hal_spi_t *handle,
                             const hal_spi_config_t *config)
 {
     SPI_HandleTypeDef *hspi;
@@ -1122,7 +1122,7 @@ hal_status_t hal_spi_init(hal_spi_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_spi_deinit(hal_spi_t *handle)
+int hal_spi_deinit(hal_spi_t *handle)
 {
     SPI_HandleTypeDef *hspi;
 
@@ -1138,7 +1138,7 @@ hal_status_t hal_spi_deinit(hal_spi_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_spi_transmit(hal_spi_t *handle, const void *data,
+int hal_spi_transmit(hal_spi_t *handle, const void *data,
                                 size_t length, uint32_t timeout)
 {
     SPI_HandleTypeDef *hspi;
@@ -1162,7 +1162,7 @@ hal_status_t hal_spi_transmit(hal_spi_t *handle, const void *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_spi_receive(hal_spi_t *handle, void *data,
+int hal_spi_receive(hal_spi_t *handle, void *data,
                                size_t length, uint32_t timeout)
 {
     SPI_HandleTypeDef *hspi;
@@ -1186,7 +1186,7 @@ hal_status_t hal_spi_receive(hal_spi_t *handle, void *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_spi_transfer(hal_spi_t *handle, const void *tx_data,
+int hal_spi_transfer(hal_spi_t *handle, const void *tx_data,
                                 void *rx_data, size_t length, uint32_t timeout)
 {
     SPI_HandleTypeDef *hspi;
@@ -1212,7 +1212,7 @@ hal_status_t hal_spi_transfer(hal_spi_t *handle, const void *tx_data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_spi_transmit_dma(hal_spi_t *handle,
+int hal_spi_transmit_dma(hal_spi_t *handle,
                                     const void *data, size_t length)
 {
     SPI_HandleTypeDef *hspi;
@@ -1237,7 +1237,7 @@ hal_status_t hal_spi_transmit_dma(hal_spi_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_spi_receive_dma(hal_spi_t *handle, void *data,
+int hal_spi_receive_dma(hal_spi_t *handle, void *data,
                                    size_t length)
 {
     SPI_HandleTypeDef *hspi;
@@ -1262,7 +1262,7 @@ hal_status_t hal_spi_receive_dma(hal_spi_t *handle, void *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_spi_transfer_dma(hal_spi_t *handle,
+int hal_spi_transfer_dma(hal_spi_t *handle,
                                     const void *tx_data, void *rx_data,
                                     size_t length)
 {
@@ -1290,7 +1290,7 @@ hal_status_t hal_spi_transfer_dma(hal_spi_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate)
+int hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate)
 {
     SPI_HandleTypeDef *hspi;
 
@@ -1318,7 +1318,7 @@ hal_status_t hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate)
     return HAL_OK;
 }
 
-hal_status_t hal_spi_abort(hal_spi_t *handle)
+int hal_spi_abort(hal_spi_t *handle)
 {
     SPI_HandleTypeDef *hspi;
 
@@ -1335,7 +1335,7 @@ hal_status_t hal_spi_abort(hal_spi_t *handle)
     return f1_hal_status(HAL_SPI_Init(hspi));
 }
 
-hal_state_t hal_spi_get_state(hal_spi_t *handle)
+hal_state_e hal_spi_get_state(hal_spi_t *handle)
 {
     return (handle != NULL) ? handle->base.state : HAL_STATE_RESET;
 }
@@ -1353,7 +1353,7 @@ static uint16_t f1_i2c_dev_address(hal_i2c_t *handle, uint16_t address)
     return (uint16_t)(address << 1);
 }
 
-hal_status_t hal_i2c_init(hal_i2c_t *handle,
+int hal_i2c_init(hal_i2c_t *handle,
                             const hal_i2c_config_t *config)
 {
     I2C_HandleTypeDef *hi2c;
@@ -1407,7 +1407,7 @@ hal_status_t hal_i2c_init(hal_i2c_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_i2c_deinit(hal_i2c_t *handle)
+int hal_i2c_deinit(hal_i2c_t *handle)
 {
     I2C_HandleTypeDef *hi2c;
 
@@ -1423,7 +1423,7 @@ hal_status_t hal_i2c_deinit(hal_i2c_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_i2c_master_transmit(hal_i2c_t *handle,
+int hal_i2c_master_transmit(hal_i2c_t *handle,
                                        uint16_t address, const uint8_t *data,
                                        size_t length, uint32_t timeout)
 {
@@ -1449,7 +1449,7 @@ hal_status_t hal_i2c_master_transmit(hal_i2c_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2c_master_receive(hal_i2c_t *handle,
+int hal_i2c_master_receive(hal_i2c_t *handle,
                                       uint16_t address, uint8_t *data,
                                       size_t length, uint32_t timeout)
 {
@@ -1475,7 +1475,7 @@ hal_status_t hal_i2c_master_receive(hal_i2c_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2c_master_transfer(hal_i2c_t *handle,
+int hal_i2c_master_transfer(hal_i2c_t *handle,
                                        uint16_t address,
                                        const uint8_t *tx_data, size_t tx_length,
                                        uint8_t *rx_data, size_t rx_length,
@@ -1561,7 +1561,7 @@ hal_status_t hal_i2c_master_transfer(hal_i2c_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_i2c_mem_write(hal_i2c_t *handle, uint16_t address,
+int hal_i2c_mem_write(hal_i2c_t *handle, uint16_t address,
                                  uint16_t reg, uint8_t reg_size,
                                  const uint8_t *data, size_t length,
                                  uint32_t timeout)
@@ -1595,7 +1595,7 @@ hal_status_t hal_i2c_mem_write(hal_i2c_t *handle, uint16_t address,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2c_mem_read(hal_i2c_t *handle, uint16_t address,
+int hal_i2c_mem_read(hal_i2c_t *handle, uint16_t address,
                                 uint16_t reg, uint8_t reg_size, uint8_t *data,
                                 size_t length, uint32_t timeout)
 {
@@ -1627,7 +1627,7 @@ hal_status_t hal_i2c_mem_read(hal_i2c_t *handle, uint16_t address,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2c_master_transmit_dma(hal_i2c_t *handle,
+int hal_i2c_master_transmit_dma(hal_i2c_t *handle,
                                            uint16_t address,
                                            const uint8_t *data, size_t length)
 {
@@ -1655,7 +1655,7 @@ hal_status_t hal_i2c_master_transmit_dma(hal_i2c_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2c_master_receive_dma(hal_i2c_t *handle,
+int hal_i2c_master_receive_dma(hal_i2c_t *handle,
                                           uint16_t address, uint8_t *data,
                                           size_t length)
 {
@@ -1683,7 +1683,7 @@ hal_status_t hal_i2c_master_receive_dma(hal_i2c_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2c_is_device_ready(hal_i2c_t *handle,
+int hal_i2c_is_device_ready(hal_i2c_t *handle,
                                        uint16_t address, uint32_t trials,
                                        uint32_t timeout)
 {
@@ -1700,14 +1700,14 @@ hal_status_t hal_i2c_is_device_ready(hal_i2c_t *handle,
         hi2c, f1_i2c_dev_address(handle, address), trials, timeout));
 }
 
-hal_status_t hal_i2c_bus_recover(hal_i2c_t *handle)
+int hal_i2c_bus_recover(hal_i2c_t *handle)
 {
     HAL_UNUSED(handle);
     /* 需要用户提供 SCL/SDA 引脚信息才能做时钟翻转恢复。 */
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_i2c_abort(hal_i2c_t *handle)
+int hal_i2c_abort(hal_i2c_t *handle)
 {
     I2C_HandleTypeDef *hi2c;
 
@@ -1724,7 +1724,7 @@ hal_status_t hal_i2c_abort(hal_i2c_t *handle)
     return f1_hal_status(HAL_I2C_Init(hi2c));
 }
 
-hal_state_t hal_i2c_get_state(hal_i2c_t *handle)
+hal_state_e hal_i2c_get_state(hal_i2c_t *handle)
 {
     return (handle != NULL) ? handle->base.state : HAL_STATE_RESET;
 }
@@ -1733,7 +1733,7 @@ hal_state_t hal_i2c_get_state(hal_i2c_t *handle)
 /* I2S                                                                        */
 /* ========================================================================== */
 
-hal_status_t hal_i2s_init(hal_i2s_t *handle,
+int hal_i2s_init(hal_i2s_t *handle,
                             const hal_i2s_config_t *config)
 {
     I2S_HandleTypeDef *hi2s;
@@ -1813,7 +1813,7 @@ hal_status_t hal_i2s_init(hal_i2s_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_i2s_deinit(hal_i2s_t *handle)
+int hal_i2s_deinit(hal_i2s_t *handle)
 {
     I2S_HandleTypeDef *hi2s;
 
@@ -1829,7 +1829,7 @@ hal_status_t hal_i2s_deinit(hal_i2s_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_i2s_transmit(hal_i2s_t *handle, const void *data,
+int hal_i2s_transmit(hal_i2s_t *handle, const void *data,
                                 size_t length, uint32_t timeout)
 {
     I2S_HandleTypeDef *hi2s;
@@ -1854,7 +1854,7 @@ hal_status_t hal_i2s_transmit(hal_i2s_t *handle, const void *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2s_receive(hal_i2s_t *handle, void *data,
+int hal_i2s_receive(hal_i2s_t *handle, void *data,
                                size_t length, uint32_t timeout)
 {
     I2S_HandleTypeDef *hi2s;
@@ -1878,7 +1878,7 @@ hal_status_t hal_i2s_receive(hal_i2s_t *handle, void *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2s_transmit_dma(hal_i2s_t *handle,
+int hal_i2s_transmit_dma(hal_i2s_t *handle,
                                     const void *data, size_t length)
 {
     I2S_HandleTypeDef *hi2s;
@@ -1903,7 +1903,7 @@ hal_status_t hal_i2s_transmit_dma(hal_i2s_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2s_receive_dma(hal_i2s_t *handle, void *data,
+int hal_i2s_receive_dma(hal_i2s_t *handle, void *data,
                                    size_t length)
 {
     I2S_HandleTypeDef *hi2s;
@@ -1928,7 +1928,7 @@ hal_status_t hal_i2s_receive_dma(hal_i2s_t *handle, void *data,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_i2s_abort(hal_i2s_t *handle)
+int hal_i2s_abort(hal_i2s_t *handle)
 {
     I2S_HandleTypeDef *hi2s;
 
@@ -1951,7 +1951,7 @@ hal_status_t hal_i2s_abort(hal_i2s_t *handle)
 
 #define F1_CAN_MAX_FILTER_BANK 13U
 
-static uint32_t f1_can_mode(hal_can_mode_t mode)
+static uint32_t f1_can_mode(hal_can_mode_e mode)
 {
     switch (mode) {
     case HAL_CAN_MODE_LOOPBACK:
@@ -2017,7 +2017,7 @@ static void f1_can_frame_to_header(const hal_can_frame_t *frame,
     header->TransmitGlobalTime = DISABLE;
 }
 
-hal_status_t hal_can_init(hal_can_t *handle,
+int hal_can_init(hal_can_t *handle,
                             const hal_can_config_t *config)
 {
     CAN_HandleTypeDef *hcan;
@@ -2078,7 +2078,7 @@ hal_status_t hal_can_init(hal_can_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_can_deinit(hal_can_t *handle)
+int hal_can_deinit(hal_can_t *handle)
 {
     CAN_HandleTypeDef *hcan;
 
@@ -2095,7 +2095,7 @@ hal_status_t hal_can_deinit(hal_can_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_can_start(hal_can_t *handle)
+int hal_can_start(hal_can_t *handle)
 {
     CAN_HandleTypeDef *hcan;
 
@@ -2109,7 +2109,7 @@ hal_status_t hal_can_start(hal_can_t *handle)
     return f1_hal_status(HAL_CAN_Start(hcan));
 }
 
-hal_status_t hal_can_stop(hal_can_t *handle)
+int hal_can_stop(hal_can_t *handle)
 {
     CAN_HandleTypeDef *hcan;
 
@@ -2123,7 +2123,7 @@ hal_status_t hal_can_stop(hal_can_t *handle)
     return f1_hal_status(HAL_CAN_Stop(hcan));
 }
 
-hal_status_t hal_can_transmit(hal_can_t *handle,
+int hal_can_transmit(hal_can_t *handle,
                                 const hal_can_frame_t *frame,
                                 uint32_t timeout)
 {
@@ -2166,7 +2166,7 @@ hal_status_t hal_can_transmit(hal_can_t *handle,
     }
 }
 
-hal_status_t hal_can_receive(hal_can_t *handle,
+int hal_can_receive(hal_can_t *handle,
                                hal_can_frame_t *frame, uint32_t timeout)
 {
     CAN_HandleTypeDef *hcan;
@@ -2215,7 +2215,7 @@ hal_status_t hal_can_receive(hal_can_t *handle,
     }
 }
 
-hal_status_t hal_can_transmit_it(hal_can_t *handle,
+int hal_can_transmit_it(hal_can_t *handle,
                                    const hal_can_frame_t *frame)
 {
     CAN_HandleTypeDef *hcan;
@@ -2269,7 +2269,7 @@ static uint32_t *f1_can_filter_bank(const hal_can_t *handle)
     return NULL;
 }
 
-hal_status_t hal_can_add_filter(hal_can_t *handle,
+int hal_can_add_filter(hal_can_t *handle,
                                   const hal_can_filter_t *filter)
 {
     CAN_HandleTypeDef *hcan;
@@ -2325,7 +2325,7 @@ hal_status_t hal_can_add_filter(hal_can_t *handle,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_can_clear_filters(hal_can_t *handle)
+int hal_can_clear_filters(hal_can_t *handle)
 {
     CAN_HandleTypeDef *hcan;
     CAN_FilterTypeDef config;
@@ -2388,7 +2388,7 @@ void iot_stm32_can_irq_handler(hal_can_t *handle)
 /* ADC                                                                        */
 /* ========================================================================== */
 
-hal_status_t hal_adc_init(hal_adc_t *handle,
+int hal_adc_init(hal_adc_t *handle,
                             const hal_adc_config_t *config)
 {
     ADC_HandleTypeDef *hadc;
@@ -2430,7 +2430,7 @@ hal_status_t hal_adc_init(hal_adc_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_adc_deinit(hal_adc_t *handle)
+int hal_adc_deinit(hal_adc_t *handle)
 {
     ADC_HandleTypeDef *hadc;
 
@@ -2446,7 +2446,7 @@ hal_status_t hal_adc_deinit(hal_adc_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_adc_config_channel(hal_adc_t *handle,
+int hal_adc_config_channel(hal_adc_t *handle,
                                       const hal_adc_channel_config_t *config)
 {
     ADC_HandleTypeDef *hadc;
@@ -2475,7 +2475,7 @@ hal_status_t hal_adc_config_channel(hal_adc_t *handle,
     return f1_hal_status(HAL_ADC_ConfigChannel(hadc, &channel_config));
 }
 
-hal_status_t hal_adc_start(hal_adc_t *handle)
+int hal_adc_start(hal_adc_t *handle)
 {
     ADC_HandleTypeDef *hadc;
 
@@ -2489,7 +2489,7 @@ hal_status_t hal_adc_start(hal_adc_t *handle)
     return f1_hal_status(HAL_ADC_Start(hadc));
 }
 
-hal_status_t hal_adc_stop(hal_adc_t *handle)
+int hal_adc_stop(hal_adc_t *handle)
 {
     ADC_HandleTypeDef *hadc;
 
@@ -2503,7 +2503,7 @@ hal_status_t hal_adc_stop(hal_adc_t *handle)
     return f1_hal_status(HAL_ADC_Stop(hadc));
 }
 
-hal_status_t hal_adc_read(hal_adc_t *handle, uint8_t channel,
+int hal_adc_read(hal_adc_t *handle, uint8_t channel,
                             uint32_t *value, uint32_t timeout)
 {
     ADC_HandleTypeDef *hadc;
@@ -2544,7 +2544,7 @@ hal_status_t hal_adc_read(hal_adc_t *handle, uint8_t channel,
     return f1_hal_status(status);
 }
 
-hal_status_t hal_adc_start_it(hal_adc_t *handle)
+int hal_adc_start_it(hal_adc_t *handle)
 {
     ADC_HandleTypeDef *hadc;
 
@@ -2558,7 +2558,7 @@ hal_status_t hal_adc_start_it(hal_adc_t *handle)
     return f1_hal_status(HAL_ADC_Start_IT(hadc));
 }
 
-hal_status_t hal_adc_start_dma(hal_adc_t *handle,
+int hal_adc_start_dma(hal_adc_t *handle,
                                  uint32_t *buffer, size_t length)
 {
     ADC_HandleTypeDef *hadc;
@@ -2576,7 +2576,7 @@ hal_status_t hal_adc_start_dma(hal_adc_t *handle,
     return f1_hal_status(HAL_ADC_Start_DMA(hadc, buffer, (uint32_t)length));
 }
 
-hal_status_t hal_adc_calibrate(hal_adc_t *handle)
+int hal_adc_calibrate(hal_adc_t *handle)
 {
     ADC_HandleTypeDef *hadc;
 
@@ -2613,7 +2613,7 @@ static uint32_t f1_dac_channel(uint8_t channel)
     return (channel == 2U) ? DAC_CHANNEL_2 : DAC_CHANNEL_1;
 }
 
-static uint32_t f1_dac_alignment(hal_dac_alignment_t alignment)
+static uint32_t f1_dac_alignment(hal_dac_alignment_e alignment)
 {
     switch (alignment) {
     case HAL_DAC_ALIGN_8BIT:
@@ -2626,7 +2626,7 @@ static uint32_t f1_dac_alignment(hal_dac_alignment_t alignment)
     }
 }
 
-hal_status_t hal_dac_init(hal_dac_t *handle,
+int hal_dac_init(hal_dac_t *handle,
                             const hal_dac_config_t *config)
 {
     DAC_HandleTypeDef *hdac;
@@ -2669,7 +2669,7 @@ hal_status_t hal_dac_init(hal_dac_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_dac_deinit(hal_dac_t *handle)
+int hal_dac_deinit(hal_dac_t *handle)
 {
     DAC_HandleTypeDef *hdac;
 
@@ -2685,7 +2685,7 @@ hal_status_t hal_dac_deinit(hal_dac_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_dac_start(hal_dac_t *handle)
+int hal_dac_start(hal_dac_t *handle)
 {
     DAC_HandleTypeDef *hdac;
 
@@ -2700,7 +2700,7 @@ hal_status_t hal_dac_start(hal_dac_t *handle)
         HAL_DAC_Start(hdac, f1_dac_channel(handle->config.channel)));
 }
 
-hal_status_t hal_dac_stop(hal_dac_t *handle)
+int hal_dac_stop(hal_dac_t *handle)
 {
     DAC_HandleTypeDef *hdac;
 
@@ -2715,7 +2715,7 @@ hal_status_t hal_dac_stop(hal_dac_t *handle)
         HAL_DAC_Stop(hdac, f1_dac_channel(handle->config.channel)));
 }
 
-hal_status_t hal_dac_write(hal_dac_t *handle, uint32_t value)
+int hal_dac_write(hal_dac_t *handle, uint32_t value)
 {
     DAC_HandleTypeDef *hdac;
 
@@ -2731,7 +2731,7 @@ hal_status_t hal_dac_write(hal_dac_t *handle, uint32_t value)
         f1_dac_alignment(handle->config.alignment), value));
 }
 
-hal_status_t hal_dac_write_dma(hal_dac_t *handle,
+int hal_dac_write_dma(hal_dac_t *handle,
                                  const uint32_t *buffer, size_t length)
 {
     DAC_HandleTypeDef *hdac;
@@ -2756,7 +2756,7 @@ hal_status_t hal_dac_write_dma(hal_dac_t *handle,
 /* OPAMP（F1 无此模块）                                                       */
 /* ========================================================================== */
 
-hal_status_t hal_opamp_init(hal_opamp_t *handle,
+int hal_opamp_init(hal_opamp_t *handle,
                               const hal_opamp_config_t *config)
 {
     HAL_UNUSED(handle);
@@ -2764,13 +2764,13 @@ hal_status_t hal_opamp_init(hal_opamp_t *handle,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_opamp_start(hal_opamp_t *handle)
+int hal_opamp_start(hal_opamp_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_opamp_stop(hal_opamp_t *handle)
+int hal_opamp_stop(hal_opamp_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
@@ -2780,7 +2780,7 @@ hal_status_t hal_opamp_stop(hal_opamp_t *handle)
 /* TIM / PWM / CAPTURE / ENCODER                                              */
 /* ========================================================================== */
 
-static uint32_t f1_tim_counter_mode(hal_tim_counter_t mode)
+static uint32_t f1_tim_counter_mode(hal_tim_counter_e mode)
 {
     switch (mode) {
     case HAL_TIM_COUNTER_DOWN:
@@ -2841,7 +2841,7 @@ static uint32_t f1_tim_ic_prescaler(uint32_t prescaler)
     }
 }
 
-hal_status_t hal_tim_init(hal_tim_t *handle,
+int hal_tim_init(hal_tim_t *handle,
                             const hal_tim_config_t *config)
 {
     TIM_HandleTypeDef *htim;
@@ -2876,7 +2876,7 @@ hal_status_t hal_tim_init(hal_tim_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_tim_deinit(hal_tim_t *handle)
+int hal_tim_deinit(hal_tim_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -2892,7 +2892,7 @@ hal_status_t hal_tim_deinit(hal_tim_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_tim_start(hal_tim_t *handle)
+int hal_tim_start(hal_tim_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -2910,7 +2910,7 @@ hal_status_t hal_tim_start(hal_tim_t *handle)
     return HAL_ERROR;
 }
 
-hal_status_t hal_tim_stop(hal_tim_t *handle)
+int hal_tim_stop(hal_tim_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -2926,7 +2926,7 @@ hal_status_t hal_tim_stop(hal_tim_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_tim_start_it(hal_tim_t *handle)
+int hal_tim_start_it(hal_tim_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -2944,7 +2944,7 @@ hal_status_t hal_tim_start_it(hal_tim_t *handle)
     return HAL_ERROR;
 }
 
-hal_status_t hal_tim_stop_it(hal_tim_t *handle)
+int hal_tim_stop_it(hal_tim_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -2960,7 +2960,7 @@ hal_status_t hal_tim_stop_it(hal_tim_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_tim_set_period(hal_tim_t *handle,
+int hal_tim_set_period(hal_tim_t *handle,
                                   uint32_t period)
 {
     TIM_HandleTypeDef *htim;
@@ -2979,7 +2979,7 @@ hal_status_t hal_tim_set_period(hal_tim_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_tim_set_prescaler(hal_tim_t *handle,
+int hal_tim_set_prescaler(hal_tim_t *handle,
                                      uint32_t prescaler)
 {
     TIM_HandleTypeDef *htim;
@@ -2998,7 +2998,7 @@ hal_status_t hal_tim_set_prescaler(hal_tim_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_tim_set_counter(hal_tim_t *handle,
+int hal_tim_set_counter(hal_tim_t *handle,
                                    uint32_t counter)
 {
     TIM_HandleTypeDef *htim;
@@ -3074,7 +3074,7 @@ static void f1_pwm_calculate(uint32_t timer_clock, uint32_t frequency,
     *period = per - 1U;
 }
 
-static hal_status_t f1_pwm_config_output(hal_pwm_t *handle,
+static int f1_pwm_config_output(hal_pwm_t *handle,
                                           TIM_HandleTypeDef *htim,
                                           uint32_t channel)
 {
@@ -3093,7 +3093,7 @@ static hal_status_t f1_pwm_config_output(hal_pwm_t *handle,
     return f1_hal_status(HAL_TIM_PWM_ConfigChannel(htim, &oc, channel));
 }
 
-hal_status_t hal_pwm_init(hal_pwm_t *handle,
+int hal_pwm_init(hal_pwm_t *handle,
                             const hal_pwm_config_t *config)
 {
     TIM_HandleTypeDef *htim;
@@ -3148,7 +3148,7 @@ hal_status_t hal_pwm_init(hal_pwm_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_pwm_deinit(hal_pwm_t *handle)
+int hal_pwm_deinit(hal_pwm_t *handle)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3169,7 +3169,7 @@ hal_status_t hal_pwm_deinit(hal_pwm_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_pwm_start(hal_pwm_t *handle)
+int hal_pwm_start(hal_pwm_t *handle)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3192,7 +3192,7 @@ hal_status_t hal_pwm_start(hal_pwm_t *handle)
     return HAL_ERROR;
 }
 
-hal_status_t hal_pwm_stop(hal_pwm_t *handle)
+int hal_pwm_stop(hal_pwm_t *handle)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3213,7 +3213,7 @@ hal_status_t hal_pwm_stop(hal_pwm_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_pwm_set_frequency(hal_pwm_t *handle,
+int hal_pwm_set_frequency(hal_pwm_t *handle,
                                      uint32_t frequency)
 {
     TIM_HandleTypeDef *htim;
@@ -3262,7 +3262,7 @@ hal_status_t hal_pwm_set_frequency(hal_pwm_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
+int hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3291,8 +3291,8 @@ hal_status_t hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
     return HAL_OK;
 }
 
-hal_status_t hal_pwm_set_polarity(hal_pwm_t *handle,
-                                    hal_pwm_polarity_t polarity)
+int hal_pwm_set_polarity(hal_pwm_t *handle,
+                                    hal_pwm_polarity_e polarity)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3321,7 +3321,7 @@ static uint32_t f1_capture_channel(hal_capture_t *handle)
     return f1_tim_channel(1U);
 }
 
-hal_status_t hal_capture_init(hal_capture_t *handle,
+int hal_capture_init(hal_capture_t *handle,
                                 const hal_capture_config_t *config)
 {
     TIM_HandleTypeDef *htim;
@@ -3384,7 +3384,7 @@ hal_status_t hal_capture_init(hal_capture_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_capture_start(hal_capture_t *handle)
+int hal_capture_start(hal_capture_t *handle)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3407,7 +3407,7 @@ hal_status_t hal_capture_start(hal_capture_t *handle)
     return HAL_ERROR;
 }
 
-hal_status_t hal_capture_stop(hal_capture_t *handle)
+int hal_capture_stop(hal_capture_t *handle)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3428,7 +3428,7 @@ hal_status_t hal_capture_stop(hal_capture_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_capture_start_it(hal_capture_t *handle)
+int hal_capture_start_it(hal_capture_t *handle)
 {
     TIM_HandleTypeDef *htim;
     uint32_t channel;
@@ -3467,7 +3467,7 @@ uint32_t hal_capture_get_value(hal_capture_t *handle)
     return HAL_TIM_ReadCapturedValue(htim, channel);
 }
 
-hal_status_t hal_encoder_init(hal_encoder_t *handle,
+int hal_encoder_init(hal_encoder_t *handle,
                                 const hal_encoder_config_t *config)
 {
     TIM_HandleTypeDef *htim;
@@ -3533,7 +3533,7 @@ hal_status_t hal_encoder_init(hal_encoder_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_encoder_start(hal_encoder_t *handle)
+int hal_encoder_start(hal_encoder_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -3551,7 +3551,7 @@ hal_status_t hal_encoder_start(hal_encoder_t *handle)
     return HAL_ERROR;
 }
 
-hal_status_t hal_encoder_stop(hal_encoder_t *handle)
+int hal_encoder_stop(hal_encoder_t *handle)
 {
     TIM_HandleTypeDef *htim;
 
@@ -3578,7 +3578,7 @@ int32_t hal_encoder_get_count(hal_encoder_t *handle)
     return (int32_t)__HAL_TIM_GET_COUNTER(htim);
 }
 
-hal_status_t hal_encoder_set_count(hal_encoder_t *handle,
+int hal_encoder_set_count(hal_encoder_t *handle,
                                      int32_t count)
 {
     TIM_HandleTypeDef *htim;
@@ -3634,7 +3634,7 @@ static uint32_t f1_wwdg_prescaler(uint32_t divider)
     }
 }
 
-hal_status_t hal_wdg_init(hal_wdg_t *handle,
+int hal_wdg_init(hal_wdg_t *handle,
                             const hal_wdg_config_t *config)
 {
     if ((handle == NULL) || (config == NULL)) {
@@ -3741,7 +3741,7 @@ hal_status_t hal_wdg_init(hal_wdg_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_wdg_start(hal_wdg_t *handle)
+int hal_wdg_start(hal_wdg_t *handle)
 {
     if ((handle == NULL) || (handle->base.state == HAL_STATE_RESET)) {
         return HAL_NOT_READY;
@@ -3750,7 +3750,7 @@ hal_status_t hal_wdg_start(hal_wdg_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_wdg_refresh(hal_wdg_t *handle)
+int hal_wdg_refresh(hal_wdg_t *handle)
 {
     if ((handle == NULL) || (handle->base.state == HAL_STATE_RESET)) {
         return HAL_NOT_READY;
@@ -3773,7 +3773,7 @@ hal_status_t hal_wdg_refresh(hal_wdg_t *handle)
     }
 }
 
-hal_status_t hal_wdg_stop(hal_wdg_t *handle)
+int hal_wdg_stop(hal_wdg_t *handle)
 {
     HAL_UNUSED(handle);
     /* IWDG 启动后无法停止；WWDG 只能通过复位关闭。 */
@@ -3818,7 +3818,7 @@ static int64_t f1_days_from_civil(int32_t year, uint32_t month, uint32_t day)
     return (int64_t)era * 146097 + (int64_t)day_of_era - 719468;
 }
 
-hal_status_t hal_rtc_init(void)
+int hal_rtc_init(void)
 {
     if (s_f1_rtc_ready) {
         return HAL_OK;
@@ -3839,7 +3839,7 @@ hal_status_t hal_rtc_init(void)
     return HAL_OK;
 }
 
-hal_status_t hal_rtc_deinit(void)
+int hal_rtc_deinit(void)
 {
     if (!s_f1_rtc_ready) {
         return HAL_NOT_READY;
@@ -3851,7 +3851,7 @@ hal_status_t hal_rtc_deinit(void)
     return HAL_OK;
 }
 
-hal_status_t hal_rtc_set_time(const hal_rtc_time_t *time)
+int hal_rtc_set_time(const hal_rtc_time_t *time)
 {
     RTC_TimeTypeDef rtc_time;
     RTC_DateTypeDef rtc_date;
@@ -3885,7 +3885,7 @@ hal_status_t hal_rtc_set_time(const hal_rtc_time_t *time)
     return HAL_OK;
 }
 
-hal_status_t hal_rtc_get_time(hal_rtc_time_t *time)
+int hal_rtc_get_time(hal_rtc_time_t *time)
 {
     RTC_TimeTypeDef rtc_time;
     RTC_DateTypeDef rtc_date;
@@ -3916,7 +3916,7 @@ hal_status_t hal_rtc_get_time(hal_rtc_time_t *time)
     return HAL_OK;
 }
 
-hal_status_t hal_rtc_set_alarm(hal_rtc_alarm_t alarm,
+int hal_rtc_set_alarm(hal_rtc_alarm_e alarm,
                                  const hal_rtc_alarm_config_t *config)
 {
     RTC_AlarmTypeDef rtc_alarm;
@@ -3947,7 +3947,7 @@ hal_status_t hal_rtc_set_alarm(hal_rtc_alarm_t alarm,
     return HAL_OK;
 }
 
-hal_status_t hal_rtc_disable_alarm(hal_rtc_alarm_t alarm)
+int hal_rtc_disable_alarm(hal_rtc_alarm_e alarm)
 {
     if (!s_f1_rtc_ready) {
         return HAL_NOT_READY;
@@ -3961,7 +3961,7 @@ hal_status_t hal_rtc_disable_alarm(hal_rtc_alarm_t alarm)
     return f1_hal_status(HAL_RTC_DeactivateAlarm(&s_f1_rtc, RTC_ALARM_A));
 }
 
-hal_status_t hal_rtc_get_timestamp(uint32_t *timestamp)
+int hal_rtc_get_timestamp(uint32_t *timestamp)
 {
     hal_rtc_time_t time;
     int64_t days;
@@ -4009,7 +4009,7 @@ void iot_stm32_rtc_alarm_irq_handler(void)
 #define IOT_F1_FLASH_PAGE_SIZE 1024U
 #endif
 
-hal_status_t hal_flash_init(hal_flash_t *handle)
+int hal_flash_init(hal_flash_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4031,7 +4031,7 @@ hal_status_t hal_flash_init(hal_flash_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_flash_deinit(hal_flash_t *handle)
+int hal_flash_deinit(hal_flash_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4041,7 +4041,7 @@ hal_status_t hal_flash_deinit(hal_flash_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_flash_get_info(hal_flash_t *handle,
+int hal_flash_get_info(hal_flash_t *handle,
                                   hal_flash_info_t *info)
 {
     if ((handle == NULL) || (info == NULL)) {
@@ -4054,7 +4054,7 @@ hal_status_t hal_flash_get_info(hal_flash_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_flash_read(hal_flash_t *handle, uintptr_t address,
+int hal_flash_read(hal_flash_t *handle, uintptr_t address,
                               void *buffer, size_t length)
 {
     uintptr_t end;
@@ -4079,13 +4079,13 @@ hal_status_t hal_flash_read(hal_flash_t *handle, uintptr_t address,
     return HAL_OK;
 }
 
-hal_status_t hal_flash_write(hal_flash_t *handle, uintptr_t address,
+int hal_flash_write(hal_flash_t *handle, uintptr_t address,
                                const void *buffer, size_t length)
 {
     const uint8_t *source = (const uint8_t *)buffer;
     uintptr_t end;
     size_t offset;
-    hal_status_t result = HAL_OK;
+    int result = HAL_OK;
 
     if ((handle == NULL) || (buffer == NULL)) {
         return HAL_INVALID_PARAM;
@@ -4127,7 +4127,7 @@ hal_status_t hal_flash_write(hal_flash_t *handle, uintptr_t address,
     return result;
 }
 
-hal_status_t hal_flash_erase(hal_flash_t *handle, uintptr_t address,
+int hal_flash_erase(hal_flash_t *handle, uintptr_t address,
                                size_t length)
 {
     FLASH_EraseInitTypeDef erase;
@@ -4175,7 +4175,7 @@ hal_status_t hal_flash_erase(hal_flash_t *handle, uintptr_t address,
     return HAL_OK;
 }
 
-hal_status_t hal_flash_lock(hal_flash_t *handle)
+int hal_flash_lock(hal_flash_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4184,7 +4184,7 @@ hal_status_t hal_flash_lock(hal_flash_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_flash_unlock(hal_flash_t *handle)
+int hal_flash_unlock(hal_flash_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4220,7 +4220,7 @@ static uint32_t f1_crc_reflect(uint32_t value, uint32_t bits)
     return result;
 }
 
-hal_status_t hal_crc_init(hal_crc_t *handle,
+int hal_crc_init(hal_crc_t *handle,
                             const hal_crc_config_t *config)
 {
     if ((handle == NULL) || (config == NULL)) {
@@ -4241,7 +4241,7 @@ hal_status_t hal_crc_init(hal_crc_t *handle,
     return HAL_OK;
 }
 
-hal_status_t hal_crc_reset(hal_crc_t *handle)
+int hal_crc_reset(hal_crc_t *handle)
 {
     if ((handle == NULL) || (handle->base.state == HAL_STATE_RESET)) {
         return HAL_NOT_READY;
@@ -4251,7 +4251,7 @@ hal_status_t hal_crc_reset(hal_crc_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_crc_calculate(hal_crc_t *handle, const void *data,
+int hal_crc_calculate(hal_crc_t *handle, const void *data,
                                  size_t length, uint32_t *result)
 {
     const uint8_t *bytes = (const uint8_t *)data;
@@ -4322,7 +4322,7 @@ hal_status_t hal_crc_calculate(hal_crc_t *handle, const void *data,
     return HAL_OK;
 }
 
-hal_status_t hal_crc_deinit(hal_crc_t *handle)
+int hal_crc_deinit(hal_crc_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4338,7 +4338,7 @@ hal_status_t hal_crc_deinit(hal_crc_t *handle)
 
 static uint32_t s_f1_rng_state = 0x2545F491U;
 
-hal_status_t hal_rng_init(hal_rng_t *handle)
+int hal_rng_init(hal_rng_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4353,7 +4353,7 @@ hal_status_t hal_rng_init(hal_rng_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_rng_deinit(hal_rng_t *handle)
+int hal_rng_deinit(hal_rng_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -4363,7 +4363,7 @@ hal_status_t hal_rng_deinit(hal_rng_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_rng_get(hal_rng_t *handle, uint32_t *value)
+int hal_rng_get(hal_rng_t *handle, uint32_t *value)
 {
     if ((handle == NULL) || (value == NULL)) {
         return HAL_INVALID_PARAM;
@@ -4377,7 +4377,7 @@ hal_status_t hal_rng_get(hal_rng_t *handle, uint32_t *value)
     return HAL_OK;
 }
 
-hal_status_t hal_rng_generate(hal_rng_t *handle, void *buffer,
+int hal_rng_generate(hal_rng_t *handle, void *buffer,
                                 size_t length)
 {
     uint8_t *bytes = (uint8_t *)buffer;
@@ -4401,13 +4401,13 @@ hal_status_t hal_rng_generate(hal_rng_t *handle, void *buffer,
 /* PWR                                                                        */
 /* ========================================================================== */
 
-hal_status_t hal_pwr_init(void)
+int hal_pwr_init(void)
 {
     __HAL_RCC_PWR_CLK_ENABLE();
     return HAL_OK;
 }
 
-hal_status_t hal_pwr_enter(const hal_pwr_config_t *config)
+int hal_pwr_enter(const hal_pwr_config_t *config)
 {
     uint32_t regulator;
 
@@ -4434,7 +4434,7 @@ hal_status_t hal_pwr_enter(const hal_pwr_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t hal_pwr_get_status(hal_pwr_status_t *status)
+int hal_pwr_get_status(hal_pwr_status_t *status)
 {
     if (status == NULL) {
         return HAL_INVALID_PARAM;
@@ -4472,7 +4472,7 @@ hal_status_t hal_pwr_get_status(hal_pwr_status_t *status)
     return HAL_OK;
 }
 
-hal_status_t hal_pwr_clear_flags(void)
+int hal_pwr_clear_flags(void)
 {
     __HAL_RCC_CLEAR_RESET_FLAGS();
     __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
@@ -4486,7 +4486,7 @@ hal_status_t hal_pwr_clear_flags(void)
 /* QSPI / SDIO / USB / ETH（STM32F1 不支持）                                  */
 /* ========================================================================== */
 
-hal_status_t hal_qspi_init(hal_qspi_t *handle,
+int hal_qspi_init(hal_qspi_t *handle,
                              const hal_qspi_config_t *config)
 {
     HAL_UNUSED(handle);
@@ -4494,13 +4494,13 @@ hal_status_t hal_qspi_init(hal_qspi_t *handle,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_qspi_deinit(hal_qspi_t *handle)
+int hal_qspi_deinit(hal_qspi_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_qspi_command(hal_qspi_t *handle,
+int hal_qspi_command(hal_qspi_t *handle,
                                 const hal_qspi_command_t *command)
 {
     HAL_UNUSED(handle);
@@ -4508,7 +4508,7 @@ hal_status_t hal_qspi_command(hal_qspi_t *handle,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_qspi_transmit(hal_qspi_t *handle, const void *data,
+int hal_qspi_transmit(hal_qspi_t *handle, const void *data,
                                  size_t length, uint32_t timeout)
 {
     HAL_UNUSED(handle);
@@ -4518,7 +4518,7 @@ hal_status_t hal_qspi_transmit(hal_qspi_t *handle, const void *data,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_qspi_receive(hal_qspi_t *handle, void *data,
+int hal_qspi_receive(hal_qspi_t *handle, void *data,
                                 size_t length, uint32_t timeout)
 {
     HAL_UNUSED(handle);
@@ -4528,19 +4528,19 @@ hal_status_t hal_qspi_receive(hal_qspi_t *handle, void *data,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_qspi_memory_map(hal_qspi_t *handle)
+int hal_qspi_memory_map(hal_qspi_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_qspi_memory_unmap(hal_qspi_t *handle)
+int hal_qspi_memory_unmap(hal_qspi_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_sdio_init(hal_sdio_t *handle,
+int hal_sdio_init(hal_sdio_t *handle,
                              const hal_sdio_config_t *config)
 {
     HAL_UNUSED(handle);
@@ -4548,13 +4548,13 @@ hal_status_t hal_sdio_init(hal_sdio_t *handle,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_sdio_deinit(hal_sdio_t *handle)
+int hal_sdio_deinit(hal_sdio_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_sdio_read(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_read(hal_sdio_t *handle, uint32_t block,
                              void *buffer, size_t block_count,
                              uint32_t timeout)
 {
@@ -4566,7 +4566,7 @@ hal_status_t hal_sdio_read(hal_sdio_t *handle, uint32_t block,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_sdio_write(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_write(hal_sdio_t *handle, uint32_t block,
                               const void *buffer, size_t block_count,
                               uint32_t timeout)
 {
@@ -4578,7 +4578,7 @@ hal_status_t hal_sdio_write(hal_sdio_t *handle, uint32_t block,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_sdio_read_dma(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_read_dma(hal_sdio_t *handle, uint32_t block,
                                  void *buffer, size_t block_count)
 {
     HAL_UNUSED(handle);
@@ -4588,7 +4588,7 @@ hal_status_t hal_sdio_read_dma(hal_sdio_t *handle, uint32_t block,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_sdio_write_dma(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_write_dma(hal_sdio_t *handle, uint32_t block,
                                   const void *buffer, size_t block_count)
 {
     HAL_UNUSED(handle);
@@ -4598,7 +4598,7 @@ hal_status_t hal_sdio_write_dma(hal_sdio_t *handle, uint32_t block,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_usb_init(hal_usb_t *handle,
+int hal_usb_init(hal_usb_t *handle,
                             const hal_usb_config_t *config)
 {
     HAL_UNUSED(handle);
@@ -4607,37 +4607,37 @@ hal_status_t hal_usb_init(hal_usb_t *handle,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_usb_deinit(hal_usb_t *handle)
+int hal_usb_deinit(hal_usb_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_usb_start(hal_usb_t *handle)
+int hal_usb_start(hal_usb_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_usb_stop(hal_usb_t *handle)
+int hal_usb_stop(hal_usb_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_usb_connect(hal_usb_t *handle)
+int hal_usb_connect(hal_usb_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_usb_disconnect(hal_usb_t *handle)
+int hal_usb_disconnect(hal_usb_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_eth_init(hal_eth_t *handle,
+int hal_eth_init(hal_eth_t *handle,
                             const hal_eth_config_t *config)
 {
     HAL_UNUSED(handle);
@@ -4645,25 +4645,25 @@ hal_status_t hal_eth_init(hal_eth_t *handle,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_eth_deinit(hal_eth_t *handle)
+int hal_eth_deinit(hal_eth_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_eth_start(hal_eth_t *handle)
+int hal_eth_start(hal_eth_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_eth_stop(hal_eth_t *handle)
+int hal_eth_stop(hal_eth_t *handle)
 {
     HAL_UNUSED(handle);
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_eth_transmit(hal_eth_t *handle, const void *data,
+int hal_eth_transmit(hal_eth_t *handle, const void *data,
                                 size_t length)
 {
     HAL_UNUSED(handle);
@@ -4672,7 +4672,7 @@ hal_status_t hal_eth_transmit(hal_eth_t *handle, const void *data,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_eth_receive(hal_eth_t *handle, void *buffer,
+int hal_eth_receive(hal_eth_t *handle, void *buffer,
                                size_t buffer_size, size_t *received_length)
 {
     HAL_UNUSED(handle);
@@ -4746,7 +4746,7 @@ static uint32_t f1_pll_multiplier(uint32_t multiplier)
     }
 }
 
-hal_status_t hal_clock_init(const hal_clock_config_t *config)
+int hal_clock_init(const hal_clock_config_t *config)
 {
     RCC_OscInitTypeDef oscillator;
     RCC_ClkInitTypeDef clock;
@@ -4847,7 +4847,7 @@ hal_status_t hal_clock_init(const hal_clock_config_t *config)
     return f1_hal_status(HAL_RCC_ClockConfig(&clock, latency));
 }
 
-uint32_t hal_clock_get_frequency(hal_clock_bus_t bus)
+uint32_t hal_clock_get_frequency(hal_clock_bus_e bus)
 {
     switch (bus) {
     case HAL_CLOCK_CORE:
@@ -4864,7 +4864,7 @@ uint32_t hal_clock_get_frequency(hal_clock_bus_t bus)
     }
 }
 
-hal_status_t hal_clock_enable(void *peripheral)
+int hal_clock_enable(void *peripheral)
 {
     if (peripheral == NULL) {
         return HAL_INVALID_PARAM;
@@ -4873,7 +4873,7 @@ hal_status_t hal_clock_enable(void *peripheral)
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t hal_clock_disable(void *peripheral)
+int hal_clock_disable(void *peripheral)
 {
     if (peripheral == NULL) {
         return HAL_INVALID_PARAM;
@@ -4885,7 +4885,7 @@ hal_status_t hal_clock_disable(void *peripheral)
 /* CORE / PLATFORM                                                            */
 /* ========================================================================== */
 
-uint32_t hal_get_capabilities(hal_device_type_t type, uint8_t instance)
+uint32_t hal_get_capabilities(hal_device_type_e type, uint8_t instance)
 {
     HAL_UNUSED(instance);
 
@@ -4918,17 +4918,17 @@ uint32_t hal_get_capabilities(hal_device_type_t type, uint8_t instance)
     }
 }
 
-hal_status_t hal_init(void)
+int hal_init(void)
 {
     return HAL_OK;
 }
 
-hal_status_t hal_deinit(void)
+int hal_deinit(void)
 {
     return HAL_OK;
 }
 
-hal_status_t hal_get_info(hal_mcu_info_t *info)
+int hal_get_info(hal_mcu_info_t *info)
 {
     if (info == NULL) {
         return HAL_INVALID_PARAM;

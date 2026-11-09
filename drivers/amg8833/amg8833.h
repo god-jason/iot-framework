@@ -19,11 +19,11 @@ extern "C" {
 typedef enum {
     AMG8833_FRAME_RATE_10FPS = 0,
     AMG8833_FRAME_RATE_1FPS
-} amg8833_frame_rate_t;
+} amg8833_frame_rate_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    amg8833_frame_rate_t frame_rate;
+    amg8833_frame_rate_e frame_rate;
     bool initialized;
 } amg8833_handle_t;
 
@@ -57,7 +57,7 @@ int amg8833_write(amg8833_handle_t *handle, uint8_t reg, const uint8_t *data, si
 int amg8833_read_reg(amg8833_handle_t *handle, uint8_t reg, uint8_t *data, size_t len);
 
 /** 设置帧率 */
-int amg8833_set_frame_rate(amg8833_handle_t *handle, amg8833_frame_rate_t rate);
+int amg8833_set_frame_rate(amg8833_handle_t *handle, amg8833_frame_rate_e rate);
 
 /** 使能/关闭中断输出，enable 为 true 时按 high_c/low_c 设置绝对阈值 */
 int amg8833_set_interrupt(amg8833_handle_t *handle, bool enable, float high_c, float low_c);

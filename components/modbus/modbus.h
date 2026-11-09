@@ -29,7 +29,7 @@ extern "C" {
 typedef enum {
     MODBUS_RTU,             /* RTU：从站地址 + PDU + CRC16 */
     MODBUS_TCP              /* TCP：MBAP 头 + 单元标识 + PDU */
-} modbus_mode_t;
+} modbus_mode_e;
 
 /* 功能码 */
 #define MODBUS_FC_READ_COILS           0x01  /* 读线圈 */
@@ -71,14 +71,14 @@ uint16_t modbus_crc16(const uint8_t *data, uint32_t len);
 /* 构建请求 ADU（RTU：slave+PDU+CRC；TCP：MBAP+PDU）。
  * data/data_len 仅对写功能码有意义（线圈按位打包 / 寄存器按大端 uint16）。
  * 返回 0 成功，out_len 为完整 ADU 长度。 */
-int modbus_build_request(modbus_mode_t mode, uint8_t slave, uint8_t fc,
+int modbus_build_request(modbus_mode_e mode, uint8_t slave, uint8_t fc,
                          uint16_t addr, uint16_t qty,
                          const uint8_t *data, uint16_t data_len,
                          uint8_t *out, uint32_t capacity, uint32_t *out_len);
 
 /* 解析响应 ADU：校验帧（CRC/MBAP），填充 fc 与数据区。
  * 返回 0 成功；负值表示帧错误；正值表示异常码。 */
-int modbus_parse_response(modbus_mode_t mode, const uint8_t *adu, uint32_t len,
+int modbus_parse_response(modbus_mode_e mode, const uint8_t *adu, uint32_t len,
                           uint8_t *fc, uint8_t *out_data, uint32_t cap,
                           uint32_t *out_data_len);
 
@@ -94,12 +94,12 @@ uint16_t modbus_get_be16(const uint8_t *p);
 uint32_t modbus_bits_to_bytes(uint16_t qty);
 
 /* 把 PDU 封装为 ADU；返回 ADU 长度，0 表示容量不足 */
-uint32_t modbus_frame_adu(modbus_mode_t mode, uint8_t slave,
+uint32_t modbus_frame_adu(modbus_mode_e mode, uint8_t slave,
                           const uint8_t *pdu, uint32_t pdu_len,
                           uint8_t *out, uint32_t capacity);
 
 /* 解帧并抽出 PDU；返回负值表示非法帧 */
-int modbus_unframe_adu(modbus_mode_t mode, uint8_t *slave,
+int modbus_unframe_adu(modbus_mode_e mode, uint8_t *slave,
                        const uint8_t *adu, uint32_t len,
                        const uint8_t **pdu, uint32_t *pdu_len);
 

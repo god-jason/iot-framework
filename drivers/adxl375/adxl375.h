@@ -29,7 +29,7 @@ typedef enum {
     ADXL375_ODR_800HZ = 0x0D,
     ADXL375_ODR_1600HZ = 0x0E,
     ADXL375_ODR_3200HZ = 0x0F
-} adxl375_odr_t;
+} adxl375_odr_e;
 
 typedef struct {
     float x;
@@ -47,7 +47,7 @@ typedef struct {
     driver_i2c_t i2c;
     driver_spi_t spi;
     bool use_spi;
-    adxl375_odr_t odr;
+    adxl375_odr_e odr;
     bool initialized;
 } adxl375_handle_t;
 
@@ -59,11 +59,11 @@ typedef struct {
  * @param  cs       片选引脚，总线自带片选时传 0
  * @param  address  7 位从机地址，0 表示默认 0x53（SPI 模式忽略）
  * @param  odr      输出率
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int adxl375_init(adxl375_handle_t *handle, hal_i2c_t *i2c,
                  hal_spi_t *spi, hal_pin_t cs, uint16_t address,
-                 adxl375_odr_t odr);
+                 adxl375_odr_e odr);
 
 /** @brief 反初始化：进入待机模式 */
 int adxl375_deinit(adxl375_handle_t *handle);

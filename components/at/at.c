@@ -39,7 +39,7 @@ static bool s_inited = false;
 static bool s_started = false;
 
 /* 当前事务状态机状态 */
-static at_state_t s_state = AT_IDLE;
+static at_state_e s_state = AT_IDLE;
 /* 当前（或最近一次）在途事务的请求参数 */
 static at_request_t s_req;
 /* 是否有事务正在等待响应 */
@@ -58,7 +58,7 @@ static uint32_t s_start_ms;
 static uint8_t s_retried;
 
 /* 最近一次事务的结果，供阻塞接口 at_transact() 返回 */
-static at_result_t s_result = AT_RESULT_OK;
+static at_result_e s_result = AT_RESULT_OK;
 
 /* ---- 发送 ---- */
 
@@ -153,7 +153,7 @@ static void at_response_append(const char *line)
  * 说明：回调在调用者上下文（通常是 at_process）中同步执行；
  *       回调返回后清除 pending 标志，允许发起下一条事务。
  */
-static void at_complete(at_result_t result)
+static void at_complete(at_result_e result)
 {
     s_state = (result == AT_RESULT_OK) ? AT_COMPLETE : AT_ERROR;
     s_result = result;
@@ -401,7 +401,7 @@ int at_query(const at_request_t *request)
  * 返回：事务结果；提交失败（如已有事务在途）返回 AT_RESULT_BUSY。
  * 说明：循环调用 at_process() 推进接收与超时；会阻塞当前执行流。
  */
-at_result_t at_transact(const at_request_t *request)
+at_result_e at_transact(const at_request_t *request)
 {
     if (at_query(request) != 0) {
         return AT_RESULT_BUSY;
@@ -418,7 +418,7 @@ at_result_t at_transact(const at_request_t *request)
  * 参数：command 命令字符串；timeout 超时（逻辑 tick 数，0 表示用默认值）。
  * 返回：事务结果。
  */
-at_result_t at_exec(const char *command, uint32_t timeout)
+at_result_e at_exec(const char *command, uint32_t timeout)
 {
     at_request_t req;
 
@@ -472,7 +472,7 @@ void at_input(const uint8_t *data, uint32_t len)
 int at_process(void)
 {
     uint32_t n;
-    hal_status_t r;
+    int r;
 
     s_tick_ms++;
 
@@ -522,9 +522,9 @@ bool at_is_busy(void)
 
 /*
  * 获取当前状态机状态。
- * 返回：at_state_t 状态值（AT_IDLE/AT_SENDING/AT_WAITING/...）。
+ * 返回：at_state_e 状态值（AT_IDLE/AT_SENDING/AT_WAITING/...）。
  */
-at_state_t at_get_state(void)
+at_state_e at_get_state(void)
 {
     return s_state;
 }

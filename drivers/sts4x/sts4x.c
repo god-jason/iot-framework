@@ -84,7 +84,7 @@ int sts4x_soft_reset(sts4x_handle_t *handle)
     return ret;
 }
 
-int sts4x_set_repeatability(sts4x_handle_t *handle, sts4x_repeatability_t repeatability)
+int sts4x_set_repeatability(sts4x_handle_t *handle, sts4x_repeatability_e repeatability)
 {
     int ret = sts4x_check(handle);
 

@@ -22,7 +22,7 @@ typedef enum {
     ADS1115_PGA_1V024,      /* ±1.024V */
     ADS1115_PGA_0V512,      /* ±0.512V */
     ADS1115_PGA_0V256       /* ±0.256V */
-} ads1115_pga_t;
+} ads1115_pga_e;
 
 /* 数据速率（SPS） */
 typedef enum {
@@ -34,7 +34,7 @@ typedef enum {
     ADS1115_DR_250,
     ADS1115_DR_475,
     ADS1115_DR_860
-} ads1115_dr_t;
+} ads1115_dr_e;
 
 /* 输入通道选择（对应 MUX[2:0]） */
 typedef enum {
@@ -46,12 +46,12 @@ typedef enum {
     ADS1115_MUX_SINGLE_1,
     ADS1115_MUX_SINGLE_2,
     ADS1115_MUX_SINGLE_3
-} ads1115_mux_t;
+} ads1115_mux_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    ads1115_pga_t pga;
-    ads1115_dr_t data_rate;
+    ads1115_pga_e pga;
+    ads1115_dr_e data_rate;
     bool initialized;
 } ads1115_handle_t;
 
@@ -60,7 +60,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址（0x48~0x4B），传 0 使用 0x48
- * @return 0 成功，负值为 hal_status_t（无应答返回 HAL_NOT_FOUND）
+ * @return 0 成功，负值为 HAL 状态码（无应答返回 HAL_NOT_FOUND）
  */
 int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -68,17 +68,17 @@ int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int ads1115_deinit(ads1115_handle_t *handle);
 
 /** @brief 设置 PGA */
-int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_t pga);
+int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_e pga);
 
 /** @brief 设置数据速率 */
-int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_t data_rate);
+int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_e data_rate);
 
 /**
  * @brief  对指定 MUX 做一次单次转换
  * @param  mux  输入选择（单端或差分）
  * @param  raw  原始有符号 16 位码值
  */
-int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_t mux, int16_t *raw);
+int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_e mux, int16_t *raw);
 
 /**
  * @brief  读取单端通道电压

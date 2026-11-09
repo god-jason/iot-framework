@@ -20,11 +20,11 @@ extern "C" {
  * 因此回调必须短小，不得调用任何可能阻塞的内核 API
  * （信号量 take、互斥量 lock、队列 send/recv、sleep 等）。
  */
-iot_status_t iot_timer_init(iot_timer_t *timer, const char *name,
+int iot_timer_init(iot_timer_t *timer, const char *name,
                               iot_timer_cb_t cb, void *arg,
                               uint32_t period_ms, bool periodic);
-iot_status_t iot_timer_start(iot_timer_t *timer, uint32_t period_ms);
-iot_status_t iot_timer_stop(iot_timer_t *timer);
+int iot_timer_start(iot_timer_t *timer, uint32_t period_ms);
+int iot_timer_stop(iot_timer_t *timer);
 
 /* ---------------- 内核内部接口（iot_tick_increment 调用） ---------------- */
 

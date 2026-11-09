@@ -34,7 +34,7 @@ typedef enum {
     MPU6500_ACCEL_RANGE_8G,
     MPU6500_ACCEL_RANGE_16G,
     MPU6500_ACCEL_RANGE_COUNT
-} mpu6500_accel_range_t;
+} mpu6500_accel_range_e;
 
 typedef enum {
     MPU6500_GYRO_RANGE_250DPS = 0,
@@ -42,7 +42,7 @@ typedef enum {
     MPU6500_GYRO_RANGE_1000DPS,
     MPU6500_GYRO_RANGE_2000DPS,
     MPU6500_GYRO_RANGE_COUNT
-} mpu6500_gyro_range_t;
+} mpu6500_gyro_range_e;
 
 typedef struct {
     float x;
@@ -60,8 +60,8 @@ typedef struct {
     driver_i2c_t i2c;
     driver_spi_t spi;
     bool use_spi;
-    mpu6500_accel_range_t accel_range;
-    mpu6500_gyro_range_t gyro_range;
+    mpu6500_accel_range_e accel_range;
+    mpu6500_gyro_range_e gyro_range;
     float accel_lsb_per_g;
     float gyro_lsb_per_dps;
     bool initialized;
@@ -76,11 +76,11 @@ typedef struct {
  * @param  address      7 位从机地址，0 表示默认 0x68（SPI 模式忽略）
  * @param  accel_range  加速度量程
  * @param  gyro_range   陀螺量程
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int mpu6500_init(mpu6500_handle_t *handle, hal_i2c_t *i2c,
                  hal_spi_t *spi, hal_pin_t cs, uint16_t address,
-                 mpu6500_accel_range_t accel_range, mpu6500_gyro_range_t gyro_range);
+                 mpu6500_accel_range_e accel_range, mpu6500_gyro_range_e gyro_range);
 
 /** @brief 反初始化：进入睡眠并复位句柄状态 */
 int mpu6500_deinit(mpu6500_handle_t *handle);

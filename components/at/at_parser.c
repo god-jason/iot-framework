@@ -32,7 +32,7 @@ static void *s_user;
  * 参数：type token 类型；data 数据指针（可为 NULL）；len 数据长度。
  * 说明：未注册回调时直接返回。
  */
-static void parser_emit(at_token_type_t type, const uint8_t *data, uint32_t len)
+static void parser_emit(at_token_type_e type, const uint8_t *data, uint32_t len)
 {
     at_token_t token;
 

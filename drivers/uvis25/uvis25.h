@@ -19,11 +19,11 @@ typedef enum {
     UVIS25_ODR_1HZ = 0,
     UVIS25_ODR_7HZ,
     UVIS25_ODR_12HZ
-} uvis25_odr_t;
+} uvis25_odr_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    uvis25_odr_t odr;
+    uvis25_odr_e odr;
     bool initialized;
 } uvis25_handle_t;
 
@@ -31,7 +31,7 @@ typedef struct {
 int uvis25_init(uvis25_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int uvis25_deinit(uvis25_handle_t *handle);
 
-int uvis25_set_odr(uvis25_handle_t *handle, uvis25_odr_t odr);
+int uvis25_set_odr(uvis25_handle_t *handle, uvis25_odr_e odr);
 
 /** 读取 UV 指数原始值（16 位无符号） */
 int uvis25_read_raw(uvis25_handle_t *handle, uint16_t *raw);

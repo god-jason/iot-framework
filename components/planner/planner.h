@@ -33,7 +33,7 @@ typedef enum {
     PLANNER_PLAN_RUNNING,   /* 执行中：由 planner_process 推进 */
     PLANNER_PLAN_SUCCESS,   /* 全部 Action 成功 */
     PLANNER_PLAN_FAILED     /* 任一 Action 失败 */
-} planner_plan_state_t;
+} planner_plan_state_e;
 
 /* 计划描述：由使用方静态定义并注册到 planner */
 typedef struct {
@@ -41,7 +41,7 @@ typedef struct {
     const char *name;               /* 计划名称（调试/日志用，可为 NULL） */
 
     uint8_t priority;               /* 优先级（当前仅存储，未参与调度） */
-    planner_plan_state_t state;     /* 当前状态，由 planner 维护 */
+    planner_plan_state_e state;     /* 当前状态，由 planner 维护 */
 
     action_t **actions;             /* Action 指针数组（外部持有），按数组顺序执行 */
     uint16_t action_count;          /* Action 个数，必须 >0 才能注册 */

@@ -20,10 +20,10 @@ extern "C" {
  *   timeout   : IOT_TIMEOUT_FOREVER 永久等待；>0 时挂入延时链表，到期返回 IOT_TIMEOUT
  * 返回：被唤醒时写入的结果码（IOT_OK / IOT_TIMEOUT）。
  */
-iot_status_t iot_block_current(list_t *wait_list, uint32_t timeout);
+int iot_block_current(list_t *wait_list, uint32_t timeout);
 
 /* 唤醒任务：摘除等待/延时节点，写入结果并加入就绪表 */
-void iot_task_wake(iot_task_t *task, iot_status_t result);
+void iot_task_wake(iot_task_t *task, int result);
 
 /* 从等待队列取出优先级最高的任务（摘除 wait_node）；无则返回 NULL */
 iot_task_t *iot_wait_pop_highest(list_t *list);

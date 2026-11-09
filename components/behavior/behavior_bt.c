@@ -75,14 +75,14 @@ static behavior_bt_node_t *bt_alloc(void)
     return NULL;
 }
 
-static behavior_bt_status_t bt_tick_sequence(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_selector(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_parallel(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_inverter(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_repeat(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_delay(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_action(behavior_bt_node_t *n);
-static behavior_bt_status_t bt_tick_condition(behavior_bt_node_t *n);
+static int bt_tick_sequence(behavior_bt_node_t *n);
+static int bt_tick_selector(behavior_bt_node_t *n);
+static int bt_tick_parallel(behavior_bt_node_t *n);
+static int bt_tick_inverter(behavior_bt_node_t *n);
+static int bt_tick_repeat(behavior_bt_node_t *n);
+static int bt_tick_delay(behavior_bt_node_t *n);
+static int bt_tick_action(behavior_bt_node_t *n);
+static int bt_tick_condition(behavior_bt_node_t *n);
 
 /*
  * 递归停止子树：先深度遍历子节点，再调用本节点 halt 回调（后序）。
@@ -151,7 +151,7 @@ int behavior_bt_init(behavior_bt_node_t *root)
  * @return 三态结果；root 为 NULL 时返回 FAILURE（帧计数不递增）
  * @note 帧号在调用根 tick 之前递增，因此 delay 节点首次 tick 记录的是当帧帧号。
  */
-behavior_bt_status_t behavior_bt_tick(behavior_bt_node_t *root)
+int behavior_bt_tick(behavior_bt_node_t *root)
 {
     if (root == NULL) {
         return BEHAVIOR_BT_FAILURE;
@@ -277,7 +277,7 @@ behavior_bt_node_t *behavior_bt_delay_create(behavior_bt_node_t **children, uint
 }
 
 /* 动作叶子：fn 为空时 tick 返回 FAILURE */
-behavior_bt_node_t *behavior_bt_action_create(behavior_bt_status_t (*fn)(behavior_bt_node_t *node), void *ctx)
+behavior_bt_node_t *behavior_bt_action_create(int (*fn)(behavior_bt_node_t *node), void *ctx)
 {
     behavior_bt_node_t *n = bt_alloc();
     if (n == NULL) {
@@ -305,12 +305,12 @@ behavior_bt_node_t *behavior_bt_condition_create(bool (*fn)(behavior_bt_node_t *
 }
 
 /* 顺序节点 tick：短路求值，第一个 FAILURE 即失败；RUNNING 逐帧返回直到子节点完成 */
-static behavior_bt_status_t bt_tick_sequence(behavior_bt_node_t *n)
+static int bt_tick_sequence(behavior_bt_node_t *n)
 {
     uint16_t i;
     for (i = 0; i < n->child_count; i++) {
         behavior_bt_node_t *c = n->children[i];
-        behavior_bt_status_t s = c->tick(c);
+        int s = c->tick(c);
         if (s == BEHAVIOR_BT_FAILURE) {
             return BEHAVIOR_BT_FAILURE;     /* 任一子节点失败：整条顺序失败 */
         }
@@ -322,12 +322,12 @@ static behavior_bt_status_t bt_tick_sequence(behavior_bt_node_t *n)
 }
 
 /* 选择节点 tick：短路求值，第一个 SUCCESS 即成功；RUNNING 逐帧返回直到子节点完成 */
-static behavior_bt_status_t bt_tick_selector(behavior_bt_node_t *n)
+static int bt_tick_selector(behavior_bt_node_t *n)
 {
     uint16_t i;
     for (i = 0; i < n->child_count; i++) {
         behavior_bt_node_t *c = n->children[i];
-        behavior_bt_status_t s = c->tick(c);
+        int s = c->tick(c);
         if (s == BEHAVIOR_BT_SUCCESS) {
             return BEHAVIOR_BT_SUCCESS;     /* 任一子节点成功：整个选择成功 */
         }
@@ -339,14 +339,14 @@ static behavior_bt_status_t bt_tick_selector(behavior_bt_node_t *n)
 }
 
 /* 并行节点 tick：不短路，本帧把所有子节点都推进一次；失败优先级高于运行中 */
-static behavior_bt_status_t bt_tick_parallel(behavior_bt_node_t *n)
+static int bt_tick_parallel(behavior_bt_node_t *n)
 {
     uint16_t i;
     bool any_fail = false;
     bool all_success = true;
 
     for (i = 0; i < n->child_count; i++) {
-        behavior_bt_status_t s = n->children[i]->tick(n->children[i]);
+        int s = n->children[i]->tick(n->children[i]);
         if (s == BEHAVIOR_BT_FAILURE) {
             any_fail = true;        /* 只要有一个失败，最终就是失败 */
         }
@@ -364,10 +364,10 @@ static behavior_bt_status_t bt_tick_parallel(behavior_bt_node_t *n)
 }
 
 /* 取反节点 tick：只取第一个子节点，成功/失败互换，RUNNING 透传 */
-static behavior_bt_status_t bt_tick_inverter(behavior_bt_node_t *n)
+static int bt_tick_inverter(behavior_bt_node_t *n)
 {
     behavior_bt_node_t *c = (n->child_count > 0) ? n->children[0] : NULL;
-    behavior_bt_status_t s;
+    int s;
 
     if (c == NULL) {
         return BEHAVIOR_BT_FAILURE;     /* 无子节点：无法取反，视为失败 */
@@ -388,7 +388,7 @@ static behavior_bt_status_t bt_tick_inverter(behavior_bt_node_t *n)
  * 同一帧内会用 while 循环连续执行已完成的次数，直到子节点返回 RUNNING 或次数耗尽；
  * 每完成一次后复位子节点，使下一次从干净状态开始。
  */
-static behavior_bt_status_t bt_tick_repeat(behavior_bt_node_t *n)
+static int bt_tick_repeat(behavior_bt_node_t *n)
 {
     behavior_bt_node_t *c = (n->child_count > 0) ? n->children[0] : NULL;
 
@@ -399,7 +399,7 @@ static behavior_bt_status_t bt_tick_repeat(behavior_bt_node_t *n)
         n->counter = (int32_t)n->config;    /* 首次 tick：装载总次数 */
     }
     while (n->counter > 0) {
-        behavior_bt_status_t s = c->tick(c);
+        int s = c->tick(c);
         if (s == BEHAVIOR_BT_FAILURE) {
             n->counter = -1;                /* 失败即放弃剩余次数，回到未初始化态 */
             return BEHAVIOR_BT_FAILURE;
@@ -421,7 +421,7 @@ static behavior_bt_status_t bt_tick_repeat(behavior_bt_node_t *n)
  * counter 语义：-1 表示未开始（本帧记录起始帧号），否则为起始帧号。
  * 判定条件为“当前帧 - 起始帧 >= config”，因此首次 tick 当帧只记录不执行。
  */
-static behavior_bt_status_t bt_tick_delay(behavior_bt_node_t *n)
+static int bt_tick_delay(behavior_bt_node_t *n)
 {
     behavior_bt_node_t *c = (n->child_count > 0) ? n->children[0] : NULL;
 
@@ -438,13 +438,13 @@ static behavior_bt_status_t bt_tick_delay(behavior_bt_node_t *n)
 }
 
 /* 动作叶子 tick：直接转发使用方回调结果；回调为空视为失败 */
-static behavior_bt_status_t bt_tick_action(behavior_bt_node_t *n)
+static int bt_tick_action(behavior_bt_node_t *n)
 {
     return (n->action_fn != NULL) ? n->action_fn(n) : BEHAVIOR_BT_FAILURE;
 }
 
 /* 条件叶子 tick：条件为真映射 SUCCESS，否则 FAILURE；回调为空按 false 处理 */
-static behavior_bt_status_t bt_tick_condition(behavior_bt_node_t *n)
+static int bt_tick_condition(behavior_bt_node_t *n)
 {
     bool ok = (n->cond_fn != NULL) ? n->cond_fn(n) : false;
     return ok ? BEHAVIOR_BT_SUCCESS : BEHAVIOR_BT_FAILURE;

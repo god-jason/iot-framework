@@ -3,7 +3,7 @@
 #include "log.h"
 
 /* 通道/增益对应的总时钟数（24 数据位 + 选择脉冲） */
-static uint8_t hx711_gain_pulses(hx711_gain_t gain)
+static uint8_t hx711_gain_pulses(hx711_gain_e gain)
 {
     switch (gain) {
     case HX711_GAIN_B_32:
@@ -16,7 +16,7 @@ static uint8_t hx711_gain_pulses(hx711_gain_t gain)
     }
 }
 
-static void hx711_sck(hx711_handle_t *handle, hal_gpio_level_t level)
+static void hx711_sck(hx711_handle_t *handle, hal_gpio_level_e level)
 {
     (void)driver_gpio_write(handle->sck, level);
 }
@@ -96,7 +96,7 @@ int hx711_is_ready(hx711_handle_t *handle)
     return (level == 0) ? 1 : 0;
 }
 
-int hx711_set_gain(hx711_handle_t *handle, hx711_gain_t gain)
+int hx711_set_gain(hx711_handle_t *handle, hx711_gain_e gain)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

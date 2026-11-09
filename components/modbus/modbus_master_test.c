@@ -32,7 +32,7 @@ static int scripted_transport(void *ctx, const uint8_t *tx, uint32_t tx_len,
     return 0;
 }
 
-static void set_response(modbus_mode_t mode, uint8_t slave,
+static void set_response(modbus_mode_e mode, uint8_t slave,
                          const uint8_t *pdu, uint32_t n)
 {
     g_resp_len = modbus_frame_adu(mode, slave, pdu, n, g_resp, sizeof(g_resp));

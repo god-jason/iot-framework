@@ -92,7 +92,7 @@ int sts3x_soft_reset(sts3x_handle_t *handle)
     return ret;
 }
 
-int sts3x_set_repeatability(sts3x_handle_t *handle, sts3x_repeatability_t repeatability)
+int sts3x_set_repeatability(sts3x_handle_t *handle, sts3x_repeatability_e repeatability)
 {
     int ret = sts3x_check(handle);
 

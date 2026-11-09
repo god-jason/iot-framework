@@ -51,9 +51,9 @@ int driver_spi_read_cs(driver_spi_t *bus, uint8_t *data, size_t len);
 /* ---------------- GPIO ---------------- */
 
 int driver_gpio_deinit(hal_pin_t pin);
-int driver_gpio_output(hal_pin_t pin, hal_gpio_level_t initial);
-int driver_gpio_input(hal_pin_t pin, hal_gpio_pull_t pull);
-int driver_gpio_write(hal_pin_t pin, hal_gpio_level_t level);
+int driver_gpio_output(hal_pin_t pin, hal_gpio_level_e initial);
+int driver_gpio_input(hal_pin_t pin, hal_gpio_pull_e pull);
+int driver_gpio_write(hal_pin_t pin, hal_gpio_level_e level);
 int driver_gpio_toggle(hal_pin_t pin);
 /* 返回 0/1 电平，负值为错误码 */
 int driver_gpio_read(hal_pin_t pin);

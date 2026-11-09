@@ -27,7 +27,7 @@ extern "C" {
  * 返回：MOTION_PARSE_OK 成功；EMPTY 空行；INVALID 语法错误；
  *       OVERFLOW 行过长或参数超限；UNSUPPORTED 未知指令。
  * 说明：instruction 为 NULL 或 line 为 NULL 时返回 INVALID。 */
-motion_parse_result_t motion_parser_parse(const char *line,
+motion_parse_result_e motion_parser_parse(const char *line,
                                           motion_instruction_t *instruction);
 
 /* 解析一个值（整数/浮点/布尔/字符串/$变量，可带单位）。
@@ -44,7 +44,7 @@ int motion_parser_parse_value(const char *text, motion_value_t *value);
 /* 把解析结果码转换为静态英文描述字符串（仅用于日志）。
  * 参数：result 解析结果码。
  * 返回：指向常量字符串的指针，未知码返回 "unknown parse result"。 */
-const char *motion_parse_result_message(motion_parse_result_t result);
+const char *motion_parse_result_message(motion_parse_result_e result);
 
 #ifdef __cplusplus
 }

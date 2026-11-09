@@ -31,12 +31,12 @@ typedef enum {
     HAL_PIN_FUNCTION_GPIO = 0,  /* 普通 GPIO，由 hal_gpio 控制 */
     HAL_PIN_FUNCTION_AF,        /* 复用功能，需配合 alternate 编号 */
     HAL_PIN_FUNCTION_ANALOG     /* 模拟模式（ADC/DAC/COMP 等） */
-} hal_pin_function_t;
+} hal_pin_function_e;
 
 /* 单个引脚的复用配置 */
 typedef struct {
     hal_pin_t pin;              /* 逻辑引脚编码（HAL_PIN(port, pin)） */
-    hal_pin_function_t function;/* 目标功能 */
+    hal_pin_function_e function;/* 目标功能 */
     uint8_t alternate;           /* 复用功能编号，仅 HAL_PIN_FUNCTION_AF 时有效 */
 } hal_pin_config_t;
 
@@ -46,14 +46,14 @@ typedef struct {
  * 返回   : HAL_OK 成功；config 为 NULL 返回 HAL_INVALID_PARAM；
  *          平台不支持该复用编号时返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_pin_init(const hal_pin_config_t *config);
+int hal_pin_init(const hal_pin_config_t *config);
 
 /*
  * 复位引脚复用为默认状态（通常恢复为模拟/浮空输入）。
  * pin  : 逻辑引脚编码。
  * 返回 : HAL_OK 成功；引脚非法返回 HAL_INVALID_PARAM。
  */
-hal_status_t hal_pin_deinit(hal_pin_t pin);
+int hal_pin_deinit(hal_pin_t pin);
 
 #ifdef __cplusplus
 }

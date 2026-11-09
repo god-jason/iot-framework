@@ -47,8 +47,8 @@ typedef struct {
  * 注意：结构体较大（含变量表与多层栈），应静态分配，避免放在栈上。
  */
 typedef struct motion_vm {
-    motion_state_t state;        /* 当前运行状态 */
-    motion_state_t resume_state; /* 暂停前的状态，供 resume 恢复 */
+    motion_state_e state;        /* 当前运行状态 */
+    motion_state_e resume_state; /* 暂停前的状态，供 resume 恢复 */
 
     uint32_t pc;                 /* 程序计数器：下一条待取指令的字节偏移 */
     uint32_t line;               /* 当前源码行号（用于报错） */
@@ -124,7 +124,7 @@ int motion_vm_abort(motion_vm_t *vm);
 void motion_vm_poll(motion_vm_t *vm);
 
 /* 返回当前状态；vm 为 NULL 时返回 MOTION_STATE_IDLE */
-motion_state_t motion_vm_get_state(const motion_vm_t *vm);
+motion_state_e motion_vm_get_state(const motion_vm_t *vm);
 
 /*
  * 跳转到指定偏移：更新 pc 与行号，并按目标位置清理失去作用域的

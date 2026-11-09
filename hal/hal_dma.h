@@ -20,14 +20,14 @@ typedef enum {
     HAL_DMA_MEMORY_TO_MEMORY = 0,  /* 存储器到存储器 */
     HAL_DMA_MEMORY_TO_PERIPH,      /* 存储器到外设 */
     HAL_DMA_PERIPH_TO_MEMORY       /* 外设到存储器 */
-} hal_dma_direction_t;
+} hal_dma_direction_e;
 
 /* 数据宽度 */
 typedef enum {
     HAL_DMA_WIDTH_8BIT = 0,    /* 8 位 */
     HAL_DMA_WIDTH_16BIT,       /* 16 位 */
     HAL_DMA_WIDTH_32BIT        /* 32 位 */
-} hal_dma_width_t;
+} hal_dma_width_e;
 
 /* 通道优先级 */
 typedef enum {
@@ -35,23 +35,23 @@ typedef enum {
     HAL_DMA_PRIORITY_MEDIUM,   /* 中 */
     HAL_DMA_PRIORITY_HIGH,     /* 高 */
     HAL_DMA_PRIORITY_VERY_HIGH /* 最高 */
-} hal_dma_priority_t;
+} hal_dma_priority_e;
 
 /* 传输模式 */
 typedef enum {
     HAL_DMA_MODE_NORMAL = 0,   /* 单次模式，传输完成后停止 */
     HAL_DMA_MODE_CIRCULAR      /* 循环模式，长度回绕后继续 */
-} hal_dma_mode_t;
+} hal_dma_mode_e;
 
 /* DMA 通道配置 */
 typedef struct {
-    hal_dma_direction_t direction; /* 传输方向 */
+    hal_dma_direction_e direction; /* 传输方向 */
 
-    hal_dma_width_t src_width;     /* 源数据宽度 */
-    hal_dma_width_t dst_width;     /* 目的数据宽度，与源不同时硬件可能不支持 */
+    hal_dma_width_e src_width;     /* 源数据宽度 */
+    hal_dma_width_e dst_width;     /* 目的数据宽度，与源不同时硬件可能不支持 */
 
-    hal_dma_priority_t priority;   /* 通道优先级 */
-    hal_dma_mode_t mode;           /* 传输模式 */
+    hal_dma_priority_e priority;   /* 通道优先级 */
+    hal_dma_mode_e mode;           /* 传输模式 */
 
     bool src_increment;             /* 源地址是否自增；外设地址通常为 false */
     bool dst_increment;             /* 目的地址是否自增；外设地址通常为 false */
@@ -76,14 +76,14 @@ typedef struct hal_dma {
  * 返回   : HAL_OK；HAL_INVALID_PARAM；参数组合不受支持时 HAL_NOT_SUPPORTED。
  * 注意   : 成功后 base.state 进入 HAL_STATE_READY。
  */
-hal_status_t hal_dma_init(hal_dma_t *handle, const hal_dma_config_t *config);
+int hal_dma_init(hal_dma_t *handle, const hal_dma_config_t *config);
 
 /*
  * 反初始化 DMA 通道。
  * handle : 句柄，不可为 NULL。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_dma_deinit(hal_dma_t *handle);
+int hal_dma_deinit(hal_dma_t *handle);
 
 /*
  * 启动一次 DMA 传输。
@@ -94,7 +94,7 @@ hal_status_t hal_dma_deinit(hal_dma_t *handle);
  * 返回   : HAL_OK；HAL_INVALID_PARAM；通道忙返回 HAL_BUSY。
  * 注意   : length 为 0 时不做任何传输并返回 HAL_OK。
  */
-hal_status_t hal_dma_start(hal_dma_t *handle, uintptr_t src, uintptr_t dst, size_t length);
+int hal_dma_start(hal_dma_t *handle, uintptr_t src, uintptr_t dst, size_t length);
 
 /*
  * 停止当前传输。
@@ -102,19 +102,19 @@ hal_status_t hal_dma_start(hal_dma_t *handle, uintptr_t src, uintptr_t dst, size
  * 返回   : HAL_OK；HAL_INVALID_PARAM。
  * 注意   : 停止后不会触发完成回调。
  */
-hal_status_t hal_dma_stop(hal_dma_t *handle);
+int hal_dma_stop(hal_dma_t *handle);
 
 /*
  * 挂起传输，保留剩余计数与现场。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；无活动传输返回 HAL_NOT_READY。
  */
-hal_status_t hal_dma_suspend(hal_dma_t *handle);
+int hal_dma_suspend(hal_dma_t *handle);
 
 /*
  * 恢复被挂起的传输。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；非挂起状态返回 HAL_NOT_READY。
  */
-hal_status_t hal_dma_resume(hal_dma_t *handle);
+int hal_dma_resume(hal_dma_t *handle);
 
 /*
  * 查询剩余未传输的数据个数。

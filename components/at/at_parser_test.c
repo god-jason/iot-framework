@@ -13,7 +13,7 @@
 #define TOK_TEXT_MAX 128
 
 typedef struct {
-    at_token_type_t type;
+    at_token_type_e type;
     char text[TOK_TEXT_MAX];
     uint32_t len;
 } tok_rec_t;

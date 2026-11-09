@@ -23,8 +23,8 @@ extern "C" {
  */
 typedef struct {
     void *instance;             /* 平台外设实例（寄存器基址 / HAL 句柄指针 / 平台槽位） */
-    hal_state_t state;         /* 当前运行状态，HAL_STATE_RESET 表示未初始化 */
-    hal_status_t error;        /* 最近一次错误码，成功时为 HAL_OK */
+    hal_state_e state;         /* 当前运行状态，HAL_STATE_RESET 表示未初始化 */
+    int error;        /* 最近一次错误码，成功时为 HAL_OK */
 } hal_handle_base_t;
 
 /* ---------------- 通用回调 ---------------- */
@@ -36,7 +36,7 @@ typedef struct {
  * user_data : 注册回调时绑定的用户上下文，可为 NULL。
  * 注意：回调通常在中断上下文执行，禁止阻塞或耗时操作。
  */
-typedef void (*hal_callback_t)(void *handle, hal_event_t event, void *user_data);
+typedef void (*hal_callback_t)(void *handle, hal_event_e event, void *user_data);
 
 /* ---------------- 超时 ---------------- */
 #define HAL_TIMEOUT_FOREVER    UINT32_MAX  /* 无限等待 */

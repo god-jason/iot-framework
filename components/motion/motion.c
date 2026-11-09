@@ -181,7 +181,7 @@ void motion_poll(void)
 }
 
 /* 查询主程序状态（直接读取静态 VM 的 state） */
-motion_state_t motion_state(void)
+motion_state_e motion_state(void)
 {
     return s_vm.state;
 }

@@ -26,7 +26,7 @@ void iot_yield(void);
  *   stack_mem  : 任务栈内存（调用者提供，建议 8 字节对齐）；
  *   stack_size : 栈大小（字节）。
  */
-iot_status_t iot_task_create(iot_task_t *task, const char *name,
+int iot_task_create(iot_task_t *task, const char *name,
                                uint8_t priority, iot_entry_t entry, void *arg,
                                void *stack_mem, uint32_t stack_size);
 

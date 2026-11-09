@@ -187,7 +187,7 @@ int motion_vm_abort(motion_vm_t *vm)
 }
 
 /* 查询状态；vm 为 NULL 时返回 IDLE */
-motion_state_t motion_vm_get_state(const motion_vm_t *vm)
+motion_state_e motion_vm_get_state(const motion_vm_t *vm)
 {
     return (vm == NULL) ? MOTION_STATE_IDLE : vm->state;
 }
@@ -286,7 +286,7 @@ static bool enter_error(motion_vm_t *vm)
 }
 
 /* 判断 JOB 是否已处于“结束”状态（空闲/完成/错误/中止） */
-static bool job_finished(motion_state_t state)
+static bool job_finished(motion_state_e state)
 {
     return state == MOTION_STATE_IDLE ||
            state == MOTION_STATE_COMPLETED ||
@@ -295,7 +295,7 @@ static bool job_finished(motion_state_t state)
 }
 
 /* 按比较条件比较实际值与目标值，返回是否满足条件 */
-static bool compare_wait_value(int32_t actual, motion_compare_t compare,
+static bool compare_wait_value(int32_t actual, motion_compare_e compare,
                                int32_t target)
 {
     switch (compare) {
@@ -423,7 +423,7 @@ int motion_vm_check_wait(motion_vm_t *vm)
     }
 
     case MOTION_WAIT_JOB: {
-        motion_state_t state;
+        motion_state_e state;
 
         if (motion_task_find(wait->job_name) < 0) {
             motion_error_set(&vm->error, MOTION_ERR_PARAMETER, vm->line,
@@ -546,8 +546,8 @@ void motion_vm_poll(motion_vm_t *vm)
            executed < MOTION_MAX_EXEC_PER_POLL) {
         char buffer[MOTION_MAX_LINE];
         motion_instruction_t ins;
-        motion_parse_result_t parsed;
-        motion_exec_result_t exec;
+        motion_parse_result_e parsed;
+        motion_exec_result_e exec;
         uint32_t next_offset = vm->pc;
         uint32_t line_offset = vm->pc;
         uint32_t line;

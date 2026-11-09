@@ -20,43 +20,43 @@ extern "C" {
 typedef enum {
     HAL_SPI_MODE_MASTER = 0,   /* 主机，输出时钟 */
     HAL_SPI_MODE_SLAVE         /* 从机，由外部提供时钟 */
-} hal_spi_mode_t;
+} hal_spi_mode_e;
 
 /* 数据线方向 */
 typedef enum {
     HAL_SPI_DIRECTION_2LINES = 0,  /* 全双工，两根数据线 */
     HAL_SPI_DIRECTION_2LINES_RXONLY,/* 仅接收（两线） */
     HAL_SPI_DIRECTION_1LINE        /* 半双工，单数据线 */
-} hal_spi_direction_t;
+} hal_spi_direction_e;
 
 /* 时钟极性 */
 typedef enum {
     HAL_SPI_CPOL_LOW = 0,      /* 空闲时 SCK 为低 */
     HAL_SPI_CPOL_HIGH          /* 空闲时 SCK 为高 */
-} hal_spi_cpol_t;
+} hal_spi_cpol_e;
 
 /* 时钟相位 */
 typedef enum {
     HAL_SPI_CPHA_1EDGE = 0,    /* 第一个边沿采样 */
     HAL_SPI_CPHA_2EDGE         /* 第二个边沿采样 */
-} hal_spi_cpha_t;
+} hal_spi_cpha_e;
 
 /* 位序 */
 typedef enum {
     HAL_SPI_BITORDER_MSB = 0,  /* 高位先发 */
     HAL_SPI_BITORDER_LSB       /* 低位先发 */
-} hal_spi_bitorder_t;
+} hal_spi_bitorder_e;
 
 /* SPI 配置 */
 typedef struct {
-    hal_spi_mode_t mode;           /* 主从模式 */
-    hal_spi_direction_t direction; /* 数据线方向 */
+    hal_spi_mode_e mode;           /* 主从模式 */
+    hal_spi_direction_e direction; /* 数据线方向 */
 
     uint32_t baudrate;              /* 目标时钟频率（Hz），仅主机模式有效 */
 
-    hal_spi_cpol_t cpol;           /* 时钟极性 */
-    hal_spi_cpha_t cpha;           /* 时钟相位 */
-    hal_spi_bitorder_t bit_order;  /* 位序 */
+    hal_spi_cpol_e cpol;           /* 时钟极性 */
+    hal_spi_cpha_e cpha;           /* 时钟相位 */
+    hal_spi_bitorder_e bit_order;  /* 位序 */
 
     uint8_t data_bits;              /* 数据位宽，通常为 8 或 16 */
 } hal_spi_config_t;
@@ -80,10 +80,10 @@ typedef struct hal_spi {
  * config : 配置，不可为 NULL，data_bits 需为平台支持的值。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；位宽/速率不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_spi_init(hal_spi_t *handle, const hal_spi_config_t *config);
+int hal_spi_init(hal_spi_t *handle, const hal_spi_config_t *config);
 
 /* 反初始化 SPI，终止进行中的传输；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_spi_deinit(hal_spi_t *handle);
+int hal_spi_deinit(hal_spi_t *handle);
 
 /*
  * 阻塞发送。
@@ -92,11 +92,11 @@ hal_status_t hal_spi_deinit(hal_spi_t *handle);
  * timeout : 最大等待毫秒数，HAL_TIMEOUT_FOREVER 表示无限等待。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT；HAL_BUSY。
  */
-hal_status_t hal_spi_transmit(hal_spi_t *handle, const void *data,
+int hal_spi_transmit(hal_spi_t *handle, const void *data,
                                 size_t length, uint32_t timeout);
 
 /* 阻塞接收；data 缓冲区不可为 NULL，其余语义同 transmit */
-hal_status_t hal_spi_receive(hal_spi_t *handle, void *data,
+int hal_spi_receive(hal_spi_t *handle, void *data,
                                size_t length, uint32_t timeout);
 
 /*
@@ -105,17 +105,17 @@ hal_status_t hal_spi_receive(hal_spi_t *handle, void *data,
  * rx_data : 接收缓冲区，可为 NULL（此时丢弃接收数据）；
  * 返回    : HAL_OK；HAL_INVALID_PARAM（两者均为 NULL 且 length 非 0）；HAL_TIMEOUT。
  */
-hal_status_t hal_spi_transfer(hal_spi_t *handle, const void *tx_data,
+int hal_spi_transfer(hal_spi_t *handle, const void *tx_data,
                                 void *rx_data, size_t length, uint32_t timeout);
 
 /* DMA 发送；data 需在完成回调前保持有效 */
-hal_status_t hal_spi_transmit_dma(hal_spi_t *handle, const void *data, size_t length);
+int hal_spi_transmit_dma(hal_spi_t *handle, const void *data, size_t length);
 
 /* DMA 接收；data 需在完成回调前保持有效 */
-hal_status_t hal_spi_receive_dma(hal_spi_t *handle, void *data, size_t length);
+int hal_spi_receive_dma(hal_spi_t *handle, void *data, size_t length);
 
 /* DMA 全双工传输；tx_data/rx_data 可为 NULL，语义同 hal_spi_transfer */
-hal_status_t hal_spi_transfer_dma(hal_spi_t *handle, const void *tx_data,
+int hal_spi_transfer_dma(hal_spi_t *handle, const void *tx_data,
                                     void *rx_data, size_t length);
 
 /*
@@ -123,13 +123,13 @@ hal_status_t hal_spi_transfer_dma(hal_spi_t *handle, const void *tx_data,
  * baudrate : 目标频率（Hz），实际值由平台分频取最接近值。
  * 返回     : HAL_OK；HAL_INVALID_PARAM；从机模式返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate);
+int hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate);
 
 /* 中止当前传输；无传输时返回 HAL_OK */
-hal_status_t hal_spi_abort(hal_spi_t *handle);
+int hal_spi_abort(hal_spi_t *handle);
 
 /* 查询当前状态；handle 为 NULL 时返回 HAL_STATE_RESET */
-hal_state_t hal_spi_get_state(hal_spi_t *handle);
+hal_state_e hal_spi_get_state(hal_spi_t *handle);
 
 #ifdef __cplusplus
 }

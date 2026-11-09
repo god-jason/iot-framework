@@ -39,8 +39,8 @@ static int tcs3200_pins_valid(const tcs3200_handle_t *handle)
 /* filter 编码：bit1 = S2，bit0 = S3 */
 static int tcs3200_select(const tcs3200_handle_t *handle, uint8_t filter)
 {
-    hal_gpio_level_t s2 = ((filter & 0x02U) != 0U) ? HAL_GPIO_HIGH : HAL_GPIO_LOW;
-    hal_gpio_level_t s3 = ((filter & 0x01U) != 0U) ? HAL_GPIO_HIGH : HAL_GPIO_LOW;
+    hal_gpio_level_e s2 = ((filter & 0x02U) != 0U) ? HAL_GPIO_HIGH : HAL_GPIO_LOW;
+    hal_gpio_level_e s3 = ((filter & 0x01U) != 0U) ? HAL_GPIO_HIGH : HAL_GPIO_LOW;
 
     if (driver_gpio_write(handle->s2, s2) != DRIVER_OK) {
         return (int)HAL_IO_ERROR;

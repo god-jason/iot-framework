@@ -19,7 +19,7 @@ static int mics6814_check(const mics6814_handle_t *handle)
     return DRIVER_OK;
 }
 
-static bool mics6814_ch_valid(mics6814_channel_t ch)
+static bool mics6814_ch_valid(mics6814_channel_e ch)
 {
     return ((int)ch >= 0 && (int)ch < (int)MICS6814_CH_MAX) ? true : false;
 }
@@ -59,7 +59,7 @@ int mics6814_deinit(mics6814_handle_t *handle)
     return DRIVER_OK;
 }
 
-int mics6814_set_rl(mics6814_handle_t *handle, mics6814_channel_t ch, uint16_t rl_ohm)
+int mics6814_set_rl(mics6814_handle_t *handle, mics6814_channel_e ch, uint16_t rl_ohm)
 {
     int ret = mics6814_check(handle);
 
@@ -70,7 +70,7 @@ int mics6814_set_rl(mics6814_handle_t *handle, mics6814_channel_t ch, uint16_t r
     return DRIVER_OK;
 }
 
-int mics6814_calibrate_r0(mics6814_handle_t *handle, mics6814_channel_t ch,
+int mics6814_calibrate_r0(mics6814_handle_t *handle, mics6814_channel_e ch,
                           uint16_t adc_mv, float clean_air_ratio)
 {
     float rs;
@@ -96,7 +96,7 @@ int mics6814_calibrate_r0(mics6814_handle_t *handle, mics6814_channel_t ch,
     return DRIVER_OK;
 }
 
-int mics6814_set_ppm_scale(mics6814_handle_t *handle, mics6814_channel_t ch,
+int mics6814_set_ppm_scale(mics6814_handle_t *handle, mics6814_channel_e ch,
                            float ppm_scale)
 {
     int ret = mics6814_check(handle);

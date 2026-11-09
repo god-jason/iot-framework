@@ -77,7 +77,7 @@ int sht4x_read_serial(sht4x_handle_t *handle, uint16_t *serial)
     return DRIVER_OK;
 }
 
-int sht4x_set_repeatability(sht4x_handle_t *handle, sht4x_repeatability_t repeatability)
+int sht4x_set_repeatability(sht4x_handle_t *handle, sht4x_repeatability_e repeatability)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

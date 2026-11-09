@@ -41,7 +41,7 @@ typedef enum {
     MOTION_ERR_MOTOR = 1006,       /* 电机错误 */
     MOTION_ERR_LIMIT = 1007,       /* 触发限位 */
     MOTION_ERR_RUNTIME = 1008      /* 其他运行时错误 */
-} motion_error_code_t;
+} motion_error_code_e;
 
 /* 清空错误记录：code 归 0，line 归 0，message 置空。error 可为 NULL。 */
 void motion_error_clear(motion_error_t *error);

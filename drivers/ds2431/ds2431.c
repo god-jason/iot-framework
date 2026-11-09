@@ -11,7 +11,7 @@ static void ds2431_release(ds2431_handle_t *h) { (void)hal_gpio_write(h->pin, HA
 
 static int ds2431_sample(ds2431_handle_t *h)
 {
-    hal_gpio_level_t level = HAL_GPIO_LOW;
+    hal_gpio_level_e level = HAL_GPIO_LOW;
     if (hal_gpio_read(h->pin, &level) != HAL_OK) { return 0; }
     return (level == HAL_GPIO_HIGH) ? 1 : 0;
 }

@@ -21,7 +21,7 @@ typedef enum {
     MAX30105_MODE_HR_ONLY = 0x02,
     MAX30105_MODE_SPO2 = 0x03,
     MAX30105_MODE_MULTI_LED = 0x07
-} max30105_mode_t;
+} max30105_mode_e;
 
 typedef enum {
     MAX30105_AVG_1 = 0,
@@ -30,7 +30,7 @@ typedef enum {
     MAX30105_AVG_8,
     MAX30105_AVG_16,
     MAX30105_AVG_32
-} max30105_sample_avg_t;
+} max30105_sample_avg_e;
 
 typedef struct {
     uint32_t red;
@@ -40,7 +40,7 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    max30105_mode_t mode;
+    max30105_mode_e mode;
     uint8_t channels;
     bool initialized;
 } max30105_handle_t;
@@ -64,9 +64,9 @@ int max30105_read(max30105_handle_t *handle, max30105_sample_t *samples,
 int max30105_write(max30105_handle_t *handle, uint8_t reg, const uint8_t *data, size_t len);
 int max30105_read_reg(max30105_handle_t *handle, uint8_t reg, uint8_t *data, size_t len);
 
-int max30105_set_mode(max30105_handle_t *handle, max30105_mode_t mode);
+int max30105_set_mode(max30105_handle_t *handle, max30105_mode_e mode);
 
-int max30105_set_fifo(max30105_handle_t *handle, max30105_sample_avg_t average,
+int max30105_set_fifo(max30105_handle_t *handle, max30105_sample_avg_e average,
                       bool rollover, uint8_t almost_full);
 
 /** 设置三路 LED 电流（寄存器原始值，1 LSB ≈ 0.2mA） */

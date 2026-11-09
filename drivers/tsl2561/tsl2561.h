@@ -17,18 +17,18 @@ extern "C" {
 typedef enum {
     TSL2561_GAIN_1X = 0,
     TSL2561_GAIN_16X
-} tsl2561_gain_t;
+} tsl2561_gain_e;
 
 typedef enum {
     TSL2561_INTEG_13MS = 0,
     TSL2561_INTEG_101MS,
     TSL2561_INTEG_402MS
-} tsl2561_integration_t;
+} tsl2561_integration_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    tsl2561_gain_t gain;
-    tsl2561_integration_t integration;
+    tsl2561_gain_e gain;
+    tsl2561_integration_e integration;
     bool initialized;
 } tsl2561_handle_t;
 
@@ -43,8 +43,8 @@ typedef struct {
 int tsl2561_init(tsl2561_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int tsl2561_deinit(tsl2561_handle_t *handle);
 
-int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_t gain);
-int tsl2561_set_integration_time(tsl2561_handle_t *handle, tsl2561_integration_t integration);
+int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_e gain);
+int tsl2561_set_integration_time(tsl2561_handle_t *handle, tsl2561_integration_e integration);
 
 /** 读取两个通道原始计数 */
 int tsl2561_read_raw(tsl2561_handle_t *handle, uint32_t *ch0, uint32_t *ch1);

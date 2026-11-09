@@ -21,7 +21,7 @@ typedef enum {
     ADS1118_PGA_1V024,      /* ±1.024V */
     ADS1118_PGA_0V512,      /* ±0.512V */
     ADS1118_PGA_0V256       /* ±0.256V */
-} ads1118_pga_t;
+} ads1118_pga_e;
 
 typedef enum {
     ADS1118_DR_8 = 0,
@@ -32,7 +32,7 @@ typedef enum {
     ADS1118_DR_250,
     ADS1118_DR_475,
     ADS1118_DR_860
-} ads1118_dr_t;
+} ads1118_dr_e;
 
 typedef enum {
     ADS1118_MUX_DIFF_0_1 = 0,   /* AIN0 - AIN1 */
@@ -43,12 +43,12 @@ typedef enum {
     ADS1118_MUX_SINGLE_1,
     ADS1118_MUX_SINGLE_2,
     ADS1118_MUX_SINGLE_3
-} ads1118_mux_t;
+} ads1118_mux_e;
 
 typedef struct {
     driver_spi_t spi;
-    ads1118_pga_t pga;
-    ads1118_dr_t data_rate;
+    ads1118_pga_e pga;
+    ads1118_dr_e data_rate;
     bool initialized;
 } ads1118_handle_t;
 
@@ -57,7 +57,7 @@ typedef struct {
  * @param  handle  驱动句柄
  * @param  spi     已初始化的 SPI 主机句柄（模式 1，8 位，MSB first）
  * @param  cs      片选引脚，HAL_PIN(0,0) 表示由总线管理
- * @return 0 成功，负值为 hal_status_t（无响应返回 HAL_NOT_FOUND）
+ * @return 0 成功，负值为 HAL 状态码（无响应返回 HAL_NOT_FOUND）
  */
 int ads1118_init(ads1118_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
 
@@ -65,20 +65,20 @@ int ads1118_init(ads1118_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
 int ads1118_deinit(ads1118_handle_t *handle);
 
 /** @brief 设置 PGA */
-int ads1118_set_pga(ads1118_handle_t *handle, ads1118_pga_t pga);
+int ads1118_set_pga(ads1118_handle_t *handle, ads1118_pga_e pga);
 
 /** @brief 设置数据速率 */
-int ads1118_set_data_rate(ads1118_handle_t *handle, ads1118_dr_t data_rate);
+int ads1118_set_data_rate(ads1118_handle_t *handle, ads1118_dr_e data_rate);
 
 /**
  * @brief  对指定 MUX 做一次单次转换
  * @param  mux  输入选择
  * @param  raw  原始有符号 16 位码值
  */
-int ads1118_read_raw(ads1118_handle_t *handle, ads1118_mux_t mux, int16_t *raw);
+int ads1118_read_raw(ads1118_handle_t *handle, ads1118_mux_e mux, int16_t *raw);
 
 /** @brief 读取指定 MUX 的电压（V） */
-int ads1118_read_voltage(ads1118_handle_t *handle, ads1118_mux_t mux, float *volts);
+int ads1118_read_voltage(ads1118_handle_t *handle, ads1118_mux_e mux, float *volts);
 
 /** @brief 读取内部温度传感器（℃） */
 int ads1118_read_internal_temp(ads1118_handle_t *handle, float *celsius);

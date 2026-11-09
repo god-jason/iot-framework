@@ -18,7 +18,7 @@ extern "C" {
 typedef enum {
     MCP3421_MODE_ONESHOT = 0,
     MCP3421_MODE_CONTINUOUS
-} mcp3421_mode_t;
+} mcp3421_mode_e;
 
 /* 分辨率与内建 ×2 档（对应 S[2:0]） */
 typedef enum {
@@ -30,7 +30,7 @@ typedef enum {
     MCP3421_RES_14BIT_2X,
     MCP3421_RES_16BIT_2X,
     MCP3421_RES_18BIT_2X
-} mcp3421_res_t;
+} mcp3421_res_e;
 
 /* PGA 增益（对应 G[1:0]） */
 typedef enum {
@@ -38,13 +38,13 @@ typedef enum {
     MCP3421_GAIN_2,
     MCP3421_GAIN_4,
     MCP3421_GAIN_8
-} mcp3421_gain_t;
+} mcp3421_gain_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    mcp3421_res_t resolution;
-    mcp3421_gain_t pga;
-    mcp3421_mode_t mode;
+    mcp3421_res_e resolution;
+    mcp3421_gain_e pga;
+    mcp3421_mode_e mode;
     bool initialized;
 } mcp3421_handle_t;
 
@@ -53,7 +53,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址（固定 0x68），传 0 使用默认值
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int mcp3421_init(mcp3421_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -61,13 +61,13 @@ int mcp3421_init(mcp3421_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int mcp3421_deinit(mcp3421_handle_t *handle);
 
 /** @brief 设置分辨率（写配置寄存器） */
-int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_t resolution);
+int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_e resolution);
 
 /** @brief 设置 PGA 增益（写配置寄存器） */
-int mcp3421_set_gain(mcp3421_handle_t *handle, mcp3421_gain_t pga);
+int mcp3421_set_gain(mcp3421_handle_t *handle, mcp3421_gain_e pga);
 
 /** @brief 设置转换模式（写配置寄存器） */
-int mcp3421_set_mode(mcp3421_handle_t *handle, mcp3421_mode_t mode);
+int mcp3421_set_mode(mcp3421_handle_t *handle, mcp3421_mode_e mode);
 
 /**
  * @brief  读取一次转换结果（单次模式下会先触发转换并按分辨率等待）

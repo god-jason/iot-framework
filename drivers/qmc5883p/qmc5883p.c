@@ -78,7 +78,7 @@ int qmc5883p_soft_reset(qmc5883p_handle_t *handle)
                                              QMC5883P_CTRL1_OSR_MASK));
 }
 
-int qmc5883p_set_range(qmc5883p_handle_t *handle, qmc5883p_range_t range)
+int qmc5883p_set_range(qmc5883p_handle_t *handle, qmc5883p_range_e range)
 {
     uint8_t value;
     int ret;

@@ -18,7 +18,7 @@ typedef enum {
     NRF24L01_MODE_STANDBY,          /* PWR_UP=1, CE=0, TX 方向 */
     NRF24L01_MODE_TX,               /* 同 STANDBY，send() 内拉高 CE */
     NRF24L01_MODE_RX                /* PWR_UP=1, PRIM_RX=1, CE=1 */
-} nrf24l01_mode_t;
+} nrf24l01_mode_e;
 
 typedef struct {
     driver_spi_t spi;
@@ -37,7 +37,7 @@ int nrf24l01_deinit(nrf24l01_handle_t *handle);
 
 /* 频率单位 kHz，范围 2400000..2525000 */
 int nrf24l01_set_frequency(nrf24l01_handle_t *handle, uint32_t frequency_khz);
-int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_t mode);
+int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_e mode);
 /* 地址同时写入 TX_ADDR 与 RX_ADDR_P0，收发共用；payload 固定 32 字节 */
 int nrf24l01_set_address(nrf24l01_handle_t *handle, const uint8_t *address,
                          uint8_t width);

@@ -82,7 +82,7 @@ int max30105_reset(max30105_handle_t *handle)
     }
 }
 
-int max30105_set_mode(max30105_handle_t *handle, max30105_mode_t mode)
+int max30105_set_mode(max30105_handle_t *handle, max30105_mode_e mode)
 {
     int ret = max30105_check(handle);
 
@@ -105,7 +105,7 @@ int max30105_set_mode(max30105_handle_t *handle, max30105_mode_t mode)
     return DRIVER_OK;
 }
 
-int max30105_set_fifo(max30105_handle_t *handle, max30105_sample_avg_t average,
+int max30105_set_fifo(max30105_handle_t *handle, max30105_sample_avg_e average,
                       bool rollover, uint8_t almost_full)
 {
     uint8_t value;

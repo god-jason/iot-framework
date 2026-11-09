@@ -27,7 +27,7 @@ typedef enum {
     ADXL362_RANGE_4G,
     ADXL362_RANGE_8G,
     ADXL362_RANGE_COUNT
-} adxl362_range_t;
+} adxl362_range_e;
 
 /* 枚举值与 FILTER_CTL 中的 ODR 编码一致（1~6） */
 typedef enum {
@@ -37,7 +37,7 @@ typedef enum {
     ADXL362_ODR_100HZ = 0x04,
     ADXL362_ODR_200HZ = 0x05,
     ADXL362_ODR_400HZ = 0x06
-} adxl362_odr_t;
+} adxl362_odr_e;
 
 typedef struct {
     float x;
@@ -54,8 +54,8 @@ typedef struct {
 
 typedef struct {
     driver_spi_t spi;
-    adxl362_range_t range;
-    adxl362_odr_t odr;
+    adxl362_range_e range;
+    adxl362_odr_e odr;
     bool initialized;
 } adxl362_handle_t;
 
@@ -66,10 +66,10 @@ typedef struct {
  * @param  cs      片选引脚，总线自带片选时传 0
  * @param  range   量程
  * @param  odr     输出率
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int adxl362_init(adxl362_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
-                 adxl362_range_t range, adxl362_odr_t odr);
+                 adxl362_range_e range, adxl362_odr_e odr);
 
 /** @brief 反初始化：进入待机模式 */
 int adxl362_deinit(adxl362_handle_t *handle);

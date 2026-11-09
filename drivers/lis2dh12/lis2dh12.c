@@ -149,9 +149,9 @@ int lis2dh12_read(lis2dh12_handle_t *handle, lis2dh12_accel_t *accel)
     return DRIVER_OK;
 }
 
-int lis2dh12_set_range(lis2dh12_handle_t *handle, lis2dh12_range_t range)
+int lis2dh12_set_range(lis2dh12_handle_t *handle, lis2dh12_range_e range)
 {
-    lis2dh12_range_t old;
+    lis2dh12_range_e old;
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)LIS2DH12_RANGE_COUNT) {
@@ -168,9 +168,9 @@ int lis2dh12_set_range(lis2dh12_handle_t *handle, lis2dh12_range_t range)
     return DRIVER_OK;
 }
 
-int lis2dh12_set_output_rate(lis2dh12_handle_t *handle, lis2dh12_odr_t odr)
+int lis2dh12_set_output_rate(lis2dh12_handle_t *handle, lis2dh12_odr_e odr)
 {
-    lis2dh12_odr_t old;
+    lis2dh12_odr_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)LIS2DH12_ODR_COUNT) {
         return (int)HAL_INVALID_PARAM;

@@ -92,7 +92,7 @@ static void eth_mqtt_fn(struct mg_connection *c, int ev, void *ev_data)
 
 /* ---------------- iot_mqtt 接口实现 ---------------- */
 
-hal_status_t iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
+int iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
 {
     (void)eth_net_mgr();
 
@@ -101,7 +101,7 @@ hal_status_t iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_deinit(void)
+int iot_mqtt_deinit(void)
 {
     if (s_mqtt.conn != NULL) {
         mg_mqtt_disconnect(s_mqtt.conn, NULL);
@@ -115,7 +115,7 @@ hal_status_t iot_mqtt_deinit(void)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_connect(const iot_mqtt_config_t *config)
+int iot_mqtt_connect(const iot_mqtt_config_t *config)
 {
     struct mg_mqtt_opts opts;
     char url[ETH_MQTT_URL_MAX];
@@ -167,7 +167,7 @@ hal_status_t iot_mqtt_connect(const iot_mqtt_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_disconnect(void)
+int iot_mqtt_disconnect(void)
 {
     if (s_mqtt.conn == NULL) {
         return HAL_NOT_READY;
@@ -180,7 +180,7 @@ hal_status_t iot_mqtt_disconnect(void)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos)
+int iot_mqtt_subscribe(const char *topic, uint8_t qos)
 {
     struct mg_mqtt_opts opts;
 
@@ -198,7 +198,7 @@ hal_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_unsubscribe(const char *topic)
+int iot_mqtt_unsubscribe(const char *topic)
 {
     struct mg_mqtt_opts opts;
 
@@ -215,7 +215,7 @@ hal_status_t iot_mqtt_unsubscribe(const char *topic)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_publish(const iot_mqtt_message_t *message)
+int iot_mqtt_publish(const iot_mqtt_message_t *message)
 {
     struct mg_mqtt_opts opts;
 
@@ -235,7 +235,7 @@ hal_status_t iot_mqtt_publish(const iot_mqtt_message_t *message)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_process(void)
+int iot_mqtt_process(void)
 {
     eth_net_poll(0);
     return HAL_OK;

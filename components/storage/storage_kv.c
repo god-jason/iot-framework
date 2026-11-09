@@ -31,7 +31,7 @@
 /* 单个 KV 条目：used 为 false 表示槽位空闲 */
 typedef struct {
     char key[STORAGE_KV_KEY_MAX];   /* 键名，保证以 '\0' 结尾 */
-    storage_kv_type_t type;         /* 值类型，读取时必须与写入一致 */
+    storage_kv_type_e type;         /* 值类型，读取时必须与写入一致 */
     uint8_t value[STORAGE_KV_VAL_MAX];  /* 值的原始字节 */
     uint32_t len;                   /* 值实际字节数（0..32） */
     bool used;                      /* 槽位占用标志 */
@@ -99,7 +99,7 @@ int storage_kv_init(void)
  * 返回：0 成功；参数非法、len 超过 32 或表已满返回 -1。
  * 说明：key 已存在时原地覆盖（类型与值同时更新）。
  */
-int storage_kv_set(const char *key, storage_kv_type_t type,
+int storage_kv_set(const char *key, storage_kv_type_e type,
                const void *value, uint32_t len)
 {
     storage_kv_entry_t *e;
@@ -149,7 +149,7 @@ int storage_kv_set(const char *key, storage_kv_type_t type,
  * 说明：size 小于实际长度时只拷贝前 size 字节，返回的 actual_size
  *       仍是原始长度，调用者可据此判断是否被截断。
  */
-int storage_kv_get(const char *key, storage_kv_type_t type,
+int storage_kv_get(const char *key, storage_kv_type_e type,
                void *value, uint32_t size, uint32_t *actual_size)
 {
     storage_kv_entry_t *e = storage_kv_find(key);

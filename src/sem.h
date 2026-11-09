@@ -13,9 +13,9 @@
 extern "C" {
 #endif
 
-iot_status_t iot_sem_init(iot_sem_t *sem, uint32_t initial_count);
-iot_status_t iot_sem_take(iot_sem_t *sem, uint32_t timeout);
-iot_status_t iot_sem_give(iot_sem_t *sem);
+int iot_sem_init(iot_sem_t *sem, uint32_t initial_count);
+int iot_sem_take(iot_sem_t *sem, uint32_t timeout);
+int iot_sem_give(iot_sem_t *sem);
 
 #ifdef __cplusplus
 }

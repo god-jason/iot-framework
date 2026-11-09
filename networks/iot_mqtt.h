@@ -58,28 +58,28 @@ typedef void (*iot_mqtt_message_cb_t)(const iot_mqtt_message_t *message,
                                        void *user_data);
 
 /* 初始化并注册消息回调 */
-hal_status_t iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data);
+int iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data);
 
 /* 反初始化，释放实现资源 */
-hal_status_t iot_mqtt_deinit(void);
+int iot_mqtt_deinit(void);
 
 /* 连接服务器（阻塞直到 CONNACK 或超时） */
-hal_status_t iot_mqtt_connect(const iot_mqtt_config_t *config);
+int iot_mqtt_connect(const iot_mqtt_config_t *config);
 
 /* 断开连接 */
-hal_status_t iot_mqtt_disconnect(void);
+int iot_mqtt_disconnect(void);
 
 /* 订阅主题 */
-hal_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos);
+int iot_mqtt_subscribe(const char *topic, uint8_t qos);
 
 /* 取消订阅 */
-hal_status_t iot_mqtt_unsubscribe(const char *topic);
+int iot_mqtt_unsubscribe(const char *topic);
 
 /* 发布消息 */
-hal_status_t iot_mqtt_publish(const iot_mqtt_message_t *message);
+int iot_mqtt_publish(const iot_mqtt_message_t *message);
 
 /* 周期处理（泵取收包、保活），未实现时直接返回 HAL_OK */
-hal_status_t iot_mqtt_process(void);
+int iot_mqtt_process(void);
 
 /* 查询连接状态 */
 bool iot_mqtt_is_connected(void);

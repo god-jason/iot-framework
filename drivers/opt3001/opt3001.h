@@ -17,11 +17,11 @@ extern "C" {
 typedef enum {
     OPT3001_CONV_100MS = 0,   /* 100 ms，高速 */
     OPT3001_CONV_800MS        /* 800 ms，高分辨率 / 低照度 */
-} opt3001_conv_time_t;
+} opt3001_conv_time_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    opt3001_conv_time_t conv_time;
+    opt3001_conv_time_e conv_time;
     bool continuous;
     bool initialized;
 } opt3001_handle_t;
@@ -30,7 +30,7 @@ typedef struct {
 int opt3001_init(opt3001_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int opt3001_deinit(opt3001_handle_t *handle);
 
-int opt3001_set_conversion_time(opt3001_handle_t *handle, opt3001_conv_time_t conv_time);
+int opt3001_set_conversion_time(opt3001_handle_t *handle, opt3001_conv_time_e conv_time);
 
 /** 连续 / 单次转换模式切换 */
 int opt3001_set_continuous(opt3001_handle_t *handle, bool enable);

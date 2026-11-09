@@ -23,7 +23,7 @@ static uint8_t tsl2561_timing_value(const tsl2561_handle_t *handle)
     return value;
 }
 
-static float tsl2561_integration_time_ms(tsl2561_integration_t integration)
+static float tsl2561_integration_time_ms(tsl2561_integration_e integration)
 {
     switch (integration) {
     case TSL2561_INTEG_13MS:
@@ -36,7 +36,7 @@ static float tsl2561_integration_time_ms(tsl2561_integration_t integration)
     }
 }
 
-static uint32_t tsl2561_integration_delay_ms(tsl2561_integration_t integration)
+static uint32_t tsl2561_integration_delay_ms(tsl2561_integration_e integration)
 {
     switch (integration) {
     case TSL2561_INTEG_13MS:
@@ -157,7 +157,7 @@ int tsl2561_deinit(tsl2561_handle_t *handle)
     return DRIVER_OK;
 }
 
-int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_t gain)
+int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_e gain)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;
@@ -174,7 +174,7 @@ int tsl2561_set_gain(tsl2561_handle_t *handle, tsl2561_gain_t gain)
     return DRIVER_OK;
 }
 
-int tsl2561_set_integration_time(tsl2561_handle_t *handle, tsl2561_integration_t integration)
+int tsl2561_set_integration_time(tsl2561_handle_t *handle, tsl2561_integration_e integration)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

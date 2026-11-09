@@ -20,7 +20,7 @@ typedef enum {
     HAL_EXTI_RISING = 0,   /* 上升沿 */
     HAL_EXTI_FALLING,      /* 下降沿 */
     HAL_EXTI_BOTH          /* 双边沿 */
-} hal_exti_trigger_t;
+} hal_exti_trigger_e;
 
 /*
  * 外部中断回调。
@@ -32,7 +32,7 @@ typedef void (*hal_exti_callback_t)(hal_pin_t pin, void *user_data);
 
 /* 外部中断配置 */
 typedef struct {
-    hal_exti_trigger_t trigger;    /* 触发边沿 */
+    hal_exti_trigger_e trigger;    /* 触发边沿 */
     uint8_t priority;               /* 中断优先级，数值含义由平台定义（通常越小越高） */
 
     hal_exti_callback_t callback;  /* 中断回调，可为 NULL（仅轮询标志时） */
@@ -46,19 +46,19 @@ typedef struct {
  * 返回   : HAL_OK 成功；HAL_INVALID_PARAM；引脚不支持中断返回 HAL_NOT_SUPPORTED。
  * 注意   : 初始化后默认未必使能，需再调用 hal_exti_enable()。
  */
-hal_status_t hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config);
+int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config);
 
 /* 使能指定引脚的外部中断；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_exti_enable(hal_pin_t pin);
+int hal_exti_enable(hal_pin_t pin);
 
 /* 关闭指定引脚的外部中断；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_exti_disable(hal_pin_t pin);
+int hal_exti_disable(hal_pin_t pin);
 
 /* 清除挂起的中断标志；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_exti_clear(hal_pin_t pin);
+int hal_exti_clear(hal_pin_t pin);
 
 /* 反初始化并释放该引脚的中断资源；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_exti_deinit(hal_pin_t pin);
+int hal_exti_deinit(hal_pin_t pin);
 
 #ifdef __cplusplus
 }

@@ -172,9 +172,9 @@ int ns2520_read(ns2520_handle_t *handle, ns2520_accel_t *accel)
     return DRIVER_OK;
 }
 
-int ns2520_set_range(ns2520_handle_t *handle, ns2520_range_t range)
+int ns2520_set_range(ns2520_handle_t *handle, ns2520_range_e range)
 {
-    ns2520_range_t old;
+    ns2520_range_e old;
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)NS2520_RANGE_COUNT) {
@@ -191,9 +191,9 @@ int ns2520_set_range(ns2520_handle_t *handle, ns2520_range_t range)
     return DRIVER_OK;
 }
 
-int ns2520_set_output_rate(ns2520_handle_t *handle, ns2520_odr_t odr)
+int ns2520_set_output_rate(ns2520_handle_t *handle, ns2520_odr_e odr)
 {
-    ns2520_odr_t old;
+    ns2520_odr_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)NS2520_ODR_COUNT) {
         return (int)HAL_INVALID_PARAM;

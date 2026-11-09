@@ -25,17 +25,17 @@ typedef struct hal_rng {
  * handle : 句柄，不可为 NULL。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；平台无 RNG 返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_rng_init(hal_rng_t *handle);
+int hal_rng_init(hal_rng_t *handle);
 
 /* 反初始化 RNG；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_rng_deinit(hal_rng_t *handle);
+int hal_rng_deinit(hal_rng_t *handle);
 
 /*
  * 获取一个 32 位随机数。
  * value : 输出，不可为 NULL。
  * 返回  : HAL_OK；HAL_INVALID_PARAM；熵源未就绪返回 HAL_NOT_READY。
  */
-hal_status_t hal_rng_get(hal_rng_t *handle, uint32_t *value);
+int hal_rng_get(hal_rng_t *handle, uint32_t *value);
 
 /*
  * 用随机数填充缓冲区。
@@ -43,7 +43,7 @@ hal_status_t hal_rng_get(hal_rng_t *handle, uint32_t *value);
  * length : 字节数，内部按 32 位字填充，尾部可能不足 4 字节。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；HAL_NOT_READY。
  */
-hal_status_t hal_rng_generate(hal_rng_t *handle, void *buffer, size_t length);
+int hal_rng_generate(hal_rng_t *handle, void *buffer, size_t length);
 
 #ifdef __cplusplus
 }

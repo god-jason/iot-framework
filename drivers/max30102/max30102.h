@@ -20,7 +20,7 @@ typedef enum {
     MAX30102_MODE_HR_ONLY = 0x02,
     MAX30102_MODE_SPO2 = 0x03,
     MAX30102_MODE_MULTI_LED = 0x07
-} max30102_mode_t;
+} max30102_mode_e;
 
 typedef enum {
     MAX30102_AVG_1 = 0,
@@ -29,7 +29,7 @@ typedef enum {
     MAX30102_AVG_8,
     MAX30102_AVG_16,
     MAX30102_AVG_32
-} max30102_sample_avg_t;
+} max30102_sample_avg_e;
 
 typedef struct {
     uint32_t red;
@@ -38,7 +38,7 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    max30102_mode_t mode;
+    max30102_mode_e mode;
     uint8_t channels;      /* 每个采样点的通道数 */
     bool initialized;
 } max30102_handle_t;
@@ -66,10 +66,10 @@ int max30102_write(max30102_handle_t *handle, uint8_t reg, const uint8_t *data, 
 int max30102_read_reg(max30102_handle_t *handle, uint8_t reg, uint8_t *data, size_t len);
 
 /** 设置工作模式 */
-int max30102_set_mode(max30102_handle_t *handle, max30102_mode_t mode);
+int max30102_set_mode(max30102_handle_t *handle, max30102_mode_e mode);
 
 /** 设置 FIFO 平均次数、回绕与 almost full 阈值（0..15） */
-int max30102_set_fifo(max30102_handle_t *handle, max30102_sample_avg_t average,
+int max30102_set_fifo(max30102_handle_t *handle, max30102_sample_avg_e average,
                       bool rollover, uint8_t almost_full);
 
 /** 设置 LED 驱动电流（寄存器原始值，1 LSB ≈ 0.2mA） */

@@ -3,26 +3,26 @@
 #include "test.h"
 #include "behavior_bt.h"
 
-static behavior_bt_status_t cb_success(behavior_bt_node_t *n)
+static int cb_success(behavior_bt_node_t *n)
 {
     (void)n;
     return BEHAVIOR_BT_SUCCESS;
 }
 
-static behavior_bt_status_t cb_failure(behavior_bt_node_t *n)
+static int cb_failure(behavior_bt_node_t *n)
 {
     (void)n;
     return BEHAVIOR_BT_FAILURE;
 }
 
-static behavior_bt_status_t cb_running(behavior_bt_node_t *n)
+static int cb_running(behavior_bt_node_t *n)
 {
     (void)n;
     return BEHAVIOR_BT_RUNNING;
 }
 
 static int s_rep_ticks;
-static behavior_bt_status_t cb_count(behavior_bt_node_t *n)
+static int cb_count(behavior_bt_node_t *n)
 {
     (void)n;
     s_rep_ticks++;

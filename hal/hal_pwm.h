@@ -19,14 +19,14 @@ extern "C" {
 typedef enum {
     HAL_PWM_POLARITY_HIGH = 0, /* 高电平有效（占空比部分为高） */
     HAL_PWM_POLARITY_LOW       /* 低电平有效 */
-} hal_pwm_polarity_t;
+} hal_pwm_polarity_e;
 
 /* PWM 配置 */
 typedef struct {
     uint32_t frequency;         /* PWM 频率（Hz），必须大于 0 */
     uint32_t duty;              /* 占空比，范围 0~10000，对应 0~100.00% */
 
-    hal_pwm_polarity_t polarity; /* 输出极性 */
+    hal_pwm_polarity_e polarity; /* 输出极性 */
 } hal_pwm_config_t;
 
 /* PWM 句柄 */
@@ -44,33 +44,33 @@ typedef struct hal_pwm {
  * config : 配置，不可为 NULL；duty 超过 10000 视为 10000。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；频率不可达返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config);
+int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config);
 
 /* 反初始化 PWM 通道并停止输出；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_pwm_deinit(hal_pwm_t *handle);
+int hal_pwm_deinit(hal_pwm_t *handle);
 
 /* 启动 PWM 输出；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_pwm_start(hal_pwm_t *handle);
+int hal_pwm_start(hal_pwm_t *handle);
 
 /* 停止 PWM 输出（通道保持无效电平）；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_pwm_stop(hal_pwm_t *handle);
+int hal_pwm_stop(hal_pwm_t *handle);
 
 /*
  * 运行期修改频率。
  * frequency : 目标频率（Hz），必须大于 0；会同步重算占空比寄存器。
  * 返回      : HAL_OK；HAL_INVALID_PARAM；不可达返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_pwm_set_frequency(hal_pwm_t *handle, uint32_t frequency);
+int hal_pwm_set_frequency(hal_pwm_t *handle, uint32_t frequency);
 
 /*
  * 运行期修改占空比。
  * duty : 0~10000 对应 0~100.00%，超过 10000 按 10000 处理。
  * 返回 : HAL_OK；HAL_INVALID_PARAM（句柄为空）。
  */
-hal_status_t hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty);
+int hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty);
 
 /* 运行期修改输出极性；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_pwm_set_polarity(hal_pwm_t *handle, hal_pwm_polarity_t polarity);
+int hal_pwm_set_polarity(hal_pwm_t *handle, hal_pwm_polarity_e polarity);
 
 #ifdef __cplusplus
 }

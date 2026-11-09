@@ -22,7 +22,7 @@ typedef enum {
     HAL_I2S_MODE_MASTER_RX,    /* 主机接收 */
     HAL_I2S_MODE_SLAVE_TX,     /* 从机发送 */
     HAL_I2S_MODE_SLAVE_RX      /* 从机接收 */
-} hal_i2s_mode_t;
+} hal_i2s_mode_e;
 
 /* 协议标准 */
 typedef enum {
@@ -30,22 +30,22 @@ typedef enum {
     HAL_I2S_STANDARD_MSB,          /* 左对齐（MSB） */
     HAL_I2S_STANDARD_LSB,          /* 右对齐（LSB） */
     HAL_I2S_STANDARD_PCM           /* PCM/DSP 模式 */
-} hal_i2s_standard_t;
+} hal_i2s_standard_e;
 
 /* 采样数据位宽 */
 typedef enum {
     HAL_I2S_DATA_16BIT = 0,    /* 16 位 */
     HAL_I2S_DATA_24BIT,        /* 24 位 */
     HAL_I2S_DATA_32BIT         /* 32 位 */
-} hal_i2s_data_size_t;
+} hal_i2s_data_size_e;
 
 /* I2S 配置 */
 typedef struct {
-    hal_i2s_mode_t mode;           /* 工作模式 */
-    hal_i2s_standard_t standard;   /* 协议标准 */
+    hal_i2s_mode_e mode;           /* 工作模式 */
+    hal_i2s_standard_e standard;   /* 协议标准 */
 
     uint32_t sample_rate;           /* 采样率（Hz），如 44100/48000 */
-    hal_i2s_data_size_t data_size; /* 采样数据位宽 */
+    hal_i2s_data_size_e data_size; /* 采样数据位宽 */
 
     bool master_clock;              /* 是否输出主时钟 MCLK */
 } hal_i2s_config_t;
@@ -68,10 +68,10 @@ typedef struct hal_i2s {
  * config : 配置，不可为 NULL，sample_rate 必须大于 0。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；采样率不可达返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_i2s_init(hal_i2s_t *handle, const hal_i2s_config_t *config);
+int hal_i2s_init(hal_i2s_t *handle, const hal_i2s_config_t *config);
 
 /* 反初始化 I2S；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_i2s_deinit(hal_i2s_t *handle);
+int hal_i2s_deinit(hal_i2s_t *handle);
 
 /*
  * 阻塞发送。
@@ -80,21 +80,21 @@ hal_status_t hal_i2s_deinit(hal_i2s_t *handle);
  * timeout : 最大等待毫秒数。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT；HAL_BUSY。
  */
-hal_status_t hal_i2s_transmit(hal_i2s_t *handle, const void *data,
+int hal_i2s_transmit(hal_i2s_t *handle, const void *data,
                                 size_t length, uint32_t timeout);
 
 /* 阻塞接收；data 缓冲区不可为 NULL */
-hal_status_t hal_i2s_receive(hal_i2s_t *handle, void *data,
+int hal_i2s_receive(hal_i2s_t *handle, void *data,
                                size_t length, uint32_t timeout);
 
 /* DMA 发送；data 需在完成回调前保持有效 */
-hal_status_t hal_i2s_transmit_dma(hal_i2s_t *handle, const void *data, size_t length);
+int hal_i2s_transmit_dma(hal_i2s_t *handle, const void *data, size_t length);
 
 /* DMA 接收；data 需在完成回调前保持有效 */
-hal_status_t hal_i2s_receive_dma(hal_i2s_t *handle, void *data, size_t length);
+int hal_i2s_receive_dma(hal_i2s_t *handle, void *data, size_t length);
 
 /* 中止当前传输；无传输时返回 HAL_OK */
-hal_status_t hal_i2s_abort(hal_i2s_t *handle);
+int hal_i2s_abort(hal_i2s_t *handle);
 
 #ifdef __cplusplus
 }

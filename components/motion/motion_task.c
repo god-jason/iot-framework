@@ -458,7 +458,7 @@ void motion_task_poll(void)
 }
 
 /* 查询 JOB 状态；未初始化或未找到时返回 MOTION_STATE_IDLE */
-motion_state_t motion_task_state(const char *name)
+motion_state_e motion_task_state(const char *name)
 {
     int index;
 

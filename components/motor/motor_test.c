@@ -3,7 +3,7 @@
 #include "motor.h"
 
 static int32_t s_hw_speed;
-static motor_direction_t s_hw_dir;
+static motor_direction_e s_hw_dir;
 static int s_speed_calls;
 static int s_dir_calls;
 static int s_stop_calls;
@@ -21,7 +21,7 @@ static int fake_set_speed(void *ctx, int32_t speed)
     return 0;
 }
 
-static int fake_set_dir(void *ctx, motor_direction_t direction)
+static int fake_set_dir(void *ctx, motor_direction_e direction)
 {
     (void)ctx;
     s_dir_calls++;

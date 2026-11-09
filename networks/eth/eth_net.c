@@ -227,7 +227,7 @@ static void eth_net_fn(struct mg_connection *c, int ev, void *ev_data)
 
 /* ---------------- iot_net 接口实现 ---------------- */
 
-hal_status_t iot_net_init(void)
+int iot_net_init(void)
 {
     (void)eth_net_mgr();
     memset(s_socks, 0, sizeof(s_socks));
@@ -235,7 +235,7 @@ hal_status_t iot_net_init(void)
     return HAL_OK;
 }
 
-hal_status_t iot_net_deinit(void)
+int iot_net_deinit(void)
 {
     int i;
 
@@ -353,7 +353,7 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
     return eth_recv_common(id, data, len, timeout);
 }
 
-hal_status_t iot_net_close(iot_net_id_t id)
+int iot_net_close(iot_net_id_t id)
 {
     if (id < 0 || id >= ETH_NET_MAX_CONN || !s_socks[id].used) {
         return HAL_NOT_FOUND;
@@ -368,7 +368,7 @@ hal_status_t iot_net_close(iot_net_id_t id)
     return HAL_OK;
 }
 
-hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
+int iot_net_listen(iot_net_type_t type, const char *host,
                             uint16_t port, iot_net_id_t *id)
 {
     char url[ETH_NET_URL_MAX];
@@ -401,7 +401,7 @@ hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
     return HAL_OK;
 }
 
-hal_status_t iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
+int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
                             char *peer_ip, uint32_t ip_size,
                             uint16_t *peer_port, uint32_t timeout)
 {
@@ -525,12 +525,12 @@ int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
 
 /* ---------------- 系统信息 ---------------- */
 
-hal_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
+int iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
 {
     struct addrinfo hints;
     struct addrinfo *res = NULL;
     struct addrinfo *p;
-    hal_status_t status = HAL_NOT_FOUND;
+    int status = HAL_NOT_FOUND;
 
     if (name == NULL || ip == NULL || size == 0U) {
         return HAL_INVALID_PARAM;
@@ -560,7 +560,7 @@ hal_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
     return status;
 }
 
-hal_status_t iot_net_getip(char *ip, uint32_t size)
+int iot_net_getip(char *ip, uint32_t size)
 {
     char host[256];
     struct addrinfo hints;
@@ -600,7 +600,7 @@ hal_status_t iot_net_getip(char *ip, uint32_t size)
     return HAL_NOT_FOUND;
 }
 
-static hal_status_t eth_mac_text(const uint8_t *addr, char *mac, uint32_t size)
+static int eth_mac_text(const uint8_t *addr, char *mac, uint32_t size)
 {
     if (size < IOT_NET_MAC_MAX) {
         return HAL_OVERFLOW;
@@ -610,7 +610,7 @@ static hal_status_t eth_mac_text(const uint8_t *addr, char *mac, uint32_t size)
     return HAL_OK;
 }
 
-hal_status_t iot_net_getmac(char *mac, uint32_t size)
+int iot_net_getmac(char *mac, uint32_t size)
 {
     if (mac == NULL) {
         return HAL_INVALID_PARAM;
@@ -624,7 +624,7 @@ hal_status_t iot_net_getmac(char *mac, uint32_t size)
         IP_ADAPTER_ADDRESSES *addrs = NULL;
         ULONG len = 15000;
         ULONG ret;
-        hal_status_t status = HAL_NOT_FOUND;
+        int status = HAL_NOT_FOUND;
         int attempt;
 
         for (attempt = 0; attempt < 3; attempt++) {
@@ -672,7 +672,7 @@ hal_status_t iot_net_getmac(char *mac, uint32_t size)
     {
         struct ifaddrs *list = NULL;
         struct ifaddrs *ifa;
-        hal_status_t status = HAL_NOT_FOUND;
+        int status = HAL_NOT_FOUND;
 
         if (getifaddrs(&list) != 0) {
             return HAL_IO_ERROR;
@@ -704,7 +704,7 @@ hal_status_t iot_net_getmac(char *mac, uint32_t size)
 #endif
 }
 
-hal_status_t iot_net_gettime(iot_net_time_t *time_out)
+int iot_net_gettime(iot_net_time_t *time_out)
 {
     time_t now;
     struct tm *tm;

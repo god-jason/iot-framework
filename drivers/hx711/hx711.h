@@ -27,12 +27,12 @@ typedef enum {
     HX711_GAIN_A_128 = 0,   /* 通道 A，增益 128（常用称重） */
     HX711_GAIN_B_32,        /* 通道 B，增益 32 */
     HX711_GAIN_A_64         /* 通道 A，增益 64 */
-} hx711_gain_t;
+} hx711_gain_e;
 
 typedef struct {
     hal_pin_t sck;         /* PD_SCK，主机输出 */
     hal_pin_t dout;        /* DOUT，芯片输出（低电平=就绪） */
-    hx711_gain_t gain;      /* 当前通道/增益 */
+    hx711_gain_e gain;      /* 当前通道/增益 */
     int32_t offset;         /* 零点（皮重）原始值 */
     float scale;            /* 换算系数：重量 = (raw - offset) / scale */
     bool initialized;
@@ -43,7 +43,7 @@ typedef struct {
  * @param  handle  驱动句柄
  * @param  sck     PD_SCK 引脚
  * @param  dout    DOUT 引脚
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int hx711_init(hx711_handle_t *handle, hal_pin_t sck, hal_pin_t dout);
 
@@ -57,7 +57,7 @@ int hx711_deinit(hx711_handle_t *handle);
 int hx711_is_ready(hx711_handle_t *handle);
 
 /** @brief 设置下一次转换的通道与增益 */
-int hx711_set_gain(hx711_handle_t *handle, hx711_gain_t gain);
+int hx711_set_gain(hx711_handle_t *handle, hx711_gain_e gain);
 
 /**
  * @brief  读取一次原始值（阻塞等待转换完成）

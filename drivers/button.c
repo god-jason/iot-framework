@@ -34,9 +34,9 @@ int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
 
 int button_process(button_t *btn, uint32_t tick_ms)
 {
-    hal_gpio_level_t level;
+    hal_gpio_level_e level;
     uint8_t pressed;
-    button_event_t ev = BUTTON_RELEASED;
+    button_event_e ev = BUTTON_RELEASED;
 
     if (btn == NULL) {
         return -1;

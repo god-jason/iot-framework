@@ -30,11 +30,11 @@ typedef enum {
     AT_PROMPT,    /* 行首的 ">" 数据模式提示符 */
     AT_BINARY,    /* 二进制数据块（预留，当前未产生） */
     AT_OVERFLOW   /* 行缓冲溢出，当前行已丢弃 */
-} at_token_type_t;
+} at_token_type_e;
 
 /* 解析得到的一个 token */
 typedef struct {
-    at_token_type_t type;   /* token 类型 */
+    at_token_type_e type;   /* token 类型 */
     const uint8_t *data;    /* 数据指针；AT_PROMPT/AT_OVERFLOW 为 NULL */
     uint32_t len;           /* 数据长度；AT_PROMPT/AT_OVERFLOW 为 0 */
 } at_token_t;

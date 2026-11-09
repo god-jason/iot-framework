@@ -27,13 +27,13 @@ typedef struct {
  * @brief  初始化 AM2302（引脚配置为开漏输出 + 上拉）
  * @param  handle  驱动句柄
  * @param  pin     数据引脚（HAL_PIN(port, index) 编码）
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int am2302_init(am2302_handle_t *handle, hal_pin_t pin);
 
 /**
  * @brief  反初始化（释放引脚）
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int am2302_deinit(am2302_handle_t *handle);
 

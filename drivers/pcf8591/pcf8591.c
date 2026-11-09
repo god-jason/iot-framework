@@ -80,7 +80,7 @@ int pcf8591_deinit(pcf8591_handle_t *handle)
     return DRIVER_OK;
 }
 
-int pcf8591_set_input_mode(pcf8591_handle_t *handle, pcf8591_input_mode_t mode)
+int pcf8591_set_input_mode(pcf8591_handle_t *handle, pcf8591_input_mode_e mode)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)mode > (uint16_t)PCF8591_MODE_2_DIFFERENTIAL) {

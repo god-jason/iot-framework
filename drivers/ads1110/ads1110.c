@@ -80,7 +80,7 @@ int ads1110_deinit(ads1110_handle_t *handle)
     return DRIVER_OK;
 }
 
-int ads1110_set_gain(ads1110_handle_t *handle, ads1110_gain_t gain)
+int ads1110_set_gain(ads1110_handle_t *handle, ads1110_gain_e gain)
 {
     int ret;
 
@@ -93,7 +93,7 @@ int ads1110_set_gain(ads1110_handle_t *handle, ads1110_gain_t gain)
     return ret;
 }
 
-int ads1110_set_data_rate(ads1110_handle_t *handle, ads1110_rate_t data_rate)
+int ads1110_set_data_rate(ads1110_handle_t *handle, ads1110_rate_e data_rate)
 {
     int ret;
 

@@ -149,9 +149,9 @@ int sc7a20h_read(sc7a20h_handle_t *handle, sc7a20h_accel_t *accel)
     return DRIVER_OK;
 }
 
-int sc7a20h_set_range(sc7a20h_handle_t *handle, sc7a20h_range_t range)
+int sc7a20h_set_range(sc7a20h_handle_t *handle, sc7a20h_range_e range)
 {
-    sc7a20h_range_t old;
+    sc7a20h_range_e old;
 
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)SC7A20H_RANGE_COUNT) {
@@ -168,9 +168,9 @@ int sc7a20h_set_range(sc7a20h_handle_t *handle, sc7a20h_range_t range)
     return DRIVER_OK;
 }
 
-int sc7a20h_set_output_rate(sc7a20h_handle_t *handle, sc7a20h_odr_t odr)
+int sc7a20h_set_output_rate(sc7a20h_handle_t *handle, sc7a20h_odr_e odr)
 {
-    sc7a20h_odr_t old;
+    sc7a20h_odr_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)SC7A20H_ODR_COUNT) {
         return (int)HAL_INVALID_PARAM;

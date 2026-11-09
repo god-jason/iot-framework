@@ -42,7 +42,7 @@ typedef struct {
 
 /* 处理一条请求 ADU 并生成响应 ADU（含异常响应）。
  * 返回 0 成功（out_len 为响应长度）；返回负值表示输入帧非法（不应回复）。 */
-int modbus_slave_process(modbus_mode_t mode, uint8_t slave,
+int modbus_slave_process(modbus_mode_e mode, uint8_t slave,
                          const modbus_slave_if_t *iface,
                          const uint8_t *adu, uint32_t len,
                          uint8_t *out, uint32_t capacity, uint32_t *out_len);
@@ -55,7 +55,7 @@ typedef enum {
     MODBUS_REG_DISCRETE,        /* FC02，只读 */
     MODBUS_REG_HOLDING,         /* FC03 / FC06 / FC10 */
     MODBUS_REG_INPUT            /* FC04，只读 */
-} modbus_reg_type_t;
+} modbus_reg_type_e;
 
 /*
  * 读写回调：values 为 qty 个逻辑值（线圈/离散输入为 0/1）。
@@ -67,7 +67,7 @@ typedef int (*modbus_slave_write_cb)(uint16_t addr, const uint16_t *values, uint
 
 /* 寄存器区间描述：以下三种存储/回调方式任选，优先级 read_cb/write_cb > data > bits */
 typedef struct {
-    modbus_reg_type_t type;     /* 区间类型（线圈/离散/保持/输入） */
+    modbus_reg_type_e type;     /* 区间类型（线圈/离散/保持/输入） */
     uint16_t addr;              /* 起始地址 */
     uint16_t qty;               /* 数量（地址范围 [addr, addr+qty)） */
 
@@ -86,7 +86,7 @@ typedef struct {
 
 typedef struct {
     uint8_t address;            /* 本机地址；0 表示广播模式（只处理不回复） */
-    modbus_mode_t mode;         /* RTU / TCP */
+    modbus_mode_e mode;         /* RTU / TCP */
 
     modbus_reg_range_t ranges[MODBUS_SLAVE_MAX_RANGES]; /* 已注册区间表 */
     uint16_t range_count;       /* 已注册区间数 */
@@ -97,7 +97,7 @@ typedef struct {
 } modbus_slave_t;
 
 /* 初始化从站（address 为 0 时按广播地址处理：处理请求但不回复） */
-void modbus_slave_register_init(modbus_slave_t *slave, uint8_t address, modbus_mode_t mode);
+void modbus_slave_register_init(modbus_slave_t *slave, uint8_t address, modbus_mode_e mode);
 
 /*
  * 注册连续寄存器/线圈区间（结构体整体拷贝，内部不持有指针生命周期管理）。
@@ -109,18 +109,18 @@ int modbus_slave_register_range(modbus_slave_t *slave, const modbus_reg_range_t 
 
 /* 注册直接映射数组（regs 类型用 uint16 数组；coil/discrete 用 uint8 位数组） */
 int modbus_slave_map_regs(modbus_slave_t *slave, uint16_t addr,
-                          uint16_t *data, uint16_t qty, modbus_reg_type_t type);
+                          uint16_t *data, uint16_t qty, modbus_reg_type_e type);
 int modbus_slave_map_bits(modbus_slave_t *slave, uint16_t addr,
-                          uint8_t *bits, uint16_t qty, modbus_reg_type_t type);
+                          uint8_t *bits, uint16_t qty, modbus_reg_type_e type);
 
 /* 为已注册区间绑定读/写回调（回调优先于直接映射）
  * 返回：0 成功；MODBUS_ERR_PARAM 参数非法；MODBUS_ERR_RANGE 未找到匹配区间。 */
-int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_t type, uint16_t addr,
+int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_e type, uint16_t addr,
                               modbus_slave_read_cb read_cb, modbus_slave_write_cb write_cb,
                               void *user);
 
 /* 注销指定类型/起始地址的区间，返回 0 或 MODBUS_ERR_RANGE。 */
-int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_t type,
+int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_e type,
                                   uint16_t addr);
 
 /* 处理一条请求 ADU：返回 0 成功（广播时 out_len=0）；

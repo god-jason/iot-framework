@@ -47,7 +47,8 @@ extern "C" {
 
 /* ============================== 状态码 ============================== */
 
-typedef enum {
+/* 状态值统一以 int 返回，枚举仅用于定义常量名 */
+enum {
     IOT_OK = 0,            /* 成功 */
     IOT_ERROR = -1,        /* 未分类错误 */
     IOT_TIMEOUT = -2,      /* 等待超时 */
@@ -56,7 +57,7 @@ typedef enum {
     IOT_NOT_READY = -5,    /* 未初始化或前置条件不满足 */
     IOT_BUSY = -6,         /* 资源被占用 */
     IOT_NOT_OWNER = -7,    /* 当前任务不是该资源的持有者 */
-} iot_status_t;
+};
 
 /* ============================== 任务状态 ============================== */
 
@@ -66,7 +67,7 @@ typedef enum {
     IOT_TASK_BLOCKED,      /* 阻塞在信号量/互斥量/队列上 */
     IOT_TASK_DELAYED,      /* 睡眠中，等待 tick 到期 */
     IOT_TASK_TERMINATED    /* 已退出，不再参与调度 */
-} iot_task_state_t;
+} iot_task_state_e;
 
 /* ============================== 回调类型 ============================== */
 
@@ -86,7 +87,7 @@ typedef struct iot_task {
     void *arg;                      /* 入口参数 */
 
     uint8_t priority;               /* 优先级：0 最高 */
-    iot_task_state_t state;        /* 当前状态 */
+    iot_task_state_e state;        /* 当前状态 */
 
     list_node_t ready_node;    /* 就绪链表节点（每优先级一条环形链） */
     list_node_t delayed_node;  /* 延时链表节点（排序键 wake_tick） */
@@ -95,7 +96,7 @@ typedef struct iot_task {
     uint32_t wake_tick;             /* 延时/超时唤醒时刻 */
     void *wait_ptr;                 /* 队列等待者的数据缓冲指针 */
 
-    iot_status_t wait_result;      /* 被唤醒时写入的结果码 */
+    int wait_result;      /* 被唤醒时写入的结果码 */
 
     bool created;                   /* 是否已创建（调试用） */
 } iot_task_t;

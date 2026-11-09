@@ -19,7 +19,7 @@ typedef enum {
     CS1237_GAIN_2,
     CS1237_GAIN_64,
     CS1237_GAIN_128
-} cs1237_gain_t;
+} cs1237_gain_e;
 
 /* 输出速率档位 */
 typedef enum {
@@ -27,13 +27,13 @@ typedef enum {
     CS1237_RATE_40HZ,
     CS1237_RATE_640HZ,
     CS1237_RATE_1280HZ
-} cs1237_rate_t;
+} cs1237_rate_e;
 
 typedef struct {
     hal_pin_t sclk;        /* 时钟，主机输出 */
     hal_pin_t dout;        /* DRDY/DOUT，芯片输出（低电平=就绪） */
-    cs1237_gain_t gain;     /* 当前增益档位 */
-    cs1237_rate_t rate;     /* 当前输出速率档位 */
+    cs1237_gain_e gain;     /* 当前增益档位 */
+    cs1237_rate_e rate;     /* 当前输出速率档位 */
     int32_t offset;         /* 零点（皮重）原始值 */
     float scale;            /* 换算系数：重量 = (raw - offset) / scale */
     bool initialized;
@@ -44,7 +44,7 @@ typedef struct {
  * @param  handle  驱动句柄
  * @param  sclk    SCLK 引脚
  * @param  dout    DRDY/DOUT 引脚
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int cs1237_init(cs1237_handle_t *handle, hal_pin_t sclk, hal_pin_t dout);
 
@@ -67,10 +67,10 @@ int cs1237_read_raw(cs1237_handle_t *handle, int32_t *raw);
 int cs1237_read_average(cs1237_handle_t *handle, uint8_t times, int32_t *raw);
 
 /** @brief 设置增益档位（仅记录，需调用 cs1237_write_config 生效） */
-int cs1237_set_gain(cs1237_handle_t *handle, cs1237_gain_t gain);
+int cs1237_set_gain(cs1237_handle_t *handle, cs1237_gain_e gain);
 
 /** @brief 设置输出速率档位（仅记录，需调用 cs1237_write_config 生效） */
-int cs1237_set_rate(cs1237_handle_t *handle, cs1237_rate_t rate);
+int cs1237_set_rate(cs1237_handle_t *handle, cs1237_rate_e rate);
 
 /**
  * @brief  写配置寄存器（增益与速率）

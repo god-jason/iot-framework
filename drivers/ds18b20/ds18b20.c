@@ -14,7 +14,7 @@ static void ds18b20_release(ds18b20_handle_t *handle)
 
 static int ds18b20_sample(ds18b20_handle_t *handle)
 {
-    hal_gpio_level_t level = HAL_GPIO_LOW;
+    hal_gpio_level_e level = HAL_GPIO_LOW;
 
     if (hal_gpio_read(handle->pin, &level) != HAL_OK) {
         return 0;

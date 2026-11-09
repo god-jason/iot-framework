@@ -20,7 +20,7 @@ void iot_timers_init(void)
     list_init(&s_timers);
 }
 
-iot_status_t iot_timer_init(iot_timer_t *timer, const char *name,
+int iot_timer_init(iot_timer_t *timer, const char *name,
                               iot_timer_cb_t cb, void *arg,
                               uint32_t period_ms, bool periodic)
 {
@@ -43,7 +43,7 @@ iot_status_t iot_timer_init(iot_timer_t *timer, const char *name,
     return IOT_OK;
 }
 
-iot_status_t iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
+int iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
 {
     if (timer == NULL || timer->cb == NULL || period_ms == 0U) {
         LOG_E(IOT_TAG, "timer_start: invalid param");
@@ -66,7 +66,7 @@ iot_status_t iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
     return IOT_OK;
 }
 
-iot_status_t iot_timer_stop(iot_timer_t *timer)
+int iot_timer_stop(iot_timer_t *timer)
 {
     if (timer == NULL) {
         LOG_E(IOT_TAG, "timer_stop: null timer");

@@ -39,7 +39,7 @@ static void set_rx(const char *resp)
 }
 
 /* 每次发送后按旧 mock 语义回放一条响应；命令尾部的 CRLF 不消耗响应。 */
-static void uart_tx_hook(void *handle, hal_uart_event_t event,
+static void uart_tx_hook(void *handle, hal_uart_event_e event,
                          size_t length, void *user)
 {
     uint32_t total;

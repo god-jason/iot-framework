@@ -27,11 +27,11 @@ typedef enum {
     MOTOR_FORWARD,   /* 正转 */
     MOTOR_REVERSE,   /* 反转 */
     MOTOR_BRAKING    /* 制动 */
-} motor_direction_t;
+} motor_direction_e;
 
 /* 底层电机驱动操作表 */
 typedef struct {
-    int (*set_direction)(void *ctx, motor_direction_t direction);   /* 设置方向，可选 */
+    int (*set_direction)(void *ctx, motor_direction_e direction);   /* 设置方向，可选 */
     int (*set_speed)(void *ctx, int32_t speed);                     /* 设置带符号速度，可选 */
     int (*stop)(void *ctx);                                         /* 停止，可选 */
     void *ctx;                                                      /* 驱动私有上下文 */
@@ -44,7 +44,7 @@ typedef struct {
     int32_t speed;            /* 当前速度（带符号） */
     int32_t max_speed;        /* 速度限幅上限，默认 1000 */
 
-    motor_direction_t direction;   /* 当前方向/状态记录 */
+    motor_direction_e direction;   /* 当前方向/状态记录 */
 } motor_t;
 
 /*
@@ -66,7 +66,7 @@ int motor_set_speed(motor_t *motor, int32_t speed);
  * 参数：motor 对象；direction 目标方向。
  * 返回：0 成功；参数非法或底层未实现/失败返回 -1。
  */
-int motor_set_direction(motor_t *motor, motor_direction_t direction);
+int motor_set_direction(motor_t *motor, motor_direction_e direction);
 
 /*
  * 停止电机并复位软件状态。

@@ -223,7 +223,7 @@ static void pc_uart_poll_stdio(pc_uart_ctx_t *ctx)
 #endif
 }
 
-hal_status_t hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config)
+int hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config)
 {
     pc_uart_ctx_t *ctx;
     uintptr_t instance;
@@ -247,7 +247,7 @@ hal_status_t hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t hal_uart_deinit(hal_uart_t *handle)
+int hal_uart_deinit(hal_uart_t *handle)
 {
     pc_uart_ctx_t *ctx;
 
@@ -268,7 +268,7 @@ hal_status_t hal_uart_deinit(hal_uart_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
+int hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
                                  size_t length, uint32_t timeout)
 {
     pc_uart_ctx_t *ctx;
@@ -290,7 +290,7 @@ hal_status_t hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
     return HAL_OK;
 }
 
-hal_status_t hal_uart_receive(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive(hal_uart_t *handle, uint8_t *data,
                                 size_t length, uint32_t timeout)
 {
     pc_uart_ctx_t *ctx;
@@ -323,7 +323,7 @@ hal_status_t hal_uart_receive(hal_uart_t *handle, uint8_t *data,
     return HAL_OK;
 }
 
-hal_status_t hal_uart_transmit_it(hal_uart_t *handle, const uint8_t *data,
+int hal_uart_transmit_it(hal_uart_t *handle, const uint8_t *data,
                                     size_t length)
 {
     pc_uart_ctx_t *ctx;
@@ -344,7 +344,7 @@ hal_status_t hal_uart_transmit_it(hal_uart_t *handle, const uint8_t *data,
     return HAL_OK;
 }
 
-hal_status_t hal_uart_receive_it(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive_it(hal_uart_t *handle, uint8_t *data,
                                    size_t length)
 {
     pc_uart_ctx_t *ctx;
@@ -374,20 +374,20 @@ hal_status_t hal_uart_receive_it(hal_uart_t *handle, uint8_t *data,
     return HAL_OK;
 }
 
-hal_status_t hal_uart_transmit_dma(hal_uart_t *handle, const uint8_t *data,
+int hal_uart_transmit_dma(hal_uart_t *handle, const uint8_t *data,
                                      size_t length)
 {
     return hal_uart_transmit_it(handle, data, length);
 }
 
-hal_status_t hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data,
                                     size_t length)
 {
     return hal_uart_receive_it(handle, data, length);
 }
 
-hal_status_t hal_uart_receive_to_idle(hal_uart_t *handle, uint8_t *data,
-                                        size_t length, hal_transfer_mode_t mode)
+int hal_uart_receive_to_idle(hal_uart_t *handle, uint8_t *data,
+                                        size_t length, hal_transfer_mode_e mode)
 {
     pc_uart_ctx_t *ctx;
     size_t n;
@@ -432,7 +432,7 @@ size_t hal_uart_get_rx_count(hal_uart_t *handle)
     return ctx->rx_len;
 }
 
-hal_status_t hal_uart_abort_tx(hal_uart_t *handle)
+int hal_uart_abort_tx(hal_uart_t *handle)
 {
     pc_uart_ctx_t *ctx;
 
@@ -447,7 +447,7 @@ hal_status_t hal_uart_abort_tx(hal_uart_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_uart_abort_rx(hal_uart_t *handle)
+int hal_uart_abort_rx(hal_uart_t *handle)
 {
     pc_uart_ctx_t *ctx;
 
@@ -462,7 +462,7 @@ hal_status_t hal_uart_abort_rx(hal_uart_t *handle)
     return HAL_OK;
 }
 
-hal_status_t hal_uart_abort(hal_uart_t *handle)
+int hal_uart_abort(hal_uart_t *handle)
 {
     pc_uart_ctx_t *ctx;
 
@@ -478,7 +478,7 @@ hal_status_t hal_uart_abort(hal_uart_t *handle)
     return HAL_OK;
 }
 
-hal_state_t hal_uart_get_state(hal_uart_t *handle)
+hal_state_e hal_uart_get_state(hal_uart_t *handle)
 {
     if (handle == NULL) {
         return HAL_STATE_RESET;
@@ -486,7 +486,7 @@ hal_state_t hal_uart_get_state(hal_uart_t *handle)
     return handle->base.state;
 }
 
-hal_status_t hal_uart_get_error(hal_uart_t *handle)
+int hal_uart_get_error(hal_uart_t *handle)
 {
     if (handle == NULL) {
         return HAL_INVALID_PARAM;
@@ -494,7 +494,7 @@ hal_status_t hal_uart_get_error(hal_uart_t *handle)
     return handle->base.error;
 }
 
-hal_status_t hal_uart_register_callback(hal_uart_t *handle,
+int hal_uart_register_callback(hal_uart_t *handle,
                                           hal_uart_callback_t callback, void *user_data)
 {
     if (handle == NULL) {

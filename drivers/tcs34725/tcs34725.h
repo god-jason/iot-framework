@@ -19,7 +19,7 @@ typedef enum {
     TCS34725_GAIN_4X,
     TCS34725_GAIN_16X,
     TCS34725_GAIN_60X
-} tcs34725_gain_t;
+} tcs34725_gain_e;
 
 typedef struct {
     uint16_t clear;
@@ -37,7 +37,7 @@ typedef struct {
 typedef struct {
     driver_i2c_t i2c;
     uint8_t atime;
-    tcs34725_gain_t gain;
+    tcs34725_gain_e gain;
     bool initialized;
 } tcs34725_handle_t;
 
@@ -48,7 +48,7 @@ int tcs34725_deinit(tcs34725_handle_t *handle);
 /** 设置积分时间寄存器值：越小积分时间越长（2.4ms ~ 614.4ms） */
 int tcs34725_set_atime(tcs34725_handle_t *handle, uint8_t atime);
 
-int tcs34725_set_gain(tcs34725_handle_t *handle, tcs34725_gain_t gain);
+int tcs34725_set_gain(tcs34725_handle_t *handle, tcs34725_gain_e gain);
 
 /** 当前 ATIME 对应的积分时间（ms） */
 float tcs34725_get_integration_time_ms(const tcs34725_handle_t *handle);

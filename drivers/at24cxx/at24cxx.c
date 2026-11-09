@@ -20,7 +20,7 @@ static const at24cxx_model_info_t s_model_info[] = {
 };
 
 int at24cxx_init(at24cxx_handle_t *handle, hal_i2c_t *i2c,
-                 uint16_t address, at24cxx_model_t model)
+                 uint16_t address, at24cxx_model_e model)
 {
     if (handle == NULL || i2c == NULL || (uint32_t)model >= DRIVER_ARRAY_SIZE(s_model_info)) {
         return (int)HAL_INVALID_PARAM;

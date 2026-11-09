@@ -40,7 +40,7 @@ typedef struct {
 
 /**
  * @brief  初始化三线 GPIO 并解除写保护
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int ds1302_init(ds1302_handle_t *handle, hal_pin_t ce, hal_pin_t sclk, hal_pin_t io);
 

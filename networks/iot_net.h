@@ -53,8 +53,8 @@ typedef struct {
 } iot_net_time_t;
 
 /* 初始化 / 反初始化网络实现 */
-hal_status_t iot_net_init(void);
-hal_status_t iot_net_deinit(void);
+int iot_net_init(void);
+int iot_net_deinit(void);
 
 /*
  * 建立连接并分配 ID。
@@ -75,7 +75,7 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
                      uint32_t timeout);
 
 /* 关闭连接并释放 ID */
-hal_status_t iot_net_close(iot_net_id_t id);
+int iot_net_close(iot_net_id_t id);
 
 /*
  * 监听本地端口。
@@ -85,7 +85,7 @@ hal_status_t iot_net_close(iot_net_id_t id);
  * id   : 输出监听 ID。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；HAL_NOT_SUPPORTED；HAL_IO_ERROR；HAL_NO_MEMORY。
  */
-hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
+int iot_net_listen(iot_net_type_t type, const char *host,
                             uint16_t port, iot_net_id_t *id);
 
 /*
@@ -98,7 +98,7 @@ hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
  * timeout   : 等待超时毫秒数，0 表示不等待。
  * 返回      : HAL_OK；HAL_TIMEOUT；HAL_INVALID_PARAM；HAL_NOT_SUPPORTED；HAL_NO_MEMORY。
  */
-hal_status_t iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
+int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
                             char *peer_ip, uint32_t ip_size,
                             uint16_t *peer_port, uint32_t timeout);
 
@@ -124,10 +124,10 @@ int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
                          uint16_t *peer_port);
 
 /* 域名解析，输出点分十进制 IPv4 字符串 */
-hal_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size);
+int iot_net_gethostbyname(const char *name, char *ip, uint32_t size);
 
 /* 获取本机 IP 地址 */
-hal_status_t iot_net_getip(char *ip, uint32_t size);
+int iot_net_getip(char *ip, uint32_t size);
 
 /*
  * 获取本机 MAC 地址（小写、冒号分隔）。
@@ -135,10 +135,10 @@ hal_status_t iot_net_getip(char *ip, uint32_t size);
  * size : 缓冲区容量，建议不小于 IOT_NET_MAC_MAX。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；HAL_NOT_SUPPORTED；HAL_OVERFLOW。
  */
-hal_status_t iot_net_getmac(char *mac, uint32_t size);
+int iot_net_getmac(char *mac, uint32_t size);
 
 /* 获取网络时间 */
-hal_status_t iot_net_gettime(iot_net_time_t *time);
+int iot_net_gettime(iot_net_time_t *time);
 
 #ifdef __cplusplus
 }

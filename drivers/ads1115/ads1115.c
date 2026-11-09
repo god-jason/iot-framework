@@ -35,7 +35,7 @@ static int ads1115_read_config(ads1115_handle_t *handle, uint16_t *config)
 }
 
 static uint16_t ads1115_build_config(const ads1115_handle_t *handle,
-                                     ads1115_mux_t mux, bool start)
+                                     ads1115_mux_e mux, bool start)
 {
     uint16_t config;
 
@@ -116,7 +116,7 @@ int ads1115_deinit(ads1115_handle_t *handle)
     return DRIVER_OK;
 }
 
-int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_t pga)
+int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_e pga)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)pga > (uint16_t)ADS1115_PGA_0V256) {
         return (int)HAL_INVALID_PARAM;
@@ -125,7 +125,7 @@ int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_t pga)
     return DRIVER_OK;
 }
 
-int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_t data_rate)
+int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_e data_rate)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)data_rate > (uint16_t)ADS1115_DR_860) {
         return (int)HAL_INVALID_PARAM;
@@ -134,7 +134,7 @@ int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_t data_rate)
     return DRIVER_OK;
 }
 
-int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_t mux, int16_t *raw)
+int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_e mux, int16_t *raw)
 {
     uint16_t config;
     uint32_t start;
@@ -185,7 +185,7 @@ int ads1115_read_voltage(ads1115_handle_t *handle, uint8_t channel, float *volts
         return (int)HAL_INVALID_PARAM;
     }
 
-    ret = ads1115_read_raw(handle, (ads1115_mux_t)((uint16_t)ADS1115_MUX_SINGLE_0 + channel), &raw);
+    ret = ads1115_read_raw(handle, (ads1115_mux_e)((uint16_t)ADS1115_MUX_SINGLE_0 + channel), &raw);
     if (ret != DRIVER_OK) {
         return ret;
     }
@@ -206,7 +206,7 @@ int ads1115_read(ads1115_handle_t *handle, int16_t *values, size_t count)
 
     for (i = 0U; i < count; i++) {
         int ret = ads1115_read_raw(handle,
-                                   (ads1115_mux_t)((uint16_t)ADS1115_MUX_SINGLE_0 + i),
+                                   (ads1115_mux_e)((uint16_t)ADS1115_MUX_SINGLE_0 + i),
                                    &values[i]);
         if (ret != DRIVER_OK) {
             return ret;

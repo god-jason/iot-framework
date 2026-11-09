@@ -19,11 +19,11 @@ typedef enum {
     SHT30_REPEAT_HIGH = 0,
     SHT30_REPEAT_MEDIUM,
     SHT30_REPEAT_LOW
-} sht30_repeatability_t;
+} sht30_repeatability_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    sht30_repeatability_t repeatability;
+    sht30_repeatability_e repeatability;
     bool crc_enabled;
     bool initialized;
 } sht30_handle_t;

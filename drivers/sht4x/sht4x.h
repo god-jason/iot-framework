@@ -19,11 +19,11 @@ typedef enum {
     SHT4X_REPEAT_HIGH = 0,
     SHT4X_REPEAT_MEDIUM,
     SHT4X_REPEAT_LOW
-} sht4x_repeatability_t;
+} sht4x_repeatability_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    sht4x_repeatability_t repeatability;
+    sht4x_repeatability_e repeatability;
     bool crc_enabled;
     bool initialized;
 } sht4x_handle_t;
@@ -41,7 +41,7 @@ int sht4x_deinit(sht4x_handle_t *handle);
 int sht4x_soft_reset(sht4x_handle_t *handle);
 
 /** @brief 设置测量重复性（影响转换时间与噪声） */
-int sht4x_set_repeatability(sht4x_handle_t *handle, sht4x_repeatability_t repeatability);
+int sht4x_set_repeatability(sht4x_handle_t *handle, sht4x_repeatability_e repeatability);
 
 /**
  * @brief  单次测量并读取温度/湿度

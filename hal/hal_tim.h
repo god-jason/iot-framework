@@ -20,7 +20,7 @@ typedef enum {
     HAL_TIM_COUNTER_UP = 0,    /* 向上计数 */
     HAL_TIM_COUNTER_DOWN,      /* 向下计数 */
     HAL_TIM_COUNTER_CENTER     /* 中心对齐（上下交替） */
-} hal_tim_counter_t;
+} hal_tim_counter_e;
 
 /* 定时器事件 */
 typedef enum {
@@ -28,14 +28,14 @@ typedef enum {
     HAL_TIM_EVENT_COMPARE,     /* 比较匹配 */
     HAL_TIM_EVENT_CAPTURE,     /* 输入捕获 */
     HAL_TIM_EVENT_UPDATE       /* 更新事件 */
-} hal_tim_event_t;
+} hal_tim_event_e;
 
 /* 定时器配置 */
 typedef struct {
     uint32_t prescaler;             /* 预分频系数，计数频率 = 定时器时钟 / (prescaler + 1) */
     uint32_t period;                /* 自动重载值，决定计数周期 */
 
-    hal_tim_counter_t counter_mode;/* 计数模式 */
+    hal_tim_counter_e counter_mode;/* 计数模式 */
 
     uint8_t clock_division;         /* 时钟分频档位编号（平台定义），0 表示不分频 */
 } hal_tim_config_t;
@@ -56,29 +56,29 @@ typedef struct hal_tim {
  * config : 配置，不可为 NULL；period 需大于 0。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；计数模式不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_tim_init(hal_tim_t *handle, const hal_tim_config_t *config);
+int hal_tim_init(hal_tim_t *handle, const hal_tim_config_t *config);
 
 /* 反初始化定时器；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_tim_deinit(hal_tim_t *handle);
+int hal_tim_deinit(hal_tim_t *handle);
 
 /* 启动计数（轮询方式）；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_tim_start(hal_tim_t *handle);
+int hal_tim_start(hal_tim_t *handle);
 
 /* 停止计数；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_tim_stop(hal_tim_t *handle);
+int hal_tim_stop(hal_tim_t *handle);
 
 /* 启动计数并使能更新中断（事件通过 callback 上报） */
-hal_status_t hal_tim_start_it(hal_tim_t *handle);
+int hal_tim_start_it(hal_tim_t *handle);
 
 /* 停止计数并关闭更新中断 */
-hal_status_t hal_tim_stop_it(hal_tim_t *handle);
+int hal_tim_stop_it(hal_tim_t *handle);
 
 /*
  * 运行期修改自动重载值。
  * period : 新的周期值；0 在部分平台会被硬件解释为最大值，需注意。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_tim_set_period(hal_tim_t *handle, uint32_t period);
+int hal_tim_set_period(hal_tim_t *handle, uint32_t period);
 
 /*
  * 运行期修改预分频。
@@ -86,14 +86,14 @@ hal_status_t hal_tim_set_period(hal_tim_t *handle, uint32_t period);
  * 返回      : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  * 注意      : 新分频通常在下一个更新事件生效。
  */
-hal_status_t hal_tim_set_prescaler(hal_tim_t *handle, uint32_t prescaler);
+int hal_tim_set_prescaler(hal_tim_t *handle, uint32_t prescaler);
 
 /*
  * 直接写入计数器当前值。
  * counter : 目标计数值，超出 period 时行为由硬件决定。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_tim_set_counter(hal_tim_t *handle, uint32_t counter);
+int hal_tim_set_counter(hal_tim_t *handle, uint32_t counter);
 
 /*
  * 读取计数器当前值。
@@ -113,11 +113,11 @@ typedef enum {
     HAL_ENCODER_MODE_TI1 = 0,  /* 仅 TI1 计数（单相） */
     HAL_ENCODER_MODE_TI2,      /* 仅 TI2 计数（单相） */
     HAL_ENCODER_MODE_TI12      /* TI1 与 TI2 正交解码（四倍频） */
-} hal_encoder_mode_t;
+} hal_encoder_mode_e;
 
 /* 编码器配置 */
 typedef struct {
-    hal_encoder_mode_t mode;   /* 计数模式 */
+    hal_encoder_mode_e mode;   /* 计数模式 */
 
     uint32_t period;            /* 计数上限（自动重载值），到达后回绕 */
     uint32_t filter;            /* 输入滤波长度，0 表示不滤波 */
@@ -137,14 +137,14 @@ typedef struct hal_encoder {
  * config : 配置，不可为 NULL；period 需大于 0。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；模式不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_encoder_init(hal_encoder_t *handle,
+int hal_encoder_init(hal_encoder_t *handle,
                                 const hal_encoder_config_t *config);
 
 /* 启动计数；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_encoder_start(hal_encoder_t *handle);
+int hal_encoder_start(hal_encoder_t *handle);
 
 /* 停止计数并保持当前值；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_encoder_stop(hal_encoder_t *handle);
+int hal_encoder_stop(hal_encoder_t *handle);
 
 /*
  * 读取当前计数值（带符号，已按 reverse 处理方向）。
@@ -158,7 +158,7 @@ int32_t hal_encoder_get_count(hal_encoder_t *handle);
  * count : 目标计数值（带符号）。
  * 返回  : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_encoder_set_count(hal_encoder_t *handle, int32_t count);
+int hal_encoder_set_count(hal_encoder_t *handle, int32_t count);
 
 #ifdef __cplusplus
 }

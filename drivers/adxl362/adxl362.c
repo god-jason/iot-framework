@@ -49,7 +49,7 @@ int adxl362_get_status(adxl362_handle_t *handle, uint8_t *status)
 }
 
 int adxl362_init(adxl362_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
-                 adxl362_range_t range, adxl362_odr_t odr)
+                 adxl362_range_e range, adxl362_odr_e odr)
 {
     uint8_t id[ADXL362_ID_LEN];
     uint8_t value;

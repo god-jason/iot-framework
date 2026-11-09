@@ -41,7 +41,7 @@ int adxl375_get_status(adxl375_handle_t *handle, uint8_t *int_source)
 }
 
 int adxl375_init(adxl375_handle_t *handle, hal_i2c_t *i2c,
-                 hal_spi_t *spi, hal_pin_t cs, uint16_t address, adxl375_odr_t odr)
+                 hal_spi_t *spi, hal_pin_t cs, uint16_t address, adxl375_odr_e odr)
 {
     uint8_t id = 0U;
     uint8_t check = 0U;

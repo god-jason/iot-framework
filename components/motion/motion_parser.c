@@ -482,7 +482,7 @@ int motion_parser_parse_value(const char *text, motion_value_t *value)
  * 返回：推断出的单位；无法推断时返回 MOTION_UNIT_NONE。
  * 说明：仅在参数未显式书写单位时调用，让 "SPEED 1000" 这类写法
  *       也能按语义（step/s、Hz、% 等）解释。 */
-static motion_unit_t default_unit(motion_cmd_t command, const char *action,
+static motion_unit_e default_unit(motion_cmd_e command, const char *action,
                                  const char *key)
 {
     if (key == NULL) {
@@ -543,13 +543,13 @@ static int add_param(motion_instruction_t *instruction, const char *name,
  * 参数：p 游标位置；instruction 目标指令（追加参数）。
  * 返回：MOTION_PARSE_OK 结束；INVALID 语法错误；OVERFLOW 参数超限。
  * 说明：允许空子句（直接 '\0'）与多余逗号；解析结束后必须到达行尾。 */
-static motion_parse_result_t parse_param_clauses(const char *p,
+static motion_parse_result_e parse_param_clauses(const char *p,
                                                  motion_instruction_t *instruction)
 {
     for (;;) {
         char key[24];
         motion_value_t value;
-        motion_unit_t unit;
+        motion_unit_e unit;
 
         p = skip_ws(p);
         if (*p == '\0') {
@@ -601,8 +601,8 @@ static motion_parse_result_t parse_param_clauses(const char *p,
  *   - 其他指令动作名之后若紧跟非逗号内容，则视为不带参数名的内联值，
  *     以 "VALUE" 作为参数名保存（如 "PWM 0 START 1000"）；
  *   - 剩余逗号分隔部分交给 parse_param_clauses 处理。 */
-static motion_parse_result_t parse_device_line(const char *p,
-                                               motion_cmd_t command,
+static motion_parse_result_e parse_device_line(const char *p,
+                                               motion_cmd_e command,
                                                motion_instruction_t *instruction)
 {
     char action[16];
@@ -680,7 +680,7 @@ static motion_parse_result_t parse_device_line(const char *p,
  *       WAIT ALL [, 参数...]
  *       WAIT JOB <名称> [, 参数...]
  * 说明：WAIT TIME 缺省单位为毫秒；目标关键字区分大小写不敏感（已转大写）。 */
-static motion_parse_result_t parse_wait_line(const char *p,
+static motion_parse_result_e parse_wait_line(const char *p,
                                              motion_instruction_t *instruction)
 {
     char target[16];
@@ -787,7 +787,7 @@ static void copy_expression(const char *p, char *out, size_t size)
  * 返回：MOTION_PARSE_OK 成功；MOTION_PARSE_INVALID 缺少 '$'、变量名或 '='，
  *       或等号右侧为空。
  * 说明：变量名存入 instruction->name，右侧原文存入 expression 供求值使用。 */
-static motion_parse_result_t parse_set_line(const char *p,
+static motion_parse_result_e parse_set_line(const char *p,
                                             motion_instruction_t *instruction)
 {
     char name[MOTION_MAX_VAR_NAME];
@@ -828,7 +828,7 @@ static motion_parse_result_t parse_set_line(const char *p,
  *   - line 长度 >= MOTION_MAX_LINE 直接判为 OVERFLOW，避免截断后语义错误；
  *   - 复制到栈缓冲后再去注释、去尾空白，因此不修改调用方文本；
  *   - 命令关键字大小写不敏感（read_word 已统一转大写）。 */
-motion_parse_result_t motion_parser_parse(const char *line,
+motion_parse_result_e motion_parser_parse(const char *line,
                                           motion_instruction_t *instruction)
 {
     char buffer[MOTION_MAX_LINE]; /* 预处理用栈缓冲，最大 256 字节 */
@@ -1067,7 +1067,7 @@ motion_parse_result_t motion_parser_parse(const char *line,
 /* 把解析结果码转换成可读文本。
  * 参数：result 解析结果码。
  * 返回：静态常量字符串，调用方不得修改或释放。 */
-const char *motion_parse_result_message(motion_parse_result_t result)
+const char *motion_parse_result_message(motion_parse_result_e result)
 {
     switch (result) {
     case MOTION_PARSE_OK:

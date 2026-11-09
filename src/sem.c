@@ -10,7 +10,7 @@
 #include "iot.h"
 #include "port.h"
 
-iot_status_t iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
+int iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
 {
     if (sem == NULL) {
         LOG_E(IOT_TAG, "sem_init: null sem");
@@ -25,7 +25,7 @@ iot_status_t iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
     return IOT_OK;
 }
 
-iot_status_t iot_sem_take(iot_sem_t *sem, uint32_t timeout)
+int iot_sem_take(iot_sem_t *sem, uint32_t timeout)
 {
     if (!IOT_OBJ_VALID(sem)) {
         LOG_E(IOT_TAG, "sem_take: invalid sem");
@@ -50,7 +50,7 @@ iot_status_t iot_sem_take(iot_sem_t *sem, uint32_t timeout)
     return iot_block_current(&sem->wait, timeout);
 }
 
-iot_status_t iot_sem_give(iot_sem_t *sem)
+int iot_sem_give(iot_sem_t *sem)
 {
     iot_task_t *task;
 

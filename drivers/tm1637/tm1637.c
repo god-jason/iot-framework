@@ -7,12 +7,12 @@ static void tm1637_delay(void)
     driver_delay_us(TM1637_DELAY_US);
 }
 
-static int tm1637_dio(tm1637_handle_t *handle, hal_gpio_level_t level)
+static int tm1637_dio(tm1637_handle_t *handle, hal_gpio_level_e level)
 {
     return driver_gpio_write(handle->config.dio, level);
 }
 
-static int tm1637_clk(tm1637_handle_t *handle, hal_gpio_level_t level)
+static int tm1637_clk(tm1637_handle_t *handle, hal_gpio_level_e level)
 {
     return driver_gpio_write(handle->config.clk, level);
 }

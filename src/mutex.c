@@ -12,7 +12,7 @@
 #include "iot.h"
 #include "port.h"
 
-iot_status_t iot_mutex_init(iot_mutex_t *mutex)
+int iot_mutex_init(iot_mutex_t *mutex)
 {
     if (mutex == NULL) {
         LOG_E(IOT_TAG, "mutex_init: null mutex");
@@ -27,7 +27,7 @@ iot_status_t iot_mutex_init(iot_mutex_t *mutex)
     return IOT_OK;
 }
 
-iot_status_t iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
+int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
 {
     if (!IOT_OBJ_VALID(mutex)) {
         LOG_E(IOT_TAG, "mutex_lock: invalid mutex");
@@ -55,7 +55,7 @@ iot_status_t iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
     return iot_block_current(&mutex->wait, timeout);
 }
 
-iot_status_t iot_mutex_unlock(iot_mutex_t *mutex)
+int iot_mutex_unlock(iot_mutex_t *mutex)
 {
     iot_task_t *task;
 

@@ -37,7 +37,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示默认 0x33
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int mlx90640_init(mlx90640_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 

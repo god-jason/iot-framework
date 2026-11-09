@@ -2,7 +2,7 @@
 #include "opt3001_register.h"
 #include "log.h"
 
-static uint32_t opt3001_conv_delay_ms(opt3001_conv_time_t conv_time)
+static uint32_t opt3001_conv_delay_ms(opt3001_conv_time_e conv_time)
 {
     return (conv_time == OPT3001_CONV_800MS) ? OPT3001_DELAY_800MS : OPT3001_DELAY_100MS;
 }
@@ -96,7 +96,7 @@ int opt3001_deinit(opt3001_handle_t *handle)
     return DRIVER_OK;
 }
 
-int opt3001_set_conversion_time(opt3001_handle_t *handle, opt3001_conv_time_t conv_time)
+int opt3001_set_conversion_time(opt3001_handle_t *handle, opt3001_conv_time_e conv_time)
 {
     int ret;
 

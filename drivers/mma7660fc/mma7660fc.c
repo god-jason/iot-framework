@@ -22,7 +22,7 @@ static int16_t mma7660fc_decode(uint8_t raw)
     return value;
 }
 
-int mma7660fc_set_sample_rate(mma7660fc_handle_t *handle, mma7660fc_sample_rate_t sample_rate)
+int mma7660fc_set_sample_rate(mma7660fc_handle_t *handle, mma7660fc_sample_rate_e sample_rate)
 {
     uint8_t check = 0U;
     bool was_active;
@@ -56,7 +56,7 @@ int mma7660fc_set_sample_rate(mma7660fc_handle_t *handle, mma7660fc_sample_rate_
 }
 
 int mma7660fc_init(mma7660fc_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                   mma7660fc_sample_rate_t sample_rate)
+                   mma7660fc_sample_rate_e sample_rate)
 {
     uint8_t check = 0U;
     if (handle == NULL || i2c == NULL ||

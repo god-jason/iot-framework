@@ -105,14 +105,14 @@ static iot_mqtt_message_cb_t s_callback;
 static void *s_user_data;
 static bool s_connected;
 
-hal_status_t iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
+int iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
 {
     s_callback = callback;
     s_user_data = user_data;
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_deinit(void)
+int iot_mqtt_deinit(void)
 {
     if (s_connected) {
         (void)ml307_mqtt_disconnect();
@@ -123,7 +123,7 @@ hal_status_t iot_mqtt_deinit(void)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_connect(const iot_mqtt_config_t *config)
+int iot_mqtt_connect(const iot_mqtt_config_t *config)
 {
     if (config == NULL || config->host == NULL || config->host[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -137,7 +137,7 @@ hal_status_t iot_mqtt_connect(const iot_mqtt_config_t *config)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_disconnect(void)
+int iot_mqtt_disconnect(void)
 {
     if (ml307_mqtt_disconnect() != 0) {
         return HAL_IO_ERROR;
@@ -146,7 +146,7 @@ hal_status_t iot_mqtt_disconnect(void)
     return HAL_OK;
 }
 
-hal_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos)
+int iot_mqtt_subscribe(const char *topic, uint8_t qos)
 {
     if (topic == NULL || topic[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -154,7 +154,7 @@ hal_status_t iot_mqtt_subscribe(const char *topic, uint8_t qos)
     return (ml307_mqtt_subscribe(topic, qos) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-hal_status_t iot_mqtt_unsubscribe(const char *topic)
+int iot_mqtt_unsubscribe(const char *topic)
 {
     if (topic == NULL || topic[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -162,7 +162,7 @@ hal_status_t iot_mqtt_unsubscribe(const char *topic)
     return (ml307_mqtt_unsubscribe(topic) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-hal_status_t iot_mqtt_publish(const iot_mqtt_message_t *message)
+int iot_mqtt_publish(const iot_mqtt_message_t *message)
 {
     if (message == NULL || message->topic[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -175,7 +175,7 @@ hal_status_t iot_mqtt_publish(const iot_mqtt_message_t *message)
                                message->retain) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-hal_status_t iot_mqtt_process(void)
+int iot_mqtt_process(void)
 {
     return HAL_OK;
 }

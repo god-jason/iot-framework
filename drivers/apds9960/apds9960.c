@@ -2,7 +2,7 @@
 #include "apds9960_register.h"
 #include "log.h"
 
-static uint8_t apds9960_again_code(apds9960_gain_t gain)
+static uint8_t apds9960_again_code(apds9960_gain_e gain)
 {
     switch (gain) {
     case APDS9960_AGAIN_4X:
@@ -146,7 +146,7 @@ int apds9960_set_atime(apds9960_handle_t *handle, uint8_t atime)
     return DRIVER_OK;
 }
 
-int apds9960_set_als_gain(apds9960_handle_t *handle, apds9960_gain_t gain)
+int apds9960_set_als_gain(apds9960_handle_t *handle, apds9960_gain_e gain)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

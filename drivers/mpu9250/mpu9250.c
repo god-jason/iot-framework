@@ -90,8 +90,8 @@ int mpu9250_set_sample_rate(mpu9250_handle_t *handle, uint16_t rate_hz)
 }
 
 int mpu9250_init(mpu9250_handle_t *handle, hal_i2c_t *i2c, hal_spi_t *spi,
-                 hal_pin_t cs, uint16_t address, mpu9250_accel_range_t accel_range,
-                 mpu9250_gyro_range_t gyro_range)
+                 hal_pin_t cs, uint16_t address, mpu9250_accel_range_e accel_range,
+                 mpu9250_gyro_range_e gyro_range)
 {
     uint8_t id = 0U, check = 0U;
     uint8_t bypass = MPU9250_INT_PIN_BYPASS_EN;

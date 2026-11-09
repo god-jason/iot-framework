@@ -37,7 +37,7 @@ extern "C" {
  *   MOTION_EXEC_ABORT    - 中止执行。
  * 注意：返回 ERROR 时由 VM 决定是否转入 ON ERROR 处理器。
  */
-motion_exec_result_t motion_executor_execute(
+motion_exec_result_e motion_executor_execute(
     motion_vm_t *vm, const motion_instruction_t *instruction);
 
 #ifdef __cplusplus

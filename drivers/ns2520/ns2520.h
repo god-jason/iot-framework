@@ -32,7 +32,7 @@ typedef enum {
     NS2520_RANGE_8G,            /* 4 mg/digit  */
     NS2520_RANGE_16G,           /* 12 mg/digit */
     NS2520_RANGE_COUNT
-} ns2520_range_t;
+} ns2520_range_e;
 
 typedef enum {
     NS2520_ODR_1HZ = 0,
@@ -43,7 +43,7 @@ typedef enum {
     NS2520_ODR_200HZ,
     NS2520_ODR_400HZ,
     NS2520_ODR_COUNT
-} ns2520_odr_t;
+} ns2520_odr_e;
 
 typedef struct {
     float x;
@@ -53,8 +53,8 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    ns2520_range_t range;
-    ns2520_odr_t odr;
+    ns2520_range_e range;
+    ns2520_odr_e odr;
     float g_per_lsb;        /* 当前量程灵敏度，g/LSB */
     bool initialized;
 } ns2520_handle_t;
@@ -64,7 +64,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x18
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int ns2520_init(ns2520_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -78,10 +78,10 @@ int ns2520_read_raw(ns2520_handle_t *handle, int16_t accel[3]);
 int ns2520_read(ns2520_handle_t *handle, ns2520_accel_t *accel);
 
 /** @brief 设置量程（重新写 CTRL_REG4，同步更新灵敏度） */
-int ns2520_set_range(ns2520_handle_t *handle, ns2520_range_t range);
+int ns2520_set_range(ns2520_handle_t *handle, ns2520_range_e range);
 
 /** @brief 设置输出率（重新写 CTRL_REG1） */
-int ns2520_set_output_rate(ns2520_handle_t *handle, ns2520_odr_t odr);
+int ns2520_set_output_rate(ns2520_handle_t *handle, ns2520_odr_e odr);
 
 #ifdef __cplusplus
 }

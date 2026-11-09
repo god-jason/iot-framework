@@ -7,7 +7,7 @@
  * 输入 + 上拉释放总线（由外部上拉拉高）并读取从机电平。
  * 不依赖开漏输出，可移植到没有 OD 能力的端口（如 AVR）。
  */
-static int dht22_mode(dht22_handle_t *handle, hal_gpio_mode_t mode)
+static int dht22_mode(dht22_handle_t *handle, hal_gpio_mode_e mode)
 {
     hal_gpio_config_t cfg;
 
@@ -24,7 +24,7 @@ static int dht22_mode(dht22_handle_t *handle, hal_gpio_mode_t mode)
 /* 采样数据线：1 高 / 0 低，负值为错误码 */
 static int dht22_line(dht22_handle_t *handle)
 {
-    hal_gpio_level_t level = HAL_GPIO_LOW;
+    hal_gpio_level_e level = HAL_GPIO_LOW;
 
     if (hal_gpio_read(handle->pin, &level) != HAL_OK) {
         return (int)HAL_IO_ERROR;

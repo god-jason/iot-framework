@@ -20,11 +20,11 @@ typedef enum {
     PCF8591_MODE_3_DIFFERENTIAL,       /* 3 路差分 */
     PCF8591_MODE_MIXED,                /* 2 单端 + 1 差分 */
     PCF8591_MODE_2_DIFFERENTIAL        /* 2 路差分 */
-} pcf8591_input_mode_t;
+} pcf8591_input_mode_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    pcf8591_input_mode_t input_mode;
+    pcf8591_input_mode_e input_mode;
     uint8_t channel;            /* 当前通道 0~3 */
     bool auto_increment;        /* 读操作后通道自动递增 */
     bool dac_enabled;           /* 是否使能模拟输出 */
@@ -37,7 +37,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址（0x48~0x4F），传 0 使用 0x48
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int pcf8591_init(pcf8591_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -45,7 +45,7 @@ int pcf8591_init(pcf8591_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int pcf8591_deinit(pcf8591_handle_t *handle);
 
 /** @brief 设置输入模式（写控制字节） */
-int pcf8591_set_input_mode(pcf8591_handle_t *handle, pcf8591_input_mode_t mode);
+int pcf8591_set_input_mode(pcf8591_handle_t *handle, pcf8591_input_mode_e mode);
 
 /** @brief 设置当前通道（0~3） */
 int pcf8591_set_channel(pcf8591_handle_t *handle, uint8_t channel);

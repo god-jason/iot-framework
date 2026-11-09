@@ -31,7 +31,7 @@ typedef enum {
     LIS2DH12_RANGE_8G,          /* 4 mg/digit  */
     LIS2DH12_RANGE_16G,         /* 12 mg/digit */
     LIS2DH12_RANGE_COUNT
-} lis2dh12_range_t;
+} lis2dh12_range_e;
 
 typedef enum {
     LIS2DH12_ODR_1HZ = 0,
@@ -42,7 +42,7 @@ typedef enum {
     LIS2DH12_ODR_200HZ,
     LIS2DH12_ODR_400HZ,
     LIS2DH12_ODR_COUNT
-} lis2dh12_odr_t;
+} lis2dh12_odr_e;
 
 typedef struct {
     float x;
@@ -52,8 +52,8 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    lis2dh12_range_t range;
-    lis2dh12_odr_t odr;
+    lis2dh12_range_e range;
+    lis2dh12_odr_e odr;
     float g_per_lsb;        /* 当前量程灵敏度，g/LSB */
     bool initialized;
 } lis2dh12_handle_t;
@@ -63,7 +63,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x18
- * @return 0 成功，负值为 hal_status_t（-11 表示 WHO_AM_I 不匹配）
+ * @return 0 成功，负值为 HAL 状态码（-11 表示 WHO_AM_I 不匹配）
  */
 int lis2dh12_init(lis2dh12_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -77,10 +77,10 @@ int lis2dh12_read_raw(lis2dh12_handle_t *handle, int16_t accel[3]);
 int lis2dh12_read(lis2dh12_handle_t *handle, lis2dh12_accel_t *accel);
 
 /** @brief 设置量程（重新写 CTRL_REG4，同步更新灵敏度） */
-int lis2dh12_set_range(lis2dh12_handle_t *handle, lis2dh12_range_t range);
+int lis2dh12_set_range(lis2dh12_handle_t *handle, lis2dh12_range_e range);
 
 /** @brief 设置输出率（重新写 CTRL_REG1） */
-int lis2dh12_set_output_rate(lis2dh12_handle_t *handle, lis2dh12_odr_t odr);
+int lis2dh12_set_output_rate(lis2dh12_handle_t *handle, lis2dh12_odr_e odr);
 
 #ifdef __cplusplus
 }

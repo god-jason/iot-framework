@@ -27,7 +27,7 @@ typedef int (*modbus_transport_fn)(void *ctx, const uint8_t *tx, uint32_t tx_len
                                    uint32_t *rx_len, uint32_t timeout_ms);
 
 typedef struct {
-    modbus_mode_t mode;         /* 传输模式：RTU 或 TCP */
+    modbus_mode_e mode;         /* 传输模式：RTU 或 TCP */
     uint8_t address;            /* 从站地址 */
     uint16_t transaction_id;    /* TCP 事务号，自动递增 */
     uint32_t timeout_ms;        /* 单帧响应超时（毫秒） */
@@ -46,7 +46,7 @@ typedef struct {
  *       （可传 NULL，稍后设置）；user 回调上下文；timeout_ms 超时时间。
  * 返回：0 成功；MODBUS_ERR_PARAM 表示 master 为空。
  */
-int modbus_master_init(modbus_master_t *master, modbus_mode_t mode, uint8_t address,
+int modbus_master_init(modbus_master_t *master, modbus_mode_e mode, uint8_t address,
                        modbus_transport_fn transport, void *user, uint32_t timeout_ms);
 
 /* 运行时替换收发回调及其上下文（常用于链路切换）。 */

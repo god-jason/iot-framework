@@ -20,11 +20,11 @@ typedef enum {
     HAL_CRC_WIDTH_8 = 8,       /* 8 位 CRC */
     HAL_CRC_WIDTH_16 = 16,     /* 16 位 CRC */
     HAL_CRC_WIDTH_32 = 32      /* 32 位 CRC */
-} hal_crc_width_t;
+} hal_crc_width_e;
 
 /* CRC 配置 */
 typedef struct {
-    hal_crc_width_t width;     /* 校验位宽 */
+    hal_crc_width_e width;     /* 校验位宽 */
 
     uint32_t polynomial;        /* 生成多项式，按位宽取低 N 位 */
     uint32_t initial_value;     /* 初始值 */
@@ -47,13 +47,13 @@ typedef struct hal_crc {
  * config : 配置，不可为 NULL；多项式需与位宽匹配。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；位宽不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_crc_init(hal_crc_t *handle, const hal_crc_config_t *config);
+int hal_crc_init(hal_crc_t *handle, const hal_crc_config_t *config);
 
 /*
  * 复位 CRC 内部状态到 initial_value，用于开始一次新的分段计算。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_crc_reset(hal_crc_t *handle);
+int hal_crc_reset(hal_crc_t *handle);
 
 /*
  * 计算一段数据的 CRC。
@@ -62,11 +62,11 @@ hal_status_t hal_crc_reset(hal_crc_t *handle);
  * result : 输出结果，不可为 NULL。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_crc_calculate(hal_crc_t *handle, const void *data,
+int hal_crc_calculate(hal_crc_t *handle, const void *data,
                                  size_t length, uint32_t *result);
 
 /* 反初始化 CRC 单元；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_crc_deinit(hal_crc_t *handle);
+int hal_crc_deinit(hal_crc_t *handle);
 
 #ifdef __cplusplus
 }

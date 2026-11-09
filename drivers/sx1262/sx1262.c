@@ -111,7 +111,7 @@ int sx1262_set_modulation(sx1262_handle_t *h, uint8_t sf, uint32_t bw_hz, uint8_
     return DRIVER_OK;
 }
 
-int sx1262_set_mode(sx1262_handle_t *h, sx1262_mode_t mode)
+int sx1262_set_mode(sx1262_handle_t *h, sx1262_mode_e mode)
 {
     uint8_t p[3] = { 0U, 0U, 0U };
     SX126X_CHECK(h);
@@ -222,7 +222,7 @@ int sx1262_poll(sx1262_handle_t *h, uint8_t *data, size_t len, size_t *received)
 
 int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
                         hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1,
-                        sx1262_variant_t variant)
+                        sx1262_variant_e variant)
 {
     uint8_t p[8];
     if (handle == NULL || spi == NULL || busy == 0U || reset == 0U) {

@@ -51,17 +51,17 @@ typedef struct hal_qspi {
  * config : 配置，不可为 NULL。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；频率/线数不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_qspi_init(hal_qspi_t *handle, const hal_qspi_config_t *config);
+int hal_qspi_init(hal_qspi_t *handle, const hal_qspi_config_t *config);
 
 /* 反初始化 QSPI；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_qspi_deinit(hal_qspi_t *handle);
+int hal_qspi_deinit(hal_qspi_t *handle);
 
 /*
  * 下发一条 QSPI 命令帧（指令/地址/空周期阶段）。
  * command : 命令描述，不可为 NULL；data_length 非 0 时数据阶段由后续收发接口完成。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；总线忙返回 HAL_BUSY。
  */
-hal_status_t hal_qspi_command(hal_qspi_t *handle, const hal_qspi_command_t *command);
+int hal_qspi_command(hal_qspi_t *handle, const hal_qspi_command_t *command);
 
 /*
  * 阻塞发送数据。
@@ -70,21 +70,21 @@ hal_status_t hal_qspi_command(hal_qspi_t *handle, const hal_qspi_command_t *comm
  * timeout : 最大等待毫秒数。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT。
  */
-hal_status_t hal_qspi_transmit(hal_qspi_t *handle, const void *data,
+int hal_qspi_transmit(hal_qspi_t *handle, const void *data,
                                  size_t length, uint32_t timeout);
 
 /* 阻塞接收数据；data 缓冲区不可为 NULL，语义同 transmit */
-hal_status_t hal_qspi_receive(hal_qspi_t *handle, void *data,
+int hal_qspi_receive(hal_qspi_t *handle, void *data,
                                 size_t length, uint32_t timeout);
 
 /*
  * 进入内存映射模式，之后外部 Flash 可直接按地址读取。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；平台不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_qspi_memory_map(hal_qspi_t *handle);
+int hal_qspi_memory_map(hal_qspi_t *handle);
 
 /* 退出内存映射模式；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_qspi_memory_unmap(hal_qspi_t *handle);
+int hal_qspi_memory_unmap(hal_qspi_t *handle);
 
 #ifdef __cplusplus
 }

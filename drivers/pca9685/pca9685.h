@@ -25,7 +25,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址（0x40~0x7F），传 0 使用 0x40
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  * @note   init 不改变 prescale；默认频率为芯片复位值（约 200Hz），
  *         需要其他频率请调用 pca9685_set_pwm_freq。
  */

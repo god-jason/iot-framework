@@ -34,7 +34,7 @@ typedef enum {
     MPU6050_ACCEL_RANGE_8G,         /*  4096 LSB/g */
     MPU6050_ACCEL_RANGE_16G,        /*  2048 LSB/g */
     MPU6050_ACCEL_RANGE_COUNT
-} mpu6050_accel_range_t;
+} mpu6050_accel_range_e;
 
 typedef enum {
     MPU6050_GYRO_RANGE_250DPS = 0,  /* 131.0 LSB/(°/s) */
@@ -42,7 +42,7 @@ typedef enum {
     MPU6050_GYRO_RANGE_1000DPS,     /*  32.8 LSB/(°/s) */
     MPU6050_GYRO_RANGE_2000DPS,     /*  16.4 LSB/(°/s) */
     MPU6050_GYRO_RANGE_COUNT
-} mpu6050_gyro_range_t;
+} mpu6050_gyro_range_e;
 
 typedef enum {
     MPU6050_DLPF_BW_260HZ = 0,
@@ -52,7 +52,7 @@ typedef enum {
     MPU6050_DLPF_BW_21HZ,
     MPU6050_DLPF_BW_10HZ,
     MPU6050_DLPF_BW_5HZ
-} mpu6050_dlpf_t;
+} mpu6050_dlpf_e;
 
 typedef struct {
     float x;
@@ -68,9 +68,9 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    mpu6050_accel_range_t accel_range;
-    mpu6050_gyro_range_t gyro_range;
-    mpu6050_dlpf_t dlpf;
+    mpu6050_accel_range_e accel_range;
+    mpu6050_gyro_range_e gyro_range;
+    mpu6050_dlpf_e dlpf;
     float accel_lsb_per_g;          /* 当前量程灵敏度 */
     float gyro_lsb_per_dps;
     bool initialized;
@@ -83,10 +83,10 @@ typedef struct {
  * @param  address      7 位从机地址，0 表示使用默认 0x68
  * @param  accel_range  加速度量程
  * @param  gyro_range   陀螺量程
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int mpu6050_init(mpu6050_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                 mpu6050_accel_range_t accel_range, mpu6050_gyro_range_t gyro_range);
+                 mpu6050_accel_range_e accel_range, mpu6050_gyro_range_e gyro_range);
 
 /** @brief 反初始化：进入睡眠并复位句柄状态（不关闭总线） */
 int mpu6050_deinit(mpu6050_handle_t *handle);
@@ -107,7 +107,7 @@ int mpu6050_read_raw(mpu6050_handle_t *handle, int16_t accel[3], int16_t gyro[3]
 int mpu6050_set_sample_rate(mpu6050_handle_t *handle, uint16_t rate_hz);
 
 /** @brief 配置数字低通带宽（同时决定陀螺仪内部采样率） */
-int mpu6050_set_dlpf(mpu6050_handle_t *handle, mpu6050_dlpf_t dlpf);
+int mpu6050_set_dlpf(mpu6050_handle_t *handle, mpu6050_dlpf_e dlpf);
 
 /** @brief 读取中断状态寄存器（bit0 为数据就绪） */
 int mpu6050_get_status(mpu6050_handle_t *handle, uint8_t *int_status);

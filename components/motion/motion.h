@@ -56,7 +56,7 @@ int motion_abort(void);
 void motion_poll(void);
 
 /* 查询主程序当前状态 */
-motion_state_t motion_state(void);
+motion_state_e motion_state(void);
 
 /*
  * 获取最近一次错误信息。

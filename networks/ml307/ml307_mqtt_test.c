@@ -38,7 +38,7 @@ static void set_rx(const char *resp)
 }
 
 /* 每次发送后回放一条响应；命令尾部 "\r\n" 且仍有未读数据时不消耗响应。 */
-static void uart_tx_hook(void *handle, hal_uart_event_t event,
+static void uart_tx_hook(void *handle, hal_uart_event_e event,
                          size_t length, void *user)
 {
     uint32_t total;

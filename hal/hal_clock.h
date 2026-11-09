@@ -20,7 +20,7 @@ typedef enum {
     HAL_CLOCK_APB2,        /* APB2 总线时钟 */
     HAL_CLOCK_APB3,        /* APB3 总线时钟 */
     HAL_CLOCK_APB4         /* APB4 总线时钟 */
-} hal_clock_bus_t;
+} hal_clock_bus_e;
 
 /* 时钟源 */
 typedef enum {
@@ -29,11 +29,11 @@ typedef enum {
     HAL_CLOCK_PLL,         /* 锁相环输出 */
     HAL_CLOCK_LSI,         /* 内部低速时钟 */
     HAL_CLOCK_LSE          /* 外部低速时钟 */
-} hal_clock_source_t;
+} hal_clock_source_e;
 
 /* 时钟初始化配置 */
 typedef struct {
-    hal_clock_source_t source; /* 系统主时钟源 */
+    hal_clock_source_e source; /* 系统主时钟源 */
     uint32_t frequency;         /* 时钟源频率（Hz）；HSI/HSE 等输入频率 */
     uint32_t pll_frequency;     /* 期望的 PLL 输出频率（Hz），source 非 PLL 时忽略 */
 } hal_clock_config_t;
@@ -45,14 +45,14 @@ typedef struct {
  *          返回 HAL_NOT_SUPPORTED / HAL_HW_ERROR。
  * 注意   : 会改变系统主频，调用前应确认外设分频设置可接受。
  */
-hal_status_t hal_clock_init(const hal_clock_config_t *config);
+int hal_clock_init(const hal_clock_config_t *config);
 
 /*
  * 查询指定总线当前频率。
  * bus  : 总线类型；非法值返回 0。
  * 返回 : 频率（Hz）；平台未知时为 0，不会返回错误码。
  */
-uint32_t hal_clock_get_frequency(hal_clock_bus_t bus);
+uint32_t hal_clock_get_frequency(hal_clock_bus_e bus);
 
 /*
  * 使能外设时钟。
@@ -60,7 +60,7 @@ uint32_t hal_clock_get_frequency(hal_clock_bus_t bus);
  * 返回       : HAL_OK 成功；HAL_INVALID_PARAM；平台不支持返回 HAL_NOT_SUPPORTED。
  * 注意       : 必须先使能时钟再访问外设寄存器。
  */
-hal_status_t hal_clock_enable(void *peripheral);
+int hal_clock_enable(void *peripheral);
 
 /*
  * 关闭外设时钟。
@@ -68,7 +68,7 @@ hal_status_t hal_clock_enable(void *peripheral);
  * 返回       : HAL_OK 成功；HAL_INVALID_PARAM / HAL_NOT_SUPPORTED。
  * 注意       : 关闭后该外设寄存器访问将失败，正在传输的外设不可关闭。
  */
-hal_status_t hal_clock_disable(void *peripheral);
+int hal_clock_disable(void *peripheral);
 
 #ifdef __cplusplus
 }

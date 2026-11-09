@@ -12,7 +12,7 @@
 
 #include <string.h>
 
-iot_status_t iot_task_create(iot_task_t *task, const char *name,
+int iot_task_create(iot_task_t *task, const char *name,
                                uint8_t priority, iot_entry_t entry, void *arg,
                                void *stack_mem, uint32_t stack_size)
 {

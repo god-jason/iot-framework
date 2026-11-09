@@ -19,11 +19,11 @@ typedef enum {
     SHT35_REPEAT_HIGH = 0,
     SHT35_REPEAT_MEDIUM,
     SHT35_REPEAT_LOW
-} sht35_repeatability_t;
+} sht35_repeatability_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    sht35_repeatability_t repeatability;
+    sht35_repeatability_e repeatability;
     bool crc_enabled;
     bool initialized;
 } sht35_handle_t;
@@ -41,7 +41,7 @@ int sht35_deinit(sht35_handle_t *handle);
 int sht35_soft_reset(sht35_handle_t *handle);
 
 /** @brief 设置测量重复性 */
-int sht35_set_repeatability(sht35_handle_t *handle, sht35_repeatability_t repeatability);
+int sht35_set_repeatability(sht35_handle_t *handle, sht35_repeatability_e repeatability);
 
 /** @brief 使能/关闭片上加热器 */
 int sht35_set_heater(sht35_handle_t *handle, bool enable);

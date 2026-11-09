@@ -147,9 +147,9 @@ int lis3dh_read(lis3dh_handle_t *handle, lis3dh_accel_t *accel)
     return DRIVER_OK;
 }
 
-int lis3dh_set_range(lis3dh_handle_t *handle, lis3dh_range_t range)
+int lis3dh_set_range(lis3dh_handle_t *handle, lis3dh_range_e range)
 {
-    lis3dh_range_t old;
+    lis3dh_range_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)range >= (unsigned)LIS3DH_RANGE_COUNT) {
         return (int)HAL_INVALID_PARAM;
@@ -165,9 +165,9 @@ int lis3dh_set_range(lis3dh_handle_t *handle, lis3dh_range_t range)
     return DRIVER_OK;
 }
 
-int lis3dh_set_output_rate(lis3dh_handle_t *handle, lis3dh_odr_t odr)
+int lis3dh_set_output_rate(lis3dh_handle_t *handle, lis3dh_odr_e odr)
 {
-    lis3dh_odr_t old;
+    lis3dh_odr_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)LIS3DH_ODR_COUNT) {
         return (int)HAL_INVALID_PARAM;

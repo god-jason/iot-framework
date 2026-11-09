@@ -145,18 +145,18 @@ static void eth_http_fn(struct mg_connection *c, int ev, void *ev_data)
 
 /* ---------------- iot_http 接口实现 ---------------- */
 
-hal_status_t iot_http_init(void)
+int iot_http_init(void)
 {
     (void)eth_net_mgr();
     return HAL_OK;
 }
 
-hal_status_t iot_http_deinit(void)
+int iot_http_deinit(void)
 {
     return HAL_OK;
 }
 
-hal_status_t iot_http_request(const iot_http_request_t *request,
+int iot_http_request(const iot_http_request_t *request,
                               iot_http_response_t *response)
 {
     char url_buf[ETH_HTTP_URL_MAX];

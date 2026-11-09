@@ -22,10 +22,10 @@ extern "C" {
 typedef enum {
     TTP229_BUS_I2C = 0,
     TTP229_BUS_GPIO_2WIRE
-} ttp229_bus_t;
+} ttp229_bus_e;
 
 typedef struct {
-    ttp229_bus_t bus;
+    ttp229_bus_e bus;
     driver_i2c_t i2c;       /* I2C 模式使用 */
     hal_pin_t scl;         /* 2 线模式：时钟输出 */
     hal_pin_t sdo;         /* 2 线模式：数据输入 */
@@ -37,7 +37,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址，传 0 使用 0x57
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int ttp229_init_i2c(ttp229_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -46,7 +46,7 @@ int ttp229_init_i2c(ttp229_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
  * @param  handle  驱动句柄
  * @param  scl     SCL 引脚（主机输出）
  * @param  sdo     SDO 引脚（芯片输出，需上拉）
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int ttp229_init_gpio(ttp229_handle_t *handle, hal_pin_t scl, hal_pin_t sdo);
 
@@ -56,7 +56,7 @@ int ttp229_deinit(ttp229_handle_t *handle);
 /**
  * @brief  读取 16 键位图
  * @param  keys  bit0 对应 K1 ... bit15 对应 K16
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int ttp229_read_keys(ttp229_handle_t *handle, uint16_t *keys);
 

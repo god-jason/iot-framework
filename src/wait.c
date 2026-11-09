@@ -40,7 +40,7 @@ iot_task_t *iot_wait_pop_highest(list_t *list)
     return IOT_CONTAINER_OF(best, iot_task_t, wait_node);
 }
 
-void iot_task_wake(iot_task_t *task, iot_status_t result)
+void iot_task_wake(iot_task_t *task, int result)
 {
     if (task == NULL) {
         return;
@@ -57,7 +57,7 @@ void iot_task_wake(iot_task_t *task, iot_status_t result)
               task->name != NULL ? task->name : "?", (int)result);
 }
 
-iot_status_t iot_block_current(list_t *wait_list, uint32_t timeout)
+int iot_block_current(list_t *wait_list, uint32_t timeout)
 {
     iot_task_t *cur = iot_current_task;
     iot_task_t *next;

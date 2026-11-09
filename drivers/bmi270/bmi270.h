@@ -38,7 +38,7 @@ typedef enum {
     BMI270_ACCEL_RANGE_8G,          /*  4096 LSB/g */
     BMI270_ACCEL_RANGE_16G,         /*  2048 LSB/g */
     BMI270_ACCEL_RANGE_COUNT
-} bmi270_accel_range_t;
+} bmi270_accel_range_e;
 
 typedef enum {
     BMI270_GYRO_RANGE_2000DPS = 0,  /* 16.384 LSB/(°/s) */
@@ -47,7 +47,7 @@ typedef enum {
     BMI270_GYRO_RANGE_250DPS,       /* 131.072 LSB/(°/s) */
     BMI270_GYRO_RANGE_125DPS,       /* 262.144 LSB/(°/s) */
     BMI270_GYRO_RANGE_COUNT
-} bmi270_gyro_range_t;
+} bmi270_gyro_range_e;
 
 typedef enum {
     BMI270_ODR_25HZ = 0,
@@ -58,7 +58,7 @@ typedef enum {
     BMI270_ODR_800HZ,
     BMI270_ODR_1600HZ,
     BMI270_ODR_COUNT
-} bmi270_odr_t;
+} bmi270_odr_e;
 
 typedef struct {
     float x;
@@ -73,9 +73,9 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    bmi270_accel_range_t accel_range;
-    bmi270_gyro_range_t gyro_range;
-    bmi270_odr_t odr;
+    bmi270_accel_range_e accel_range;
+    bmi270_gyro_range_e gyro_range;
+    bmi270_odr_e odr;
     float accel_lsb_per_g;      /* 当前量程灵敏度 */
     float gyro_lsb_per_dps;
     bool initialized;
@@ -86,7 +86,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x68
- * @return 0 成功，负值为 hal_status_t（-11 表示 probe / CHIP_ID 不匹配）
+ * @return 0 成功，负值为 HAL 状态码（-11 表示 probe / CHIP_ID 不匹配）
  */
 int bmi270_init(bmi270_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -104,13 +104,13 @@ int bmi270_read_raw(bmi270_handle_t *handle, int16_t accel[3], int16_t gyro[3]);
 int bmi270_read(bmi270_handle_t *handle, bmi270_data_t *data);
 
 /** @brief 设置加速度量程（重新写 ACC_RANGE，同步更新灵敏度） */
-int bmi270_set_accel_range(bmi270_handle_t *handle, bmi270_accel_range_t range);
+int bmi270_set_accel_range(bmi270_handle_t *handle, bmi270_accel_range_e range);
 
 /** @brief 设置陀螺量程（重新写 GYR_RANGE，同步更新灵敏度） */
-int bmi270_set_gyro_range(bmi270_handle_t *handle, bmi270_gyro_range_t range);
+int bmi270_set_gyro_range(bmi270_handle_t *handle, bmi270_gyro_range_e range);
 
 /** @brief 设置输出率（同时配置加速度计与陀螺仪） */
-int bmi270_set_output_rate(bmi270_handle_t *handle, bmi270_odr_t odr);
+int bmi270_set_output_rate(bmi270_handle_t *handle, bmi270_odr_e odr);
 
 /**
  * @brief  读取内部状态寄存器

@@ -21,11 +21,11 @@ typedef enum {
     STS3X_REPEAT_HIGH = 0,
     STS3X_REPEAT_MEDIUM,
     STS3X_REPEAT_LOW
-} sts3x_repeatability_t;
+} sts3x_repeatability_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    sts3x_repeatability_t repeatability;
+    sts3x_repeatability_e repeatability;
     bool crc_enabled;
     bool initialized;
 } sts3x_handle_t;
@@ -46,7 +46,7 @@ int sts3x_read(sts3x_handle_t *handle, float *celsius);
 int sts3x_read_raw(sts3x_handle_t *handle, uint16_t *raw);
 
 /** 设置重复性（决定测量时间与噪声） */
-int sts3x_set_repeatability(sts3x_handle_t *handle, sts3x_repeatability_t repeatability);
+int sts3x_set_repeatability(sts3x_handle_t *handle, sts3x_repeatability_e repeatability);
 
 /** 使能/关闭 CRC 校验 */
 int sts3x_set_crc(sts3x_handle_t *handle, bool enable);

@@ -32,7 +32,7 @@ typedef enum {
     MICS6814_CH_OX,        /* NO2 等氧化性气体 */
     MICS6814_CH_NH3,       /* 氨气 */
     MICS6814_CH_MAX
-} mics6814_channel_t;
+} mics6814_channel_e;
 
 typedef struct {
     uint16_t vc_mv;
@@ -60,14 +60,14 @@ int mics6814_init(mics6814_handle_t *handle, uint16_t vc_mv, uint16_t rl_ohm);
 int mics6814_deinit(mics6814_handle_t *handle);
 
 /** 单独设置某通道的负载电阻（各通道 RL 不同时使用） */
-int mics6814_set_rl(mics6814_handle_t *handle, mics6814_channel_t ch, uint16_t rl_ohm);
+int mics6814_set_rl(mics6814_handle_t *handle, mics6814_channel_e ch, uint16_t rl_ohm);
 
 /** 用洁净空气样本标定某通道 R0；clean_air_ratio 取自 datasheet 曲线 */
-int mics6814_calibrate_r0(mics6814_handle_t *handle, mics6814_channel_t ch,
+int mics6814_calibrate_r0(mics6814_handle_t *handle, mics6814_channel_e ch,
                           uint16_t adc_mv, float clean_air_ratio);
 
 /** 设置某通道的 ppm 线性近似系数：ppm_est = ppm_scale * (Rs/R0) */
-int mics6814_set_ppm_scale(mics6814_handle_t *handle, mics6814_channel_t ch,
+int mics6814_set_ppm_scale(mics6814_handle_t *handle, mics6814_channel_e ch,
                            float ppm_scale);
 
 /**

@@ -28,7 +28,7 @@ typedef enum {
     MAG3110_DR_20HZ,
     MAG3110_DR_10HZ,
     MAG3110_DR_COUNT
-} mag3110_data_rate_t;
+} mag3110_data_rate_e;
 
 typedef enum {
     MAG3110_OS_16 = 0,      /* 16 倍过采样 */
@@ -36,7 +36,7 @@ typedef enum {
     MAG3110_OS_64,
     MAG3110_OS_128,
     MAG3110_OS_COUNT
-} mag3110_oversampling_t;
+} mag3110_oversampling_e;
 
 typedef struct {
     float x;
@@ -52,8 +52,8 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    mag3110_data_rate_t data_rate;
-    mag3110_oversampling_t oversampling;
+    mag3110_data_rate_e data_rate;
+    mag3110_oversampling_e oversampling;
     bool initialized;
 } mag3110_handle_t;
 
@@ -64,10 +64,10 @@ typedef struct {
  * @param  address      7 位从机地址，0 表示默认 0x0E
  * @param  data_rate    数据率
  * @param  oversampling 过采样倍数
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int mag3110_init(mag3110_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                 mag3110_data_rate_t data_rate, mag3110_oversampling_t oversampling);
+                 mag3110_data_rate_e data_rate, mag3110_oversampling_e oversampling);
 
 /** @brief 反初始化：进入待机模式 */
 int mag3110_deinit(mag3110_handle_t *handle);
@@ -82,7 +82,7 @@ int mag3110_read_raw(mag3110_handle_t *handle, int16_t xyz[3]);
 int mag3110_get_status(mag3110_handle_t *handle, uint8_t *status);
 
 /** @brief 修改数据率 */
-int mag3110_set_data_rate(mag3110_handle_t *handle, mag3110_data_rate_t data_rate);
+int mag3110_set_data_rate(mag3110_handle_t *handle, mag3110_data_rate_e data_rate);
 
 #ifdef __cplusplus
 }

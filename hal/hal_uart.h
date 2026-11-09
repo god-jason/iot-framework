@@ -21,20 +21,20 @@ typedef enum {
     HAL_UART_WORD_7BIT = 7,    /* 7 位数据 */
     HAL_UART_WORD_8BIT = 8,    /* 8 位数据 */
     HAL_UART_WORD_9BIT = 9     /* 9 位数据（含校验时常见） */
-} hal_uart_word_t;
+} hal_uart_word_e;
 
 /* 校验方式 */
 typedef enum {
     HAL_UART_PARITY_NONE = 0,  /* 无校验 */
     HAL_UART_PARITY_EVEN,      /* 偶校验 */
     HAL_UART_PARITY_ODD        /* 奇校验 */
-} hal_uart_parity_t;
+} hal_uart_parity_e;
 
 /* 停止位 */
 typedef enum {
     HAL_UART_STOP_1 = 0,       /* 1 个停止位 */
     HAL_UART_STOP_2            /* 2 个停止位 */
-} hal_uart_stop_t;
+} hal_uart_stop_e;
 
 /* 硬件流控 */
 typedef enum {
@@ -42,25 +42,25 @@ typedef enum {
     HAL_UART_FLOW_RTS,         /* 仅 RTS */
     HAL_UART_FLOW_CTS,         /* 仅 CTS */
     HAL_UART_FLOW_RTS_CTS      /* RTS + CTS */
-} hal_uart_flow_t;
+} hal_uart_flow_e;
 
 /* 收发方向，可组合 */
 typedef enum {
     HAL_UART_MODE_TX = 1,      /* 仅发送 */
     HAL_UART_MODE_RX = 2,      /* 仅接收 */
     HAL_UART_MODE_TX_RX = 3    /* 收发 */
-} hal_uart_mode_t;
+} hal_uart_mode_e;
 
 /* UART 配置 */
 typedef struct {
     uint32_t baudrate;              /* 波特率（bps），需大于 0 */
 
-    hal_uart_word_t word_length;   /* 数据字长 */
-    hal_uart_parity_t parity;      /* 校验方式 */
-    hal_uart_stop_t stop_bits;     /* 停止位 */
+    hal_uart_word_e word_length;   /* 数据字长 */
+    hal_uart_parity_e parity;      /* 校验方式 */
+    hal_uart_stop_e stop_bits;     /* 停止位 */
 
-    hal_uart_flow_t flow_control;  /* 硬件流控 */
-    hal_uart_mode_t mode;          /* 收发方向 */
+    hal_uart_flow_e flow_control;  /* 硬件流控 */
+    hal_uart_mode_e mode;          /* 收发方向 */
 
     bool oversampling;              /* true = 8 倍过采样，false = 16 倍 */
 } hal_uart_config_t;
@@ -73,7 +73,7 @@ typedef enum {
     HAL_UART_EVENT_RX_IDLE,            /* 总线空闲，接收结束 */
     HAL_UART_EVENT_ERROR,              /* 帧错误/溢出/噪声等 */
     HAL_UART_EVENT_ABORT               /* 传输被中止 */
-} hal_uart_event_t;
+} hal_uart_event_e;
 
 /*
  * UART 事件回调。
@@ -83,7 +83,7 @@ typedef enum {
  * user_data : 注册时绑定的上下文，可为 NULL。
  * 注意：执行于中断上下文，禁止阻塞。
  */
-typedef void (*hal_uart_callback_t)(void *handle, hal_uart_event_t event,
+typedef void (*hal_uart_callback_t)(void *handle, hal_uart_event_e event,
                                      size_t length, void *user_data);
 
 /* UART 句柄 */
@@ -106,13 +106,13 @@ typedef struct hal_uart {
  * 返回   : HAL_OK；HAL_INVALID_PARAM；波特率不可达返回 HAL_NOT_SUPPORTED。
  * 注意   : 成功后 base.state 为 HAL_STATE_READY。
  */
-hal_status_t hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config);
+int hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config);
 
 /*
  * 反初始化 UART，终止所有进行中的传输。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_uart_deinit(hal_uart_t *handle);
+int hal_uart_deinit(hal_uart_t *handle);
 
 /* 阻塞收发 */
 /*
@@ -122,7 +122,7 @@ hal_status_t hal_uart_deinit(hal_uart_t *handle);
  * timeout : 最大等待毫秒数，HAL_TIMEOUT_FOREVER 表示无限等待。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT；HAL_BUSY。
  */
-hal_status_t hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
+int hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
                                  size_t length, uint32_t timeout);
 
 /*
@@ -132,24 +132,24 @@ hal_status_t hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,
  * timeout : 最大等待毫秒数。
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT；HAL_OVERFLOW（缓冲不足）。
  */
-hal_status_t hal_uart_receive(hal_uart_t *handle, uint8_t *data,
+int hal_uart_receive(hal_uart_t *handle, uint8_t *data,
                                 size_t length, uint32_t timeout);
 
 /* 中断收发 */
 
 /* 中断方式发送；data 与 length 所指缓冲区在完成回调前必须保持有效 */
-hal_status_t hal_uart_transmit_it(hal_uart_t *handle, const uint8_t *data, size_t length);
+int hal_uart_transmit_it(hal_uart_t *handle, const uint8_t *data, size_t length);
 
 /* 中断方式接收；data 缓冲区需保持有效直到接收完成或中止 */
-hal_status_t hal_uart_receive_it(hal_uart_t *handle, uint8_t *data, size_t length);
+int hal_uart_receive_it(hal_uart_t *handle, uint8_t *data, size_t length);
 
 /* DMA 收发 */
 
 /* DMA 方式发送；缓冲区需在回调前保持有效，且注意缓存一致性 */
-hal_status_t hal_uart_transmit_dma(hal_uart_t *handle, const uint8_t *data, size_t length);
+int hal_uart_transmit_dma(hal_uart_t *handle, const uint8_t *data, size_t length);
 
 /* DMA 方式接收；缓冲区需在回调前保持有效 */
-hal_status_t hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data, size_t length);
+int hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data, size_t length);
 
 /* 接收至空闲 */
 
@@ -161,8 +161,8 @@ hal_status_t hal_uart_receive_dma(hal_uart_t *handle, uint8_t *data, size_t leng
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_NOT_SUPPORTED；HAL_BUSY。
  * 注意    : 实际接收长度通过 hal_uart_get_rx_count() 或 RX_IDLE 事件获取。
  */
-hal_status_t hal_uart_receive_to_idle(hal_uart_t *handle, uint8_t *data,
-                                        size_t length, hal_transfer_mode_t mode);
+int hal_uart_receive_to_idle(hal_uart_t *handle, uint8_t *data,
+                                        size_t length, hal_transfer_mode_e mode);
 
 /*
  * 获取最近一次（或当前）接收的数据长度。
@@ -174,21 +174,21 @@ size_t hal_uart_get_rx_count(hal_uart_t *handle);
 /* 中止 */
 
 /* 中止发送；未在发送时返回 HAL_OK */
-hal_status_t hal_uart_abort_tx(hal_uart_t *handle);
+int hal_uart_abort_tx(hal_uart_t *handle);
 
 /* 中止接收；未在接收时返回 HAL_OK */
-hal_status_t hal_uart_abort_rx(hal_uart_t *handle);
+int hal_uart_abort_rx(hal_uart_t *handle);
 
 /* 同时中止收发 */
-hal_status_t hal_uart_abort(hal_uart_t *handle);
+int hal_uart_abort(hal_uart_t *handle);
 
 /* 状态 */
 
 /* 查询当前状态；handle 为 NULL 时返回 HAL_STATE_RESET */
-hal_state_t hal_uart_get_state(hal_uart_t *handle);
+hal_state_e hal_uart_get_state(hal_uart_t *handle);
 
 /* 查询最近一次错误码；handle 为 NULL 时返回 HAL_INVALID_PARAM，无错误返回 HAL_OK */
-hal_status_t hal_uart_get_error(hal_uart_t *handle);
+int hal_uart_get_error(hal_uart_t *handle);
 
 /* 回调 */
 
@@ -199,7 +199,7 @@ hal_status_t hal_uart_get_error(hal_uart_t *handle);
  * 返回      : HAL_OK；HAL_INVALID_PARAM。
  * 注意      : 可在运行期调用，注册后覆盖旧回调。
  */
-hal_status_t hal_uart_register_callback(hal_uart_t *handle,
+int hal_uart_register_callback(hal_uart_t *handle,
                                           hal_uart_callback_t callback, void *user_data);
 
 #ifdef __cplusplus

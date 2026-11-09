@@ -51,8 +51,8 @@ typedef struct {
 } iot_http_response_t;
 
 /* 初始化 / 反初始化 HTTP 实现 */
-hal_status_t iot_http_init(void);
-hal_status_t iot_http_deinit(void);
+int iot_http_init(void);
+int iot_http_deinit(void);
 
 /*
  * 执行一次阻塞 HTTP 请求。
@@ -60,7 +60,7 @@ hal_status_t iot_http_deinit(void);
  * 返回：HAL_OK；HAL_INVALID_PARAM；HAL_NOT_READY；HAL_TIMEOUT；
  *       HAL_NOT_SUPPORTED；HAL_OVERFLOW（响应体超过缓冲区）；HAL_IO_ERROR。
  */
-hal_status_t iot_http_request(const iot_http_request_t *request,
+int iot_http_request(const iot_http_request_t *request,
                               iot_http_response_t *response);
 
 #ifdef __cplusplus

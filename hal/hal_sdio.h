@@ -22,12 +22,12 @@ typedef enum {
     HAL_SDIO_BUS_1BIT = 0,     /* 1 线 */
     HAL_SDIO_BUS_4BIT,         /* 4 线 */
     HAL_SDIO_BUS_8BIT          /* 8 线（eMMC 等） */
-} hal_sdio_bus_width_t;
+} hal_sdio_bus_width_e;
 
 /* SDIO 配置 */
 typedef struct {
     uint32_t clock_frequency;       /* 总线时钟频率（Hz） */
-    hal_sdio_bus_width_t bus_width;/* 总线位宽 */
+    hal_sdio_bus_width_e bus_width;/* 总线位宽 */
 } hal_sdio_config_t;
 
 /* SDIO 句柄 */
@@ -45,10 +45,10 @@ typedef struct hal_sdio {
  * config : 配置，不可为 NULL，clock_frequency 必须大于 0。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；位宽不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_sdio_init(hal_sdio_t *handle, const hal_sdio_config_t *config);
+int hal_sdio_init(hal_sdio_t *handle, const hal_sdio_config_t *config);
 
 /* 反初始化 SDIO；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_sdio_deinit(hal_sdio_t *handle);
+int hal_sdio_deinit(hal_sdio_t *handle);
 
 /*
  * 阻塞读多个块。
@@ -58,19 +58,19 @@ hal_status_t hal_sdio_deinit(hal_sdio_t *handle);
  * timeout     : 最大等待毫秒数。
  * 返回        : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT；HAL_CRC_ERROR。
  */
-hal_status_t hal_sdio_read(hal_sdio_t *handle, uint32_t block, void *buffer,
+int hal_sdio_read(hal_sdio_t *handle, uint32_t block, void *buffer,
                              size_t block_count, uint32_t timeout);
 
 /* 阻塞写多个块；buffer 为源数据，其余语义同 read */
-hal_status_t hal_sdio_write(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_write(hal_sdio_t *handle, uint32_t block,
                               const void *buffer, size_t block_count, uint32_t timeout);
 
 /* DMA 读多个块；buffer 需在完成回调前保持有效 */
-hal_status_t hal_sdio_read_dma(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_read_dma(hal_sdio_t *handle, uint32_t block,
                                  void *buffer, size_t block_count);
 
 /* DMA 写多个块；buffer 需在完成回调前保持有效 */
-hal_status_t hal_sdio_write_dma(hal_sdio_t *handle, uint32_t block,
+int hal_sdio_write_dma(hal_sdio_t *handle, uint32_t block,
                                   const void *buffer, size_t block_count);
 
 #ifdef __cplusplus

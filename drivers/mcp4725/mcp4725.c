@@ -26,7 +26,7 @@ static int mcp4725_fast_write(mcp4725_handle_t *handle, uint16_t value)
 
 /* 3 字节命令写：CMD | PD | D11..D4 | D3..D0 */
 static int mcp4725_cmd_write(mcp4725_handle_t *handle, uint8_t cmd,
-                             uint16_t value, mcp4725_pd_t pd)
+                             uint16_t value, mcp4725_pd_e pd)
 {
     uint8_t buf[3];
 
@@ -112,7 +112,7 @@ int mcp4725_set_raw(mcp4725_handle_t *handle, uint16_t value)
     return mcp4725_write(handle, value);
 }
 
-int mcp4725_write_dac(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_t pd)
+int mcp4725_write_dac(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_e pd)
 {
     if (handle == NULL || !handle->initialized || value > MCP4725_FULL_SCALE ||
         (uint16_t)pd > (uint16_t)MCP4725_PD_500K_TO_GND) {
@@ -121,7 +121,7 @@ int mcp4725_write_dac(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_t pd)
     return mcp4725_cmd_write(handle, MCP4725_CMD_WRITE_DAC, value, pd);
 }
 
-int mcp4725_save(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_t pd)
+int mcp4725_save(mcp4725_handle_t *handle, uint16_t value, mcp4725_pd_e pd)
 {
     int ret;
 
@@ -163,7 +163,7 @@ int mcp4725_set_voltage(mcp4725_handle_t *handle, float volts)
     return mcp4725_fast_write(handle, (uint16_t)code);
 }
 
-int mcp4725_read(mcp4725_handle_t *handle, uint16_t *value, mcp4725_pd_t *pd)
+int mcp4725_read(mcp4725_handle_t *handle, uint16_t *value, mcp4725_pd_e *pd)
 {
     uint8_t buf[MCP4725_READ_LEN] = { 0U };
     uint16_t dac;
@@ -184,7 +184,7 @@ int mcp4725_read(mcp4725_handle_t *handle, uint16_t *value, mcp4725_pd_t *pd)
         *value = (uint16_t)(dac & MCP4725_FULL_SCALE);
     }
     if (pd != NULL) {
-        *pd = (mcp4725_pd_t)((buf[0] >> 4) & 0x03U);
+        *pd = (mcp4725_pd_e)((buf[0] >> 4) & 0x03U);
     }
     return DRIVER_OK;
 }

@@ -54,7 +54,7 @@ static int nrf24l01_cmd(nrf24l01_handle_t *h, uint8_t cmd, uint8_t *status)
     return DRIVER_OK;
 }
 
-int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_t mode)
+int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_e mode)
 {
     uint8_t config = 0U;
     NRF_CHECK(handle);

@@ -102,7 +102,7 @@ int console_process(void)
     while (n > 0 && s_rx != NULL && s_rx_size > 0) {
         /* 单次读取量不超过接收缓冲容量 */
         uint32_t chunk = (n > s_rx_size) ? s_rx_size : n;
-        hal_status_t r = hal_uart_receive(s_uart, s_rx, chunk, 100);
+        int r = hal_uart_receive(s_uart, s_rx, chunk, 100);
         if (r != HAL_OK) {
             break;   /* 底层读失败，保留剩余数据待下次处理 */
         }

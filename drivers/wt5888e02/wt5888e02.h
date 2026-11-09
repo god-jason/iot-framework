@@ -23,13 +23,13 @@ extern "C" {
 typedef enum {
     WT5888E02_BUS_UART = 0,
     WT5888E02_BUS_ONELINE
-} wt5888e02_bus_t;
+} wt5888e02_bus_e;
 
 typedef struct {
     hal_uart_t *uart;   /* UART 模式必需，一线模式可为 NULL */
     hal_pin_t data_pin;        /* 一线串口数据脚，UART 模式为 0 */
     hal_pin_t busy_pin;        /* BUSY 指示脚，0 表示不检测 */
-    wt5888e02_bus_t bus;
+    wt5888e02_bus_e bus;
     uint32_t timeout_ms;
     bool initialized;
 } wt5888e02_handle_t;

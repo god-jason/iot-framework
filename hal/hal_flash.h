@@ -21,7 +21,7 @@ typedef enum {
     HAL_FLASH_FLAG_READ = HAL_BIT(0),     /* 支持读 */
     HAL_FLASH_FLAG_WRITE = HAL_BIT(1),    /* 支持写 */
     HAL_FLASH_FLAG_ERASE = HAL_BIT(2)     /* 支持擦除 */
-} hal_flash_flags_t;
+} hal_flash_flags_e;
 
 /* Flash 信息 */
 typedef struct {
@@ -45,17 +45,17 @@ typedef struct hal_flash {
  * handle : 句柄，不可为 NULL。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；平台不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_flash_init(hal_flash_t *handle);
+int hal_flash_init(hal_flash_t *handle);
 
 /* 反初始化 Flash 驱动（不擦除数据）；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_flash_deinit(hal_flash_t *handle);
+int hal_flash_deinit(hal_flash_t *handle);
 
 /*
  * 获取 Flash 区域信息。
  * info : 输出结构，不可为 NULL。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；未初始化返回 HAL_NOT_READY。
  */
-hal_status_t hal_flash_get_info(hal_flash_t *handle, hal_flash_info_t *info);
+int hal_flash_get_info(hal_flash_t *handle, hal_flash_info_t *info);
 
 /*
  * 读取 Flash。
@@ -64,7 +64,7 @@ hal_status_t hal_flash_get_info(hal_flash_t *handle, hal_flash_info_t *info);
  * length  : 字节数。
  * 返回    : HAL_OK；HAL_INVALID_PARAM（越界）；HAL_NOT_READY。
  */
-hal_status_t hal_flash_read(hal_flash_t *handle, uintptr_t address,
+int hal_flash_read(hal_flash_t *handle, uintptr_t address,
                               void *buffer, size_t length);
 
 /*
@@ -75,7 +75,7 @@ hal_status_t hal_flash_read(hal_flash_t *handle, uintptr_t address,
  * 返回    : HAL_OK；HAL_INVALID_PARAM；未解锁返回 HAL_PERMISSION；
  *           校验失败返回 HAL_CRC_ERROR。
  */
-hal_status_t hal_flash_write(hal_flash_t *handle, uintptr_t address,
+int hal_flash_write(hal_flash_t *handle, uintptr_t address,
                                const void *buffer, size_t length);
 
 /*
@@ -85,13 +85,13 @@ hal_status_t hal_flash_write(hal_flash_t *handle, uintptr_t address,
  * 返回    : HAL_OK；HAL_INVALID_PARAM；未解锁返回 HAL_PERMISSION。
  * 注意    : 擦除期间通常无法取指，必要时需搬到 RAM 执行。
  */
-hal_status_t hal_flash_erase(hal_flash_t *handle, uintptr_t address, size_t length);
+int hal_flash_erase(hal_flash_t *handle, uintptr_t address, size_t length);
 
 /* 加锁写保护；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_SUPPORTED */
-hal_status_t hal_flash_lock(hal_flash_t *handle);
+int hal_flash_lock(hal_flash_t *handle);
 
 /* 解锁写保护；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_SUPPORTED */
-hal_status_t hal_flash_unlock(hal_flash_t *handle);
+int hal_flash_unlock(hal_flash_t *handle);
 
 #ifdef __cplusplus
 }

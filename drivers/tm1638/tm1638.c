@@ -7,7 +7,7 @@ static void tm1638_delay(void)
     driver_delay_us(TM1638_DELAY_US);
 }
 
-static int tm1638_pin_write(hal_pin_t pin, hal_gpio_level_t level)
+static int tm1638_pin_write(hal_pin_t pin, hal_gpio_level_e level)
 {
     return driver_gpio_write(pin, level);
 }

@@ -76,7 +76,7 @@ int as5600_init(as5600_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     /* 恢复原始配置 */
     if (as5600_update_conf(handle, 0xFFFFU, conf) != DRIVER_OK) { return (int)HAL_IO_ERROR; }
     handle->conf = conf;
-    handle->power_mode = (as5600_power_mode_t)(conf & AS5600_CONF_PM_MASK);
+    handle->power_mode = (as5600_power_mode_e)(conf & AS5600_CONF_PM_MASK);
 
     if (as5600_read_reg(handle, AS5600_REG_STATUS, &status, 1U) != DRIVER_OK) {
         return (int)HAL_IO_ERROR;
@@ -138,7 +138,7 @@ int as5600_read(as5600_handle_t *handle, as5600_data_t *data)
     return DRIVER_OK;
 }
 
-int as5600_set_power_mode(as5600_handle_t *handle, as5600_power_mode_t mode)
+int as5600_set_power_mode(as5600_handle_t *handle, as5600_power_mode_e mode)
 {
     int ret;
     if (handle == NULL || !handle->initialized ||

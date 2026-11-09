@@ -112,7 +112,7 @@ static int call_result(int result)
  * 返回：0 成功；MOTION_ERR_DEVICE 未注册或回调缺失；
  *       MOTION_ERR_DEVICE_EXEC 回调执行失败。 */
 int motion_device_step_start(uint16_t id, uint8_t dir, double speed,
-                             motion_unit_t unit, int32_t pulse,
+                             motion_unit_e unit, int32_t pulse,
                              uint32_t time_ms, uint32_t acc_ms,
                              uint32_t dec_ms)
 {
@@ -142,7 +142,7 @@ int motion_device_step_stop(uint16_t id, uint32_t dec_ms)
 
 /* 设置步进速度。 */
 int motion_device_step_set_speed(uint16_t id, double speed,
-                                 motion_unit_t unit)
+                                 motion_unit_e unit)
 {
     const motion_device_ops_t *ops = get_ops();
 
@@ -175,7 +175,7 @@ int motion_device_step_enable(uint16_t id, uint8_t enable)
 }
 
 /* 步进回零并标记设备占用。 */
-int motion_device_step_home(uint16_t id, double speed, motion_unit_t unit,
+int motion_device_step_home(uint16_t id, double speed, motion_unit_e unit,
                             uint8_t dir, uint32_t timeout_ms)
 {
     const motion_device_ops_t *ops = get_ops();
@@ -371,7 +371,7 @@ int motion_device_sensor_read(uint16_t id, int32_t *value)
 /* 标记设备开始占用。
  * 参数：family 设备类别；id 设备号。
  * 说明：id >= MOTION_MAX_DEVICES 时直接忽略，避免位图越界。 */
-void motion_device_note_start(motion_device_family_t family, uint16_t id)
+void motion_device_note_start(motion_device_family_e family, uint16_t id)
 {
     if (id >= MOTION_MAX_DEVICES) {
         return;
@@ -388,7 +388,7 @@ void motion_device_note_start(motion_device_family_t family, uint16_t id)
 }
 
 /* 标记设备释放；id 越界时忽略。 */
-void motion_device_note_stop(motion_device_family_t family, uint16_t id)
+void motion_device_note_stop(motion_device_family_e family, uint16_t id)
 {
     if (id >= MOTION_MAX_DEVICES) {
         return;

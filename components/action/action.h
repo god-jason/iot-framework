@@ -43,7 +43,7 @@ typedef enum {
     ACTION_SUCCESS,     /* 成功：update 返回 >0 后进入的终态 */
     ACTION_FAILED,      /* 失败：start 或 update 返回负值后进入的终态 */
     ACTION_CANCELLED    /* 已取消：调用 cancel 后的终态 */
-} action_state_t;
+} action_state_e;
 
 typedef struct action action_t;
 
@@ -78,7 +78,7 @@ struct action {
      */
     int (*reset)(action_t *action);
 
-    action_state_t state;   /* 当前状态，由框架维护，外部只读 */
+    action_state_e state;   /* 当前状态，由框架维护，外部只读 */
 
     void *ctx;              /* 使用方私有数据指针，框架原样保存 */
 };
@@ -127,7 +127,7 @@ int action_reset(action_t *action);
  * @param action 动作对象，可为 NULL
  * @return 当前状态；action 为 NULL 时返回 ACTION_IDLE
  */
-action_state_t action_get_state(const action_t *action);
+action_state_e action_get_state(const action_t *action);
 
 #ifdef __cplusplus
 }

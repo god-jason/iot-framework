@@ -33,7 +33,7 @@ typedef struct {
     int step_position;
     int last_step_dir;
     double last_step_speed;
-    motion_unit_t last_step_unit;
+    motion_unit_e last_step_unit;
     int32_t last_pulse;
     uint32_t last_time_ms;
     uint32_t last_acc_ms;
@@ -91,7 +91,7 @@ typedef struct {
 static mock_t g_mock;
 
 static int mock_step_start(uint16_t id, uint8_t dir, double speed,
-                           motion_unit_t unit, int32_t pulse,
+                           motion_unit_e unit, int32_t pulse,
                            uint32_t time_ms, uint32_t acc_ms,
                            uint32_t dec_ms)
 {
@@ -119,7 +119,7 @@ static int mock_step_stop(uint16_t id, uint32_t dec_ms)
     return 0;
 }
 
-static int mock_step_set_speed(uint16_t id, double speed, motion_unit_t unit)
+static int mock_step_set_speed(uint16_t id, double speed, motion_unit_e unit)
 {
     (void)id;
     if (g_mock.fail_step_speed) { return -1; }
@@ -147,7 +147,7 @@ static int mock_step_enable(uint16_t id, uint8_t enable)
     return 0;
 }
 
-static int mock_step_home(uint16_t id, double speed, motion_unit_t unit,
+static int mock_step_home(uint16_t id, double speed, motion_unit_e unit,
                           uint8_t dir, uint32_t timeout_ms)
 {
     (void)id;
@@ -329,7 +329,7 @@ static void reset_all(void)
     (void)motion_device_register(&g_mock_ops);
 }
 
-static bool is_terminal(motion_state_t state)
+static bool is_terminal(motion_state_e state)
 {
     return state == MOTION_STATE_COMPLETED ||
            state == MOTION_STATE_ERROR ||
@@ -337,7 +337,7 @@ static bool is_terminal(motion_state_t state)
            state == MOTION_STATE_IDLE;
 }
 
-static motion_state_t run_to_terminal(int max_polls)
+static motion_state_e run_to_terminal(int max_polls)
 {
     int i;
 

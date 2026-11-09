@@ -48,7 +48,7 @@ int l3gd20h_get_status(l3gd20h_handle_t *handle, uint8_t *status)
 
 int l3gd20h_init(l3gd20h_handle_t *handle, hal_i2c_t *i2c,
                  hal_spi_t *spi, hal_pin_t cs, uint16_t address,
-                 l3gd20h_range_t range, l3gd20h_odr_t odr)
+                 l3gd20h_range_e range, l3gd20h_odr_e odr)
 {
     uint8_t id = 0U;
     uint8_t check = 0U;

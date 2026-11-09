@@ -3,7 +3,7 @@
 #include "log.h"
 
 int adxl345_init(adxl345_handle_t *handle, hal_i2c_t *i2c,
-                 uint16_t address, adxl345_range_t range)
+                 uint16_t address, adxl345_range_e range)
 {
     uint8_t devid = 0U;
     uint8_t value;

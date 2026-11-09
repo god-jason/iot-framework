@@ -140,7 +140,7 @@ int driver_gpio_deinit(hal_pin_t pin)
     return (int)hal_gpio_deinit(pin);
 }
 
-int driver_gpio_output(hal_pin_t pin, hal_gpio_level_t initial)
+int driver_gpio_output(hal_pin_t pin, hal_gpio_level_e initial)
 {
     hal_gpio_config_t cfg;
 
@@ -154,7 +154,7 @@ int driver_gpio_output(hal_pin_t pin, hal_gpio_level_t initial)
     return (int)hal_gpio_init(pin, &cfg);
 }
 
-int driver_gpio_input(hal_pin_t pin, hal_gpio_pull_t pull)
+int driver_gpio_input(hal_pin_t pin, hal_gpio_pull_e pull)
 {
     hal_gpio_config_t cfg;
 
@@ -168,7 +168,7 @@ int driver_gpio_input(hal_pin_t pin, hal_gpio_pull_t pull)
     return (int)hal_gpio_init(pin, &cfg);
 }
 
-int driver_gpio_write(hal_pin_t pin, hal_gpio_level_t level)
+int driver_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
 {
     return (int)hal_gpio_write(pin, level);
 }
@@ -180,8 +180,8 @@ int driver_gpio_toggle(hal_pin_t pin)
 
 int driver_gpio_read(hal_pin_t pin)
 {
-    hal_gpio_level_t level = HAL_GPIO_LOW;
-    hal_status_t status = hal_gpio_read(pin, &level);
+    hal_gpio_level_e level = HAL_GPIO_LOW;
+    int status = hal_gpio_read(pin, &level);
 
     if (status != HAL_OK) {
         return (int)status;

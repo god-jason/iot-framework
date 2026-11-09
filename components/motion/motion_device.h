@@ -31,18 +31,18 @@ typedef struct {
      * pulse 目标脉冲数；time_ms 总时长；acc_ms 加速时间；dec_ms 减速时间。
      * 返回 0 成功，负值失败。 */
     int (*step_start)(uint16_t id, uint8_t dir, double speed,
-                      motion_unit_t speed_unit, int32_t pulse,
+                      motion_unit_e speed_unit, int32_t pulse,
                       uint32_t time_ms, uint32_t acc_ms, uint32_t dec_ms);
     /* 停止步进运动，dec_ms 为减速时间（毫秒）。 */
     int (*step_stop)(uint16_t id, uint32_t dec_ms);
     /* 设置速度（仅在非运动状态生效或由实现决定）。 */
-    int (*step_set_speed)(uint16_t id, double speed, motion_unit_t unit);
+    int (*step_set_speed)(uint16_t id, double speed, motion_unit_e unit);
     /* 设置方向：dir 0/1。 */
     int (*step_set_dir)(uint16_t id, uint8_t dir);
     /* 使能/失能驱动器：enable 0 失能、非 0 使能。 */
     int (*step_enable)(uint16_t id, uint8_t enable);
     /* 回零：按 speed/unit 运动，dir 指定方向，timeout_ms 为 0 表示不限时。 */
-    int (*step_home)(uint16_t id, double speed, motion_unit_t unit,
+    int (*step_home)(uint16_t id, double speed, motion_unit_e unit,
                      uint8_t dir, uint32_t timeout_ms);
     /* 查询是否运动中：返回 >0 忙，0 空闲，<0 出错。 */
     int (*step_is_busy)(uint16_t id);
@@ -83,7 +83,7 @@ typedef struct {
 typedef enum {
     MOTION_DEVICE_STEP = 0, /* 步进电机 */
     MOTION_DEVICE_PWM       /* PWM 输出 */
-} motion_device_family_t;
+} motion_device_family_e;
 
 /* 注册设备回调表（整体拷贝）。
  * 参数：ops 回调表，不可为 NULL。
@@ -99,20 +99,20 @@ void motion_device_reset(void);
 /* 参数说明同回调原型；未注册或缺对应回调返回 MOTION_ERR_DEVICE，
  * 回调返回非 0 时统一折算为 MOTION_ERR_DEVICE_EXEC。 */
 int motion_device_step_start(uint16_t id, uint8_t dir, double speed,
-                             motion_unit_t unit, int32_t pulse,
+                             motion_unit_e unit, int32_t pulse,
                              uint32_t time_ms, uint32_t acc_ms,
                              uint32_t dec_ms);
 /* 停止步进并清除该设备的占用标记。 */
 int motion_device_step_stop(uint16_t id, uint32_t dec_ms);
 /* 设置步进速度。 */
 int motion_device_step_set_speed(uint16_t id, double speed,
-                                 motion_unit_t unit);
+                                 motion_unit_e unit);
 /* 设置步进方向。 */
 int motion_device_step_set_dir(uint16_t id, uint8_t dir);
 /* 使能/失能步进驱动器。 */
 int motion_device_step_enable(uint16_t id, uint8_t enable);
 /* 步进回零并标记该设备占用。 */
-int motion_device_step_home(uint16_t id, double speed, motion_unit_t unit,
+int motion_device_step_home(uint16_t id, double speed, motion_unit_e unit,
                             uint8_t dir, uint32_t timeout_ms);
 /* 查询步进是否忙：busy 输出 true 表示运动中。
  * 返回 0 成功；MOTION_ERR_DEVICE 未注册/回调缺失/busy 为 NULL；
@@ -150,9 +150,9 @@ int motion_device_sensor_read(uint16_t id, int32_t *value);
 
 /* 已用设备占用记录，供 WAIT ALL 使用 */
 /* 标记设备开始占用；id 越界（>= MOTION_MAX_DEVICES）时忽略。 */
-void motion_device_note_start(motion_device_family_t family, uint16_t id);
+void motion_device_note_start(motion_device_family_e family, uint16_t id);
 /* 标记设备释放；id 越界时忽略。 */
-void motion_device_note_stop(motion_device_family_t family, uint16_t id);
+void motion_device_note_stop(motion_device_family_e family, uint16_t id);
 /* 遍历占用位图，查询是否有设备仍在忙。
  * 返回 0 成功（busy 已写入）；MOTION_ERR_PARAMETER busy 为 NULL；
  * 查询某个设备失败时原样返回其错误码。 */

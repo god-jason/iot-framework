@@ -34,7 +34,7 @@ typedef enum {
     MMA7660FC_SR_2HZ,
     MMA7660FC_SR_1HZ,
     MMA7660FC_SR_COUNT
-} mma7660fc_sample_rate_t;
+} mma7660fc_sample_rate_e;
 
 typedef struct {
     float x;
@@ -50,7 +50,7 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    mma7660fc_sample_rate_t sample_rate;
+    mma7660fc_sample_rate_e sample_rate;
     bool initialized;
 } mma7660fc_handle_t;
 
@@ -60,10 +60,10 @@ typedef struct {
  * @param  i2c          已初始化的 I2C 主机句柄
  * @param  address      7 位从机地址，0 表示默认 0x4C
  * @param  sample_rate  自动唤醒采样率
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int mma7660fc_init(mma7660fc_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                   mma7660fc_sample_rate_t sample_rate);
+                   mma7660fc_sample_rate_e sample_rate);
 
 /** @brief 反初始化：进入待机模式 */
 int mma7660fc_deinit(mma7660fc_handle_t *handle);
@@ -78,7 +78,7 @@ int mma7660fc_read_raw(mma7660fc_handle_t *handle, int16_t xyz[3]);
 int mma7660fc_get_tilt(mma7660fc_handle_t *handle, uint8_t *tilt);
 
 /** @brief 修改采样率 */
-int mma7660fc_set_sample_rate(mma7660fc_handle_t *handle, mma7660fc_sample_rate_t sample_rate);
+int mma7660fc_set_sample_rate(mma7660fc_handle_t *handle, mma7660fc_sample_rate_e sample_rate);
 
 #ifdef __cplusplus
 }

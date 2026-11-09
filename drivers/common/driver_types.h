@@ -7,7 +7,7 @@
  * 设计约定（参考 libdriver）：
  *   - 每个器件一个目录 drivers/<chip>/，包含 <chip>.h、<chip>_register.h、<chip>.c
  *   - 公开 API 统一为 <chip>_init / <chip>_deinit / <chip>_read / <chip>_write ...
- *   - 所有返回值使用 int：0 表示成功，负值为 hal_status_t
+ *   - 所有返回值使用 int：0 表示成功，负值为 HAL 状态码
  *   - 所有硬件访问只经由 hal 的抽象接口，不直接操作寄存器
  */
 

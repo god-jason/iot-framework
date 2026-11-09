@@ -28,7 +28,7 @@ int hmc5883l_get_status(hmc5883l_handle_t *handle, uint8_t *status)
     return hmc5883l_read_reg(handle, HMC5883L_REG_STATUS, status, 1U);
 }
 
-int hmc5883l_set_gain(hmc5883l_handle_t *handle, hmc5883l_gain_t gain)
+int hmc5883l_set_gain(hmc5883l_handle_t *handle, hmc5883l_gain_e gain)
 {
     uint8_t check = 0U;
     uint8_t value;
@@ -48,8 +48,8 @@ int hmc5883l_set_gain(hmc5883l_handle_t *handle, hmc5883l_gain_t gain)
 }
 
 int hmc5883l_init(hmc5883l_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                  hmc5883l_gain_t gain, hmc5883l_average_t average,
-                  hmc5883l_data_rate_t data_rate)
+                  hmc5883l_gain_e gain, hmc5883l_average_e average,
+                  hmc5883l_data_rate_e data_rate)
 {
     uint8_t id[HMC5883L_ID_LEN];
     uint8_t check = 0U;

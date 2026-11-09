@@ -12,7 +12,7 @@ static uint8_t tcs34725_cmd(uint8_t reg, bool auto_inc)
     return cmd;
 }
 
-static uint8_t tcs34725_gain_code(tcs34725_gain_t gain)
+static uint8_t tcs34725_gain_code(tcs34725_gain_e gain)
 {
     switch (gain) {
     case TCS34725_GAIN_4X:
@@ -27,7 +27,7 @@ static uint8_t tcs34725_gain_code(tcs34725_gain_t gain)
     }
 }
 
-static float tcs34725_gain_factor(tcs34725_gain_t gain)
+static float tcs34725_gain_factor(tcs34725_gain_e gain)
 {
     switch (gain) {
     case TCS34725_GAIN_4X:
@@ -164,7 +164,7 @@ int tcs34725_set_atime(tcs34725_handle_t *handle, uint8_t atime)
     return DRIVER_OK;
 }
 
-int tcs34725_set_gain(tcs34725_handle_t *handle, tcs34725_gain_t gain)
+int tcs34725_set_gain(tcs34725_handle_t *handle, tcs34725_gain_e gain)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

@@ -57,7 +57,7 @@ uint32_t modbus_bits_to_bytes(uint16_t qty)
  *       协议号固定 0，长度域 = PDU 长度 + 1（含单元标识）。
  *       RTU 模式下 CRC 低字节在前、高字节在后。
  */
-uint32_t modbus_frame_adu(modbus_mode_t mode, uint8_t slave,
+uint32_t modbus_frame_adu(modbus_mode_e mode, uint8_t slave,
                           const uint8_t *pdu, uint32_t pdu_len,
                           uint8_t *out, uint32_t capacity)
 {
@@ -100,7 +100,7 @@ uint32_t modbus_frame_adu(modbus_mode_t mode, uint8_t slave,
  * 返回：0 成功；-1 表示帧非法（长度不足、协议号非 0、长度域不符或
  *       CRC 校验失败）。
  */
-int modbus_unframe_adu(modbus_mode_t mode, uint8_t *slave,
+int modbus_unframe_adu(modbus_mode_e mode, uint8_t *slave,
                        const uint8_t *adu, uint32_t len,
                        const uint8_t **pdu, uint32_t *pdu_len)
 {
@@ -153,7 +153,7 @@ int modbus_unframe_adu(modbus_mode_t mode, uint8_t *slave,
  * 数量上限遵循 Modbus 规范：读线圈/离散输入 2000，读寄存器 125，
  * 写多线圈 1968，写多寄存器 123。
  */
-int modbus_build_request(modbus_mode_t mode, uint8_t slave, uint8_t fc,
+int modbus_build_request(modbus_mode_e mode, uint8_t slave, uint8_t fc,
                          uint16_t addr, uint16_t qty,
                          const uint8_t *data, uint16_t data_len,
                          uint8_t *out, uint32_t capacity, uint32_t *out_len)
@@ -254,7 +254,7 @@ int modbus_build_request(modbus_mode_t mode, uint8_t slave, uint8_t fc,
  *       正常响应时数据区即 PDU 第 1 字节起的全部内容（含字节数字段），
  *       拷贝长度取 min(pdu_len-1, cap)，由调用方按功能码自行解释。
  */
-int modbus_parse_response(modbus_mode_t mode, const uint8_t *adu, uint32_t len,
+int modbus_parse_response(modbus_mode_e mode, const uint8_t *adu, uint32_t len,
                           uint8_t *fc, uint8_t *out_data, uint32_t cap,
                           uint32_t *out_data_len)
 {

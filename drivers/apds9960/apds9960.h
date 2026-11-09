@@ -19,7 +19,7 @@ typedef enum {
     APDS9960_AGAIN_4X,
     APDS9960_AGAIN_16X,
     APDS9960_AGAIN_64X
-} apds9960_gain_t;
+} apds9960_gain_e;
 
 typedef struct {
     uint16_t clear;
@@ -38,7 +38,7 @@ typedef struct {
 typedef struct {
     driver_i2c_t i2c;
     uint8_t atime;
-    apds9960_gain_t gain;
+    apds9960_gain_e gain;
     uint8_t pulse_count;    /* 1~64 */
     uint8_t pulse_len;      /* APDS9960_PPULSE_LEN_xxx */
     bool initialized;
@@ -51,7 +51,7 @@ int apds9960_deinit(apds9960_handle_t *handle);
 /** 设置 ALS 积分时间寄存器值（(256-ATIME)*2.78ms） */
 int apds9960_set_atime(apds9960_handle_t *handle, uint8_t atime);
 
-int apds9960_set_als_gain(apds9960_handle_t *handle, apds9960_gain_t gain);
+int apds9960_set_als_gain(apds9960_handle_t *handle, apds9960_gain_e gain);
 
 /** 设置接近脉冲数与脉宽（脉宽取 APDS9960_PPULSE_LEN_xxx） */
 int apds9960_set_proximity_pulse(apds9960_handle_t *handle, uint8_t pulse_count,

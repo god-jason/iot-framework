@@ -37,7 +37,7 @@ typedef enum {
     MPU9250_ACCEL_RANGE_8G,
     MPU9250_ACCEL_RANGE_16G,
     MPU9250_ACCEL_RANGE_COUNT
-} mpu9250_accel_range_t;
+} mpu9250_accel_range_e;
 
 typedef enum {
     MPU9250_GYRO_RANGE_250DPS = 0,
@@ -45,7 +45,7 @@ typedef enum {
     MPU9250_GYRO_RANGE_1000DPS,
     MPU9250_GYRO_RANGE_2000DPS,
     MPU9250_GYRO_RANGE_COUNT
-} mpu9250_gyro_range_t;
+} mpu9250_gyro_range_e;
 
 typedef struct {
     float x;
@@ -69,8 +69,8 @@ typedef struct {
     bool use_spi;
     bool mag_present;
     float mag_ut_per_lsb[3];        /* 按 ASA 修正后的 µT/LSB */
-    mpu9250_accel_range_t accel_range;
-    mpu9250_gyro_range_t gyro_range;
+    mpu9250_accel_range_e accel_range;
+    mpu9250_gyro_range_e gyro_range;
     float accel_lsb_per_g;
     float gyro_lsb_per_dps;
     bool initialized;
@@ -89,7 +89,7 @@ typedef struct {
  */
 int mpu9250_init(mpu9250_handle_t *handle, hal_i2c_t *i2c,
                  hal_spi_t *spi, hal_pin_t cs, uint16_t address,
-                 mpu9250_accel_range_t accel_range, mpu9250_gyro_range_t gyro_range);
+                 mpu9250_accel_range_e accel_range, mpu9250_gyro_range_e gyro_range);
 
 /** @brief 反初始化：陀螺/加速度进入睡眠，磁力计掉电 */
 int mpu9250_deinit(mpu9250_handle_t *handle);

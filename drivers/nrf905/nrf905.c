@@ -72,7 +72,7 @@ static int nrf905_wait_ready(nrf905_handle_t *h, uint32_t timeout_ms)
     }
 }
 
-int nrf905_set_mode(nrf905_handle_t *h, nrf905_mode_t mode)
+int nrf905_set_mode(nrf905_handle_t *h, nrf905_mode_e mode)
 {
     NRF905_CHECK(h);
     switch (mode) {

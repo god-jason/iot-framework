@@ -28,7 +28,7 @@ typedef enum {
     HAL_CAP_IDLE_DETECT   = HAL_BIT(5),   /* 支持总线空闲检测 */
     HAL_CAP_CACHE         = HAL_BIT(6),   /* 需要/支持缓存维护操作 */
     HAL_CAP_FIFO          = HAL_BIT(7)    /* 具备硬件 FIFO */
-} hal_capability_t;
+} hal_capability_e;
 
 /* MCU 家族标识，用于上层做按家族的差异化处理 */
 typedef enum {
@@ -41,11 +41,11 @@ typedef enum {
     HAL_MCU_N32,               /* 国民技术 N32 */
     HAL_MCU_AVR,               /* Atmel AVR */
     HAL_MCU_PC          /* 主机模拟器 */
-} hal_mcu_family_t;
+} hal_mcu_family_e;
 
 /* 芯片信息，由平台 hal_get_info() 填充 */
 typedef struct {
-    hal_mcu_family_t family;   /* MCU 家族 */
+    hal_mcu_family_e family;   /* MCU 家族 */
 
     uint32_t model;             /* 型号标识（平台自定义编码） */
     uint32_t revision;          /* 芯片修订版本 */
@@ -73,18 +73,18 @@ typedef enum {
     HAL_DEVICE_FLASH,          /* 片内 Flash */
     HAL_DEVICE_USB,            /* USB */
     HAL_DEVICE_ETH             /* 以太网 */
-} hal_device_type_t;
+} hal_device_type_e;
 
 /*
  * 初始化 / 反初始化 PORT 层。
  * 由当前链接的平台实现提供。
  * 返回: HAL_OK 成功；其余为平台相关错误。
  */
-hal_status_t hal_init(void);
-hal_status_t hal_deinit(void);
+int hal_init(void);
+int hal_deinit(void);
 
 /* 获取芯片信息；info 不可为 NULL */
-hal_status_t hal_get_info(hal_mcu_info_t *info);
+int hal_get_info(hal_mcu_info_t *info);
 
 /*
  * 查询外设能力。
@@ -92,7 +92,7 @@ hal_status_t hal_get_info(hal_mcu_info_t *info);
  * instance : 逻辑实例号，从 0 开始。
  * 返回     : HAL_CAP_* 的位掩码；实例不存在时返回 0。
  */
-uint32_t hal_get_capabilities(hal_device_type_t type, uint8_t instance);
+uint32_t hal_get_capabilities(hal_device_type_e type, uint8_t instance);
 
 #ifdef __cplusplus
 }

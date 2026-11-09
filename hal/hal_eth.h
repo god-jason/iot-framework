@@ -41,16 +41,16 @@ typedef struct hal_eth {
  * config : 配置，不可为 NULL；speed 需为硬件支持值。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；速率不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_eth_init(hal_eth_t *handle, const hal_eth_config_t *config);
+int hal_eth_init(hal_eth_t *handle, const hal_eth_config_t *config);
 
 /* 反初始化以太网 MAC；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_eth_deinit(hal_eth_t *handle);
+int hal_eth_deinit(hal_eth_t *handle);
 
 /* 启动 MAC 收发；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_eth_start(hal_eth_t *handle);
+int hal_eth_start(hal_eth_t *handle);
 
 /* 停止 MAC 收发；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_eth_stop(hal_eth_t *handle);
+int hal_eth_stop(hal_eth_t *handle);
 
 /*
  * 发送一帧以太网数据。
@@ -58,7 +58,7 @@ hal_status_t hal_eth_stop(hal_eth_t *handle);
  * length : 帧长度（字节），小于最小帧长时由硬件补零的情况依平台而定。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；发送队列满返回 HAL_BUSY。
  */
-hal_status_t hal_eth_transmit(hal_eth_t *handle, const void *data, size_t length);
+int hal_eth_transmit(hal_eth_t *handle, const void *data, size_t length);
 
 /*
  * 接收一帧以太网数据。
@@ -68,7 +68,7 @@ hal_status_t hal_eth_transmit(hal_eth_t *handle, const void *data, size_t length
  * 返回             : HAL_OK；HAL_INVALID_PARAM；无数据返回 HAL_TIMEOUT；
  *                     帧长超过缓冲区返回 HAL_OVERFLOW（帧被丢弃）。
  */
-hal_status_t hal_eth_receive(hal_eth_t *handle, void *buffer,
+int hal_eth_receive(hal_eth_t *handle, void *buffer,
                                size_t buffer_size, size_t *received_length);
 
 #ifdef __cplusplus

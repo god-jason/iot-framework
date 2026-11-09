@@ -89,7 +89,7 @@ int mpu6500_set_sample_rate(mpu6500_handle_t *handle, uint16_t rate_hz)
 
 int mpu6500_init(mpu6500_handle_t *handle, hal_i2c_t *i2c,
                  hal_spi_t *spi, hal_pin_t cs, uint16_t address,
-                 mpu6500_accel_range_t accel_range, mpu6500_gyro_range_t gyro_range)
+                 mpu6500_accel_range_e accel_range, mpu6500_gyro_range_e gyro_range)
 {
     uint8_t id = 0U;
     uint8_t value;

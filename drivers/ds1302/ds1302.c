@@ -16,7 +16,7 @@ static uint8_t ds1302_bcd_to_bin(uint8_t value)
 
 /* ---------------- 三线时序 ---------------- */
 
-static void ds1302_ce(ds1302_handle_t *handle, hal_gpio_level_t level)
+static void ds1302_ce(ds1302_handle_t *handle, hal_gpio_level_e level)
 {
     (void)driver_gpio_write(handle->ce, level);
 }

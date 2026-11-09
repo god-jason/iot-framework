@@ -30,12 +30,12 @@
 extern "C" {
 #endif
 
-/* 节点 tick 返回值（三态） */
-typedef enum {
+/* 节点 tick 返回值（三态），统一以 int 返回，枚举仅用于定义常量名 */
+enum {
     BEHAVIOR_BT_SUCCESS,    /* 成功：该子树本帧已完成 */
     BEHAVIOR_BT_FAILURE,    /* 失败：该子树本帧无法完成 */
     BEHAVIOR_BT_RUNNING     /* 运行中：还需后续 tick 继续推进 */
-} behavior_bt_status_t;
+};
 
 /* 节点类型：前 7 种为组合/叶子语义，最后一种为延时装饰器 */
 typedef enum {
@@ -47,20 +47,20 @@ typedef enum {
     BEHAVIOR_BT_ACTION,     /* 叶子：调用使用方动作回调 */
     BEHAVIOR_BT_CONDITION,  /* 叶子：调用使用方条件回调（true→SUCCESS） */
     BEHAVIOR_BT_DELAY       /* 延时：等待 config 个 tick 后再 tick 子节点 */
-} behavior_bt_type_t;
+} behavior_bt_type_e;
 
 typedef struct behavior_bt_node behavior_bt_node_t;
 
 /* 行为树节点：组合节点与叶子节点共用同一结构，按 type 选择 tick 实现 */
 struct behavior_bt_node {
-    behavior_bt_type_t type;    /* 节点类型，决定 tick 的默认实现 */
+    behavior_bt_type_e type;    /* 节点类型，决定 tick 的默认实现 */
 
     /*
      * 本节点的 tick 实现。创建函数会自动绑定为对应类型的内部实现；
      * 使用方也可在创建后自行替换以实现自定义节点。
      * 参数为节点自身，返回三态结果。
      */
-    behavior_bt_status_t (*tick)(behavior_bt_node_t *node);
+    int (*tick)(behavior_bt_node_t *node);
 
     /* 可选：停止回调，递归 halt 时在子节点之后调用，用于停止正在进行的动作 */
     void (*halt)(behavior_bt_node_t *node);
@@ -74,7 +74,7 @@ struct behavior_bt_node {
     void *ctx;                      /* 使用方上下文，透传给 action/condition 回调 */
 
     /* ---- 以下为框架内部字段 ---- */
-    behavior_bt_status_t (*action_fn)(behavior_bt_node_t *node); /* action 行为 */
+    int (*action_fn)(behavior_bt_node_t *node); /* action 行为 */
     bool (*cond_fn)(behavior_bt_node_t *node);              /* condition 判断 */
 
     int32_t  counter;  /* repeat 剩余次数 / delay 起始 tick */
@@ -93,7 +93,7 @@ int behavior_bt_init(behavior_bt_node_t *root);
  * @param root 根节点
  * @return 根节点返回的三态结果；root 为 NULL 时返回 FAILURE
  */
-behavior_bt_status_t behavior_bt_tick(behavior_bt_node_t *root);
+int behavior_bt_tick(behavior_bt_node_t *root);
 
 /*
  * 递归停止：先停止子树，再调用各节点的 halt 回调。
@@ -140,7 +140,7 @@ behavior_bt_node_t *behavior_bt_delay_create(behavior_bt_node_t **children, uint
  * @param ctx 透传给 fn 的上下文（fn 内通过 node->ctx 取用）
  * @return 新节点指针；失败返回 NULL
  */
-behavior_bt_node_t *behavior_bt_action_create(behavior_bt_status_t (*fn)(behavior_bt_node_t *node), void *ctx);
+behavior_bt_node_t *behavior_bt_action_create(int (*fn)(behavior_bt_node_t *node), void *ctx);
 
 /*
  * 创建条件叶子节点。

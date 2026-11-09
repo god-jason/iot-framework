@@ -19,7 +19,7 @@ typedef enum {
     ADS1110_GAIN_2,
     ADS1110_GAIN_4,
     ADS1110_GAIN_8
-} ads1110_gain_t;
+} ads1110_gain_e;
 
 /* 数据速率（对应配置字节 DR[1:0]） */
 typedef enum {
@@ -27,12 +27,12 @@ typedef enum {
     ADS1110_RATE_30SPS,
     ADS1110_RATE_60SPS,
     ADS1110_RATE_240SPS
-} ads1110_rate_t;
+} ads1110_rate_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    ads1110_gain_t gain;
-    ads1110_rate_t data_rate;
+    ads1110_gain_e gain;
+    ads1110_rate_e data_rate;
     bool initialized;
 } ads1110_handle_t;
 
@@ -41,7 +41,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位地址（0x48~0x4F），传 0 使用 0x48
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int ads1110_init(ads1110_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -49,10 +49,10 @@ int ads1110_init(ads1110_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int ads1110_deinit(ads1110_handle_t *handle);
 
 /** @brief 设置增益（写配置寄存器） */
-int ads1110_set_gain(ads1110_handle_t *handle, ads1110_gain_t gain);
+int ads1110_set_gain(ads1110_handle_t *handle, ads1110_gain_e gain);
 
 /** @brief 设置数据速率（写配置寄存器） */
-int ads1110_set_data_rate(ads1110_handle_t *handle, ads1110_rate_t data_rate);
+int ads1110_set_data_rate(ads1110_handle_t *handle, ads1110_rate_e data_rate);
 
 /** @brief 仅启动一次转换，由调用方自行延时后读取 */
 int ads1110_start(ads1110_handle_t *handle);

@@ -25,26 +25,26 @@ typedef enum {
     HAL_ADC_RESOLUTION_12BIT = 12, /* 12 位 */
     HAL_ADC_RESOLUTION_14BIT = 14, /* 14 位 */
     HAL_ADC_RESOLUTION_16BIT = 16  /* 16 位 */
-} hal_adc_resolution_t;
+} hal_adc_resolution_e;
 
 /* 数据对齐方式 */
 typedef enum {
     HAL_ADC_ALIGN_RIGHT = 0,   /* 右对齐 */
     HAL_ADC_ALIGN_LEFT         /* 左对齐 */
-} hal_adc_align_t;
+} hal_adc_align_e;
 
 /* 转换触发源 */
 typedef enum {
     HAL_ADC_TRIGGER_SOFTWARE = 0,  /* 软件触发 */
     HAL_ADC_TRIGGER_TIMER,         /* 定时器触发 */
     HAL_ADC_TRIGGER_EXTERNAL       /* 外部信号触发 */
-} hal_adc_trigger_t;
+} hal_adc_trigger_e;
 
 /* ADC 控制器配置 */
 typedef struct {
-    hal_adc_resolution_t resolution;   /* 分辨率 */
-    hal_adc_align_t alignment;         /* 数据对齐 */
-    hal_adc_trigger_t trigger;         /* 触发源 */
+    hal_adc_resolution_e resolution;   /* 分辨率 */
+    hal_adc_align_e alignment;         /* 数据对齐 */
+    hal_adc_trigger_e trigger;         /* 触发源 */
 
     uint8_t channel_count;              /* 参与转换的通道数（规则组） */
 } hal_adc_config_t;
@@ -73,10 +73,10 @@ typedef struct hal_adc {
  * config : 配置，不可为 NULL；channel_count 不应超过硬件规则组容量。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；分辨率不支持返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_adc_init(hal_adc_t *handle, const hal_adc_config_t *config);
+int hal_adc_init(hal_adc_t *handle, const hal_adc_config_t *config);
 
 /* 反初始化 ADC；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_adc_deinit(hal_adc_t *handle);
+int hal_adc_deinit(hal_adc_t *handle);
 
 /*
  * 配置单个转换通道。
@@ -84,14 +84,14 @@ hal_status_t hal_adc_deinit(hal_adc_t *handle);
  * 返回   : HAL_OK；HAL_INVALID_PARAM；通道不存在返回 HAL_NOT_FOUND。
  * 注意   : 需在 hal_adc_start() 之前调用。
  */
-hal_status_t hal_adc_config_channel(hal_adc_t *handle,
+int hal_adc_config_channel(hal_adc_t *handle,
                                       const hal_adc_channel_config_t *config);
 
 /* 启动连续转换（软件触发模式下开始采样）；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_adc_start(hal_adc_t *handle);
+int hal_adc_start(hal_adc_t *handle);
 
 /* 停止转换；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_adc_stop(hal_adc_t *handle);
+int hal_adc_stop(hal_adc_t *handle);
 
 /*
  * 单次读取指定通道的转换结果。
@@ -101,11 +101,11 @@ hal_status_t hal_adc_stop(hal_adc_t *handle);
  * 返回    : HAL_OK；HAL_INVALID_PARAM；HAL_TIMEOUT；通道非法 HAL_NOT_FOUND。
  * 注意    : 内部会临时切换通道，不宜在高频循环中频繁调用。
  */
-hal_status_t hal_adc_read(hal_adc_t *handle, uint8_t channel,
+int hal_adc_read(hal_adc_t *handle, uint8_t channel,
                             uint32_t *value, uint32_t timeout);
 
 /* 中断方式启动转换，完成后通过回调上报 */
-hal_status_t hal_adc_start_it(hal_adc_t *handle);
+int hal_adc_start_it(hal_adc_t *handle);
 
 /*
  * DMA 方式连续转换，结果写入 buffer。
@@ -113,14 +113,14 @@ hal_status_t hal_adc_start_it(hal_adc_t *handle);
  * length : 采样点个数（按元素计，非字节）。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；DMA 不可用返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_adc_start_dma(hal_adc_t *handle, uint32_t *buffer, size_t length);
+int hal_adc_start_dma(hal_adc_t *handle, uint32_t *buffer, size_t length);
 
 /*
  * 执行 ADC 自校准，提高精度。
  * 返回 : HAL_OK；HAL_INVALID_PARAM；平台无校准能力返回 HAL_NOT_SUPPORTED。
  * 注意 : 应在初始化后、启动转换前调用。
  */
-hal_status_t hal_adc_calibrate(hal_adc_t *handle);
+int hal_adc_calibrate(hal_adc_t *handle);
 
 /*
  * 获取当前分辨率对应的满量程值（如 12 位为 4095）。

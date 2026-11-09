@@ -28,7 +28,7 @@ typedef enum {
     QMC5883P_RANGE_12G,         /* ±12G， 2500 LSB/G */
     QMC5883P_RANGE_30G,         /* ±30G， 1000 LSB/G */
     QMC5883P_RANGE_COUNT
-} qmc5883p_range_t;
+} qmc5883p_range_e;
 
 typedef struct {
     float x;
@@ -45,7 +45,7 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    qmc5883p_range_t range;
+    qmc5883p_range_e range;
     float ut_per_lsb;           /* 由量程换算得到 */
     uint8_t ctrl1;              /* 当前 CTRL1 影子值 */
     uint8_t ctrl2;              /* 当前 CTRL2 影子值 */
@@ -57,7 +57,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示默认 0x2C
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int qmc5883p_init(qmc5883p_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -74,7 +74,7 @@ int qmc5883p_read_raw(qmc5883p_handle_t *handle, int16_t xyz[3]);
 int qmc5883p_get_status(qmc5883p_handle_t *handle, uint8_t *status);
 
 /** @brief 切换量程，同时更新 µT/LSB 换算系数 */
-int qmc5883p_set_range(qmc5883p_handle_t *handle, qmc5883p_range_t range);
+int qmc5883p_set_range(qmc5883p_handle_t *handle, qmc5883p_range_e range);
 
 /** @brief 软复位（CTRL2 软复位位）并重新下发配置 */
 int qmc5883p_soft_reset(qmc5883p_handle_t *handle);

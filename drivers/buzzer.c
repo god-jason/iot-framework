@@ -4,7 +4,7 @@
 
 int buzzer_init(buzzer_t *buzzer, uint8_t pin, uint8_t active_level)
 {
-    hal_gpio_level_t initial;
+    hal_gpio_level_e initial;
 
     if (buzzer == NULL) {
         return -1;

@@ -2,7 +2,7 @@
 #include "bh1750_register.h"
 #include "log.h"
 
-static uint8_t bh1750_mode_command(bh1750_mode_t mode)
+static uint8_t bh1750_mode_command(bh1750_mode_e mode)
 {
     switch (mode) {
     case BH1750_MODE_CONT_HIGH:
@@ -72,7 +72,7 @@ int bh1750_deinit(bh1750_handle_t *handle)
     return DRIVER_OK;
 }
 
-int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_t mode)
+int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_e mode)
 {
     uint8_t cmd;
 

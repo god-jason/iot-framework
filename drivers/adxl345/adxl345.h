@@ -19,11 +19,11 @@ typedef enum {
     ADXL345_RANGE_4G,
     ADXL345_RANGE_8G,
     ADXL345_RANGE_16G
-} adxl345_range_t;
+} adxl345_range_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    adxl345_range_t range;
+    adxl345_range_e range;
     bool initialized;
 } adxl345_handle_t;
 
@@ -34,7 +34,7 @@ typedef struct {
 } adxl345_accel_t;
 
 int adxl345_init(adxl345_handle_t *handle, hal_i2c_t *i2c,
-                 uint16_t address, adxl345_range_t range);
+                 uint16_t address, adxl345_range_e range);
 int adxl345_deinit(adxl345_handle_t *handle);
 
 int adxl345_read_raw(adxl345_handle_t *handle, int16_t xyz[3]);

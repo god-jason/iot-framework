@@ -15,7 +15,7 @@
  *       回调（可稍后设置）；user 回调上下文；timeout_ms 单帧超时。
  * 返回：0 成功；MODBUS_ERR_PARAM 表示 master 为空。
  */
-int modbus_master_init(modbus_master_t *master, modbus_mode_t mode, uint8_t address,
+int modbus_master_init(modbus_master_t *master, modbus_mode_e mode, uint8_t address,
                        modbus_transport_fn transport, void *user, uint32_t timeout_ms)
 {
     if (master == NULL) {

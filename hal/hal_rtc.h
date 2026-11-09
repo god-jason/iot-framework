@@ -33,7 +33,7 @@ typedef struct {
 typedef enum {
     HAL_RTC_ALARM_A = 0,   /* 闹钟 A */
     HAL_RTC_ALARM_B        /* 闹钟 B */
-} hal_rtc_alarm_t;
+} hal_rtc_alarm_e;
 
 /*
  * 闹钟回调。
@@ -41,7 +41,7 @@ typedef enum {
  * user_data : 注册时绑定的上下文，可为 NULL。
  * 注意：执行于中断上下文，禁止阻塞。
  */
-typedef void (*hal_rtc_alarm_callback_t)(hal_rtc_alarm_t alarm, void *user_data);
+typedef void (*hal_rtc_alarm_callback_t)(hal_rtc_alarm_e alarm, void *user_data);
 
 /* 闹钟配置 */
 typedef struct {
@@ -55,22 +55,22 @@ typedef struct {
  * 初始化 RTC。
  * 返回 : HAL_OK；时钟源不可用等错误由平台返回。
  */
-hal_status_t hal_rtc_init(void);
+int hal_rtc_init(void);
 
 /* 反初始化 RTC，关闭闹钟；返回 HAL_OK / HAL_NOT_READY */
-hal_status_t hal_rtc_deinit(void);
+int hal_rtc_deinit(void);
 
 /*
  * 设置当前日期时间。
  * time : 时间结构，不可为 NULL；字段越界返回 HAL_INVALID_PARAM。
  */
-hal_status_t hal_rtc_set_time(const hal_rtc_time_t *time);
+int hal_rtc_set_time(const hal_rtc_time_t *time);
 
 /*
  * 读取当前日期时间。
  * time : 输出结构，不可为 NULL。
  */
-hal_status_t hal_rtc_get_time(hal_rtc_time_t *time);
+int hal_rtc_get_time(hal_rtc_time_t *time);
 
 /*
  * 设置并启用闹钟。
@@ -78,17 +78,17 @@ hal_status_t hal_rtc_get_time(hal_rtc_time_t *time);
  * config : 配置，不可为 NULL。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；通道不存在返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_rtc_set_alarm(hal_rtc_alarm_t alarm, const hal_rtc_alarm_config_t *config);
+int hal_rtc_set_alarm(hal_rtc_alarm_e alarm, const hal_rtc_alarm_config_t *config);
 
 /* 禁用指定闹钟通道；返回 HAL_OK / HAL_INVALID_PARAM */
-hal_status_t hal_rtc_disable_alarm(hal_rtc_alarm_t alarm);
+int hal_rtc_disable_alarm(hal_rtc_alarm_e alarm);
 
 /*
  * 获取 Unix 时间戳（自 1970-01-01 00:00:00 UTC 起的秒数）。
  * timestamp : 输出，不可为 NULL。
  * 注意      : 32 位时间戳在 2038 年后溢出，平台可返回 HAL_OVERFLOW。
  */
-hal_status_t hal_rtc_get_timestamp(uint32_t *timestamp);
+int hal_rtc_get_timestamp(uint32_t *timestamp);
 
 #ifdef __cplusplus
 }

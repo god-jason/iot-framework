@@ -27,11 +27,11 @@ typedef enum {
     AT24CXX_MODEL_128,      /* 128 Kbit= 16 KB,  page 64  */
     AT24CXX_MODEL_256,      /* 256 Kbit= 32 KB,  page 64  */
     AT24CXX_MODEL_512       /* 512 Kbit= 64 KB,  page 128 */
-} at24cxx_model_t;
+} at24cxx_model_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    at24cxx_model_t model;
+    at24cxx_model_e model;
     uint32_t capacity;
     uint16_t page_size;
     uint16_t write_delay_ms;
@@ -39,7 +39,7 @@ typedef struct {
 } at24cxx_handle_t;
 
 int at24cxx_init(at24cxx_handle_t *handle, hal_i2c_t *i2c,
-                 uint16_t address, at24cxx_model_t model);
+                 uint16_t address, at24cxx_model_e model);
 int at24cxx_deinit(at24cxx_handle_t *handle);
 
 /** 从指定地址读取 */

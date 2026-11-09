@@ -31,7 +31,7 @@ typedef enum {
     AT_DATA,      /* 数据模式（预留） */
     AT_COMPLETE,  /* 事务成功结束 */
     AT_ERROR      /* 事务失败结束 */
-} at_state_t;
+} at_state_e;
 
 /* 事务结果码；AT_RESULT_IO_ERROR 为预留码，当前实现未返回 */
 typedef enum {
@@ -42,14 +42,14 @@ typedef enum {
     AT_RESULT_CANCELLED,  /* 被 at_cancel() 取消 */
     AT_RESULT_OVERFLOW,   /* 行缓冲溢出 */
     AT_RESULT_IO_ERROR    /* IO 错误（预留） */
-} at_result_t;
+} at_result_e;
 
 /*
  * 事务完成回调。
  * 参数：result 事务结果；response 累积的响应文本；len 文本长度；
  *       user 发起事务时传入的用户指针。
  */
-typedef void (*at_callback_fn)(at_result_t result,
+typedef void (*at_callback_fn)(at_result_e result,
                                    const char *response,
                                    uint32_t len,
                                    void *user);
@@ -101,10 +101,10 @@ int at_send(const char *command);
 int at_send_raw(const uint8_t *data, uint32_t len);
 
 /* 阻塞式执行一条命令，默认等待 "OK"。返回执行结果。 */
-at_result_t at_exec(const char *command, uint32_t timeout);
+at_result_e at_exec(const char *command, uint32_t timeout);
 
 /* 阻塞式完成一个事务（command 可为 NULL，表示仅等待响应）。返回执行结果。 */
-at_result_t at_transact(const at_request_t *request);
+at_result_e at_transact(const at_request_t *request);
 
 /* 非阻塞提交一个事务，结果通过 callback 通知。返回 0 / -1。 */
 int at_query(const at_request_t *request);
@@ -122,7 +122,7 @@ int at_process(void);
 bool at_is_busy(void);
 
 /* 获取当前状态机状态 */
-at_state_t at_get_state(void);
+at_state_e at_get_state(void);
 
 /* 获取最近一次事务的响应文本（内部静态缓冲，勿修改/释放） */
 const char *at_get_response(void);

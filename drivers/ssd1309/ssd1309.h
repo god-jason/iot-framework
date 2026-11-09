@@ -19,10 +19,10 @@ extern "C" {
 typedef enum {
     SSD1309_BUS_I2C = 0,
     SSD1309_BUS_SPI
-} ssd1309_bus_t;
+} ssd1309_bus_e;
 
 typedef struct {
-    ssd1309_bus_t bus_type;
+    ssd1309_bus_e bus_type;
 
     /* I2C 模式 */
     driver_i2c_t i2c;

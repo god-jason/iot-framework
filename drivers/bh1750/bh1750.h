@@ -20,18 +20,18 @@ typedef enum {
     BH1750_MODE_ONE_HIGH,        /* 单次高分辨率 */
     BH1750_MODE_ONE_HIGH2,
     BH1750_MODE_ONE_LOW
-} bh1750_mode_t;
+} bh1750_mode_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    bh1750_mode_t mode;
+    bh1750_mode_e mode;
     bool initialized;
 } bh1750_handle_t;
 
 int bh1750_init(bh1750_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 int bh1750_deinit(bh1750_handle_t *handle);
 
-int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_t mode);
+int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_e mode);
 
 /** 读取光照强度（lux） */
 int bh1750_read(bh1750_handle_t *handle, float *lux);

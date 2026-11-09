@@ -2,7 +2,7 @@
 #include "cs1237_register.h"
 #include "log.h"
 
-static void cs1237_sclk(cs1237_handle_t *handle, hal_gpio_level_t level)
+static void cs1237_sclk(cs1237_handle_t *handle, hal_gpio_level_e level)
 {
     (void)driver_gpio_write(handle->sclk, level);
 }
@@ -147,7 +147,7 @@ int cs1237_read_average(cs1237_handle_t *handle, uint8_t times, int32_t *raw)
     return DRIVER_OK;
 }
 
-int cs1237_set_gain(cs1237_handle_t *handle, cs1237_gain_t gain)
+int cs1237_set_gain(cs1237_handle_t *handle, cs1237_gain_e gain)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)gain > (uint16_t)CS1237_GAIN_128) {
         return (int)HAL_INVALID_PARAM;
@@ -156,7 +156,7 @@ int cs1237_set_gain(cs1237_handle_t *handle, cs1237_gain_t gain)
     return DRIVER_OK;
 }
 
-int cs1237_set_rate(cs1237_handle_t *handle, cs1237_rate_t rate)
+int cs1237_set_rate(cs1237_handle_t *handle, cs1237_rate_e rate)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)rate > (uint16_t)CS1237_RATE_1280HZ) {
         return (int)HAL_INVALID_PARAM;

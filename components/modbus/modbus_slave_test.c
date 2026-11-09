@@ -517,7 +517,7 @@ static int custom_transport(void *ctx, const uint8_t *tx, uint32_t tx_len,
     return 0;
 }
 
-static void map_fixture(modbus_slave_t *slave, mb_loop_t *loop, modbus_mode_t mode)
+static void map_fixture(modbus_slave_t *slave, mb_loop_t *loop, modbus_mode_e mode)
 {
     memset(s_map_hold, 0, sizeof(s_map_hold));
     memset(s_map_input, 0, sizeof(s_map_input));

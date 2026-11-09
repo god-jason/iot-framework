@@ -2,7 +2,7 @@
 #include "uvis25_register.h"
 #include "log.h"
 
-static uint8_t uvis25_odr_code(uvis25_odr_t odr)
+static uint8_t uvis25_odr_code(uvis25_odr_e odr)
 {
     switch (odr) {
     case UVIS25_ODR_7HZ:
@@ -99,7 +99,7 @@ int uvis25_deinit(uvis25_handle_t *handle)
     return DRIVER_OK;
 }
 
-int uvis25_set_odr(uvis25_handle_t *handle, uvis25_odr_t odr)
+int uvis25_set_odr(uvis25_handle_t *handle, uvis25_odr_e odr)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

@@ -20,7 +20,7 @@ typedef enum {
     NRF905_MODE_STANDBY,
     NRF905_MODE_RX,
     NRF905_MODE_TX
-} nrf905_mode_t;
+} nrf905_mode_e;
 
 typedef struct {
     driver_spi_t spi;
@@ -42,7 +42,7 @@ int nrf905_deinit(nrf905_handle_t *handle);
 
 /* 频率单位 kHz：422400..473500 或 862000..932000 */
 int nrf905_set_frequency(nrf905_handle_t *handle, uint32_t frequency_khz);
-int nrf905_set_mode(nrf905_handle_t *handle, nrf905_mode_t mode);
+int nrf905_set_mode(nrf905_handle_t *handle, nrf905_mode_e mode);
 int nrf905_set_address(nrf905_handle_t *handle, const uint8_t address[4]);
 /* 高级接口：整体写入 10 字节 RF-CONFIG 区（含功率/AFW 等位域） */
 int nrf905_set_config(nrf905_handle_t *handle, const uint8_t config[10]);

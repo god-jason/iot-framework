@@ -26,7 +26,7 @@ static char s_line_buf[512];
 static uint8_t s_rx_buf[64];
 
 static int s_cb_calls;
-static at_result_t s_cb_result;
+static at_result_e s_cb_result;
 static char s_cb_resp[512];
 static uint32_t s_cb_len;
 static void *s_cb_user;
@@ -76,7 +76,7 @@ static void reset_cb(void)
     s_cb_user = NULL;
 }
 
-static void on_done(at_result_t result, const char *response, uint32_t len,
+static void on_done(at_result_e result, const char *response, uint32_t len,
                     void *user)
 {
     uint32_t n = len;

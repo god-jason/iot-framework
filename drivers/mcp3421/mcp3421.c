@@ -3,7 +3,7 @@
 #include "log.h"
 
 /* 分辨率枚举 → 位数 */
-static uint8_t mcp3421_bits(mcp3421_res_t resolution)
+static uint8_t mcp3421_bits(mcp3421_res_e resolution)
 {
     return (uint8_t)(12U + 2U * ((uint8_t)resolution & 0x03U));
 }
@@ -43,7 +43,7 @@ static int mcp3421_read_frame(mcp3421_handle_t *handle, uint8_t *buf, size_t len
     return DRIVER_OK;
 }
 
-static uint32_t mcp3421_conv_ms(mcp3421_res_t resolution)
+static uint32_t mcp3421_conv_ms(mcp3421_res_e resolution)
 {
     switch (mcp3421_bits(resolution)) {
     case 18U:
@@ -113,7 +113,7 @@ int mcp3421_deinit(mcp3421_handle_t *handle)
     return DRIVER_OK;
 }
 
-int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_t resolution)
+int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_e resolution)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)resolution > (uint16_t)MCP3421_RES_18BIT_2X) {
@@ -123,7 +123,7 @@ int mcp3421_set_resolution(mcp3421_handle_t *handle, mcp3421_res_t resolution)
     return mcp3421_write_config(handle, mcp3421_config(handle));
 }
 
-int mcp3421_set_gain(mcp3421_handle_t *handle, mcp3421_gain_t pga)
+int mcp3421_set_gain(mcp3421_handle_t *handle, mcp3421_gain_e pga)
 {
     if (handle == NULL || !handle->initialized || (uint16_t)pga > (uint16_t)MCP3421_GAIN_8) {
         return (int)HAL_INVALID_PARAM;
@@ -132,7 +132,7 @@ int mcp3421_set_gain(mcp3421_handle_t *handle, mcp3421_gain_t pga)
     return mcp3421_write_config(handle, mcp3421_config(handle));
 }
 
-int mcp3421_set_mode(mcp3421_handle_t *handle, mcp3421_mode_t mode)
+int mcp3421_set_mode(mcp3421_handle_t *handle, mcp3421_mode_e mode)
 {
     if (handle == NULL || !handle->initialized ||
         (uint16_t)mode > (uint16_t)MCP3421_MODE_CONTINUOUS) {

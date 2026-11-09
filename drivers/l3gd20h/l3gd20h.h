@@ -27,7 +27,7 @@ typedef enum {
     L3GD20H_RANGE_500DPS,
     L3GD20H_RANGE_2000DPS,
     L3GD20H_RANGE_COUNT
-} l3gd20h_range_t;
+} l3gd20h_range_e;
 
 typedef enum {
     L3GD20H_ODR_95HZ = 0,
@@ -35,7 +35,7 @@ typedef enum {
     L3GD20H_ODR_380HZ,
     L3GD20H_ODR_760HZ,
     L3GD20H_ODR_COUNT
-} l3gd20h_odr_t;
+} l3gd20h_odr_e;
 
 typedef struct {
     float x;
@@ -52,8 +52,8 @@ typedef struct {
     driver_i2c_t i2c;
     driver_spi_t spi;
     bool use_spi;
-    l3gd20h_range_t range;
-    l3gd20h_odr_t odr;
+    l3gd20h_range_e range;
+    l3gd20h_odr_e odr;
     float mdps_per_lsb;         /* 当前量程灵敏度 */
     bool initialized;
 } l3gd20h_handle_t;
@@ -67,11 +67,11 @@ typedef struct {
  * @param  address  7 位从机地址，0 表示默认 0x6A（SPI 模式忽略）
  * @param  range    量程
  * @param  odr      输出率
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int l3gd20h_init(l3gd20h_handle_t *handle, hal_i2c_t *i2c,
                  hal_spi_t *spi, hal_pin_t cs, uint16_t address,
-                 l3gd20h_range_t range, l3gd20h_odr_t odr);
+                 l3gd20h_range_e range, l3gd20h_odr_e odr);
 
 /** @brief 反初始化：进入掉电模式 */
 int l3gd20h_deinit(l3gd20h_handle_t *handle);

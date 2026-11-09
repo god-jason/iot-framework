@@ -27,7 +27,7 @@ typedef enum {
     STORAGE_KV_FLOAT,    /* 浮点值（按原始字节存储） */
     STORAGE_KV_STRING,   /* 字符串（通常含结尾 '\0'） */
     STORAGE_KV_BLOB      /* 任意二进制块 */
-} storage_kv_type_t;
+} storage_kv_type_e;
 
 /*
  * 初始化 KV 表（清空所有条目）。
@@ -41,7 +41,7 @@ int storage_kv_init(void);
  *       value 值数据（非 NULL）；len 值字节数（0..32）。
  * 返回：0 成功；参数非法、值超长或表已满返回 -1。
  */
-int storage_kv_set(const char *key, storage_kv_type_t type,
+int storage_kv_set(const char *key, storage_kv_type_e type,
                const void *value, uint32_t len);
 
 /*
@@ -51,7 +51,7 @@ int storage_kv_set(const char *key, storage_kv_type_t type,
  * 返回：0 成功；键不存在、类型不匹配或参数非法返回 -1。
  * 说明：size 不足时按 size 截断拷贝，可通过 actual_size 判断是否截断。
  */
-int storage_kv_get(const char *key, storage_kv_type_t type,
+int storage_kv_get(const char *key, storage_kv_type_e type,
                void *value, uint32_t size, uint32_t *actual_size);
 
 /*

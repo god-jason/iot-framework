@@ -67,7 +67,7 @@ void motion_task_poll(void);
 int motion_task_find(const char *name);
 
 /* 查询 JOB 状态；未找到时返回 MOTION_STATE_IDLE */
-motion_state_t motion_task_state(const char *name);
+motion_state_e motion_task_state(const char *name);
 
 /* 返回已注册的 JOB 数量 */
 uint8_t motion_task_count(void);

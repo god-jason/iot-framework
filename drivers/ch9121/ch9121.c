@@ -198,7 +198,7 @@ int ch9121_set_dest_port(ch9121_handle_t *handle, uint16_t port)
     return ch9121_send_command(handle, CH9121_CMD_SET_DEST_PORT, buf, sizeof(buf));
 }
 
-int ch9121_set_mode(ch9121_handle_t *handle, ch9121_net_mode_t mode)
+int ch9121_set_mode(ch9121_handle_t *handle, ch9121_net_mode_e mode)
 {
     uint8_t value;
     int ret;

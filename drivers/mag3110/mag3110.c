@@ -29,7 +29,7 @@ static uint8_t mag3110_ctrl1_value(const mag3110_handle_t *handle)
                      MAG3110_CTRL1_AC);
 }
 
-int mag3110_set_data_rate(mag3110_handle_t *handle, mag3110_data_rate_t data_rate)
+int mag3110_set_data_rate(mag3110_handle_t *handle, mag3110_data_rate_e data_rate)
 {
     uint8_t check = 0U;
     uint8_t value;
@@ -48,7 +48,7 @@ int mag3110_set_data_rate(mag3110_handle_t *handle, mag3110_data_rate_t data_rat
 }
 
 int mag3110_init(mag3110_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                 mag3110_data_rate_t data_rate, mag3110_oversampling_t oversampling)
+                 mag3110_data_rate_e data_rate, mag3110_oversampling_e oversampling)
 {
     uint8_t id = 0U;
     uint8_t check = 0U;

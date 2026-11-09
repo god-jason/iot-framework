@@ -6,7 +6,7 @@
  *
  * 本文件同时提供 SX1268 / LLCC68 的共用实现入口：
  * 两款器件的命令集与 SX1262 基本一致，仅频率范围与校准参数不同，
- * 由 sx1262_variant_t 区分（见 sx1262_init_variant）。
+ * 由 sx1262_variant_e 区分（见 sx1262_init_variant）。
  *
  * 仅实现 LoRa 显式包头 + CRC 的点对点收发；GFSK、CAD、DIO 映射等
  * 需按 datasheet 补充。
@@ -22,14 +22,14 @@ typedef enum {
     SX1262_VARIANT_SX1262 = 0,
     SX1262_VARIANT_SX1268,
     SX1262_VARIANT_LLCC68
-} sx1262_variant_t;
+} sx1262_variant_e;
 
 typedef enum {
     SX1262_MODE_SLEEP = 0,
     SX1262_MODE_STANDBY,
     SX1262_MODE_TX,
     SX1262_MODE_RX
-} sx1262_mode_t;
+} sx1262_mode_e;
 
 typedef struct {
     driver_spi_t spi;
@@ -42,7 +42,7 @@ typedef struct {
     uint8_t coding_rate;        /* 1..4 -> 4/5..4/8 */
     int8_t tx_power_dbm;
     uint16_t preamble_len;
-    sx1262_variant_t variant;
+    sx1262_variant_e variant;
     uint32_t timeout_ms;
     bool initialized;
 } sx1262_handle_t;
@@ -52,11 +52,11 @@ int sx1262_init(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
 /* SX1268 / LLCC68 共用入口 */
 int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
                         hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1,
-                        sx1262_variant_t variant);
+                        sx1262_variant_e variant);
 int sx1262_deinit(sx1262_handle_t *handle);
 
 int sx1262_set_frequency(sx1262_handle_t *handle, uint32_t frequency_hz);
-int sx1262_set_mode(sx1262_handle_t *handle, sx1262_mode_t mode);
+int sx1262_set_mode(sx1262_handle_t *handle, sx1262_mode_e mode);
 /* 发射功率在 init 中按 tx_power_dbm 字段配置（默认 14dBm） */
 int sx1262_set_modulation(sx1262_handle_t *handle, uint8_t spreading_factor,
                           uint32_t bandwidth_hz, uint8_t coding_rate);

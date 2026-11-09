@@ -209,7 +209,7 @@ int motion_flow_build(const char *text)
     for (;;) {
         char buffer[MOTION_MAX_LINE];
         uint32_t next_offset = offset;
-        motion_parse_result_t parsed;
+        motion_parse_result_e parsed;
         int read_result = source.read_line(&source, buffer,
                                            (uint16_t)sizeof(buffer));
 
@@ -879,7 +879,7 @@ static motion_value_t e_not(eval_t *e)
 static motion_value_t e_compare(eval_t *e)
 {
     motion_value_t left = e_not(e);
-    motion_compare_t op = MOTION_CMP_NONE;
+    motion_compare_e op = MOTION_CMP_NONE;
     motion_value_t right;
 
     if (e->error != 0) {

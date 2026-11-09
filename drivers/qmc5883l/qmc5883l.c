@@ -68,7 +68,7 @@ int qmc5883l_soft_reset(qmc5883l_handle_t *handle)
     return qmc5883l_write_ctrl1(handle, handle->ctrl1);
 }
 
-int qmc5883l_set_range(qmc5883l_handle_t *handle, qmc5883l_range_t range)
+int qmc5883l_set_range(qmc5883l_handle_t *handle, qmc5883l_range_e range)
 {
     uint8_t old_ctrl1;
     uint8_t value;

@@ -26,12 +26,12 @@ typedef enum {
     CH9120_NET_TCP_CLIENT,
     CH9120_NET_UDP_SERVER,
     CH9120_NET_UDP_CLIENT
-} ch9120_net_mode_t;
+} ch9120_net_mode_e;
 
 typedef struct {
     hal_uart_t *uart;
     uint32_t timeout_ms;
-    ch9120_net_mode_t mode;
+    ch9120_net_mode_e mode;
     bool initialized;
 } ch9120_handle_t;
 
@@ -59,7 +59,7 @@ int ch9120_set_gateway(ch9120_handle_t *handle, const uint8_t gateway[4]);
 int ch9120_set_local_port(ch9120_handle_t *handle, uint16_t port);
 int ch9120_set_dest_ip(ch9120_handle_t *handle, const uint8_t ip[4]);
 int ch9120_set_dest_port(ch9120_handle_t *handle, uint16_t port);
-int ch9120_set_mode(ch9120_handle_t *handle, ch9120_net_mode_t mode);
+int ch9120_set_mode(ch9120_handle_t *handle, ch9120_net_mode_e mode);
 int ch9120_set_baudrate(ch9120_handle_t *handle, uint32_t baudrate);
 
 int ch9120_save_reset(ch9120_handle_t *handle);

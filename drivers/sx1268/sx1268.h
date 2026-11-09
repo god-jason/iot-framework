@@ -14,7 +14,7 @@ extern "C" {
 #endif
 
 typedef sx1262_handle_t sx1268_handle_t;
-typedef sx1262_mode_t sx1268_mode_t;
+typedef sx1262_mode_e sx1268_mode_t;
 
 int sx1268_init(sx1268_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
                 hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1);

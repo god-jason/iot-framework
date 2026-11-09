@@ -166,7 +166,7 @@ static bool ml307_net_ipv4(const char *s, size_t len)
 
 /* ---------------- iot_net 接口实现 ---------------- */
 
-hal_status_t iot_net_init(void)
+int iot_net_init(void)
 {
     if (!s_urc_registered) {
         if (at_urc_register("+MIPURC:", ml307_net_urc, NULL) != 0) {
@@ -178,7 +178,7 @@ hal_status_t iot_net_init(void)
     return HAL_OK;
 }
 
-hal_status_t iot_net_deinit(void)
+int iot_net_deinit(void)
 {
     int i;
 
@@ -301,7 +301,7 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
     }
 }
 
-hal_status_t iot_net_close(iot_net_id_t id)
+int iot_net_close(iot_net_id_t id)
 {
     char cmd[32];
 
@@ -318,7 +318,7 @@ hal_status_t iot_net_close(iot_net_id_t id)
     return HAL_OK;
 }
 
-hal_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
+int iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
 {
     char cmd[192];
     const char *resp;
@@ -370,7 +370,7 @@ hal_status_t iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
     return HAL_NOT_FOUND;
 }
 
-hal_status_t iot_net_getip(char *ip, uint32_t size)
+int iot_net_getip(char *ip, uint32_t size)
 {
     if (ip == NULL || size == 0) {
         return HAL_INVALID_PARAM;
@@ -379,14 +379,14 @@ hal_status_t iot_net_getip(char *ip, uint32_t size)
 }
 
 /* 模组不提供 MAC 地址 */
-hal_status_t iot_net_getmac(char *mac, uint32_t size)
+int iot_net_getmac(char *mac, uint32_t size)
 {
     (void)mac;
     (void)size;
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t iot_net_gettime(iot_net_time_t *time)
+int iot_net_gettime(iot_net_time_t *time)
 {
     const char *resp;
     const char *p;
@@ -419,7 +419,7 @@ hal_status_t iot_net_gettime(iot_net_time_t *time)
 }
 
 /* ML307 的 MIP 指令只支持客户端连接，不提供本地监听与服务端 accept */
-hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
+int iot_net_listen(iot_net_type_t type, const char *host,
                             uint16_t port, iot_net_id_t *id)
 {
     (void)type;
@@ -432,7 +432,7 @@ hal_status_t iot_net_listen(iot_net_type_t type, const char *host,
     return HAL_NOT_SUPPORTED;
 }
 
-hal_status_t iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
+int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
                             char *peer_ip, uint32_t ip_size,
                             uint16_t *peer_port, uint32_t timeout)
 {

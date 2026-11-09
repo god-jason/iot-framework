@@ -33,14 +33,14 @@ typedef struct {
  * @brief  初始化 DHT22（引脚配置为开漏输出 + 上拉，总线置为空闲高电平）
  * @param  handle  驱动句柄
  * @param  pin     数据引脚（HAL_PIN(port, index) 编码）
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int dht22_init(dht22_handle_t *handle, hal_pin_t pin);
 
 /**
  * @brief  反初始化（释放引脚）
  * @param  handle  驱动句柄
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int dht22_deinit(dht22_handle_t *handle);
 
@@ -58,7 +58,7 @@ int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity);
  * @brief  读取原始 5 字节帧（不做校验和检查）
  * @param  handle  驱动句柄
  * @param  frame   输出缓冲区，frame[0..1] 湿度、frame[2..3] 温度、frame[4] 校验和
- * @return 0 成功，负值为 hal_status_t；采样间隔不足 2s 返回 HAL_BUSY
+ * @return 0 成功，负值为 HAL 状态码；采样间隔不足 2s 返回 HAL_BUSY
  */
 int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5]);
 

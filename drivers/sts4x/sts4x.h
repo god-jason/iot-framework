@@ -21,11 +21,11 @@ typedef enum {
     STS4X_REPEAT_HIGH = 0,
     STS4X_REPEAT_MEDIUM,
     STS4X_REPEAT_LOW
-} sts4x_repeatability_t;
+} sts4x_repeatability_e;
 
 typedef struct {
     driver_i2c_t i2c;
-    sts4x_repeatability_t repeatability;
+    sts4x_repeatability_e repeatability;
     bool crc_enabled;
     bool initialized;
 } sts4x_handle_t;
@@ -45,7 +45,7 @@ int sts4x_read(sts4x_handle_t *handle, float *celsius);
 /** 单次测量，返回原始 16 位值 */
 int sts4x_read_raw(sts4x_handle_t *handle, uint16_t *raw);
 
-int sts4x_set_repeatability(sts4x_handle_t *handle, sts4x_repeatability_t repeatability);
+int sts4x_set_repeatability(sts4x_handle_t *handle, sts4x_repeatability_e repeatability);
 
 int sts4x_set_crc(sts4x_handle_t *handle, bool enable);
 

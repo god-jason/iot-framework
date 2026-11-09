@@ -173,9 +173,9 @@ int da267_read(da267_handle_t *handle, da267_accel_t *accel)
     return DRIVER_OK;
 }
 
-int da267_set_range(da267_handle_t *handle, da267_range_t range)
+int da267_set_range(da267_handle_t *handle, da267_range_e range)
 {
-    da267_range_t old;
+    da267_range_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)range >= (unsigned)DA267_RANGE_COUNT) {
         return (int)HAL_INVALID_PARAM;
@@ -191,9 +191,9 @@ int da267_set_range(da267_handle_t *handle, da267_range_t range)
     return DRIVER_OK;
 }
 
-int da267_set_output_rate(da267_handle_t *handle, da267_odr_t odr)
+int da267_set_output_rate(da267_handle_t *handle, da267_odr_e odr)
 {
-    da267_odr_t old;
+    da267_odr_e old;
 
     if (handle == NULL || !handle->initialized || (unsigned)odr >= (unsigned)DA267_ODR_COUNT) {
         return (int)HAL_INVALID_PARAM;

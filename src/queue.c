@@ -16,7 +16,7 @@
 
 #include <string.h>
 
-iot_status_t iot_queue_init(iot_queue_t *queue, void *buffer,
+int iot_queue_init(iot_queue_t *queue, void *buffer,
                               uint32_t item_size, uint32_t depth)
 {
     if (queue == NULL || buffer == NULL || item_size == 0U || depth == 0U) {
@@ -39,7 +39,7 @@ iot_status_t iot_queue_init(iot_queue_t *queue, void *buffer,
     return IOT_OK;
 }
 
-iot_status_t iot_queue_send(iot_queue_t *queue, const void *item,
+int iot_queue_send(iot_queue_t *queue, const void *item,
                               uint32_t timeout)
 {
     iot_task_t *receiver;
@@ -88,7 +88,7 @@ iot_status_t iot_queue_send(iot_queue_t *queue, const void *item,
     return iot_block_current(&queue->send_wait, timeout);
 }
 
-iot_status_t iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
+int iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
 {
     iot_task_t *sender;
 

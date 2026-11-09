@@ -240,7 +240,7 @@ static uint32_t slave_pdu(const modbus_slave_if_t *iface,
  *       out/capacity 响应缓冲；out_len 输出响应长度。
  * 返回：0 成功；负值表示帧非法或地址不匹配（此时不应发送响应）。
  */
-int modbus_slave_process(modbus_mode_t mode, uint8_t slave,
+int modbus_slave_process(modbus_mode_e mode, uint8_t slave,
                          const modbus_slave_if_t *iface,
                          const uint8_t *adu, uint32_t len,
                          uint8_t *out, uint32_t capacity, uint32_t *out_len)
@@ -287,7 +287,7 @@ int modbus_slave_process(modbus_mode_t mode, uint8_t slave,
  * 参数：slave 从站对象；address 本机地址（0 表示广播，只处理不回复）；
  *       mode RTU/TCP。
  */
-void modbus_slave_register_init(modbus_slave_t *slave, uint8_t address, modbus_mode_t mode)
+void modbus_slave_register_init(modbus_slave_t *slave, uint8_t address, modbus_mode_e mode)
 {
     if (slave == NULL) {
         return;
@@ -327,7 +327,7 @@ int modbus_slave_register_range(modbus_slave_t *slave, const modbus_reg_range_t 
  * 返回：同 modbus_slave_register_range。
  */
 int modbus_slave_map_regs(modbus_slave_t *slave, uint16_t addr,
-                          uint16_t *data, uint16_t qty, modbus_reg_type_t type)
+                          uint16_t *data, uint16_t qty, modbus_reg_type_e type)
 {
     modbus_reg_range_t range;
 
@@ -349,7 +349,7 @@ int modbus_slave_map_regs(modbus_slave_t *slave, uint16_t addr,
  * 返回：同 modbus_slave_register_range。
  */
 int modbus_slave_map_bits(modbus_slave_t *slave, uint16_t addr,
-                          uint8_t *bits, uint16_t qty, modbus_reg_type_t type)
+                          uint8_t *bits, uint16_t qty, modbus_reg_type_e type)
 {
     modbus_reg_range_t range;
 
@@ -370,7 +370,7 @@ int modbus_slave_map_bits(modbus_slave_t *slave, uint16_t addr,
  *       read_cb/write_cb 读写回调（可置 NULL 表示不提供）；user 回调上下文。
  * 返回：0 成功；MODBUS_ERR_PARAM 参数非法；MODBUS_ERR_RANGE 未找到区间。
  */
-int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_t type, uint16_t addr,
+int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_e type, uint16_t addr,
                               modbus_slave_read_cb read_cb, modbus_slave_write_cb write_cb,
                               void *user)
 {
@@ -395,7 +395,7 @@ int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_t type, uin
  * 参数：slave 从站；type 区间类型；addr 区间起始地址。
  * 返回：0 成功；MODBUS_ERR_PARAM 参数非法；MODBUS_ERR_RANGE 未找到区间。
  */
-int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_t type,
+int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_e type,
                                   uint16_t addr)
 {
     uint16_t i;
@@ -422,7 +422,7 @@ int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_t type,
  * 返回：命中的区间指针；未命中或 qty == 0 时返回 NULL。
  * 说明：地址必须整体落在单个区间内，不支持跨区间拼接访问。
  */
-static modbus_reg_range_t *map_find_range(modbus_slave_t *slave, modbus_reg_type_t type,
+static modbus_reg_range_t *map_find_range(modbus_slave_t *slave, modbus_reg_type_e type,
                                           uint16_t addr, uint16_t qty)
 {
     uint16_t i;
@@ -540,7 +540,7 @@ static uint32_t map_pdu(modbus_slave_t *slave, const uint8_t *pdu, uint32_t pdu_
         uint16_t qty;
         uint16_t done = 0;
         uint32_t bytes;
-        modbus_reg_type_t type = (fc == MODBUS_FC_READ_COILS)
+        modbus_reg_type_e type = (fc == MODBUS_FC_READ_COILS)
                                  ? MODBUS_REG_COIL : MODBUS_REG_DISCRETE;
 
         if (pdu_len < 5) {
@@ -589,7 +589,7 @@ static uint32_t map_pdu(modbus_slave_t *slave, const uint8_t *pdu, uint32_t pdu_
         uint16_t qty;
         uint16_t i;
         uint16_t values[125];
-        modbus_reg_type_t type = (fc == MODBUS_FC_READ_HOLDING_REGS)
+        modbus_reg_type_e type = (fc == MODBUS_FC_READ_HOLDING_REGS)
                                  ? MODBUS_REG_HOLDING : MODBUS_REG_INPUT;
 
         if (pdu_len < 5) {

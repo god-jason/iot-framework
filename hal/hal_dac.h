@@ -21,12 +21,12 @@ typedef enum {
     HAL_DAC_ALIGN_8BIT = 0,        /* 8 位右对齐 */
     HAL_DAC_ALIGN_12BIT_RIGHT,     /* 12 位右对齐 */
     HAL_DAC_ALIGN_12BIT_LEFT       /* 12 位左对齐 */
-} hal_dac_alignment_t;
+} hal_dac_alignment_e;
 
 /* DAC 配置 */
 typedef struct {
     uint8_t channel;                /* 输出通道号 */
-    hal_dac_alignment_t alignment; /* 数据对齐方式 */
+    hal_dac_alignment_e alignment; /* 数据对齐方式 */
 } hal_dac_config_t;
 
 /* DAC 句柄 */
@@ -42,23 +42,23 @@ typedef struct hal_dac {
  * config : 配置，不可为 NULL；通道号需在硬件范围内。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；通道不存在返回 HAL_NOT_FOUND。
  */
-hal_status_t hal_dac_init(hal_dac_t *handle, const hal_dac_config_t *config);
+int hal_dac_init(hal_dac_t *handle, const hal_dac_config_t *config);
 
 /* 反初始化 DAC；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_dac_deinit(hal_dac_t *handle);
+int hal_dac_deinit(hal_dac_t *handle);
 
 /* 使能 DAC 输出；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-hal_status_t hal_dac_start(hal_dac_t *handle);
+int hal_dac_start(hal_dac_t *handle);
 
 /* 关闭 DAC 输出，输出保持为高阻或上次值由平台决定 */
-hal_status_t hal_dac_stop(hal_dac_t *handle);
+int hal_dac_stop(hal_dac_t *handle);
 
 /*
  * 输出单个采样值。
  * value : 采样值，超出当前对齐位宽的高位会被平台截断或返回 HAL_OVERFLOW。
  * 返回  : HAL_OK；HAL_INVALID_PARAM；未启动返回 HAL_NOT_READY。
  */
-hal_status_t hal_dac_write(hal_dac_t *handle, uint32_t value);
+int hal_dac_write(hal_dac_t *handle, uint32_t value);
 
 /*
  * DMA 方式连续输出波形。
@@ -66,7 +66,7 @@ hal_status_t hal_dac_write(hal_dac_t *handle, uint32_t value);
  * length : 采样点个数（按元素计，非字节）。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；DMA 不可用返回 HAL_NOT_SUPPORTED。
  */
-hal_status_t hal_dac_write_dma(hal_dac_t *handle, const uint32_t *buffer, size_t length);
+int hal_dac_write_dma(hal_dac_t *handle, const uint32_t *buffer, size_t length);
 
 #ifdef __cplusplus
 }

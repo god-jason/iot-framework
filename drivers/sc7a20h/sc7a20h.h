@@ -31,7 +31,7 @@ typedef enum {
     SC7A20H_RANGE_8G,           /* 4 mg/digit  */
     SC7A20H_RANGE_16G,          /* 12 mg/digit */
     SC7A20H_RANGE_COUNT
-} sc7a20h_range_t;
+} sc7a20h_range_e;
 
 typedef enum {
     SC7A20H_ODR_1HZ = 0,
@@ -42,7 +42,7 @@ typedef enum {
     SC7A20H_ODR_200HZ,
     SC7A20H_ODR_400HZ,
     SC7A20H_ODR_COUNT
-} sc7a20h_odr_t;
+} sc7a20h_odr_e;
 
 typedef struct {
     float x;
@@ -52,8 +52,8 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    sc7a20h_range_t range;
-    sc7a20h_odr_t odr;
+    sc7a20h_range_e range;
+    sc7a20h_odr_e odr;
     float g_per_lsb;        /* 当前量程灵敏度，g/LSB */
     bool initialized;
 } sc7a20h_handle_t;
@@ -63,7 +63,7 @@ typedef struct {
  * @param  handle   驱动句柄
  * @param  i2c      已初始化的 I2C 主机句柄
  * @param  address  7 位从机地址，0 表示使用默认 0x18
- * @return 0 成功，负值为 hal_status_t（-11 表示 WHO_AM_I 不匹配）
+ * @return 0 成功，负值为 HAL 状态码（-11 表示 WHO_AM_I 不匹配）
  */
 int sc7a20h_init(sc7a20h_handle_t *handle, hal_i2c_t *i2c, uint16_t address);
 
@@ -77,10 +77,10 @@ int sc7a20h_read_raw(sc7a20h_handle_t *handle, int16_t accel[3]);
 int sc7a20h_read(sc7a20h_handle_t *handle, sc7a20h_accel_t *accel);
 
 /** @brief 设置量程（重新写 CTRL_REG4，同步更新灵敏度） */
-int sc7a20h_set_range(sc7a20h_handle_t *handle, sc7a20h_range_t range);
+int sc7a20h_set_range(sc7a20h_handle_t *handle, sc7a20h_range_e range);
 
 /** @brief 设置输出率（重新写 CTRL_REG1） */
-int sc7a20h_set_output_rate(sc7a20h_handle_t *handle, sc7a20h_odr_t odr);
+int sc7a20h_set_output_rate(sc7a20h_handle_t *handle, sc7a20h_odr_e odr);
 
 #ifdef __cplusplus
 }

@@ -71,7 +71,7 @@ static int get_param(const motion_vm_t *vm, const motion_instruction_t *ins,
 }
 
 /* 记录错误（含当前行号）并返回 MOTION_EXEC_ERROR */
-static motion_exec_result_t exec_fail(motion_vm_t *vm, int code,
+static motion_exec_result_e exec_fail(motion_vm_t *vm, int code,
                                       const char *message)
 {
     motion_error_set(&vm->error, code, vm->line, message);
@@ -79,7 +79,7 @@ static motion_exec_result_t exec_fail(motion_vm_t *vm, int code,
 }
 
 /* 以 MOTION_ERR_PARAMETER 记录参数错误 */
-static motion_exec_result_t param_fail(motion_vm_t *vm, const char *message)
+static motion_exec_result_e param_fail(motion_vm_t *vm, const char *message)
 {
     return exec_fail(vm, MOTION_ERR_PARAMETER, message);
 }
@@ -116,8 +116,8 @@ static int param_int(const motion_vm_t *vm, const motion_instruction_t *ins,
 static int param_double_unit(const motion_vm_t *vm,
                              const motion_instruction_t *ins,
                              const char *name, double def,
-                             motion_unit_t def_unit, double *out,
-                             motion_unit_t *unit)
+                             motion_unit_e def_unit, double *out,
+                             motion_unit_e *unit)
 {
     motion_value_t value;
     int rc = get_param(vm, ins, name, &value);
@@ -214,12 +214,12 @@ static int eval_expression(motion_vm_t *vm, const char *expression,
 /* 1 成功，0 没有条件参数，-1 变量解析失败 */
 static int get_condition(const motion_vm_t *vm,
                          const motion_instruction_t *ins,
-                         motion_compare_t *compare, int32_t *target)
+                         motion_compare_e *compare, int32_t *target)
 {
     static const char *const names[] = {
         "GT", "GE", "LT", "LE", "NE", "EQ", "VALUE"
     };
-    static const motion_compare_t compares[] = {
+    static const motion_compare_e compares[] = {
         MOTION_CMP_GT, MOTION_CMP_GE, MOTION_CMP_LT, MOTION_CMP_LE,
         MOTION_CMP_NE, MOTION_CMP_EQ, MOTION_CMP_EQ
     };
@@ -243,7 +243,7 @@ static int get_condition(const motion_vm_t *vm,
 }
 
 /* 初始化等待上下文：清零、设置类型、记录起始 tick 并置 active */
-static void begin_wait(motion_vm_t *vm, motion_wait_type_t type)
+static void begin_wait(motion_vm_t *vm, motion_wait_type_e type)
 {
     memset(&vm->wait, 0, sizeof(vm->wait));
     vm->wait.type = type;
@@ -268,13 +268,13 @@ static void begin_wait(motion_vm_t *vm, motion_wait_type_t type)
  * 所有参数通过 get_param/param_* 解析，缺失时使用默认值。
  * 返回 MOTION_EXEC_OK 或 MOTION_EXEC_ERROR（错误写入 vm->error）。
  */
-static motion_exec_result_t execute_step(motion_vm_t *vm,
+static motion_exec_result_e execute_step(motion_vm_t *vm,
                                          const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "START") == 0) {
         motion_value_t dir_value;
         double speed = 0.0;
-        motion_unit_t unit = MOTION_UNIT_STEP_S;
+        motion_unit_e unit = MOTION_UNIT_STEP_S;
         int64_t time_ms = 0;
         int64_t pulse = 0;
         int64_t acc = 0;
@@ -383,7 +383,7 @@ static motion_exec_result_t execute_step(motion_vm_t *vm,
     if (strcmp(ins->action, "HOME") == 0) {
         motion_value_t dir_value;
         double speed = 0.0;
-        motion_unit_t unit = MOTION_UNIT_STEP_S;
+        motion_unit_e unit = MOTION_UNIT_STEP_S;
         int64_t timeout = 0;
         int rc;
 
@@ -479,7 +479,7 @@ static motion_exec_result_t execute_step(motion_vm_t *vm,
  *   STOP  - 按 DECEL 减速停止。
  * 返回 MOTION_EXEC_OK 或 MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_pwm(motion_vm_t *vm,
+static motion_exec_result_e execute_pwm(motion_vm_t *vm,
                                         const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "START") == 0) {
@@ -589,7 +589,7 @@ static motion_exec_result_t execute_pwm(motion_vm_t *vm,
  * READ 读取电平并可写入 TO 指定的变量。
  * 返回 MOTION_EXEC_OK 或 MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_gpio(motion_vm_t *vm,
+static motion_exec_result_e execute_gpio(motion_vm_t *vm,
                                          const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "ON") == 0 ||
@@ -651,7 +651,7 @@ static motion_exec_result_t execute_gpio(motion_vm_t *vm,
  * 执行 RELAY 指令：ON/OFF 写继电器状态，READ 读取状态并可写入 TO 变量。
  * 返回 MOTION_EXEC_OK 或 MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_relay(motion_vm_t *vm,
+static motion_exec_result_e execute_relay(motion_vm_t *vm,
                                           const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "ON") == 0 ||
@@ -702,7 +702,7 @@ static motion_exec_result_t execute_relay(motion_vm_t *vm,
  *   WAIT - 设置 ADC 等待条件与超时，返回 MOTION_EXEC_WAIT。
  * 返回 MOTION_EXEC_OK / MOTION_EXEC_WAIT / MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_adc(motion_vm_t *vm,
+static motion_exec_result_e execute_adc(motion_vm_t *vm,
                                         const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "READ") == 0) {
@@ -750,7 +750,7 @@ static motion_exec_result_t execute_adc(motion_vm_t *vm,
     }
 
     if (strcmp(ins->action, "WAIT") == 0) {
-        motion_compare_t compare = MOTION_CMP_NONE;
+        motion_compare_e compare = MOTION_CMP_NONE;
         int32_t target = 0;
         int rc = get_condition(vm, ins, &compare, &target);
 
@@ -780,7 +780,7 @@ static motion_exec_result_t execute_adc(motion_vm_t *vm,
  *   WAIT - 设置比较条件与超时，返回 MOTION_EXEC_WAIT。
  * 返回 MOTION_EXEC_OK / MOTION_EXEC_WAIT / MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_sensor(motion_vm_t *vm,
+static motion_exec_result_e execute_sensor(motion_vm_t *vm,
                                            const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "READ") == 0) {
@@ -812,7 +812,7 @@ static motion_exec_result_t execute_sensor(motion_vm_t *vm,
     }
 
     if (strcmp(ins->action, "WAIT") == 0) {
-        motion_compare_t compare = MOTION_CMP_NONE;
+        motion_compare_e compare = MOTION_CMP_NONE;
         int32_t target = 0;
         int rc = get_condition(vm, ins, &compare, &target);
 
@@ -849,7 +849,7 @@ static motion_exec_result_t execute_sensor(motion_vm_t *vm,
  *   JOB    - 等待指定 JOB 结束（启动前会校验 JOB 是否存在）。
  * 返回 MOTION_EXEC_WAIT；参数错误时返回 MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_wait(motion_vm_t *vm,
+static motion_exec_result_e execute_wait(motion_vm_t *vm,
                                          const motion_instruction_t *ins)
 {
     if (strcmp(ins->action, "TIME") == 0) {
@@ -939,7 +939,7 @@ static motion_exec_result_t execute_wait(motion_vm_t *vm,
  * 所有配对信息来自 motion_flow 在加载期建立的索引。
  * 返回 MOTION_EXEC_OK，结构或栈错误时返回 MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_flow(motion_vm_t *vm,
+static motion_exec_result_e execute_flow(motion_vm_t *vm,
                                          const motion_instruction_t *ins)
 {
     if (ins->command == MOTION_CMD_IF) {
@@ -1113,7 +1113,7 @@ static motion_exec_result_t execute_flow(motion_vm_t *vm,
  * 两者都没有时使用 MOTION_ERR_RUNTIME。
  * 返回 MOTION_EXEC_ERROR，由 VM 决定是否转入 ON ERROR 处理器。
  */
-static motion_exec_result_t execute_error(motion_vm_t *vm,
+static motion_exec_result_e execute_error(motion_vm_t *vm,
                                           const motion_instruction_t *ins)
 {
     motion_value_t value;
@@ -1138,7 +1138,7 @@ static motion_exec_result_t execute_error(motion_vm_t *vm,
  *   JOB_STATE - 查询 JOB 状态并写入 TO 指定的变量。
  * 返回 MOTION_EXEC_OK 或 MOTION_EXEC_ERROR。
  */
-static motion_exec_result_t execute_task(motion_vm_t *vm,
+static motion_exec_result_e execute_task(motion_vm_t *vm,
                                          const motion_instruction_t *ins)
 {
     if (ins->command == MOTION_CMD_START_JOB) {
@@ -1161,7 +1161,7 @@ static motion_exec_result_t execute_task(motion_vm_t *vm,
 
     if (ins->command == MOTION_CMD_JOB_STATE) {
         char target[MOTION_MAX_VAR_NAME];
-        motion_state_t state;
+        motion_state_e state;
         motion_value_t result;
         int has_target;
 
@@ -1199,7 +1199,7 @@ static motion_exec_result_t execute_task(motion_vm_t *vm,
  * 返回见 motion_executor.h；vm 或 instruction 为 NULL 时返回
  * MOTION_EXEC_ERROR（不写错误信息）。
  */
-motion_exec_result_t motion_executor_execute(
+motion_exec_result_e motion_executor_execute(
     motion_vm_t *vm, const motion_instruction_t *instruction)
 {
     if (vm == NULL || instruction == NULL) {

@@ -178,7 +178,7 @@ int bmi270_read(bmi270_handle_t *handle, bmi270_data_t *data)
     return DRIVER_OK;
 }
 
-int bmi270_set_accel_range(bmi270_handle_t *handle, bmi270_accel_range_t range)
+int bmi270_set_accel_range(bmi270_handle_t *handle, bmi270_accel_range_e range)
 {
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)BMI270_ACCEL_RANGE_COUNT) {
@@ -193,7 +193,7 @@ int bmi270_set_accel_range(bmi270_handle_t *handle, bmi270_accel_range_t range)
     return DRIVER_OK;
 }
 
-int bmi270_set_gyro_range(bmi270_handle_t *handle, bmi270_gyro_range_t range)
+int bmi270_set_gyro_range(bmi270_handle_t *handle, bmi270_gyro_range_e range)
 {
     if (handle == NULL || !handle->initialized ||
         (unsigned)range >= (unsigned)BMI270_GYRO_RANGE_COUNT) {
@@ -208,7 +208,7 @@ int bmi270_set_gyro_range(bmi270_handle_t *handle, bmi270_gyro_range_t range)
     return DRIVER_OK;
 }
 
-int bmi270_set_output_rate(bmi270_handle_t *handle, bmi270_odr_t odr)
+int bmi270_set_output_rate(bmi270_handle_t *handle, bmi270_odr_e odr)
 {
     uint8_t acc_conf;
     uint8_t gyr_conf;

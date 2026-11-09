@@ -74,7 +74,7 @@ int motor_set_speed(motor_t *motor, int32_t speed)
  * 返回：0 成功；参数非法或底层调用失败返回 -1。
  * 说明：仅调用底层 set_direction，不改变当前速度。
  */
-int motor_set_direction(motor_t *motor, motor_direction_t direction)
+int motor_set_direction(motor_t *motor, motor_direction_e direction)
 {
     if (motor == NULL || motor->ops == NULL || motor->ops->set_direction == NULL) {
         return -1;

@@ -10,7 +10,7 @@
  * 数据流：motion_parser 把文本行解析成 motion_instruction_t；
  *         motion_variable 负责 motion_value_t 的存储与求值；
  *         执行层消费 motion_instruction_t / motion_wait_t 并产生
- *         motion_state_t、motion_exec_result_t 与 motion_error_t。
+ *         motion_state_t、motion_exec_result_e 与 motion_error_t。
  *
  * 边界约束：本头文件不涉及动态内存，所有数组容量均由
  *           motion_config.h 中的 MOTION_MAX_* 编译期常量确定。
@@ -35,7 +35,7 @@ typedef enum {
     MOTION_STATE_COMPLETED, /* 完成：已执行到程序末尾 */
     MOTION_STATE_ERROR,     /* 出错：可跳转至 ON ERROR 处理块 */
     MOTION_STATE_ABORTED    /* 中止：被外部终止，不再继续执行 */
-} motion_state_t;
+} motion_state_e;
 
 /* 指令类型，覆盖 §4 - §16 全部语法 */
 typedef enum {
@@ -72,7 +72,7 @@ typedef enum {
     MOTION_CMD_START_JOB,    /* START JOB：启动指定任务 */
     MOTION_CMD_STOP_JOB,     /* STOP JOB：停止指定任务 */
     MOTION_CMD_JOB_STATE     /* JOB ... STATE：查询任务状态 */
-} motion_cmd_t;
+} motion_cmd_e;
 
 /* 解析结果 */
 typedef enum {
@@ -81,7 +81,7 @@ typedef enum {
     MOTION_PARSE_INVALID,    /* 语法错误 */
     MOTION_PARSE_OVERFLOW,   /* 行过长或参数个数超限 */
     MOTION_PARSE_UNSUPPORTED /* 无法识别的指令关键字 */
-} motion_parse_result_t;
+} motion_parse_result_e;
 
 /* 执行结果 */
 typedef enum {
@@ -90,7 +90,7 @@ typedef enum {
     MOTION_EXEC_ERROR,       /* 执行出错 */
     MOTION_EXEC_ABORT,       /* 被中止 */
     MOTION_EXEC_COMPLETE     /* 程序执行完毕 */
-} motion_exec_result_t;
+} motion_exec_result_e;
 
 /* 数值类型 */
 typedef enum {
@@ -100,7 +100,7 @@ typedef enum {
     MOTION_VALUE_BOOLEAN,    /* 布尔值：TRUE/FALSE/ON/OFF */
     MOTION_VALUE_STRING,     /* 双引号字符串（定长缓冲） */
     MOTION_VALUE_VARIABLE    /* $变量引用，使用时需要查表求值 */
-} motion_value_type_t;
+} motion_value_type_e;
 
 /* 单位 */
 typedef enum {
@@ -117,12 +117,12 @@ typedef enum {
     MOTION_UNIT_MM,          /* 毫米（cm/m 解析时已换算为 mm） */
     MOTION_UNIT_CM,          /* 厘米：保留值，解析阶段会转为 MM */
     MOTION_UNIT_M            /* 米：保留值，解析阶段会转为 MM */
-} motion_unit_t;
+} motion_unit_e;
 
 /* 通用数值 / 变量引用 */
 typedef struct {
-    motion_value_type_t type; /* 当前联合体生效的成员，决定 data 的解释方式 */
-    motion_unit_t unit;       /* 数值单位；字符串/布尔通常为 NONE */
+    motion_value_type_e type; /* 当前联合体生效的成员，决定 data 的解释方式 */
+    motion_unit_e unit;       /* 数值单位；字符串/布尔通常为 NONE */
     union {
         int64_t integer;                      /* type = INTEGER */
         double real;                          /* type = FLOAT */
@@ -140,7 +140,7 @@ typedef struct {
 
 /* 解析后的一条指令 */
 typedef struct {
-    motion_cmd_t command;  /* 指令类型 */
+    motion_cmd_e command;  /* 指令类型 */
     uint16_t device_id;    /* 目标设备号；非设备指令时为 0 */
     char action[16];       /* 动作名（大写），如 START/STOP/POSITION */
     char subaction[16];    /* 子动作名，如 STEP POSITION SET 中的 SET */
@@ -166,7 +166,7 @@ typedef enum {
     MOTION_CMP_GE,       /* >= */
     MOTION_CMP_LT,       /* <  */
     MOTION_CMP_LE        /* <= */
-} motion_compare_t;
+} motion_compare_e;
 
 /* 等待类型 */
 typedef enum {
@@ -179,15 +179,15 @@ typedef enum {
     MOTION_WAIT_SENSOR,   /* 等待传感器满足比较条件 */
     MOTION_WAIT_ALL,      /* 等待所有已启动设备空闲 */
     MOTION_WAIT_JOB       /* 等待指定 JOB 结束 */
-} motion_wait_type_t;
+} motion_wait_type_e;
 
 /* 一条进行中的等待条件 */
 typedef struct {
-    motion_wait_type_t type; /* 等待类型 */
+    motion_wait_type_e type; /* 等待类型 */
     bool active;             /* 是否处于等待中；false 表示该结构未被占用 */
 
     uint16_t device_id;      /* 被等待的设备号 */
-    motion_compare_t compare;/* 目标值比较方式（设备/传感器等待使用） */
+    motion_compare_e compare;/* 目标值比较方式（设备/传感器等待使用） */
     int32_t target;          /* 目标比较值 */
 
     uint32_t start_tick;     /* 等待起始时刻（毫秒 tick），用于计算已等待时间 */
@@ -200,7 +200,7 @@ typedef struct {
 
 /* 错误信息 */
 typedef struct {
-    int code;                        /* 错误码，取值见 motion_error_code_t */
+    int code;                        /* 错误码，取值见 motion_error_code_e */
     uint32_t line;                   /* 出错行号；0 表示与具体行无关 */
     char message[MOTION_MAX_ERROR_MSG]; /* 人类可读的错误描述，定长且以 '\0' 结尾 */
 } motion_error_t;

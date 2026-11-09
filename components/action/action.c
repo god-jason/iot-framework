@@ -115,7 +115,7 @@ int action_reset(action_t *action)
  * @param action 动作对象，可为 NULL
  * @return 当前状态；NULL 时返回 ACTION_IDLE
  */
-action_state_t action_get_state(const action_t *action)
+action_state_e action_get_state(const action_t *action)
 {
     return (action == NULL) ? ACTION_IDLE : action->state;
 }

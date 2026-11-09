@@ -18,9 +18,9 @@ typedef enum {
     BUTTON_PRESSED,
     BUTTON_CLICKED,
     BUTTON_LONG_PRESSED
-} button_event_t;
+} button_event_e;
 
-typedef void (*button_callback_fn)(button_event_t event, void *user);
+typedef void (*button_callback_fn)(button_event_e event, void *user);
 
 typedef struct {
     uint8_t pin;

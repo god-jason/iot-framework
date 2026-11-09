@@ -55,7 +55,7 @@ int sht31_soft_reset(sht31_handle_t *handle)
     return ret;
 }
 
-int sht31_set_repeatability(sht31_handle_t *handle, sht31_repeatability_t repeatability)
+int sht31_set_repeatability(sht31_handle_t *handle, sht31_repeatability_e repeatability)
 {
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;

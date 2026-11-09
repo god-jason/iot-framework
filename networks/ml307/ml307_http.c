@@ -14,7 +14,7 @@
 
 static char s_http_resp[ML307_HTTP_RESP_MAX];
 
-static hal_status_t ml307_http_copy(iot_http_response_t *response,
+static int ml307_http_copy(iot_http_response_t *response,
                                     const char *data, uint32_t len)
 {
     uint32_t n;
@@ -33,7 +33,7 @@ static hal_status_t ml307_http_copy(iot_http_response_t *response,
     return (n < len) ? HAL_OVERFLOW : HAL_OK;
 }
 
-static hal_status_t ml307_http_read(iot_http_response_t *response)
+static int ml307_http_read(iot_http_response_t *response)
 {
     const char *r;
 
@@ -51,7 +51,7 @@ static hal_status_t ml307_http_read(iot_http_response_t *response)
                            (uint32_t)strlen(s_http_resp));
 }
 
-static hal_status_t ml307_http_do_get(const iot_http_request_t *request,
+static int ml307_http_do_get(const iot_http_request_t *request,
                                       iot_http_response_t *response)
 {
     char cmd[320];
@@ -65,7 +65,7 @@ static hal_status_t ml307_http_do_get(const iot_http_request_t *request,
     return ml307_http_read(response);
 }
 
-static hal_status_t ml307_http_do_post(const iot_http_request_t *request,
+static int ml307_http_do_post(const iot_http_request_t *request,
                                        iot_http_response_t *response)
 {
     char cmd[320];
@@ -107,17 +107,17 @@ static hal_status_t ml307_http_do_post(const iot_http_request_t *request,
 
 /* ---------------- iot_http 接口实现 ---------------- */
 
-hal_status_t iot_http_init(void)
+int iot_http_init(void)
 {
     return HAL_OK;
 }
 
-hal_status_t iot_http_deinit(void)
+int iot_http_deinit(void)
 {
     return HAL_OK;
 }
 
-hal_status_t iot_http_request(const iot_http_request_t *request,
+int iot_http_request(const iot_http_request_t *request,
                               iot_http_response_t *response)
 {
     if (request == NULL || response == NULL || request->url == NULL ||

@@ -30,7 +30,7 @@ typedef enum {
     HMC5883L_AVG_4,
     HMC5883L_AVG_8,
     HMC5883L_AVG_COUNT
-} hmc5883l_average_t;
+} hmc5883l_average_e;
 
 typedef enum {
     HMC5883L_DR_0HZ75 = 0,
@@ -41,7 +41,7 @@ typedef enum {
     HMC5883L_DR_30HZ,
     HMC5883L_DR_75HZ,
     HMC5883L_DR_COUNT
-} hmc5883l_data_rate_t;
+} hmc5883l_data_rate_e;
 
 typedef enum {
     HMC5883L_GAIN_1_3GA = 0,    /* ±1.3 Ga, 1090 LSB/Ga */
@@ -52,7 +52,7 @@ typedef enum {
     HMC5883L_GAIN_5_6GA,        /* ±5.6 Ga,  330 LSB/Ga */
     HMC5883L_GAIN_8_1GA,        /* ±8.1 Ga,  230 LSB/Ga */
     HMC5883L_GAIN_COUNT
-} hmc5883l_gain_t;
+} hmc5883l_gain_e;
 
 typedef struct {
     float x;
@@ -69,9 +69,9 @@ typedef struct {
 
 typedef struct {
     driver_i2c_t i2c;
-    hmc5883l_average_t average;
-    hmc5883l_data_rate_t data_rate;
-    hmc5883l_gain_t gain;
+    hmc5883l_average_e average;
+    hmc5883l_data_rate_e data_rate;
+    hmc5883l_gain_e gain;
     float ut_per_lsb;           /* 由增益换算得到 */
     bool initialized;
 } hmc5883l_handle_t;
@@ -84,11 +84,11 @@ typedef struct {
  * @param  gain      增益档位
  * @param  average   平均次数
  * @param  data_rate 输出率
- * @return 0 成功，负值为 hal_status_t
+ * @return 0 成功，负值为 HAL 状态码
  */
 int hmc5883l_init(hmc5883l_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                  hmc5883l_gain_t gain, hmc5883l_average_t average,
-                  hmc5883l_data_rate_t data_rate);
+                  hmc5883l_gain_e gain, hmc5883l_average_e average,
+                  hmc5883l_data_rate_e data_rate);
 
 /** @brief 反初始化：进入空闲模式 */
 int hmc5883l_deinit(hmc5883l_handle_t *handle);
@@ -103,7 +103,7 @@ int hmc5883l_read_raw(hmc5883l_handle_t *handle, int16_t xyz[3]);
 int hmc5883l_get_status(hmc5883l_handle_t *handle, uint8_t *status);
 
 /** @brief 修改增益（同时更新灵敏度换算系数） */
-int hmc5883l_set_gain(hmc5883l_handle_t *handle, hmc5883l_gain_t gain);
+int hmc5883l_set_gain(hmc5883l_handle_t *handle, hmc5883l_gain_e gain);
 
 #ifdef __cplusplus
 }

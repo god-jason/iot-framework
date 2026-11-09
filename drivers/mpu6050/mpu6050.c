@@ -64,7 +64,7 @@ static int mpu6050_apply_range(mpu6050_handle_t *handle)
     return DRIVER_OK;
 }
 
-int mpu6050_set_dlpf(mpu6050_handle_t *handle, mpu6050_dlpf_t dlpf)
+int mpu6050_set_dlpf(mpu6050_handle_t *handle, mpu6050_dlpf_e dlpf)
 {
     if (handle == NULL || handle->i2c.handle == NULL ||
         (unsigned)dlpf > (unsigned)MPU6050_DLPF_BW_5HZ) {
@@ -99,7 +99,7 @@ int mpu6050_set_sample_rate(mpu6050_handle_t *handle, uint16_t rate_hz)
 }
 
 int mpu6050_init(mpu6050_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
-                 mpu6050_accel_range_t accel_range, mpu6050_gyro_range_t gyro_range)
+                 mpu6050_accel_range_e accel_range, mpu6050_gyro_range_e gyro_range)
 {
     uint8_t id = 0U;
 
