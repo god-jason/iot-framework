@@ -8,7 +8,7 @@
  * 因此回调必须短小，不得阻塞或长时间占用 CPU。
  */
 
-#include "internal.h"
+#include "iot.h"
 #include "port.h"
 
 #include <string.h>
@@ -24,8 +24,8 @@ iot_status_t iot_timer_init(iot_timer_t *timer, const char *name,
                               iot_timer_cb_t cb, void *arg,
                               uint32_t period_ms, bool periodic)
 {
-    if (timer == NULL || cb == NULL) {
-        LOG_E("iot", "timer_init: invalid param");
+    if (timer == NULL || cb == NULL || period_ms == 0U) {
+        LOG_E(IOT_TAG, "timer_init: invalid param");
         return IOT_INVALID_PARAM;
     }
 
@@ -38,7 +38,7 @@ iot_status_t iot_timer_init(iot_timer_t *timer, const char *name,
     timer->running = false;
     list_node_init(&timer->node);
 
-    LOG_D("iot", "timer init: %s period=%u periodic=%d",
+    LOG_D(IOT_TAG, "timer init: %s period=%u periodic=%d",
               name != NULL ? name : "?", (unsigned)period_ms, (int)periodic);
     return IOT_OK;
 }
@@ -46,7 +46,7 @@ iot_status_t iot_timer_init(iot_timer_t *timer, const char *name,
 iot_status_t iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
 {
     if (timer == NULL || timer->cb == NULL || period_ms == 0U) {
-        LOG_E("iot", "timer_start: invalid param");
+        LOG_E(IOT_TAG, "timer_start: invalid param");
         return IOT_INVALID_PARAM;
     }
 
@@ -61,7 +61,7 @@ iot_status_t iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
     timer->running = true;
     iot_port_critical_exit();
 
-    LOG_D("iot", "timer start: %s period=%u",
+    LOG_D(IOT_TAG, "timer start: %s period=%u",
               timer->name != NULL ? timer->name : "?", (unsigned)period_ms);
     return IOT_OK;
 }
@@ -69,7 +69,7 @@ iot_status_t iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
 iot_status_t iot_timer_stop(iot_timer_t *timer)
 {
     if (timer == NULL) {
-        LOG_E("iot", "timer_stop: null timer");
+        LOG_E(IOT_TAG, "timer_stop: null timer");
         return IOT_INVALID_PARAM;
     }
 
@@ -80,7 +80,7 @@ iot_status_t iot_timer_stop(iot_timer_t *timer)
     }
     iot_port_critical_exit();
 
-    LOG_D("iot", "timer stop: %s",
+    LOG_D(IOT_TAG, "timer stop: %s",
               timer->name != NULL ? timer->name : "?");
     return IOT_OK;
 }
@@ -103,7 +103,7 @@ void iot_timer_tick(uint32_t now)
 
         iot_port_critical_enter();
         node = list_first(&s_timers);
-        if (node == NULL || node->sort_key > now) {
+        if (node == NULL || IOT_TICK_AFTER(node->sort_key, now)) {
             iot_port_critical_exit();
             break;      /* 没有到期定时器 */
         }
@@ -114,7 +114,7 @@ void iot_timer_tick(uint32_t now)
         if (timer->periodic) {
             /* 周期定时器：按原周期推后，避免累积漂移 */
             timer->deadline += timer->period;
-            if (timer->deadline <= now) {
+            if (!IOT_TICK_AFTER(timer->deadline, now)) {
                 timer->deadline = now + timer->period;
             }
             timer->node.sort_key = timer->deadline;
@@ -124,7 +124,7 @@ void iot_timer_tick(uint32_t now)
         }
         iot_port_critical_exit();
 
-        LOG_D("iot", "timer fire: %s deadline=%u",
+        LOG_D(IOT_TAG, "timer fire: %s deadline=%u",
                   timer->name != NULL ? timer->name : "?", (unsigned)now);
 
         if (timer->cb != NULL) {

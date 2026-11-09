@@ -11,7 +11,7 @@
  *   - 发送/接收会优先与对方等待者直接握手，避免多余入队出队。
  */
 
-#include "internal.h"
+#include "iot.h"
 #include "port.h"
 
 #include <string.h>
@@ -20,7 +20,7 @@ iot_status_t iot_queue_init(iot_queue_t *queue, void *buffer,
                               uint32_t item_size, uint32_t depth)
 {
     if (queue == NULL || buffer == NULL || item_size == 0U || depth == 0U) {
-        LOG_E("iot", "queue_init: invalid param");
+        LOG_E(IOT_TAG, "queue_init: invalid param");
         return IOT_INVALID_PARAM;
     }
 
@@ -34,7 +34,7 @@ iot_status_t iot_queue_init(iot_queue_t *queue, void *buffer,
     list_init(&queue->recv_wait);
     queue->initialized = true;
 
-    LOG_D("iot", "queue init: item=%u depth=%u",
+    LOG_D(IOT_TAG, "queue init: item=%u depth=%u",
               (unsigned)item_size, (unsigned)depth);
     return IOT_OK;
 }
@@ -44,8 +44,8 @@ iot_status_t iot_queue_send(iot_queue_t *queue, const void *item,
 {
     iot_task_t *receiver;
 
-    if (queue == NULL || !queue->initialized || item == NULL) {
-        LOG_E("iot", "queue_send: invalid param");
+    if (!IOT_OBJ_VALID(queue) || item == NULL) {
+        LOG_E(IOT_TAG, "queue_send: invalid param");
         return IOT_INVALID_PARAM;
     }
 
@@ -59,7 +59,7 @@ iot_status_t iot_queue_send(iot_queue_t *queue, const void *item,
         }
         iot_task_wake(receiver, IOT_OK);
         iot_port_critical_exit();
-        LOG_D("iot", "queue send: handoff to %s",
+        LOG_D(IOT_TAG, "queue send: handoff to %s",
                   receiver->name != NULL ? receiver->name : "?");
         return IOT_OK;
     }
@@ -71,20 +71,20 @@ iot_status_t iot_queue_send(iot_queue_t *queue, const void *item,
         queue->head = (queue->head + 1U) % queue->depth;
         queue->count++;
         iot_port_critical_exit();
-        LOG_D("iot", "queue send: queued, count=%u", (unsigned)queue->count);
+        LOG_D(IOT_TAG, "queue send: queued, count=%u", (unsigned)queue->count);
         return IOT_OK;
     }
 
     iot_port_critical_exit();
 
     if (timeout == IOT_TIMEOUT_NONE) {
-        LOG_D("iot", "queue send: full, non-blocking");
+        LOG_D(IOT_TAG, "queue send: full, non-blocking");
         return IOT_TIMEOUT;
     }
 
     /* 3) 队列满：阻塞等待接收方腾出空间（item 缓冲需保持有效） */
     iot_current_task->wait_ptr = (void *)item;
-    LOG_D("iot", "queue send: full, blocking timeout=%u", (unsigned)timeout);
+    LOG_D(IOT_TAG, "queue send: full, blocking timeout=%u", (unsigned)timeout);
     return iot_block_current(&queue->send_wait, timeout);
 }
 
@@ -92,8 +92,8 @@ iot_status_t iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
 {
     iot_task_t *sender;
 
-    if (queue == NULL || !queue->initialized || item == NULL) {
-        LOG_E("iot", "queue_recv: invalid param");
+    if (!IOT_OBJ_VALID(queue) || item == NULL) {
+        LOG_E(IOT_TAG, "queue_recv: invalid param");
         return IOT_INVALID_PARAM;
     }
 
@@ -119,19 +119,19 @@ iot_status_t iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
         }
 
         iot_port_critical_exit();
-        LOG_D("iot", "queue recv: ok, count=%u", (unsigned)queue->count);
+        LOG_D(IOT_TAG, "queue recv: ok, count=%u", (unsigned)queue->count);
         return IOT_OK;
     }
 
     iot_port_critical_exit();
 
     if (timeout == IOT_TIMEOUT_NONE) {
-        LOG_D("iot", "queue recv: empty, non-blocking");
+        LOG_D(IOT_TAG, "queue recv: empty, non-blocking");
         return IOT_TIMEOUT;
     }
 
     /* 2) 队列空：阻塞等待发送方 */
     iot_current_task->wait_ptr = item;
-    LOG_D("iot", "queue recv: empty, blocking timeout=%u", (unsigned)timeout);
+    LOG_D(IOT_TAG, "queue recv: empty, blocking timeout=%u", (unsigned)timeout);
     return iot_block_current(&queue->recv_wait, timeout);
 }

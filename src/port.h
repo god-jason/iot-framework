@@ -8,7 +8,7 @@
  *   - platforms/pc/pc_rtos.c      : Windows Fiber（协作式，独立栈）；
  *   - platforms/stm32/stm32_rtos.c: Cortex-M PendSV（抢占式，SysTick 驱动）。
  *
- * iot_task_t 的完整布局见 internal.h，移植层需要访问
+ * iot_task_t 的完整布局见 types.h，移植层需要访问
  * task->stack_ptr / entry / arg / stack_mem / stack_size 等字段。
  */
 
@@ -33,7 +33,17 @@ void iot_port_switch(iot_task_t *from, iot_task_t *to);
 /* 把控制权交还给调度器起点（Windows 模拟端用于 iot_stop） */
 void iot_port_return(void);
 
-/* 进入/退出临界区（可嵌套），PC 端为空操作 */
+/*
+ * 空闲处理：内核空闲任务在没有任何就绪任务时调用。
+ *   - PC 模拟端：把模拟 tick 推进到最近的唤醒/定时截止点；
+ *   - MCU 端：进入低功耗（WFI）等待中断。
+ */
+void iot_port_idle(void);
+
+/*
+ * 进入/退出临界区，必须支持嵌套（内核存在嵌套调用路径），
+ * 典型实现为 PRIMASK 保存/恢复 + 嵌套计数；PC 协作式为可空操作。
+ */
 void iot_port_critical_enter(void);
 void iot_port_critical_exit(void);
 

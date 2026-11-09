@@ -39,6 +39,12 @@ extern "C" {
 #define IOT_TIMEOUT_FOREVER    UINT32_MAX
 #define IOT_TIMEOUT_NONE       0U
 
+/* 内核日志 tag，避免各处重复字符串字面量 */
+#define IOT_TAG "iot"
+
+/* 对象是否已初始化（所有内核对象都带 initialized 字段） */
+#define IOT_OBJ_VALID(p) ((p) != NULL && (p)->initialized)
+
 /* ============================== 状态码 ============================== */
 
 typedef enum {
@@ -49,6 +55,7 @@ typedef enum {
     IOT_NO_MEMORY = -4,    /* 资源不足（任务/等待队列已满等） */
     IOT_NOT_READY = -5,    /* 未初始化或前置条件不满足 */
     IOT_BUSY = -6,         /* 资源被占用 */
+    IOT_NOT_OWNER = -7,    /* 当前任务不是该资源的持有者 */
 } iot_status_t;
 
 /* ============================== 任务状态 ============================== */

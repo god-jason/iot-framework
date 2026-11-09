@@ -15,7 +15,7 @@
 
 #include "iot.h"
 #include "port.h"
-#include "internal.h"
+#include "iot.h"
 
 #include <stdint.h>
 
@@ -122,6 +122,12 @@ void iot_port_return(void)
     /* 单片机端 iot_stop 不返回，这里只占位 */
     for (;;) {
     }
+}
+
+/* 空闲处理：等待下一个中断（SysTick 或外设）唤醒 CPU */
+void iot_port_idle(void)
+{
+    __asm volatile ("wfi");
 }
 
 #endif /* IOT_PLATFORM_STM32 */

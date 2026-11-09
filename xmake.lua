@@ -1,31 +1,33 @@
--- iot-os 构建脚本（xmake）
--- 默认编译 Windows 模拟版本（mcu/simulator）用于功能测试。
--- STM32 统一平台位于 platforms/stm32/，交叉编译时加入该目录下的 .c，
+-- iot-frame 构建脚本（xmake）
+-- 默认编译 Windows 模拟版本用于功能测试。STM32 交叉编译时加入 platforms/stm32 下的 .c，
 -- 并在目标宏中定义 IOT_STM32_F1 / IOT_STM32_F4 / IOT_STM32_H7 之一。
 
 add_rules("mode.debug", "mode.release")
 
-target("iot-pc")
-    set_kind("binary")
-    set_toolchains("gcc")
-    add_defines("IOT_PLATFORM_PC")
-    add_defines("IOT_NETWORK_ETH")
-    add_defines("_WIN32_WINNT=0x0600")
-
-    -- 平台模拟实现（含模拟入口 main）
-    add_files("platforms/pc/**.c")
-
-    -- 框架源码（纯 C，与平台无关）
+-- 各目标共用的源码与头文件搜索路径
+function iot_common()
     add_files("src/**.c")
     add_files("components/**.c")
     add_files("vendor/**.c")
     add_files("boot/**.c")
     add_files("networks/**.c")
-
-    -- 外设驱动（含传感器/总线）
     add_files("drivers/**.c")
 
-    -- 测试文件与源码同目录，模拟运行目标不编译测试
+    add_includedirs(
+        "src", "hal", "vendor", "vendor/cjson",
+        "vendor/tlsf", "vendor/arena", "vendor/mongoose",
+        "boot", "networks", "networks/ml307", "networks/eth",
+        "drivers", "platforms", "platforms/pc"
+    )
+
+    -- components 下每个模块目录都作为头文件搜索路径，新增模块无需改脚本
+    for _, dir in ipairs(os.dirs("components/*")) do
+        add_includedirs(dir)
+    end
+end
+
+-- 模拟/示例目标排除测试文件
+function iot_exclude_tests()
     remove_files(
         "src/*_test.c", "src/**/*_test.c",
         "src/test_*.c", "src/**/test_*.c",
@@ -41,29 +43,19 @@ target("iot-pc")
         "drivers/test_*.c", "drivers/**/test_*.c",
         "platforms/pc/*_test.c"
     )
+end
 
-    -- 头文件搜索路径
-    add_includedirs(
-        "src", "hal", "vendor", "vendor/cjson",
-        "vendor/tlsf", "vendor/arena",
-        "vendor/mongoose",
-        "components/crypto",
-        "components/bytes",
-        "components/common",
-        "components/tlv",
-        "components/datetime",
-        "boot",
-        "components/action", "components/behavior", "components/planner", "components/executor",
-        "components/navigation", "components/mapping",
-        "components/filter", "components/statistics",
-        "components/interpolation", "components/pid", "components/motion",
-        "networks", "networks/ml307", "components/at", "components/modbus", "components/storage",
-        "networks/eth",
-        "components/motor", "components/encoder", "components/servo", "components/stepper",
-        "components/fan", "components/breath_led", "components/fota", "components/scheduler",
-        "components/console",
-        "drivers", "platforms", "platforms/pc"
-    )
+target("iot-pc")
+    set_kind("binary")
+    set_toolchains("gcc")
+    add_defines("IOT_PLATFORM_PC")
+    add_defines("IOT_NETWORK_ETH")
+    add_defines("_WIN32_WINNT=0x0600")
+
+    -- 平台模拟实现
+    add_files("platforms/pc/**.c")
+    iot_common()
+    iot_exclude_tests()
 
     set_warnings("all")
     set_languages("c99")
@@ -73,7 +65,7 @@ target("iot-pc")
         add_links("m", "ws2_32", "advapi32", "iphlpapi")
     end
 
--- 单元测试目标：框架源码 + 同目录测试文件，入口为 src/test_main.c
+-- 单元测试目标：框架源码 + tests/ 测试套件，入口为 tests/test_main.c
 target("iot-test")
     set_kind("binary")
     set_toolchains("gcc")
@@ -81,42 +73,10 @@ target("iot-test")
     add_defines("IOT_NETWORK_ETH")
     add_defines("_WIN32_WINNT=0x0600")
 
-    -- 模拟平台实现
-    add_files("platforms/pc/pc.c")
-    add_files("platforms/pc/pc_mem.c")
-    add_files("platforms/pc/pc_os.c")
-    add_files("platforms/pc/pc_uart.c")
-    add_files("platforms/pc/pc_rtos.c")
-
-    -- 框架源码（测试文件与源码同目录）
-    add_files("src/**.c")
-    add_files("components/**.c")
-    add_files("vendor/**.c")
-    add_files("boot/**.c")
-    add_files("networks/**.c")
-    add_files("drivers/**.c")
-
-    add_includedirs(
-        "src", "hal", "vendor", "vendor/cjson",
-        "vendor/tlsf", "vendor/arena",
-        "vendor/mongoose",
-        "components/crypto",
-        "components/bytes",
-        "components/common",
-        "components/tlv",
-        "components/datetime",
-        "boot",
-        "components/action", "components/behavior", "components/planner", "components/executor",
-        "components/navigation", "components/mapping",
-        "components/filter", "components/statistics",
-        "components/interpolation", "components/pid", "components/motion",
-        "networks", "networks/ml307", "components/at", "components/modbus", "components/storage",
-        "networks/eth",
-        "components/motor", "components/encoder", "components/servo", "components/stepper",
-        "components/fan", "components/breath_led", "components/fota", "components/scheduler",
-        "components/console",
-        "drivers", "platforms", "platforms/pc"
-    )
+    add_files("platforms/pc/**.c")
+    iot_common()
+    add_files("tests/**.c")
+    add_includedirs("tests")
 
     set_warnings("all")
     set_languages("c99")
@@ -136,49 +96,8 @@ target("iot-demo")
 
     add_files("examples/demo.c")
     add_files("platforms/pc/**.c")
-    add_files("src/**.c")
-    add_files("components/**.c")
-    add_files("vendor/**.c")
-    add_files("boot/**.c")
-    add_files("networks/**.c")
-    add_files("drivers/**.c")
-
-    remove_files(
-        "src/*_test.c", "src/**/*_test.c",
-        "src/test_*.c", "src/**/test_*.c",
-        "components/*_test.c", "components/**/*_test.c",
-        "components/test_*.c", "components/**/test_*.c",
-        "vendor/*_test.c", "vendor/**/*_test.c",
-        "vendor/test_*.c", "vendor/**/test_*.c",
-        "boot/*_test.c", "boot/**/*_test.c",
-        "boot/test_*.c", "boot/**/test_*.c",
-        "networks/*_test.c", "networks/**/*_test.c",
-        "networks/test_*.c", "networks/**/test_*.c",
-        "drivers/*_test.c", "drivers/**/*_test.c",
-        "drivers/test_*.c", "drivers/**/test_*.c"
-    )
-
-    add_includedirs(
-        "src", "hal", "vendor", "vendor/cjson",
-        "vendor/tlsf", "vendor/arena",
-        "vendor/mongoose",
-        "components/crypto",
-        "components/bytes",
-        "components/common",
-        "components/tlv",
-        "components/datetime",
-        "boot",
-        "components/action", "components/behavior", "components/planner", "components/executor",
-        "components/navigation", "components/mapping",
-        "components/filter", "components/statistics",
-        "components/interpolation", "components/pid", "components/motion",
-        "networks", "networks/ml307", "components/at", "components/modbus", "components/storage",
-        "networks/eth",
-        "components/motor", "components/encoder", "components/servo", "components/stepper",
-        "components/fan", "components/breath_led", "components/fota", "components/scheduler",
-        "components/console",
-        "drivers", "platforms", "platforms/pc"
-    )
+    iot_common()
+    iot_exclude_tests()
 
     set_warnings("all")
     set_languages("c99")

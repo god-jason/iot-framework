@@ -10,7 +10,7 @@
  *   sem.c / mutex.c / queue.c / timers.c
  */
 
-#include "internal.h"
+#include "iot.h"
 #include "port.h"
 
 void iot_init(void)
@@ -26,7 +26,7 @@ void iot_init(void)
     /* 3. 创建空闲任务（依赖移植层栈初始化） */
     iot_idle_init();
 
-    LOG_I("iot", "iot initialized, max_priority=%d", IOT_MAX_PRIORITY);
+    LOG_I(IOT_TAG, "iot initialized, max_priority=%d", IOT_MAX_PRIORITY);
 }
 
 void iot_sched_start(void)
@@ -40,7 +40,7 @@ void iot_sched_start(void)
     iot_current_task = first;
     first->state = IOT_TASK_RUNNING;
 
-    LOG_I("iot", "scheduler start, first task=%s",
+    LOG_I(IOT_TAG, "scheduler start, first task=%s",
               first->name != NULL ? first->name : "?");
 
     iot_port_start_first(first);
@@ -53,6 +53,6 @@ void iot_sched_start(void)
 
 void iot_stop(void)
 {
-    LOG_I("iot", "scheduler stop");
+    LOG_I(IOT_TAG, "scheduler stop");
     iot_port_return();
 }

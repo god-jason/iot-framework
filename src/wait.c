@@ -10,7 +10,7 @@
  * 唤醒路径与超时路径都会同时摘除两个节点（list_remove 幂等）。
  */
 
-#include "internal.h"
+#include "iot.h"
 #include "port.h"
 
 iot_task_t *iot_wait_pop_highest(list_t *list)
@@ -53,13 +53,14 @@ void iot_task_wake(iot_task_t *task, iot_status_t result)
     iot_make_ready(task);                  /* 状态置 READY 并加入就绪表 */
     iot_port_critical_exit();
 
-    LOG_D("iot", "wake: task=%s result=%d",
+    LOG_D(IOT_TAG, "wake: task=%s result=%d",
               task->name != NULL ? task->name : "?", (int)result);
 }
 
 iot_status_t iot_block_current(list_t *wait_list, uint32_t timeout)
 {
     iot_task_t *cur = iot_current_task;
+    iot_task_t *next;
 
     if (cur == NULL || wait_list == NULL) {
         return IOT_NOT_READY;
@@ -75,12 +76,18 @@ iot_status_t iot_block_current(list_t *wait_list, uint32_t timeout)
         cur->wake_tick = iot_tick_count + timeout;
         iot_delayed_add(cur);
     }
+
+    /*
+     * 在同一个临界区内完成“阻塞入表 + 选出下一个任务”，
+     * 避免解锁后、切换前被 tick 中断唤醒而重复进入就绪表。
+     */
+    next = iot_sched_pick();
     iot_port_critical_exit();
 
-    LOG_D("iot", "block: task=%s timeout=%u",
+    LOG_D(IOT_TAG, "block: task=%s timeout=%u",
               cur->name != NULL ? cur->name : "?", (unsigned)timeout);
 
-    iot_sched();               /* 切走；被唤醒后从这里返回 */
+    iot_sched_switch(next);    /* 切走；被唤醒后从这里返回 */
 
     return cur->wait_result;
 }

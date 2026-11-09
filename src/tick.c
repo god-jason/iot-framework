@@ -10,7 +10,7 @@
  *   - 阻塞任务摘除等待节点、结果置 IOT_TIMEOUT 后转就绪。
  */
 
-#include "internal.h"
+#include "iot.h"
 #include "port.h"
 
 uint32_t iot_tick_count = 0;
@@ -35,10 +35,9 @@ void iot_delayed_add(iot_task_t *task)
         return;
     }
 
-    iot_port_critical_enter();
+    /* 调用者需已进入临界区（阻塞/睡眠路径均在同一临界区内调用） */
     task->delayed_node.sort_key = task->wake_tick;
     list_insert_sorted(&s_delayed, &task->delayed_node);
-    iot_port_critical_exit();
 }
 
 uint32_t iot_delayed_next_deadline(void)
@@ -65,7 +64,7 @@ void iot_tick_increment(uint32_t delta)
             break;
         }
         task = iot_delayed_task(node);
-        if (task->wake_tick > iot_tick_count) {
+        if (IOT_TICK_AFTER(task->wake_tick, iot_tick_count)) {
             break;                  /* 后续任务尚未到期 */
         }
 
@@ -77,7 +76,7 @@ void iot_tick_increment(uint32_t delta)
         }
         iot_make_ready(task);
 
-        LOG_D("iot", "timeout/wake: task=%s tick=%u",
+        LOG_D(IOT_TAG, "timeout/wake: task=%s tick=%u",
                   task->name != NULL ? task->name : "?",
                   (unsigned)iot_tick_count);
     }

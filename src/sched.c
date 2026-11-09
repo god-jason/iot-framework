@@ -10,7 +10,7 @@
  *   让出/睡眠/阻塞前由调用方先把任务归位（就绪表或等待/延时链表）。
  */
 
-#include "internal.h"
+#include "iot.h"
 #include "port.h"
 
 /* 调度器拥有的全局状态 */
@@ -69,7 +69,7 @@ void iot_make_ready(iot_task_t *task)
     list_add_tail(&s_ready[prio], &task->ready_node);
     s_ready_bitmap |= (1U << prio);
 
-    LOG_D("iot", "ready: task=%s prio=%u",
+    LOG_D(IOT_TAG, "ready: task=%s prio=%u",
               task->name != NULL ? task->name : "?", (unsigned)prio);
 }
 
@@ -102,26 +102,40 @@ iot_task_t *iot_sched_select(void)
 
 /* ------------------------------ 调度 ------------------------------ */
 
-void iot_sched(void)
+iot_task_t *iot_sched_pick(void)
 {
-    iot_task_t *prev = iot_current_task;
     iot_task_t *next = iot_sched_select();
 
-    if (next == NULL) {
-        next = iot_idle_task;      /* 没有就绪任务时退化为空闲任务 */
-    }
-    if (next == prev) {
+    return (next != NULL) ? next : iot_idle_task;
+}
+
+void iot_sched_switch(iot_task_t *next)
+{
+    iot_task_t *prev = iot_current_task;
+
+    if (next == NULL || next == prev) {
         return;                     /* 仍应运行当前任务，无需切换 */
     }
 
     iot_current_task = next;
     next->state = IOT_TASK_RUNNING;
 
-    LOG_D("iot", "switch: %s -> %s",
+    LOG_D(IOT_TAG, "switch: %s -> %s",
               (prev != NULL && prev->name != NULL) ? prev->name : "(none)",
               next->name != NULL ? next->name : "?");
 
     iot_port_switch(prev, next);
+}
+
+void iot_sched(void)
+{
+    iot_task_t *next;
+
+    iot_port_critical_enter();
+    next = iot_sched_pick();
+    iot_port_critical_exit();
+
+    iot_sched_switch(next);
 }
 
 iot_task_t *iot_current(void)
