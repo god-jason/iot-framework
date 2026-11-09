@@ -29,8 +29,7 @@ bool iot_in_isr(void);
 /* 显式请求一次重新调度（MCU 端置位 PendSV） */
 void iot_yield_from_isr(void);
 
-/* 就绪表中是否有比当前任务优先级更高的任务 */
-bool iot_sched_preempt_needed(void);
+/* 抢占需求判定 iot_sched_preempt_needed() 声明在 iot_sched.h */
 
 /* 中断中释放信号量 */
 int iot_sem_give_from_isr(iot_sem_t *sem, bool *need_yield);

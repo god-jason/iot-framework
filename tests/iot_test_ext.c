@@ -161,6 +161,142 @@ static void test_priority_set(void)
     tf_end();
 }
 
+/* O(1) 等待队列：位图选优、同优先级 FIFO、继承提升后仍能正确摘除 */
+static void test_wait_queue(void)
+{
+    iot_wait_queue_t queue;
+    iot_task_t a;
+    iot_task_t b;
+    iot_task_t c;
+
+    tf_begin("iot/O(1)等待队列");
+
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    memset(&c, 0, sizeof(c));
+    list_node_init(&a.wait_node);
+    list_node_init(&b.wait_node);
+    list_node_init(&c.wait_node);
+    a.priority = 7U;
+    b.priority = 2U;
+    c.priority = 7U;
+
+    iot_wait_queue_init(&queue);
+    TF_CHECK_INT(iot_wait_queue_top_priority(&queue), 0xFF);
+    TF_CHECK(iot_wait_queue_pop_highest(&queue) == NULL);
+
+    iot_wait_queue_add(&queue, &a);
+    iot_wait_queue_add(&queue, &b);
+    iot_wait_queue_add(&queue, &c);
+
+    TF_CHECK_INT(iot_wait_queue_top_priority(&queue), 2);
+    TF_CHECK(iot_wait_queue_contains(&queue, &a));
+    TF_CHECK(iot_wait_queue_pop_highest(&queue) == &b);   /* 优先级最高 */
+    TF_CHECK(!iot_wait_queue_contains(&queue, &b));
+    TF_CHECK(iot_wait_queue_pop_highest(&queue) == &a);   /* 同优先级 FIFO */
+    TF_CHECK(iot_wait_queue_pop_highest(&queue) == &c);
+    TF_CHECK_INT(queue.bitmap, 0);
+    TF_CHECK(iot_wait_queue_pop_highest(&queue) == NULL);
+
+    /* 挂入后被优先级继承提升：摘除仍应回到挂入时的链 */
+    iot_wait_queue_add(&queue, &a);
+    iot_wait_queue_add(&queue, &b);
+    a.priority = 1U;
+    iot_wait_queue_remove(&queue, &a);
+    TF_CHECK_INT(queue.bitmap, (1U << 2));
+    TF_CHECK(iot_wait_queue_pop_highest(&queue) == &b);
+    TF_CHECK_INT(queue.bitmap, 0);
+
+    tf_end();
+}
+
+/* FromISR 接口：只唤醒不阻塞，need_yield 反映抢占需求 */
+static void test_from_isr(void)
+{
+    iot_sem_t sem;
+    iot_queue_t queue;
+    uint8_t qbuf[4U * sizeof(uint32_t)];
+    uint32_t msg = 0x1234U;
+    uint32_t out = 0U;
+    bool need_yield = true;
+    uint32_t i;
+
+    tf_begin("iot/FromISR接口");
+
+    /* PC 模拟端全部逻辑都在任务上下文 */
+    TF_CHECK(!iot_in_isr());
+
+    TF_CHECK_INT(iot_sem_init(&sem, 0U), IOT_OK);
+    TF_CHECK_INT(iot_sem_give_from_isr(&sem, &need_yield), IOT_OK);
+    TF_CHECK(need_yield == iot_sched_preempt_needed());
+    TF_CHECK_INT(iot_sem_take(&sem, IOT_TIMEOUT_NONE), IOT_OK);
+
+    TF_CHECK_INT(iot_queue_init(&queue, qbuf,
+                                (uint32_t)sizeof(uint32_t), 4U), IOT_OK);
+    TF_CHECK_INT(iot_queue_send_from_isr(&queue, &msg, NULL), IOT_OK);
+    TF_CHECK_INT(iot_queue_recv(&queue, &out, IOT_TIMEOUT_NONE), IOT_OK);
+    TF_CHECK_INT(out, 0x1234);
+
+    /* 填满后 FromISR 必须立即返回，绝不阻塞 */
+    for (i = 0U; i < 4U; i++) {
+        TF_CHECK_INT(iot_queue_send_from_isr(&queue, &msg, NULL), IOT_OK);
+    }
+    TF_CHECK_INT(iot_queue_send_from_isr(&queue, &msg, NULL), IOT_TIMEOUT);
+
+#if IOT_USE_EVENT
+    {
+        iot_event_t event;
+        uint32_t flags = 0U;
+
+        TF_CHECK_INT(iot_event_init(&event), IOT_OK);
+        TF_CHECK_INT(iot_event_set_from_isr(&event, 0x5U, NULL), IOT_OK);
+        TF_CHECK_INT(iot_event_get(&event, &flags), IOT_OK);
+        TF_CHECK_INT(flags, 0x5);
+    }
+#endif
+
+#if IOT_USE_NOTIFY
+    {
+        uint32_t value = 0U;
+
+        TF_CHECK_INT(iot_task_notify_from_isr(iot_current(), 0x77U, NULL), IOT_OK);
+        TF_CHECK_INT(iot_task_wait_notify(iot_current(),
+                                          IOT_TIMEOUT_NONE, &value), IOT_OK);
+        TF_CHECK_INT(value, 0x77);
+    }
+#endif
+
+    tf_end();
+}
+
+/* 整栈魔数填充后，栈水位线应反映真实可用空间 */
+static void test_stack_watermark(void)
+{
+    iot_task_stats_t stats;
+
+    tf_begin("iot/栈水位线");
+
+    TF_CHECK_INT(iot_task_get_stats(iot_current(), &stats), IOT_OK);
+    TF_CHECK(stats.stack_free_bytes >= 4096U);
+
+    iot_stats_reset();
+    TF_CHECK_INT(iot_task_get_stats(iot_current(), &stats), IOT_OK);
+    TF_CHECK_INT(stats.run_ticks, 0);
+    TF_CHECK_INT(stats.switches, 0);
+
+    tf_end();
+}
+
+static void test_preempt_query(void)
+{
+    tf_begin("iot/抢占判定");
+
+    /* driver 是最高优先级 0，不应有更高优先级任务就绪 */
+    TF_CHECK(!iot_sched_preempt_needed());
+
+    tf_end();
+}
+
 void iot_test_ext(void)
 {
     test_priority_inherit();
@@ -168,4 +304,8 @@ void iot_test_ext(void)
     test_notify();
     test_stats();
     test_priority_set();
+    test_wait_queue();
+    test_from_isr();
+    test_stack_watermark();
+    test_preempt_query();
 }

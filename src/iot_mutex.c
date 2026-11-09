@@ -70,6 +70,12 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
     if (cur == NULL) {
         return IOT_NOT_READY;
     }
+    if (iot_in_isr() && timeout != IOT_TIMEOUT_NONE) {
+        /* mutex 自带阻塞路径，需单独拦截 */
+        IOT_ASSERT(!iot_in_isr());
+        LOG_E(IOT_TAG, "mutex_lock: blocking forbidden in ISR");
+        return IOT_FORBIDDEN_IN_ISR;
+    }
 
     iot_port_critical_enter();
 

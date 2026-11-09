@@ -79,11 +79,9 @@ void iot_wait_queue_remove(iot_wait_queue_t *queue, iot_task_t *task)
     }
 
     prio = task->wait_node.sort_key;
-    if (prio < IOT_MAX_PRIORITY) {
-        list_remove(&task->wait_node);
-        if (list_empty(&queue->prio[prio])) {
-            queue->bitmap &= ~(1U << prio);
-        }
+    list_remove(&task->wait_node);   /* 对游离节点安全 */
+    if (prio < IOT_MAX_PRIORITY && list_empty(&queue->prio[prio])) {
+        queue->bitmap &= ~(1U << prio);
     }
     task->wait_queue = NULL;
 }
@@ -162,8 +160,8 @@ void iot_task_wake(iot_task_t *task, int result)
 
     /*
      * 抢占：只要被唤醒的任务优先级高于当前任务，就请求一次重新调度。
- * 覆盖任务上下文（unlock/give）与 ISR 上下文（FromISR API / 定时器回调），
- * STM32 端置位 PendSV，中断退出即刻切换；PC 协作端为空实现。
+     * 覆盖任务上下文（unlock/give）与 ISR 上下文（FromISR API / 定时器回调），
+     * STM32 端置位 PendSV，中断退出即刻切换；PC 协作端为空实现。
      */
     if (iot_current_task != NULL &&
         task->priority < iot_current_task->priority) {
@@ -182,6 +180,12 @@ int iot_block_current(iot_wait_queue_t *wait_queue, uint32_t timeout)
 
     if (cur == NULL || wait_queue == NULL) {
         return IOT_NOT_READY;
+    }
+    if (iot_in_isr()) {
+        /* ISR 中阻塞会挂死调度器：调试期停机，生产构建返回错误码 */
+        IOT_ASSERT(!iot_in_isr());
+        LOG_E(IOT_TAG, "block: forbidden in ISR");
+        return IOT_FORBIDDEN_IN_ISR;
     }
 
     iot_port_critical_enter();

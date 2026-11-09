@@ -63,6 +63,9 @@ void iot_sched_tick_slice(uint32_t delta);
 /* 时间片是否已耗尽（移植层据此触发 PendSV） */
 bool iot_sched_slice_expired(void);
 
+/* 就绪表中是否有比当前任务优先级更高的任务（FromISR 的 need_yield 依据） */
+bool iot_sched_preempt_needed(void);
+
 #if IOT_USE_STATS
 /* 上下文切换总次数 */
 uint32_t iot_sched_switch_count(void);
