@@ -24,6 +24,12 @@ int iot_sem_init(iot_sem_t *sem, uint32_t initial_count);
 int iot_sem_take(iot_sem_t *sem, uint32_t timeout);
 int iot_sem_give(iot_sem_t *sem);
 
+/* 动态创建/销毁：对象由 iot_mem_* 分配，失败返回 NULL */
+iot_sem_t *iot_sem_create(uint32_t initial_count);
+
+/* 销毁动态信号量；仍有任务等待时返回 IOT_BUSY，不释放 */
+int iot_sem_destroy(iot_sem_t *sem);
+
 #ifdef __cplusplus
 }
 #endif

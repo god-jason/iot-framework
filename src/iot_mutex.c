@@ -14,6 +14,7 @@
 
 #include "iot.h"
 #include "iot_port.h"
+#include "iot_mem.h"
 
 /* 等待队列中的最高优先级（无等待者时返回 fallback），O(1) */
 static uint8_t iot_mutex_wait_top(const iot_mutex_t *mutex, uint8_t fallback)
@@ -41,6 +42,7 @@ static void iot_mutex_inherit_locked(iot_task_t *owner, uint8_t prio)
 }
 #endif
 
+/* 初始化互斥量：持有者置空并初始化等待队列。 */
 int iot_mutex_init(iot_mutex_t *mutex)
 {
     if (mutex == NULL) {
@@ -56,6 +58,10 @@ int iot_mutex_init(iot_mutex_t *mutex)
     return IOT_OK;
 }
 
+/*
+ * 加锁：空闲时立即取得所有权；被占用时按 timeout 阻塞，
+ * 并在开启优先级继承时临时提升持有者优先级，抑制优先级反转。
+ */
 int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
 {
     iot_task_t *cur = iot_current_task;
@@ -142,6 +148,10 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
     return rc;
 }
 
+/*
+ * 解锁：校验当前任务是否为持有者；若有等待者则把所有权直接转交
+ * 给最高优先级等待者，否则置空并恢复持有者原始优先级。
+ */
 int iot_mutex_unlock(iot_mutex_t *mutex)
 {
     iot_task_t *task;
@@ -178,5 +188,44 @@ int iot_mutex_unlock(iot_mutex_t *mutex)
         iot_port_critical_exit();
         LOG_D(IOT_TAG, "mutex unlock: released");
     }
+    return IOT_OK;
+}
+
+/* 动态创建互斥量：对象由 iot_mem_calloc 分配，失败返回 NULL。 */
+iot_mutex_t *iot_mutex_create(void)
+{
+    iot_mutex_t *mutex = (iot_mutex_t *)iot_mem_calloc(1U, sizeof(*mutex));
+
+    if (mutex == NULL) {
+        LOG_E(IOT_TAG, "mutex_create: no memory");
+        return NULL;
+    }
+    if (iot_mutex_init(mutex) != IOT_OK) {
+        iot_mem_free(mutex);
+        return NULL;
+    }
+    return mutex;
+}
+
+/*
+ * 销毁动态互斥量：被持有或仍有等待者时返回 IOT_BUSY；
+ * 成功时标记失效并释放对象内存。
+ */
+int iot_mutex_destroy(iot_mutex_t *mutex)
+{
+    if (!IOT_OBJ_VALID(mutex)) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (mutex->owner != NULL || !iot_wait_queue_empty(&mutex->wait)) {
+        iot_port_critical_exit();
+        LOG_W(IOT_TAG, "mutex_destroy: in use");
+        return IOT_BUSY;
+    }
+    mutex->initialized = false;
+    iot_port_critical_exit();
+
+    iot_mem_free(mutex);
     return IOT_OK;
 }

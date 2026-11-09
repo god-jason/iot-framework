@@ -16,6 +16,7 @@
 #include "iot.h"
 #include "iot_port.h"
 #include "iot_assert.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -27,6 +28,7 @@ static list_t s_all_tasks;
 static iot_wait_queue_t s_notify_wait;
 #endif
 
+/* 初始化任务注册表与通知等待队列（由 iot_init 调用）。 */
 void iot_task_module_init(void)
 {
     list_init(&s_all_tasks);
@@ -35,6 +37,7 @@ void iot_task_module_init(void)
 #endif
 }
 
+/* 把任务 TCB 挂入全局注册表，供统计与遍历使用。 */
 void iot_task_register(iot_task_t *task)
 {
     if (task == NULL) {
@@ -47,6 +50,7 @@ void iot_task_register(iot_task_t *task)
     iot_port_critical_exit();
 }
 
+/* 遍历任务注册表，清零每个任务的运行统计。 */
 void iot_task_reset_stats_all(void)
 {
 #if IOT_USE_STATS
@@ -76,9 +80,14 @@ static void iot_stack_fill(void *stack_mem, uint32_t stack_size)
 }
 #endif
 
-int iot_task_create(iot_task_t *task, const char *name,
-                    uint8_t priority, iot_entry_t entry, void *arg,
-                    void *stack_mem, uint32_t stack_size)
+/*
+ * 任务创建公共实现：校验参数、填充 TCB、填充栈魔数、构造移植层上下文，
+ * 最后加入就绪表与任务注册表。stack_owned 标识栈是否由动态接口分配。
+ */
+static int iot_task_create_impl(iot_task_t *task, const char *name,
+                                uint8_t priority, iot_entry_t entry,
+                                void *arg, void *stack_mem,
+                                uint32_t stack_size, bool stack_owned)
 {
     int rc;
 
@@ -102,6 +111,7 @@ int iot_task_create(iot_task_t *task, const char *name,
     task->stack_size = stack_size;
     task->state = IOT_TASK_READY;
     task->created = true;
+    task->stack_owned = stack_owned;
 
 #if IOT_USE_TIME_SLICING
     task->slice_remaining = IOT_TIME_SLICE_TICKS;
@@ -130,6 +140,9 @@ int iot_task_create(iot_task_t *task, const char *name,
 
     /* 加入就绪表与任务注册表 */
     iot_port_critical_enter();
+    IOT_TRACE(IOT_EVT_TASK_CREATE, (uint32_t)(uintptr_t)task, priority);
+    iot_trace_name(task, IOT_TRACE_NAME_TASK, name);
+
     iot_make_ready(task);
     iot_port_critical_exit();
     iot_task_register(task);
@@ -140,6 +153,88 @@ int iot_task_create(iot_task_t *task, const char *name,
     return IOT_OK;
 }
 
+/* 静态创建任务：TCB 与任务栈均由调用者提供。 */
+int iot_task_create(iot_task_t *task, const char *name,
+                    uint8_t priority, iot_entry_t entry, void *arg,
+                    void *stack_mem, uint32_t stack_size)
+{
+    return iot_task_create_impl(task, name, priority, entry, arg,
+                                stack_mem, stack_size, false);
+}
+
+/* 动态创建任务：TCB 与任务栈均由 iot_mem_* 分配，失败返回 NULL。 */
+iot_task_t *iot_task_create_dynamic(const char *name, uint8_t priority,
+                                    iot_entry_t entry, void *arg,
+                                    uint32_t stack_size)
+{
+    iot_task_t *task;
+    void *stack;
+
+    if (entry == NULL || stack_size == 0U) {
+        LOG_E(IOT_TAG, "task_create_dynamic: invalid param");
+        return NULL;
+    }
+
+    task = (iot_task_t *)iot_mem_calloc(1U, sizeof(*task));
+    if (task == NULL) {
+        LOG_E(IOT_TAG, "task_create_dynamic: no memory for tcb");
+        return NULL;
+    }
+    stack = iot_mem_malloc(stack_size);
+    if (stack == NULL) {
+        LOG_E(IOT_TAG, "task_create_dynamic: no memory for stack");
+        iot_mem_free(task);
+        return NULL;
+    }
+
+    if (iot_task_create_impl(task, name, priority, entry, arg,
+                             stack, stack_size, true) != IOT_OK) {
+        iot_mem_free(stack);
+        iot_mem_free(task);
+        return NULL;
+    }
+
+    return task;
+}
+
+/*
+ * 销毁动态任务：仅允许销毁「就绪未运行」或「已退出」的任务；
+ * 运行/阻塞/延时中的任务返回 IOT_BUSY（需先退出由其他任务回收）。
+ * 成功时依次释放端口上下文、任务栈与 TCB。
+ */
+int iot_task_destroy(iot_task_t *task)
+{
+    bool was_ready;
+
+    if (task == NULL || task == iot_idle_task || !task->stack_owned) {
+        return IOT_INVALID_PARAM;   /* 仅支持动态创建的任务 */
+    }
+    if (task == iot_current_task) {
+        return IOT_BUSY;            /* 不能在自身上下文释放自己的栈 */
+    }
+
+    was_ready = (task->state == IOT_TASK_READY);
+    if (iot_sched_remove(task) != IOT_OK) {
+        return IOT_BUSY;            /* 运行/阻塞/延时中的任务不能销毁 */
+    }
+
+    if (was_ready) {
+        /* 就绪任务仍在注册表上；已退出任务在 iot_task_exit 中已摘除 */
+        iot_port_critical_enter();
+        list_remove(&task->all_node);
+        iot_port_critical_exit();
+    }
+
+    LOG_I(IOT_TAG, "task destroy: name=%s",
+              task->name != NULL ? task->name : "?");
+
+    iot_port_stack_deinit(task);
+    iot_mem_free(task->stack_mem);
+    iot_mem_free(task);
+    return IOT_OK;
+}
+
+/* 让出 CPU：当前任务放回同优先级就绪队尾，触发一次调度。 */
 void iot_yield(void)
 {
     iot_task_t *cur = iot_current_task;
@@ -157,6 +252,7 @@ void iot_yield(void)
     iot_sched_switch(next);
 }
 
+/* 终止当前任务：标记 TERMINATED、移出注册表并切换到下一个任务（通常不返回）。 */
 void iot_task_exit(void)
 {
     iot_task_t *cur = iot_current_task;
@@ -180,11 +276,16 @@ void iot_task_exit(void)
     }
 }
 
+/* 睡眠指定毫秒（基于系统 tick）。 */
 void iot_sleep_ms(uint32_t ms)
 {
     iot_sleep_until(iot_tick_get() + ms);
 }
 
+/*
+ * 睡眠到指定 tick 时刻：挂入延时链表并切换任务，
+ * 到期后由 iot_tick_increment() 唤醒。
+ */
 void iot_sleep_until(uint32_t wake_tick)
 {
     iot_task_t *cur = iot_current_task;
@@ -215,6 +316,10 @@ void iot_sleep_until(uint32_t wake_tick)
     iot_sched_switch(next);    /* 切走，tick 到期后由 iot_tick.c 唤醒 */
 }
 
+/*
+ * 修改任务基准优先级：处于继承提升状态时只更新基准值，
+ * 待继承解除后自然回落，避免破坏优先级继承链。
+ */
 int iot_task_set_priority(iot_task_t *task, uint8_t priority)
 {
     uint8_t old_base;
@@ -236,15 +341,87 @@ int iot_task_set_priority(iot_task_t *task, uint8_t priority)
     return IOT_OK;
 }
 
+/* ============================== 挂起 / 恢复 ============================== */
+
+int iot_task_suspend(iot_task_t *task)
+{
+    iot_task_t *cur = iot_current_task;
+    iot_task_t *next;
+    int rc;
+
+    if (task == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+
+    rc = iot_sched_suspend(task);
+    if (rc != IOT_OK) {
+        return rc;
+    }
+    if (task->suspend_count < 0xFFU) {
+        task->suspend_count++;
+    }
+
+    IOT_TRACE(IOT_EVT_TASK_SUSPEND, (uint32_t)(uintptr_t)task,
+              task->suspend_count);
+
+    /* 挂起自己：当前任务已不在就绪表，直接选下一个任务切走 */
+    if (task == cur) {
+        iot_port_critical_enter();
+        next = iot_sched_pick();
+        iot_port_critical_exit();
+        iot_sched_switch(next);
+    }
+
+    return IOT_OK;
+}
+
+int iot_task_resume(iot_task_t *task)
+{
+    if (task == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+    if ((task->suspend_count == 0U) ||
+        (task->state != IOT_TASK_SUSPENDED)) {
+        return IOT_NOT_READY;
+    }
+
+    task->suspend_count--;
+    if (task->suspend_count > 0U) {
+        return IOT_OK;               /* 仍有嵌套挂起，保持挂起态 */
+    }
+
+    (void)iot_sched_resume(task);
+    IOT_TRACE(IOT_EVT_TASK_RESUME, (uint32_t)(uintptr_t)task, 0U);
+
+    /* 恢复了更高优先级任务：ISR 中请求 PendSV，任务上下文主动让出 */
+    if (iot_in_isr()) {
+        iot_port_request_switch();
+    } else if (iot_sched_preempt_needed()) {
+        iot_yield();
+    }
+
+    return IOT_OK;
+}
+
+bool iot_task_is_suspended(const iot_task_t *task)
+{
+    return (task != NULL) && (task->state == IOT_TASK_SUSPENDED);
+}
+
 /* ============================== 任务通知 ============================== */
 
 #if IOT_USE_NOTIFY
 
+/* 初始化通知等待队列（所有等待通知的任务共用）。 */
 void iot_notify_init(void)
 {
     iot_wait_queue_init(&s_notify_wait);
 }
 
+/*
+ * 向指定任务发送通知：保存通知值并置 pending；
+ * 若该任务正阻塞在通知队列上则立即唤醒。
+ */
 int iot_task_notify(iot_task_t *task, uint32_t value)
 {
     if (task == NULL) {
@@ -264,6 +441,10 @@ int iot_task_notify(iot_task_t *task, uint32_t value)
     return IOT_OK;
 }
 
+/*
+ * 等待本任务通知：已有 pending 立即取走；
+ * 否则按 timeout 阻塞在通知队列上，唤醒后返回通知值。
+ */
 int iot_task_wait_notify(iot_task_t *task, uint32_t timeout, uint32_t *value)
 {
     int rc;
@@ -302,6 +483,7 @@ int iot_task_wait_notify(iot_task_t *task, uint32_t timeout, uint32_t *value)
     return IOT_OK;
 }
 
+/* 清除未消费的通知（丢弃通知值）。 */
 void iot_task_notify_clear(iot_task_t *task)
 {
     if (task == NULL) {

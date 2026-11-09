@@ -25,6 +25,12 @@ int iot_mutex_init(iot_mutex_t *mutex);
 int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout);
 int iot_mutex_unlock(iot_mutex_t *mutex);
 
+/* 动态创建/销毁：对象由 iot_mem_* 分配，失败返回 NULL */
+iot_mutex_t *iot_mutex_create(void);
+
+/* 销毁动态互斥量；被持有或仍有等待者时返回 IOT_BUSY */
+int iot_mutex_destroy(iot_mutex_t *mutex);
+
 #ifdef __cplusplus
 }
 #endif

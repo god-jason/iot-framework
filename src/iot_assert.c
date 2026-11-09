@@ -19,6 +19,11 @@
 #include "iot_port.h"
 #include "iot_crash.h"
 
+/*
+ * 断言失败入口（由 IOT_ASSERT 宏调用）。
+ * 参数：file/line/expr 为断言位置，file/expr 可能为 NULL。
+ * 处理：写崩溃记录 -> 打印现场 -> 关中断 -> PC 退出 / MCU 死循环。
+ */
 void iot_assert_fail(const char *file, int line, const char *expr)
 {
     iot_crash_context_t ctx;

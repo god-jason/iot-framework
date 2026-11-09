@@ -67,6 +67,12 @@ option("cmsis_inc")
     set_description("CMSIS Core/Include 目录（留空则自动探测）")
 option_end()
 
+option("trace")
+    set_default("on")
+    set_values("on", "off")
+    set_description("编译期启用 trace；off 时所有 IOT_TRACE_* 宏为空、零 RAM/ROM 开销")
+option_end()
+
 -- ============================================================================
 -- 工具链
 --   主机：xmake 内置的 gcc（系统 PATH 中的 gcc.exe / gcc）
@@ -94,7 +100,7 @@ toolchain_end()
 local function iot_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
-        "vendor/tlsf", "vendor/arena", "vendor/mongoose",
+        "vendor/tlsf", "vendor/arena", "vendor/mongoose", "vendor/barectf",
         "boot", "networks", "networks/ml307", "networks/eth",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
@@ -144,6 +150,13 @@ local function iot_host_defines()
     end
 end
 
+-- 编译期裁剪开关：xmake f --trace=off -c
+local function iot_trace_defines()
+    if get_config("trace") == "off" then
+        add_defines("IOT_USE_TRACE=0")
+    end
+end
+
 local function iot_host_links()
     if is_plat("windows", "mingw") then
         add_links("m", "ws2_32", "advapi32", "iphlpapi")
@@ -159,9 +172,14 @@ local function iot_host_common(with_tests)
     set_warnings("all")
 
     iot_host_defines()
+    iot_trace_defines()
     add_files("platforms/pc/**.c")
     iot_framework_sources()
     iot_includedirs()
+
+    if get_config("trace") == "off" then
+        remove_files("vendor/barectf/**.c")   -- 编译期裁剪也要去掉 CTF 后端代码
+    end
 
     if not with_tests then
         iot_exclude_tests()
@@ -242,6 +260,7 @@ if is_plat("cross") then
 
         add_defines("IOT_PLATFORM_STM32")
         add_defines("IOT_STM32_" .. family:upper())
+        iot_trace_defines()
 
         -- force=true：CPU/FPU 选项必须原样传给 arm-none-eabi-gcc，
         -- 否则 xmake 会用宿主编译器探测并可能静默丢弃这些 flag
@@ -261,6 +280,9 @@ if is_plat("cross") then
         add_files("vendor/tlsf/**.c")
         add_files("vendor/arena/**.c")
         add_files("vendor/cjson/**.c")
+        if get_config("trace") ~= "off" then
+            add_files("vendor/barectf/**.c")
+        end
         add_files("networks/ml307/**.c")
 
         iot_exclude_tests()
@@ -326,6 +348,7 @@ if is_plat("cross") then
 
             add_defines("IOT_PLATFORM_STM32", "IOT_STM32_F1")
             add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
+            iot_trace_defines()
             add_defines("LOG_LEVEL=LOG_LEVEL_NONE")
 
             for _, flag in ipairs(cpuflags) do

@@ -43,6 +43,9 @@ uint8_t iot_wait_queue_top_priority(const iot_wait_queue_t *queue);
 bool iot_wait_queue_contains(const iot_wait_queue_t *queue,
                              const iot_task_t *task);
 
+/* 等待队列是否为空（无任何等待者） */
+bool iot_wait_queue_empty(const iot_wait_queue_t *queue);
+
 /* 按位图从小到大遍历各非空优先级链（事件组广播唤醒用） */
 uint8_t iot_wait_queue_first_prio(uint32_t bitmap);
 

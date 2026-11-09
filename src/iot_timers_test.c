@@ -47,6 +47,19 @@ static void order_cb(void *arg)
     }
 }
 
+#if IOT_USE_TIMER_TASK
+static const char *s_cb_task_name;
+
+static void context_cb(void *arg)
+{
+    iot_task_t *cur;
+
+    (void)arg;
+    cur = iot_current();
+    s_cb_task_name = (cur != NULL) ? cur->name : NULL;
+}
+#endif
+
 static void test_timer_init(void)
 {
     iot_timer_t t;
@@ -132,6 +145,11 @@ static void test_timer_multi(void)
     TF_CHECK_INT(iot_timer_start(&s_slow, 7U), IOT_OK);
 
     iot_sleep_ms(35U);
+    /*
+     * 任务模式下，35ms 到期的回调可能刚入待执行队列、尚未被定时器任务处理；
+     * 再睡 1ms 让高优先级定时器任务先清空队列，再停止定时器。
+     */
+    iot_sleep_ms(1U);
 
     TF_CHECK_INT(iot_timer_stop(&s_fast), IOT_OK);
     TF_CHECK_INT(iot_timer_stop(&s_slow), IOT_OK);
@@ -188,6 +206,28 @@ static void test_timer_order(void)
     tf_end();
 }
 
+static void test_timer_context(void)
+{
+#if IOT_USE_TIMER_TASK
+    iot_timer_t timer;
+
+    tf_begin("iot/定时器-回调在定时器任务中执行");
+
+    s_cb_task_name = NULL;
+    TF_CHECK_INT(iot_timer_init(&timer, "ctx", context_cb, NULL, 5U, false),
+                 IOT_OK);
+    TF_CHECK_INT(iot_timer_start(&timer, 5U), IOT_OK);
+    iot_sleep_ms(15U);
+
+    TF_CHECK(s_cb_task_name != NULL);
+    if (s_cb_task_name != NULL) {
+        TF_CHECK_STR(s_cb_task_name, "timer");
+    }
+
+    tf_end();
+#endif
+}
+
 void iot_test_timer(void)
 {
     test_timer_init();
@@ -196,4 +236,5 @@ void iot_test_timer(void)
     test_timer_multi();
     test_timer_restart();
     test_timer_order();
+    test_timer_context();
 }

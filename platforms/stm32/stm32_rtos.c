@@ -34,8 +34,50 @@
 #define IOT_SCB_SHPR3           (*(volatile uint32_t *)0xE000ED20UL)
 #define IOT_PENDSV_PRIO_LOWEST  (0xFFUL << 16)   /* PendSV 设为最低优先级 */
 
+/* DWT 周期计数器：trace 的 µs 时间源（Cortex-M3/M4/M7 均有） */
+#define IOT_DEMCR               (*(volatile uint32_t *)0xE000EDFCUL)
+#define IOT_DEMCR_TRCENA        (1UL << 24)
+#define IOT_DWT_CTRL            (*(volatile uint32_t *)0xE0001000UL)
+#define IOT_DWT_CYCCNT          (*(volatile uint32_t *)0xE0001004UL)
+#define IOT_DWT_CTRL_CYCCNTENA  (1UL << 0)
+
+/* SysTick：tickless 用同一个定时器做长睡眠唤醒，无需额外低功耗外设 */
+#define IOT_SYSTICK_CTRL        (*(volatile uint32_t *)0xE000E010UL)
+#define IOT_SYSTICK_LOAD        (*(volatile uint32_t *)0xE000E014UL)
+#define IOT_SYSTICK_VAL         (*(volatile uint32_t *)0xE000E018UL)
+
+#ifndef IOT_TRACE_CLOCK_HZ
+#define IOT_TRACE_CLOCK_HZ      72000000UL      /* SYSCLK，按板级时钟覆盖 */
+#endif
+#ifndef IOT_SYSTICK_CLOCK_HZ
+#define IOT_SYSTICK_CLOCK_HZ    IOT_TRACE_CLOCK_HZ
+#endif
+
+static volatile uint32_t s_tickless_active;
+static volatile uint32_t s_tickless_expired;
+
 static volatile uint32_t s_critical_nesting;
 static uint32_t s_critical_primask;
+
+/*
+ * µs 单调时间戳（覆盖 iot_trace.c 的 weak 默认实现）。
+ * 首次调用惰性启用 DWT->CYCCNT；CYCCNT 约 59.6s 回绕，
+ * 换算成 µs 后是 32 位 µs（约 71 分钟），主机侧按单调递增处理。
+ */
+uint32_t iot_port_trace_time_us(void)
+{
+    uint32_t hz_per_us = IOT_TRACE_CLOCK_HZ / 1000000UL;
+
+    if ((IOT_DWT_CTRL & IOT_DWT_CTRL_CYCCNTENA) == 0U) {
+        IOT_DEMCR |= IOT_DEMCR_TRCENA;
+        IOT_DWT_CYCCNT = 0U;
+        IOT_DWT_CTRL |= IOT_DWT_CTRL_CYCCNTENA;
+    }
+    if (hz_per_us == 0U) {
+        hz_per_us = 1U;
+    }
+    return IOT_DWT_CYCCNT / hz_per_us;
+}
 
 /* ------------------------- 临界区（PRIMASK） ------------------------- */
 
@@ -136,6 +178,12 @@ int iot_port_stack_init(iot_task_t *task)
 
     task->stack_ptr = sp;
     return IOT_OK;
+}
+
+void iot_port_stack_deinit(iot_task_t *task)
+{
+    /* Cortex-M 的上下文保存在任务栈内，随任务栈一起释放，无独立资源 */
+    (void)task;
 }
 
 /*
@@ -259,6 +307,11 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
  */
 __attribute__((weak)) void SysTick_Handler(void)
 {
+    if (s_tickless_active) {
+        /* 长睡眠到期：只置标志，由 iot_port_idle_timeout() 统一补偿 tick */
+        s_tickless_expired = 1U;
+        return;
+    }
     iot_tick();
 }
 
@@ -270,17 +323,73 @@ void iot_port_idle(void)
 }
 
 /*
- * tickless 空闲：参数为距离下一个截止点的 tick 数。
+ * tickless 空闲：把 SysTick 从 1ms 周期临时改成 ms 毫秒的一次性唤醒，
+ * 进入 WFI；唤醒后按实际经过时间一次性补偿内核 tick。
  *
- * 参考实现仅进入 WFI，由 SysTick 周期唤醒（ms 暂未用于重装低功耗定时器）。
- * 完整 tickless 需要按 SoC 把 RTC/LPTIM 设为 ms 后唤醒，并在唤醒后用
- * iot_tick_increment(elapsed) 补偿内核 tick 计数；这依赖具体板级时钟源，
- * 由接入工程实现。此处保留接口与语义，不伪装成已实现。
+ * 两种唤醒来源：
+ *   - SysTick 到期：SysTick_Handler 只置 s_tickless_expired，补偿 sleep_ms；
+ *   - 其它外设中断提前唤醒：读 SysTick->VAL 算出已过去的 tick，按实际值补偿。
+ * 补偿统一走 iot_tick_increment(elapsed)，到期任务、软件定时器、
+ * 时间片轮转与抢占请求都会在一次调用里被正确处理。
+ *
+ * 约束：SysTick_Handler 需使用本文件的弱实现（或在自己的实现里转发标志），
+ * 且 IOT_SYSTICK_CLOCK_HZ 必须与板级 SysTick 时钟一致。
  */
 void iot_port_idle_timeout(uint32_t ms)
 {
-    (void)ms;
-    __asm volatile ("wfi");
+    uint32_t ticks_per_ms = IOT_SYSTICK_CLOCK_HZ / 1000UL;
+    uint32_t sleep_ms;
+    uint32_t max_ms;
+    uint32_t load;
+    uint32_t val;
+    uint32_t elapsed;
+
+    if (ticks_per_ms == 0U) {
+        ticks_per_ms = 1U;
+    }
+
+    sleep_ms = ((ms == 0U) || (ms == UINT32_MAX)) ? 1U : ms;
+    max_ms = 0x00FFFFFFUL / ticks_per_ms;   /* SysTick LOAD 为 24 位 */
+    if (sleep_ms > max_ms) {
+        sleep_ms = max_ms;
+    }
+    load = sleep_ms * ticks_per_ms - 1U;
+
+    /* 关中断重配 SysTick，避免配置过程中断打断 */
+    __asm volatile ("cpsid i" ::: "memory");
+    IOT_SYSTICK_LOAD = load;
+    IOT_SYSTICK_VAL = 0U;
+    s_tickless_expired = 0U;
+    s_tickless_active = 1U;
+    __asm volatile ("cpsie i" ::: "memory");
+
+    IOT_TRACE(IOT_EVT_TICKLESS_ENTER, sleep_ms, load);
+    __asm volatile ("wfi" ::: "memory");
+
+    /* 唤醒后立即恢复 1ms 周期；顺便清掉 SysTick pending，
+     * 避免开中断后又执行一次 SysTick_Handler 多计 1 tick */
+    __asm volatile ("cpsid i" ::: "memory");
+    s_tickless_active = 0U;
+    val = IOT_SYSTICK_VAL;
+    IOT_SYSTICK_LOAD = ticks_per_ms - 1U;
+    IOT_SYSTICK_VAL = 0U;
+    IOT_SCB_ICSR = (1UL << 26);      /* PENDSTCLR */
+    __asm volatile ("cpsie i" ::: "memory");
+
+    if (s_tickless_expired) {
+        elapsed = sleep_ms;
+    } else if (val <= load) {
+        elapsed = (load - val) / ticks_per_ms;   /* 被其它中断提前唤醒 */
+    } else {
+        elapsed = 0U;
+    }
+    s_tickless_expired = 0U;
+
+    IOT_TRACE(IOT_EVT_TICKLESS_EXIT, elapsed, val);
+
+    if (elapsed > 0U) {
+        iot_tick_increment(elapsed);
+    }
 }
 
 #endif /* IOT_PLATFORM_STM32 */

@@ -77,12 +77,14 @@ void iot_sched_init(void)
 #endif
 }
 
+/* 把任务挂到对应优先级的就绪链表尾部，并置位就绪位图。 */
 void iot_make_ready(iot_task_t *task)
 {
     uint8_t prio;
 
-    if (task == NULL || task->state == IOT_TASK_TERMINATED) {
-        return;
+    if (task == NULL || task->state == IOT_TASK_TERMINATED ||
+        task->state == IOT_TASK_SUSPENDED) {
+        return;                  /* 挂起任务不能被唤醒路径意外放回就绪表 */
     }
 
     prio = task->priority;
@@ -95,10 +97,16 @@ void iot_make_ready(iot_task_t *task)
     list_add_tail(&s_ready[prio], &task->ready_node);
     s_ready_bitmap |= (1U << prio);
 
+    IOT_TRACE_DBG(IOT_EVT_TASK_READY, (uint32_t)(uintptr_t)task, prio);
+
     LOG_D(IOT_TAG, "ready: task=%s prio=%u",
               task->name != NULL ? task->name : "?", (unsigned)prio);
 }
 
+/*
+ * 取出最高优先级就绪任务（出表并置 RUNNING）；无就绪任务返回 NULL。
+ * 若位图与链表不一致，清除该位并断言暴露问题。
+ */
 iot_task_t *iot_sched_select(void)
 {
     int prio;
@@ -125,6 +133,87 @@ iot_task_t *iot_sched_select(void)
     task = IOT_CONTAINER_OF(node, iot_task_t, ready_node);
     task->state = IOT_TASK_RUNNING;
     return task;
+}
+
+/*
+ * 从就绪表摘除任务（动态对象销毁用），状态置 TERMINATED。
+ * 任务处于运行/阻塞/延时态时返回 IOT_BUSY。
+ */
+int iot_sched_remove(iot_task_t *task)
+{
+    int rc = IOT_OK;
+
+    if (task == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (task->state == IOT_TASK_READY) {
+        list_remove(&task->ready_node);
+        if (list_empty(&s_ready[task->priority])) {
+            s_ready_bitmap &= ~(1U << task->priority);
+        }
+        task->state = IOT_TASK_TERMINATED;
+    } else if (task->state != IOT_TASK_TERMINATED) {
+        /* 运行/阻塞/延时中的任务不能直接摘除，交由调用方处理 */
+        rc = IOT_BUSY;
+    }
+    iot_port_critical_exit();
+
+    return rc;
+}
+
+/* ------------------------------ 挂起 / 恢复 ------------------------------ */
+
+/*
+ * 把任务从就绪表摘除并置 SUSPENDED。
+ * 仅 READY / RUNNING / SUSPENDED 允许；BLOCKED / DELAYED / TERMINATED
+ * 返回 IOT_BUSY（避免破坏等待队列与延时链表的节点归属）。
+ */
+int iot_sched_suspend(iot_task_t *task)
+{
+    int rc = IOT_BUSY;
+
+    if (task == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (task->state == IOT_TASK_READY) {
+        uint8_t prio = task->priority;
+
+        list_remove(&task->ready_node);
+        if ((prio < IOT_MAX_PRIORITY) && list_empty(&s_ready[prio])) {
+            s_ready_bitmap &= ~(1U << prio);
+        }
+        task->state = IOT_TASK_SUSPENDED;
+        rc = IOT_OK;
+    } else if ((task->state == IOT_TASK_RUNNING) ||
+               (task->state == IOT_TASK_SUSPENDED)) {
+        /* RUNNING 任务本来就不在就绪表上，只需改状态 */
+        task->state = IOT_TASK_SUSPENDED;
+        rc = IOT_OK;
+    }
+    iot_port_critical_exit();
+
+    return rc;
+}
+
+/* 把 SUSPENDED 任务放回就绪表；非挂起态为空操作 */
+int iot_sched_resume(iot_task_t *task)
+{
+    if (task == NULL) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (task->state == IOT_TASK_SUSPENDED) {
+        task->state = IOT_TASK_READY;
+        iot_make_ready(task);
+    }
+    iot_port_critical_exit();
+
+    return IOT_OK;
 }
 
 /* ------------------------------ 优先级变更 ------------------------------ */
@@ -155,8 +244,12 @@ void iot_sched_change_priority_locked(iot_task_t *task, uint8_t new_prio)
         /* 运行/阻塞/延时：只改字段，回到就绪表时按新优先级挂链 */
         task->priority = new_prio;
     }
+
+    IOT_TRACE(IOT_EVT_PRIO_CHANGE, (uint32_t)(uintptr_t)task,
+              ((uint32_t)old_prio << 8) | (uint32_t)new_prio);
 }
 
+/* 带临界区保护的优先级调整（外部接口）。 */
 void iot_sched_change_priority(iot_task_t *task, uint8_t new_prio)
 {
     iot_port_critical_enter();
@@ -200,6 +293,11 @@ static void iot_stack_guard(const iot_task_t *task)
 }
 #endif
 
+/*
+ * 执行实际上下文切换：
+ * 切走前校验栈底魔数，重置目标任务时间片并累计切换统计，
+ * 最后交给移植层 iot_port_switch() 保存/恢复寄存器。
+ */
 void iot_sched_switch(iot_task_t *next)
 {
     iot_task_t *prev = iot_current_task;
@@ -224,6 +322,9 @@ void iot_sched_switch(iot_task_t *next)
     next->switches++;
 #endif
 
+    IOT_TRACE(IOT_EVT_SWITCH, (uint32_t)(uintptr_t)next,
+              (uint32_t)(uintptr_t)prev);
+
     LOG_D(IOT_TAG, "switch: %s -> %s",
               (prev != NULL && prev->name != NULL) ? prev->name : "(none)",
               next->name != NULL ? next->name : "?");
@@ -231,6 +332,7 @@ void iot_sched_switch(iot_task_t *next)
     iot_port_switch(prev, next);
 }
 
+/* 任务上下文主动调度一次：选出下一个任务并在临界区外切换。 */
 void iot_sched(void)
 {
     iot_task_t *next;
@@ -279,9 +381,15 @@ iot_task_t *iot_sched_from_isr(void)
 #endif
     }
 
+    if (next != prev) {
+        IOT_TRACE(IOT_EVT_SWITCH, (uint32_t)(uintptr_t)next,
+                  (uint32_t)(uintptr_t)prev);
+    }
+
     return (next != prev) ? next : NULL;
 }
 
+/* 判断就绪表中是否存在比当前任务优先级更高的任务（FromISR 抢占依据）。 */
 bool iot_sched_preempt_needed(void)
 {
     iot_task_t *cur = iot_current_task;
@@ -297,6 +405,7 @@ bool iot_sched_preempt_needed(void)
 }
 
 #if IOT_USE_TIME_SLICING
+/* 按 delta 消耗当前任务时间片，耗尽时置位切换标志供中断退出时调度。 */
 void iot_sched_tick_slice(uint32_t delta)
 {
     iot_task_t *cur = iot_current_task;
@@ -317,23 +426,27 @@ void iot_sched_tick_slice(uint32_t delta)
 }
 #endif
 
+/* 查询当前时间片是否已耗尽。 */
 bool iot_sched_slice_expired(void)
 {
     return s_slice_expired;
 }
 
 #if IOT_USE_STATS
+/* 返回上下文切换总次数（IOT_USE_STATS 开启时有效）。 */
 uint32_t iot_sched_switch_count(void)
 {
     return s_ctx_switches;
 }
 
+/* 清零上下文切换计数。 */
 void iot_sched_reset_switch_count(void)
 {
     s_ctx_switches = 0U;
 }
 #endif
 
+/* 返回当前运行任务指针（尚未启动时为 NULL）。 */
 iot_task_t *iot_current(void)
 {
     return iot_current_task;

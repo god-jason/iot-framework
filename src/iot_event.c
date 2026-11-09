@@ -11,9 +11,11 @@
 
 #include "iot.h"
 #include "iot_port.h"
+#include "iot_mem.h"
 
 #if IOT_USE_EVENT
 
+/* 判断当前标志是否满足等待条件：ALL 要求全部置位，ANY 任一置位即可。 */
 static bool iot_event_match(uint32_t flags, uint32_t bits, uint8_t options)
 {
     if ((options & IOT_EVENT_ALL) != 0U) {
@@ -22,6 +24,7 @@ static bool iot_event_match(uint32_t flags, uint32_t bits, uint8_t options)
     return (flags & bits) != 0U;
 }
 
+/* 初始化事件组：标志位清零并初始化等待队列。 */
 int iot_event_init(iot_event_t *event)
 {
     if (event == NULL) {
@@ -34,6 +37,10 @@ int iot_event_init(iot_event_t *event)
     return IOT_OK;
 }
 
+/*
+ * 置位事件：先顺序唤醒所有因此满足等待条件的任务，
+ * 唤醒完成后再统一应用 IOT_EVENT_CLEAR，避免等待者互相抢位。
+ */
 int iot_event_set(iot_event_t *event, uint32_t bits)
 {
     uint32_t bitmap;
@@ -77,6 +84,7 @@ int iot_event_set(iot_event_t *event, uint32_t bits)
     return IOT_OK;
 }
 
+/* 清除指定事件位（不会影响等待者，仅更新标志）。 */
 int iot_event_clear(iot_event_t *event, uint32_t bits)
 {
     if (!IOT_OBJ_VALID(event)) {
@@ -89,6 +97,7 @@ int iot_event_clear(iot_event_t *event, uint32_t bits)
     return IOT_OK;
 }
 
+/* 读取当前事件标志位。 */
 int iot_event_get(iot_event_t *event, uint32_t *flags)
 {
     if (!IOT_OBJ_VALID(event) || flags == NULL) {
@@ -101,6 +110,10 @@ int iot_event_get(iot_event_t *event, uint32_t *flags)
     return IOT_OK;
 }
 
+/*
+ * 等待事件位：条件已满足立即返回；否则按 timeout 阻塞。
+ * 被唤醒后重查条件（可能被其他等待者清位），有限超时只等待一次。
+ */
 int iot_event_wait(iot_event_t *event, uint32_t bits, uint8_t options,
                    uint32_t timeout, uint32_t *out_flags)
 {
@@ -148,6 +161,45 @@ int iot_event_wait(iot_event_t *event, uint32_t bits, uint8_t options,
         remaining = (timeout == IOT_TIMEOUT_FOREVER)
                     ? IOT_TIMEOUT_FOREVER : IOT_TIMEOUT_NONE;
     }
+}
+
+/* 动态创建事件组：对象由 iot_mem_calloc 分配，失败返回 NULL。 */
+iot_event_t *iot_event_create(void)
+{
+    iot_event_t *event = (iot_event_t *)iot_mem_calloc(1U, sizeof(*event));
+
+    if (event == NULL) {
+        LOG_E(IOT_TAG, "event_create: no memory");
+        return NULL;
+    }
+    if (iot_event_init(event) != IOT_OK) {
+        iot_mem_free(event);
+        return NULL;
+    }
+    return event;
+}
+
+/*
+ * 销毁动态事件组：仍有任务等待时返回 IOT_BUSY；
+ * 成功时标记失效并释放对象内存。
+ */
+int iot_event_destroy(iot_event_t *event)
+{
+    if (!IOT_OBJ_VALID(event)) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (!iot_wait_queue_empty(&event->wait)) {
+        iot_port_critical_exit();
+        LOG_W(IOT_TAG, "event_destroy: still has waiters");
+        return IOT_BUSY;
+    }
+    event->initialized = false;
+    iot_port_critical_exit();
+
+    iot_mem_free(event);
+    return IOT_OK;
 }
 
 #else /* IOT_USE_EVENT */

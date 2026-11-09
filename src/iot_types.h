@@ -15,6 +15,8 @@
  *   iot_mutex.h   iot_mutex_t
  *   iot_event.h   iot_event_t / IOT_EVENT_*
  *   iot_queue.h   iot_queue_t
+ *   iot_sbuf.h    iot_sbuf_t
+ *   iot_msgq.h    iot_msgq_t
  *   iot_timers.h  iot_timer_t / iot_timer_cb_t
  *   iot_wait.h    iot_wait_queue_t
  *   iot_stats.h   iot_stats_t / iot_task_stats_t
@@ -22,7 +24,8 @@
  * 只依赖类型声明的模块包含本文件即可；需要访问成员时再包含对应头文件。
  *
  * 设计约束：
- *   - 所有对象由调用者静态或栈上分配，内核不做任何动态内存申请；
+ *   - 对象默认由调用者静态或栈上分配；需要运行期增减时使用
+ *     iot_*_create()/iot_*_destroy() 动态接口（内部走 iot_mem_*）；
  *   - 优先级数值越小优先级越高，0 为最高优先级。
  */
 
@@ -82,6 +85,8 @@ typedef struct iot_sem         iot_sem_t;
 typedef struct iot_mutex       iot_mutex_t;
 typedef struct iot_event       iot_event_t;
 typedef struct iot_queue       iot_queue_t;
+typedef struct iot_sbuf        iot_sbuf_t;
+typedef struct iot_msgq        iot_msgq_t;
 typedef struct iot_timer       iot_timer_t;
 typedef struct iot_wait_queue  iot_wait_queue_t;
 

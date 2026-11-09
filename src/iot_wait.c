@@ -50,6 +50,7 @@ void iot_wait_queue_init(iot_wait_queue_t *queue)
     queue->bitmap = 0U;
 }
 
+/* 把任务按当前优先级挂入等待队列尾部，并置位对应优先级位。 */
 void iot_wait_queue_add(iot_wait_queue_t *queue, iot_task_t *task)
 {
     uint8_t prio;
@@ -70,6 +71,7 @@ void iot_wait_queue_add(iot_wait_queue_t *queue, iot_task_t *task)
     task->wait_queue = queue;
 }
 
+/* 从等待队列摘除任务并维护位图；任务未挂入时安全返回。 */
 void iot_wait_queue_remove(iot_wait_queue_t *queue, iot_task_t *task)
 {
     uint32_t prio;
@@ -86,6 +88,7 @@ void iot_wait_queue_remove(iot_wait_queue_t *queue, iot_task_t *task)
     task->wait_queue = NULL;
 }
 
+/* 取出并摘除最高优先级等待者；空队列返回 NULL。 */
 iot_task_t *iot_wait_queue_pop_highest(iot_wait_queue_t *queue)
 {
     int prio;
@@ -117,6 +120,7 @@ iot_task_t *iot_wait_queue_pop_highest(iot_wait_queue_t *queue)
     return task;
 }
 
+/* 返回最高等待优先级；空队列返回 0xFF。 */
 uint8_t iot_wait_queue_top_priority(const iot_wait_queue_t *queue)
 {
     int prio;
@@ -129,12 +133,20 @@ uint8_t iot_wait_queue_top_priority(const iot_wait_queue_t *queue)
     return (prio < 0) ? 0xFFU : (uint8_t)prio;
 }
 
+/* 判断任务是否正挂在指定等待队列上（O(1) 指针比较）。 */
 bool iot_wait_queue_contains(const iot_wait_queue_t *queue,
                              const iot_task_t *task)
 {
     return (queue != NULL && task != NULL && task->wait_queue == queue);
 }
 
+/* 判断等待队列是否为空（无任何等待者）。 */
+bool iot_wait_queue_empty(const iot_wait_queue_t *queue)
+{
+    return (queue == NULL) || (queue->bitmap == 0U);
+}
+
+/* 返回位图最低置位对应的优先级（事件组广播遍历用）。 */
 uint8_t iot_wait_queue_first_prio(uint32_t bitmap)
 {
     int prio = iot_wait_ctz32(bitmap);
@@ -144,6 +156,10 @@ uint8_t iot_wait_queue_first_prio(uint32_t bitmap)
 
 /* ------------------------------ 唤醒 / 阻塞 ------------------------------ */
 
+/*
+ * 唤醒任务：摘除等待/延时节点、写入唤醒结果并加入就绪表；
+ * 若被唤醒任务优先级高于当前任务，则请求一次重调度（MCU 端置位 PendSV）。
+ */
 void iot_task_wake(iot_task_t *task, int result)
 {
     if (task == NULL) {
@@ -169,10 +185,17 @@ void iot_task_wake(iot_task_t *task, int result)
     }
     iot_port_critical_exit();
 
+    IOT_TRACE(IOT_EVT_TASK_WAKE, (uint32_t)(uintptr_t)task, (uint32_t)result);
+
     LOG_D(IOT_TAG, "wake: task=%s result=%d",
               task->name != NULL ? task->name : "?", (int)result);
 }
 
+/*
+ * 阻塞当前任务：挂入指定等待队列（可选超时），
+ * 在同一临界区内完成入表与选任务，随后切换到下一个任务。
+ * ISR 中调用会触发断言并返回 IOT_FORBIDDEN_IN_ISR。
+ */
 int iot_block_current(iot_wait_queue_t *wait_queue, uint32_t timeout)
 {
     iot_task_t *cur = iot_current_task;
@@ -187,6 +210,8 @@ int iot_block_current(iot_wait_queue_t *wait_queue, uint32_t timeout)
         LOG_E(IOT_TAG, "block: forbidden in ISR");
         return IOT_FORBIDDEN_IN_ISR;
     }
+
+    IOT_TRACE(IOT_EVT_TASK_BLOCK, (uint32_t)(uintptr_t)cur, timeout);
 
     iot_port_critical_enter();
     cur->state = IOT_TASK_BLOCKED;

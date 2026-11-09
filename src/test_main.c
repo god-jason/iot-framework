@@ -13,12 +13,14 @@ int tf_failures = 0;
 static const char *s_suite = "";
 static int s_suite_failures = 0;
 
+/* 开始一个测试套件：记录名称与当前失败计数基线。 */
 void tf_begin(const char *name)
 {
     s_suite = name;
     s_suite_failures = tf_failures;
 }
 
+/* 结束当前套件：根据失败计数增量输出 PASS/FAIL。 */
 void tf_end(void)
 {
     printf("%s  %s\n",
@@ -101,8 +103,13 @@ void ut_upgrade(void);
 
 /* ---------------- 内核 ---------------- */
 void ut_crash(void);
+void ut_trace(void);
 void ut_iot(void);
+void ut_dynamic(void);
+void ut_sbuf(void);
+void ut_msgq(void);
 
+/* 测试入口：依次运行各模块套件，全部通过返回 0，否则返回 1。 */
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -180,6 +187,10 @@ int main(void)
     printf("\n--- 内核 ---\n");
     ut_crash();
     ut_iot();
+    ut_trace();
+    ut_dynamic();
+    ut_sbuf();
+    ut_msgq();
 
     printf("\n=== 结果：%d 项检查，%d 项失败 ===\n", tf_checks, tf_failures);
     return (tf_failures == 0) ? 0 : 1;

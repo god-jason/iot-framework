@@ -38,6 +38,26 @@ int iot_sem_give_from_isr(iot_sem_t *sem, bool *need_yield);
 int iot_queue_send_from_isr(iot_queue_t *queue, const void *item,
                             bool *need_yield);
 
+#if IOT_USE_SBUF
+/* 中断中写入流式缓冲；只写当前可用空间，返回实际写入字节数 */
+int iot_sbuf_write_from_isr(iot_sbuf_t *sb, const void *data, uint32_t len,
+                            bool *need_yield);
+
+/* 中断中读取流式缓冲；返回实际读取字节数 */
+int iot_sbuf_read_from_isr(iot_sbuf_t *sb, void *data, uint32_t len,
+                           bool *need_yield);
+#endif
+
+#if IOT_USE_MSGQ
+/* 中断中发送变长消息；空间不足立即返回 IOT_TIMEOUT */
+int iot_msgq_send_from_isr(iot_msgq_t *mq, const void *msg, uint32_t len,
+                           bool *need_yield);
+
+/* 中断中接收变长消息；无消息立即返回 IOT_TIMEOUT */
+int iot_msgq_recv_from_isr(iot_msgq_t *mq, void *msg, uint32_t max_len,
+                           uint32_t *out_len, bool *need_yield);
+#endif
+
 #if IOT_USE_EVENT
 /* 中断中置位事件 */
 int iot_event_set_from_isr(iot_event_t *event, uint32_t bits,

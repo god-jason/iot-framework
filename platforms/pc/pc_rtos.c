@@ -171,6 +171,24 @@ int iot_port_stack_init(iot_task_t *task)
     return IOT_OK;
 }
 
+void iot_port_stack_deinit(iot_task_t *task)
+{
+    if (task == NULL || task->stack_ptr == NULL) {
+        return;
+    }
+
+#if defined(IOT_PC_WIN32_FIBER)
+    /* 主线程转换出的 Fiber 不能删除 */
+    if (task->stack_ptr != s_main_fiber) {
+        DeleteFiber(task->stack_ptr);
+    }
+#else
+    /* 归还静态 ucontext 槽位，供后续任务复用 */
+    ((pc_context_t *)task->stack_ptr)->used = false;
+#endif
+    task->stack_ptr = NULL;
+}
+
 void iot_port_start_first(iot_task_t *task)
 {
 #if defined(IOT_PC_WIN32_FIBER)

@@ -29,6 +29,12 @@ void iot_make_ready(iot_task_t *task);
 iot_task_t *iot_sched_select(void);
 
 /*
+ * 从就绪表摘除任务（动态对象销毁用），状态置 TERMINATED。
+ * 返回 IOT_OK；任务处于运行/阻塞/延时态返回 IOT_BUSY。
+ */
+int iot_sched_remove(iot_task_t *task);
+
+/*
  * 在临界区内选出下一个要运行的任务（无就绪任务时返回空闲任务）。
  * 与 iot_sched_switch() 配对使用，保证“状态更新 + 选择”原子完成。
  */
@@ -54,6 +60,10 @@ void iot_sched_change_priority_locked(iot_task_t *task, uint8_t new_prio);
 
 /* 带临界区保护的优先级调整 */
 void iot_sched_change_priority(iot_task_t *task, uint8_t new_prio);
+
+/* 挂起/恢复：摘除或放回就绪表（由 iot_task_suspend/resume 调用） */
+int iot_sched_suspend(iot_task_t *task);
+int iot_sched_resume(iot_task_t *task);
 
 #if IOT_USE_TIME_SLICING
 /* tick 内调用（临界区内）：按 delta 消耗当前任务时间片，耗尽时置切换标志 */

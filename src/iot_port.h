@@ -27,6 +27,14 @@ void iot_port_init(void);
  */
 int iot_port_stack_init(iot_task_t *task);
 
+/*
+ * 释放 iot_port_stack_init() 建立的上下文（动态任务销毁用）。
+ *   - PC 端：删除 Fiber / 归还 ucontext 槽位；
+ *   - Cortex-M/AVR：无独立上下文，空实现。
+ * 对静态任务无需调用。
+ */
+void iot_port_stack_deinit(iot_task_t *task);
+
 /* 启动第一个任务，通常不返回 */
 void iot_port_start_first(iot_task_t *task);
 
@@ -64,6 +72,13 @@ void iot_port_request_switch(void);
  * 内核据此禁止在 ISR / 定时器回调里调用可能阻塞的 API。
  */
 bool iot_port_in_isr(void);
+
+/*
+ * trace 时间戳（µs，单调，可在 ISR 调用）。
+ * iot_trace.c 提供 weak 默认实现（iot_tick_get()*1000），
+ * STM32 平台用 DWT->CYCCNT 覆盖以获得 µs 精度。
+ */
+uint32_t iot_port_trace_time_us(void);
 
 /*
  * 进入/退出临界区，必须支持嵌套（内核存在嵌套调用路径），

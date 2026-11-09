@@ -9,7 +9,9 @@
 
 #include "iot.h"
 #include "iot_port.h"
+#include "iot_mem.h"
 
+/* 初始化计数信号量：写入初始计数并初始化等待队列。 */
 int iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
 {
     if (sem == NULL) {
@@ -25,6 +27,10 @@ int iot_sem_init(iot_sem_t *sem, uint32_t initial_count)
     return IOT_OK;
 }
 
+/*
+ * 获取令牌：计数大于 0 时立即减一并返回；
+ * 否则按 timeout 阻塞（IOT_TIMEOUT_NONE 表示不等待，立即返回超时）。
+ */
 int iot_sem_take(iot_sem_t *sem, uint32_t timeout)
 {
     if (!IOT_OBJ_VALID(sem)) {
@@ -36,6 +42,7 @@ int iot_sem_take(iot_sem_t *sem, uint32_t timeout)
     if (sem->count > 0U) {
         sem->count--;
         iot_port_critical_exit();
+        IOT_TRACE_OBJ(IOT_EVT_SEM_TAKE, (uint32_t)(uintptr_t)sem, sem->count);
         LOG_D(IOT_TAG, "sem take: ok, count=%u", (unsigned)sem->count);
         return IOT_OK;
     }
@@ -50,6 +57,10 @@ int iot_sem_take(iot_sem_t *sem, uint32_t timeout)
     return iot_block_current(&sem->wait, timeout);
 }
 
+/*
+ * 释放令牌：有等待者时直接交接给最高优先级任务（计数保持 0）；
+ * 否则计数加一，超过 IOT_SEM_MAX_COUNT 返回 IOT_OVERFLOW。
+ */
 int iot_sem_give(iot_sem_t *sem)
 {
     iot_task_t *task;
@@ -79,6 +90,46 @@ int iot_sem_give(iot_sem_t *sem)
     sem->count++;
     iot_port_critical_exit();
 
+    IOT_TRACE_OBJ(IOT_EVT_SEM_GIVE, (uint32_t)(uintptr_t)sem, sem->count);
     LOG_D(IOT_TAG, "sem give: count=%u", (unsigned)sem->count);
+    return IOT_OK;
+}
+
+/* 动态创建信号量：对象由 iot_mem_calloc 分配，失败返回 NULL。 */
+iot_sem_t *iot_sem_create(uint32_t initial_count)
+{
+    iot_sem_t *sem = (iot_sem_t *)iot_mem_calloc(1U, sizeof(*sem));
+
+    if (sem == NULL) {
+        LOG_E(IOT_TAG, "sem_create: no memory");
+        return NULL;
+    }
+    if (iot_sem_init(sem, initial_count) != IOT_OK) {
+        iot_mem_free(sem);
+        return NULL;
+    }
+    return sem;
+}
+
+/*
+ * 销毁动态信号量：仍有任务等待时返回 IOT_BUSY；
+ * 成功时标记失效并释放对象内存。
+ */
+int iot_sem_destroy(iot_sem_t *sem)
+{
+    if (!IOT_OBJ_VALID(sem)) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (!iot_wait_queue_empty(&sem->wait)) {
+        iot_port_critical_exit();
+        LOG_W(IOT_TAG, "sem_destroy: still has waiters");
+        return IOT_BUSY;
+    }
+    sem->initialized = false;
+    iot_port_critical_exit();
+
+    iot_mem_free(sem);
     return IOT_OK;
 }

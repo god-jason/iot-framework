@@ -15,7 +15,8 @@ extern "C" {
 #endif
 
 struct iot_queue {
-    uint8_t *buffer;                /* 消息缓冲区（调用者提供） */
+    uint8_t *buffer;                /* 消息缓冲区（调用者提供或动态分配） */
+    bool buffer_owned;              /* 缓冲区是否由 iot_queue_create 分配 */
     uint32_t item_size;             /* 单条消息大小（字节） */
     uint32_t depth;                 /* 队列深度（条数） */
     uint32_t depth_mask;            /* depth 为 2 的幂时的掩码，否则为 0（回退取模） */
@@ -37,6 +38,15 @@ struct iot_queue {
  */
 int iot_queue_init(iot_queue_t *queue, void *buffer,
                    uint32_t item_size, uint32_t depth);
+
+/*
+ * 动态创建/销毁：队列结构与消息缓冲区均由 iot_mem_* 分配。
+ * 内存需求 = sizeof(iot_queue_t) + item_size * depth，失败返回 NULL。
+ */
+iot_queue_t *iot_queue_create(uint32_t item_size, uint32_t depth);
+
+/* 销毁动态队列；仍有消息或收发等待者时返回 IOT_BUSY */
+int iot_queue_destroy(iot_queue_t *queue);
 
 /*
  * 发送一条消息；队列满且 timeout 不为 0 时阻塞。

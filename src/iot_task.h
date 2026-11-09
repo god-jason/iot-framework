@@ -22,7 +22,8 @@ typedef enum {
     IOT_TASK_RUNNING,      /* 正在运行 */
     IOT_TASK_BLOCKED,      /* 阻塞在信号量/互斥量/队列上 */
     IOT_TASK_DELAYED,      /* 睡眠中，等待 tick 到期 */
-    IOT_TASK_TERMINATED    /* 已退出，不再参与调度 */
+    IOT_TASK_TERMINATED,   /* 已退出，不再参与调度 */
+    IOT_TASK_SUSPENDED     /* 被挂起，不参与调度（可恢复） */
 } iot_task_state_e;
 
 /* ============================== 回调类型 ============================== */
@@ -44,6 +45,7 @@ struct iot_task {
 
     uint8_t priority;               /* 当前优先级：0 最高（含继承提升） */
     uint8_t base_priority;          /* 创建时的原始优先级，继承解除后恢复 */
+    uint8_t suspend_count;          /* 嵌套挂起计数，减到 0 才恢复就绪 */
     iot_task_state_e state;        /* 当前状态 */
 
     list_node_t ready_node;         /* 就绪链表节点（每优先级一条环形链） */
@@ -82,6 +84,7 @@ struct iot_task {
 #endif
 
     bool created;                   /* 是否已创建（调试用） */
+    bool stack_owned;               /* 栈是否由 iot_task_create_dynamic 分配 */
 };
 
 /*
@@ -104,6 +107,25 @@ int iot_task_create(iot_task_t *task, const char *name,
                     uint8_t priority, iot_entry_t entry, void *arg,
                     void *stack_mem, uint32_t stack_size);
 
+/*
+ * 动态创建任务：TCB 与任务栈均由 iot_mem_* 分配。
+ * 返回任务句柄；参数非法或内存不足返回 NULL。
+ * 说明：创建后任务处于就绪态；销毁必须调用 iot_task_destroy()，
+ *       且不能在任务自己的上下文里销毁自己（应先 iot_task_exit()）。
+ */
+iot_task_t *iot_task_create_dynamic(const char *name, uint8_t priority,
+                                    iot_entry_t entry, void *arg,
+                                    uint32_t stack_size);
+
+/*
+ * 销毁由 iot_task_create_dynamic() 创建的任务，释放栈、端口上下文与 TCB。
+ * 仅允许销毁「就绪但未运行」或「已退出（TERMINATED）」的任务：
+ *   - 当前正在运行的任务返回 IOT_BUSY（先 iot_task_exit()，由别的任务销毁）；
+ *   - 阻塞/延时中的任务返回 IOT_BUSY（需先唤醒或让它退出）；
+ *   - 静态创建的任务返回 IOT_INVALID_PARAM。
+ */
+int iot_task_destroy(iot_task_t *task);
+
 /* 让出 CPU：当前任务回到同优先级队尾，触发一次调度 */
 void iot_yield(void);
 
@@ -118,6 +140,20 @@ void iot_sleep_until(uint32_t wake_tick);
 
 /* 调整任务基准优先级（同时解除当前继承提升） */
 int iot_task_set_priority(iot_task_t *task, uint8_t priority);
+
+/*
+ * 挂起任务：支持嵌套（计数），需同样次数的 resume 才恢复。
+ * 仅允许挂起 READY / RUNNING / SUSPENDED 状态的任务；
+ * BLOCKED / DELAYED / TERMINATED 返回 IOT_BUSY（与 destroy 一致的保守语义）。
+ * 挂起当前任务时函数内部切走，被恢复后才返回。
+ */
+int iot_task_suspend(iot_task_t *task);
+
+/* 恢复任务：嵌套计数减到 0 时重新进入就绪表 */
+int iot_task_resume(iot_task_t *task);
+
+/* 任务当前是否处于挂起态 */
+bool iot_task_is_suspended(const iot_task_t *task);
 
 /* 初始化任务注册表与通知队列（iot_init 调用） */
 void iot_task_module_init(void);

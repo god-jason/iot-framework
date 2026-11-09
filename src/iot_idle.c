@@ -34,6 +34,10 @@ static void idle_entry(void *arg)
     }
 }
 
+/*
+ * 初始化内置空闲任务：优先级最低、栈静态分配，
+ * 填充栈魔数并构造移植层上下文（不加入普通任务注册表）。
+ */
 void iot_idle_init(void)
 {
     int rc;

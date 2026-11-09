@@ -24,12 +24,17 @@ static iot_task_t *iot_delayed_task(list_node_t *node)
     return IOT_CONTAINER_OF(node, iot_task_t, delayed_node);
 }
 
+/* 初始化 tick 计数与延时链表（由 iot_init 调用）。 */
 void iot_tick_init(void)
 {
     list_init(&s_delayed);
     iot_tick_count = 0U;
 }
 
+/*
+ * 把任务挂入延时链表（按 wake_tick 升序），
+ * 调用者必须已持有临界区（阻塞/睡眠路径均在同一临界区内调用）。
+ */
 void iot_delayed_add(iot_task_t *task)
 {
     list_node_t *node;
@@ -57,6 +62,7 @@ void iot_delayed_add(iot_task_t *task)
     list_insert_sorted(&s_delayed, node);
 }
 
+/* 返回延时链表最早唤醒时刻；链表为空返回 UINT32_MAX。 */
 uint32_t iot_delayed_next_deadline(void)
 {
     list_node_t *node = list_first(&s_delayed);
@@ -67,6 +73,13 @@ uint32_t iot_delayed_next_deadline(void)
     return iot_delayed_task(node)->wake_tick;
 }
 
+/*
+ * 推进内核时间：
+ *   1) 摘下所有到期任务并在临界区外逐个唤醒；
+ *   2) 累计当前任务运行 tick、消耗时间片；
+ *   3) 处理到期软件定时器；
+ *   4) 时间片耗尽时请求重调度。
+ */
 void iot_tick_increment(uint32_t delta)
 {
     list_t expired;
@@ -78,6 +91,8 @@ void iot_tick_increment(uint32_t delta)
     }
 
     list_init(&expired);
+
+    IOT_TRACE_DBG(IOT_EVT_TICK, iot_tick_count + delta, delta);
 
     iot_port_critical_enter();
     iot_tick_count += delta;
@@ -146,16 +161,22 @@ void iot_tick_increment(uint32_t delta)
 #endif
 }
 
+/* 推进 1 个 tick（SysTick/模拟端周期调用）。 */
 void iot_tick(void)
 {
     iot_tick_increment(1U);
 }
 
+/* 读取当前 tick 计数（32 位，允许回绕）。 */
 uint32_t iot_tick_get(void)
 {
     return iot_tick_count;
 }
 
+/*
+ * 计算空闲任务可休眠的 tick 数：取延时链表与软件定时器的最近截止点；
+ * 没有任何截止点返回 UINT32_MAX，已到期返回 1。
+ */
 uint32_t iot_idle_next_timeout(void)
 {
     uint32_t now = iot_tick_count;

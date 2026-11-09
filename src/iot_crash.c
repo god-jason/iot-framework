@@ -128,6 +128,10 @@ static void iot_crash_snapshot(const iot_crash_context_t *ctx)
 
 /* ------------------------------ 对外接口 ------------------------------ */
 
+/*
+ * 初始化崩溃记录：安装平台异常钩子，并校验 .noinit 中上次复位留下的记录。
+ * 有效记录会立即打印一份完整报告。
+ */
 void iot_crash_init(void)
 {
     s_recorded_this_boot = false;
@@ -149,16 +153,19 @@ void iot_crash_init(void)
     }
 }
 
+/* 是否存在上次启动遗留的有效崩溃记录（1 = 有）。 */
 int iot_crash_pending(void)
 {
     return s_valid ? 1 : 0;
 }
 
+/* 获取有效崩溃记录；无记录返回 NULL。 */
 const iot_crash_record_t *iot_crash_get(void)
 {
     return s_valid ? &s_record : NULL;
 }
 
+/* 清除崩溃记录，并允许本次启动重新记录。 */
 void iot_crash_clear(void)
 {
     memset(&s_record, 0, sizeof(s_record));
@@ -166,6 +173,10 @@ void iot_crash_clear(void)
     s_recorded_this_boot = false;
 }
 
+/*
+ * 写入一次崩溃现场（可在中断/异常上下文调用）。
+ * 补全任务、tick、编译时间与栈快照后计算 CRC；同一次启动只保留第一次。
+ */
 int iot_crash_record(int reason, const iot_crash_context_t *ctx)
 {
     iot_task_t *task;
@@ -174,6 +185,10 @@ int iot_crash_record(int reason, const iot_crash_context_t *ctx)
     if (reason <= IOT_CRASH_NONE || reason > IOT_CRASH_USER) {
         return -1;
     }
+
+    IOT_TRACE(IOT_EVT_CRASH, (uint32_t)reason, 0U);
+    iot_trace_freeze();   /* 保留崩溃前最后一批事件，供复位前/调试器读取 */
+
     if (s_recorded_this_boot) {
         return 0;   /* 保留第一次现场，后续异常多为连锁反应 */
     }
@@ -227,6 +242,7 @@ int iot_crash_record(int reason, const iot_crash_context_t *ctx)
     return 0;
 }
 
+/* 崩溃原因枚举转短名称（未知原因返回 "UNKNOWN"）。 */
 const char *iot_crash_reason_name(int reason)
 {
     switch (reason) {
@@ -271,6 +287,10 @@ static int iot_crash_append(char *out, uint32_t max, int pos,
     return pos + n;
 }
 
+/*
+ * 把记录格式化为可上报的多行文本（行尾 "\r\n"）。
+ * 返回写入字符数；空间不足时截断并保证 '\0' 结尾。
+ */
 int iot_crash_format(const iot_crash_record_t *rec, char *out, uint32_t max)
 {
     int pos = 0;
@@ -327,6 +347,7 @@ int iot_crash_format(const iot_crash_record_t *rec, char *out, uint32_t max)
     return (pos < 0) ? 0 : pos;
 }
 
+/* 把崩溃现场打印到日志串口/stdout（不依赖日志等级，始终输出）。 */
 void iot_crash_print(const iot_crash_record_t *rec)
 {
     uint32_t i;
@@ -373,6 +394,8 @@ void iot_crash_print(const iot_crash_record_t *rec)
 }
 
 #else /* IOT_CRASH_ENABLE */
+
+/* 崩溃记录被裁剪时的空实现：保持接口可链接，不产生任何存储与代码开销。 */
 
 void iot_crash_init(void)
 {

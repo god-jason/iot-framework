@@ -13,6 +13,7 @@
 
 #include "iot.h"
 #include "iot_port.h"
+#include "iot_mem.h"
 
 #include <string.h>
 
@@ -31,6 +32,7 @@ static uint32_t iot_queue_next(const iot_queue_t *queue, uint32_t index)
     return (index + 1U) % queue->depth;
 }
 
+/* 初始化定长消息队列：绑定缓冲、计算掩码并初始化收发等待队列。 */
 int iot_queue_init(iot_queue_t *queue, void *buffer,
                               uint32_t item_size, uint32_t depth)
 {
@@ -47,6 +49,7 @@ int iot_queue_init(iot_queue_t *queue, void *buffer,
 #endif
 
     queue->buffer = (uint8_t *)buffer;
+    queue->buffer_owned = false;
     queue->item_size = item_size;
     queue->depth = depth;
     queue->depth_mask = iot_queue_is_pow2(depth) ? (depth - 1U) : 0U;
@@ -62,6 +65,10 @@ int iot_queue_init(iot_queue_t *queue, void *buffer,
     return IOT_OK;
 }
 
+/*
+ * 发送一条消息：队列未满直接入队；已满时与等待的接收者直接握手，
+ * 否则按 timeout 阻塞（IOT_TIMEOUT_NONE 立即返回 IOT_TIMEOUT）。
+ */
 int iot_queue_send(iot_queue_t *queue, const void *item,
                               uint32_t timeout)
 {
@@ -111,6 +118,10 @@ int iot_queue_send(iot_queue_t *queue, const void *item,
     return iot_block_current(&queue->send_wait, timeout);
 }
 
+/*
+ * 接收一条消息：队列非空直接出队；为空时与等待的发送者直接握手，
+ * 否则按 timeout 阻塞（IOT_TIMEOUT_NONE 立即返回 IOT_TIMEOUT）。
+ */
 int iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
 {
     iot_task_t *sender;
@@ -157,4 +168,68 @@ int iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
     iot_current_task->wait_ptr = item;
     LOG_D(IOT_TAG, "queue recv: empty, blocking timeout=%u", (unsigned)timeout);
     return iot_block_current(&queue->recv_wait, timeout);
+}
+
+/*
+ * 动态创建消息队列：队列结构与 item_size * depth 的消息缓冲
+ * 均由 iot_mem_* 分配，失败返回 NULL。
+ */
+iot_queue_t *iot_queue_create(uint32_t item_size, uint32_t depth)
+{
+    iot_queue_t *queue;
+    uint32_t total;
+
+    if (item_size == 0U || depth == 0U ||
+        depth > ((uint32_t)-1) / item_size) {
+        return NULL;
+    }
+    total = item_size * depth;
+
+    queue = (iot_queue_t *)iot_mem_calloc(1U, sizeof(*queue));
+    if (queue == NULL) {
+        LOG_E(IOT_TAG, "queue_create: no memory for queue");
+        return NULL;
+    }
+    queue->buffer = (uint8_t *)iot_mem_malloc(total);
+    if (queue->buffer == NULL) {
+        LOG_E(IOT_TAG, "queue_create: no memory for buffer");
+        iot_mem_free(queue);
+        return NULL;
+    }
+
+    if (iot_queue_init(queue, queue->buffer, item_size, depth) != IOT_OK) {
+        iot_mem_free(queue->buffer);
+        iot_mem_free(queue);
+        return NULL;
+    }
+    queue->buffer_owned = true;
+    return queue;
+}
+
+/*
+ * 销毁动态队列：仍有消息或收发等待者时返回 IOT_BUSY；
+ * 成功时释放消息缓冲（若是动态分配）与队列对象。
+ */
+int iot_queue_destroy(iot_queue_t *queue)
+{
+    if (!IOT_OBJ_VALID(queue)) {
+        return IOT_INVALID_PARAM;
+    }
+
+    iot_port_critical_enter();
+    if (queue->count != 0U ||
+        !iot_wait_queue_empty(&queue->send_wait) ||
+        !iot_wait_queue_empty(&queue->recv_wait)) {
+        iot_port_critical_exit();
+        LOG_W(IOT_TAG, "queue_destroy: not empty");
+        return IOT_BUSY;
+    }
+    queue->initialized = false;
+    iot_port_critical_exit();
+
+    if (queue->buffer_owned) {
+        iot_mem_free(queue->buffer);
+    }
+    iot_mem_free(queue);
+    return IOT_OK;
 }

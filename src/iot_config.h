@@ -89,6 +89,31 @@
 #define IOT_USE_EVENT 1
 #endif
 
+/* 流式缓冲：字节流环形缓冲，支持阻塞读/写与 FromISR 非阻塞版本 */
+#ifndef IOT_USE_SBUF
+#define IOT_USE_SBUF 1
+#endif
+
+/* 变长消息队列：带长度头的环形消息缓冲（区分 iot_queue 的定长消息） */
+#ifndef IOT_USE_MSGQ
+#define IOT_USE_MSGQ 1
+#endif
+
+/* 软件定时器回调是否由专用内核任务执行（1 = 任务上下文，0 = tick 上下文） */
+#ifndef IOT_USE_TIMER_TASK
+#define IOT_USE_TIMER_TASK 1
+#endif
+
+/* 定时器任务优先级（0 最高；须小于 IOT_PRIORITY_IDLE） */
+#ifndef IOT_TIMER_TASK_PRIORITY
+#define IOT_TIMER_TASK_PRIORITY 2U
+#endif
+
+/* 定时器任务栈大小（字节），回调应短小，避免大局部变量 */
+#ifndef IOT_TIMER_TASK_STACK_SIZE
+#define IOT_TIMER_TASK_STACK_SIZE 1024U
+#endif
+
 /* 任务通知（轻量单值同步） */
 #ifndef IOT_USE_NOTIFY
 #define IOT_USE_NOTIFY 1
@@ -97,6 +122,32 @@
 /* tickless 空闲：空闲任务按最近截止点休眠，避免固定 tick 唤醒 */
 #ifndef IOT_USE_TICKLESS
 #define IOT_USE_TICKLESS 1
+#endif
+
+/* ------------------------------ 事件跟踪 ------------------------------ */
+
+/*
+ * 事件跟踪：编译期总开关。打开后宏仍受运行期 g_iot_trace_level 控制，
+ * 默认 IOT_TRACE_DEFAULT_LEVEL = OFF，因此编译进去也不产生事件。
+ * 置 0 则所有 IOT_TRACE_* 宏编译为空，零 RAM/ROM 开销。
+ */
+#ifndef IOT_USE_TRACE
+#define IOT_USE_TRACE 1
+#endif
+
+/* 是否启用 barectf 后端（产出标准 CTF 流，源码在 vendor/barectf/） */
+#ifndef IOT_TRACE_BACKEND_BARECTF
+#define IOT_TRACE_BACKEND_BARECTF 1
+#endif
+
+/* 环形快照容量，必须是 2 的幂 */
+#ifndef IOT_TRACE_BUFFER_SIZE
+#define IOT_TRACE_BUFFER_SIZE 256U
+#endif
+
+/* 单个 CTF packet 缓冲字节数 */
+#ifndef IOT_TRACE_PACKET_SIZE
+#define IOT_TRACE_PACKET_SIZE 1024U
 #endif
 
 #endif /* IOT_CONFIG_H */

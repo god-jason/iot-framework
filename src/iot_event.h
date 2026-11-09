@@ -31,6 +31,12 @@ struct iot_event {
 /* 初始化事件组，标志位清零 */
 int iot_event_init(iot_event_t *event);
 
+/* 动态创建/销毁：对象由 iot_mem_* 分配，失败返回 NULL */
+iot_event_t *iot_event_create(void);
+
+/* 销毁动态事件组；仍有任务等待时返回 IOT_BUSY */
+int iot_event_destroy(iot_event_t *event);
+
 /* 置位，并唤醒所有因此满足等待条件的任务 */
 int iot_event_set(iot_event_t *event, uint32_t bits);
 

@@ -15,6 +15,7 @@
 
 #include <string.h>
 
+/* 统计栈底连续保持魔数的字节数，即从未使用过的栈空间（栈水位）。 */
 static uint32_t iot_stack_free_bytes(const iot_task_t *task)
 {
 #if IOT_USE_STACK_CHECK
@@ -41,6 +42,7 @@ static uint32_t iot_stack_free_bytes(const iot_task_t *task)
 #endif
 }
 
+/* 汇总内核统计：tick 计数、上下文切换次数、任务数量等。 */
 int iot_stats_get(iot_stats_t *out)
 {
     if (out == NULL) {
@@ -56,6 +58,7 @@ int iot_stats_get(iot_stats_t *out)
     return IOT_OK;
 }
 
+/* 读取指定任务的累计运行 tick、被调度次数与栈余量。 */
 int iot_task_get_stats(const iot_task_t *task, iot_task_stats_t *out)
 {
     if (task == NULL || out == NULL) {
@@ -73,6 +76,7 @@ int iot_task_get_stats(const iot_task_t *task, iot_task_stats_t *out)
     return IOT_OK;
 }
 
+/* 清零全局切换计数与所有任务的运行统计。 */
 void iot_stats_reset(void)
 {
 #if IOT_USE_STATS
