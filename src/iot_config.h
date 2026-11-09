@@ -135,17 +135,25 @@
 #define IOT_USE_TRACE 1
 #endif
 
-/* 是否启用 barectf 后端（产出标准 CTF 流，源码在 vendor/barectf/） */
+/*
+ * trace 行格式：1 = Chrome/Perfetto Trace Event JSON（主机模拟端），
+ *               0 = 紧凑十六进制文本（MCU 串口）。
+ * 由构建系统按目标能力定义，内核不判断具体平台。
+ */
+#ifndef IOT_TRACE_FORMAT_JSON
+#define IOT_TRACE_FORMAT_JSON 0
+#endif
+
+/*
+ * 可选 barectf/CTF 后端。默认关闭：CTF 是 packet 协议，必须缓冲整包，
+ * 与「事件即输出、零内存缓冲」的模型冲突。需要标准 CTF 流时通过
+ * `xmake f --ctf=on -c` 或编译期定义 IOT_TRACE_BACKEND_BARECTF=1 启用。
+ */
 #ifndef IOT_TRACE_BACKEND_BARECTF
-#define IOT_TRACE_BACKEND_BARECTF 1
+#define IOT_TRACE_BACKEND_BARECTF 0
 #endif
 
-/* 环形快照容量，必须是 2 的幂 */
-#ifndef IOT_TRACE_BUFFER_SIZE
-#define IOT_TRACE_BUFFER_SIZE 256U
-#endif
-
-/* 单个 CTF packet 缓冲字节数 */
+/* 可选 CTF 后端的单个 packet 缓冲字节数（流式输出路径不使用） */
 #ifndef IOT_TRACE_PACKET_SIZE
 #define IOT_TRACE_PACKET_SIZE 1024U
 #endif

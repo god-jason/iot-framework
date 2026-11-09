@@ -12,7 +12,6 @@
 
 #if IOT_ASSERT_ENABLE
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "iot_types.h"
@@ -39,14 +38,8 @@ void iot_assert_fail(const char *file, int line, const char *expr)
 
     iot_port_critical_enter();
 
-#if defined(IOT_PLATFORM_PC)
-    /* 模拟端无法停住 CPU，直接退出让 CI 失败 */
-    exit(1);
-#else
-    for (;;) {
-        /* 保持中断关闭，便于调试器连接后查看调用栈 */
-    }
-#endif
+    /* 平台相关停机方式：模拟端退出进程，MCU 端死循环等待调试器 */
+    iot_port_fatal_halt();
 }
 
 #endif /* IOT_ASSERT_ENABLE */

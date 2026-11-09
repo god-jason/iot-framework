@@ -1,7 +1,8 @@
 /*
- * iot_trace_test.c - 事件跟踪回归测试
+ * iot_trace_test.c - 事件跟踪回归测试（流式输出模型）
  *
- * 覆盖：运行期动态开关、宏等级过滤、环形快照、CTF 包导出、重入保护。
+ * 覆盖：运行期动态开关、宏等级过滤、冻结、名称映射、µs 时钟、
+ *       ISR 标记编码，以及 PC 平台直接产出的 JSON 内容。
  */
 
 #include "test.h"
@@ -10,25 +11,19 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TEST_CAP       2048U
-/* CTF magic 0xC1FC1FC1，配置 native-byte-order: le -> C1 1F FC C1 */
-#define CTF_MAGIC_0    0xC1U
-#define CTF_MAGIC_1    0x1FU
-#define CTF_MAGIC_2    0xFCU
-#define CTF_MAGIC_3    0xC1U
+#define TRACE_FILE "iot_trace_test.json"
 
-static uint8_t  s_sink_buf[TEST_CAP];
-static uint32_t s_sink_len;
-static uint32_t s_sink_calls;
-
-static void test_sink(const uint8_t *data, uint32_t len, void *user)
+static size_t read_trace(char *buf, size_t cap)
 {
-    (void)user;
-    if (len <= sizeof(s_sink_buf)) {
-        memcpy(s_sink_buf, data, len);
-        s_sink_len = len;
+    FILE *fp = fopen(TRACE_FILE, "rb");
+    size_t n = 0U;
+
+    if (fp != NULL) {
+        n = fread(buf, 1U, cap - 1U, fp);
+        (void)fclose(fp);
     }
-    s_sink_calls++;
+    buf[n] = '\0';
+    return n;
 }
 
 static uint32_t test_clock(void)
@@ -36,37 +31,26 @@ static uint32_t test_clock(void)
     return 0x12345678U;
 }
 
-/* 返回刚写入的最后一条事件 */
-static const iot_trace_event_t *last_event(void)
-{
-    uint32_t n = iot_trace_count();
-
-    if (n == 0U) {
-        return NULL;
-    }
-    return iot_trace_at((n - 1U) & (iot_trace_capacity() - 1U));
-}
-
 void ut_trace(void)
 {
 #if IOT_USE_TRACE
-    const iot_trace_event_t *ev;
-    uint32_t i;
+    char out[8192];
+    size_t n;
 
-    tf_begin("iot/trace 宏与动态开关");
+    tf_begin("iot/trace 流式输出");
 
     iot_trace_init();
-    iot_trace_reset();
-    iot_trace_disable();
+    iot_trace_start_file(TRACE_FILE);
+    iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
 
-    /* 1. 关闭时宏不产生任何事件 */
-    TF_CHECK_INT(iot_trace_get_level(), IOT_TRACE_LEVEL_OFF);
+    /* 1. 关闭时：无事件、文件里没有任何输出 */
     IOT_TRACE(IOT_EVT_MARKER, 1U, 2U);
     IOT_TRACE_OBJ(IOT_EVT_SEM_GIVE, 3U, 4U);
     IOT_TRACE_DBG(IOT_EVT_TICK, 5U, 6U);
     TF_CHECK_INT(iot_trace_count(), 0);
+    TF_CHECK_INT((int)read_trace(out, sizeof(out)), 0);
 
-    /* 2. 动态开启：三个等级全部生效 */
+    /* 2. 运行期开启：三类宏全部发射 */
     iot_trace_enable();
     TF_CHECK_INT(iot_trace_get_level(), IOT_TRACE_LEVEL_DEBUG);
     IOT_TRACE_CORE(IOT_EVT_SWITCH, 0xAAU, 0xBBU);
@@ -74,134 +58,115 @@ void ut_trace(void)
     IOT_TRACE_DBG(IOT_EVT_TICK, 7U, 1U);
     TF_CHECK_INT(iot_trace_count(), 3);
 
-    ev = last_event();
-    TF_CHECK(ev != NULL);
-    if (ev != NULL) {
-        TF_CHECK_INT(ev->id, IOT_EVT_TICK);
-        TF_CHECK_INT(ev->value, 7);
-        TF_CHECK_INT(ev->arg, 1);
-        TF_CHECK_INT(ev->seq, 2);
-    }
-
-    /* 3. 等级过滤：CORE 级只记录 CORE 宏 */
-    iot_trace_reset();
+    /* 3. 等级过滤：CORE 级只留 CORE 宏 */
     iot_trace_set_level(IOT_TRACE_LEVEL_CORE);
     IOT_TRACE_CORE(IOT_EVT_TASK_WAKE, 1U, 0U);
     IOT_TRACE_OBJ(IOT_EVT_SEM_TAKE, 1U, 0U);
     IOT_TRACE_DBG(IOT_EVT_TICK, 1U, 1U);
-    TF_CHECK_INT(iot_trace_count(), 1);
+    TF_CHECK_INT(iot_trace_count(), 4);
 
-    /* 4. OBJ 级放行 CORE + OBJ，仍过滤 DBG */
-    iot_trace_reset();
+    /* 4. OBJ 级放行 CORE + OBJ */
     iot_trace_set_level(IOT_TRACE_LEVEL_OBJ);
     IOT_TRACE_CORE(IOT_EVT_TASK_BLOCK, 1U, 0U);
     IOT_TRACE_OBJ(IOT_EVT_QUEUE_SEND, 2U, 0U);
     IOT_TRACE_DBG(IOT_EVT_TASK_READY, 3U, 0U);
-    TF_CHECK_INT(iot_trace_count(), 2);
+    TF_CHECK_INT(iot_trace_count(), 6);
 
-    /* 5. 运行期关掉后立刻不再产生事件 */
-    iot_trace_disable();
+    /* 5. 关闭等级后立刻停止发射 */
+    iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
     IOT_TRACE(IOT_EVT_MARKER, 9U, 9U);
-    TF_CHECK_INT(iot_trace_count(), 2);
+    TF_CHECK_INT(iot_trace_count(), 6);
 
-    /* 6. 自定义时钟生效 */
-    iot_trace_reset();
-    iot_trace_set_clock(test_clock);
-    iot_trace_enable();
-    IOT_TRACE(IOT_EVT_MARKER, 0U, 0U);
-    ev = last_event();
-    TF_CHECK(ev != NULL);
-    if (ev != NULL) {
-        TF_CHECK_INT(ev->ts, 0x12345678U);
-    }
-    iot_trace_set_clock(NULL);
-
-    /* 7. barectf CTF 包经 sink 导出 */
-    s_sink_len = 0U;
-    s_sink_calls = 0U;
-    memset(s_sink_buf, 0, sizeof(s_sink_buf));
-    iot_trace_set_sink(test_sink, NULL);
-    iot_trace_reset();
-    for (i = 0U; i < 4U; i++) {
-        IOT_TRACE(IOT_EVT_SWITCH, i + 1U, i);
-    }
-    TF_CHECK_INT(iot_trace_flush(), IOT_OK);
-    TF_CHECK(s_sink_calls > 0U);
-    TF_CHECK(s_sink_len >= 4U);
-    if (s_sink_len >= 4U) {
-        TF_CHECK_INT(s_sink_buf[0], CTF_MAGIC_0);
-        TF_CHECK_INT(s_sink_buf[1], CTF_MAGIC_1);
-        TF_CHECK_INT(s_sink_buf[2], CTF_MAGIC_2);
-        TF_CHECK_INT(s_sink_buf[3], CTF_MAGIC_3);
-    }
-    iot_trace_set_sink(NULL, NULL);
-
-    /* 7b. PC 文件 sink：CTF 流真实落盘并带合法 magic */
-    {
-        uint8_t magic[4] = {0U, 0U, 0U, 0U};
-        FILE *fp;
-
-        iot_trace_reset();
-        iot_trace_start_file("iot_trace_test_stream");
-        for (i = 0U; i < 2U; i++) {
-            IOT_TRACE(IOT_EVT_SWITCH, i, 0U);
-        }
-        iot_trace_stop_file();
-
-        fp = fopen("iot_trace_test_stream", "rb");
-        TF_CHECK(fp != NULL);
-        if (fp != NULL) {
-            TF_CHECK_INT(fread(magic, 1U, sizeof(magic), fp), 4);
-            (void)fclose(fp);
-        }
-        (void)remove("iot_trace_test_stream");
-        TF_CHECK_INT(magic[0], CTF_MAGIC_0);
-        TF_CHECK_INT(magic[1], CTF_MAGIC_1);
-        TF_CHECK_INT(magic[2], CTF_MAGIC_2);
-        TF_CHECK_INT(magic[3], CTF_MAGIC_3);
-    }
-
-    /* 8. 环形覆盖：超过容量后计数继续增长，槽位可回绕读取 */
-    iot_trace_reset();
-    for (i = 0U; i < iot_trace_capacity() + 8U; i++) {
-        IOT_TRACE(IOT_EVT_MARKER, i, 0U);
-    }
-    TF_CHECK_INT(iot_trace_count(), iot_trace_capacity() + 8U);
-    ev = last_event();
-    TF_CHECK(ev != NULL);
-    if (ev != NULL) {
-        TF_CHECK_INT(ev->value, iot_trace_capacity() + 7U);
-    }
-    TF_CHECK_INT(iot_trace_dropped(), 0);
-
-    /* 9. 名称映射：BEGIN + ceil(len/4) 个 CHUNK */
-    iot_trace_reset();
-    iot_trace_enable();
-    iot_trace_name((const void *)(uintptr_t)0x1234U,
-                   IOT_TRACE_NAME_TASK, "blink");
-    TF_CHECK_INT(iot_trace_count(), 3U);   /* 5 字节名字 -> 2 个分片 */
-    ev = iot_trace_at(0U);
-    TF_CHECK(ev != NULL);
-    if (ev != NULL) {
-        TF_CHECK_INT(ev->id, IOT_EVT_NAME_BEGIN);
-        TF_CHECK_INT(ev->value, 0x1234U);
-        TF_CHECK_INT(ev->arg & 0xFFU, IOT_TRACE_NAME_TASK);
-        TF_CHECK_INT(ev->arg >> 8, 5);
-    }
-
-    /* 10. 崩溃冻结：冻结后事件被丢弃且快照不再被覆盖 */
-    iot_trace_reset();
+    /* 6. 冻结：后续事件被丢弃 */
+    iot_trace_set_level(IOT_TRACE_LEVEL_DEBUG);
     iot_trace_freeze();
     TF_CHECK(iot_trace_is_frozen());
     IOT_TRACE(IOT_EVT_MARKER, 1U, 2U);
-    TF_CHECK_INT(iot_trace_count(), 0);
+    TF_CHECK_INT(iot_trace_count(), 6);
     TF_CHECK_INT(iot_trace_dropped(), 1);
     iot_trace_unfreeze();
     TF_CHECK(!iot_trace_is_frozen());
     IOT_TRACE(IOT_EVT_MARKER, 1U, 2U);
-    TF_CHECK_INT(iot_trace_count(), 1);
+    TF_CHECK_INT(iot_trace_count(), 7);
 
-    /* 11. ISR 标记编码 / 事件名表 */
+    /* 7. 名称映射：1 条 BEGIN + 2 条 CHUNK（"blink" 5 字节） */
+    iot_trace_name((const void *)(uintptr_t)0x1234U,
+                   IOT_TRACE_NAME_TASK, "blink");
+    TF_CHECK_INT(iot_trace_count(), 10);
+
+    /* 8. 自定义 µs 时钟写入 ts 字段 */
+    iot_trace_set_clock(test_clock);
+    IOT_TRACE(IOT_EVT_MARKER, 0U, 0U);
+    iot_trace_set_clock(NULL);
+    TF_CHECK_INT(iot_trace_count(), 11);
+
+    /* 9. 停止输出：文件里是一个完整合法的 JSON 数组 */
+    iot_trace_stop_file();
+    n = read_trace(out, sizeof(out));
+    TF_CHECK(n > 0U);
+    TF_CHECK_INT(out[0], '[');
+    TF_CHECK(strstr(out, "\"name\":\"switch\"") != NULL);
+    TF_CHECK(strstr(out, "\"name\":\"sem_give\"") != NULL);
+    TF_CHECK(strstr(out, "\"name\":\"name_begin\"") != NULL);
+    TF_CHECK(strstr(out, "\"ph\":\"i\"") != NULL);
+    TF_CHECK(strstr(out, "\"isr\":0") != NULL);
+    TF_CHECK(strstr(out, "\"ts\":305419896") != NULL);  /* 0x12345678 */
+    TF_CHECK_INT(out[n - 2U], ']');
+    (void)remove(TRACE_FILE);
+
+    /* 10. 启用 CTF 后端时同时输出 CTF 文件（二进制流 + metadata 侧车文件） */
+#if IOT_TRACE_BACKEND_BARECTF
+    {
+        const char *ctf = "iot_trace_test.ctf";
+        char meta_path[64];
+        uint8_t head[4];
+        FILE *fp;
+        long size;
+        char md[8192];
+        size_t mdn;
+
+        iot_trace_set_level(IOT_TRACE_LEVEL_DEBUG);
+        iot_trace_start_ctf_file(ctf);
+        IOT_TRACE_CORE(IOT_EVT_SWITCH, 0x11U, 0x22U);
+        IOT_TRACE_OBJ(IOT_EVT_SEM_GIVE, 0x33U, 0x44U);
+        IOT_TRACE_DBG(IOT_EVT_TICK, 1U, 1U);
+        iot_trace_stop_ctf_file();
+
+        /* 二进制流文件：CTF magic 0xC1 1F FC C1 (LE)，且非空 */
+        fp = fopen(ctf, "rb");
+        TF_CHECK(fp != NULL);
+        if (fp != NULL) {
+            size = 0; (void)fseek(fp, 0, SEEK_END); size = ftell(fp);
+            (void)fseek(fp, 0, SEEK_SET);
+            TF_CHECK(size > 4L);
+            TF_CHECK_INT((int)fread(head, 1U, sizeof(head), fp), 4);
+            (void)fclose(fp);
+        }
+        TF_CHECK_INT(head[0], 0xC1U);
+        TF_CHECK_INT(head[1], 0x1FU);
+        TF_CHECK_INT(head[2], 0xFCU);
+        TF_CHECK_INT(head[3], 0xC1U);
+
+        /* metadata 侧车文件存在且含语义事件类型 */
+        (void)snprintf(meta_path, sizeof(meta_path), "%s.metadata", ctf);
+        fp = fopen(meta_path, "rb");
+        TF_CHECK(fp != NULL);
+        mdn = 0U;
+        if (fp != NULL) {
+            mdn = fread(md, 1U, sizeof(md) - 1U, fp);
+            (void)fclose(fp);
+        }
+        TF_CHECK(mdn > 0U);
+        md[mdn] = '\0';
+        TF_CHECK(strstr(md, "sched_switch") != NULL);
+
+        (void)remove(ctf);
+        (void)remove(meta_path);
+        iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
+    }
+#endif
+
+    /* 11. ISR 标记编码与事件名表 */
     TF_CHECK(IOT_TRACE_IN_ISR(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR));
     TF_CHECK(!IOT_TRACE_IN_ISR(IOT_EVT_SWITCH));
     TF_CHECK_INT(IOT_TRACE_SEQ(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR), 0);
@@ -211,36 +176,8 @@ void ut_trace(void)
     TF_CHECK_INT(strcmp(iot_trace_event_name(IOT_EVT_TASK_SUSPEND),
                         "task_suspend"), 0);
 
-    /* 12. Perfetto / Chrome Trace JSON 导出 */
-    {
-        char json[4096];
-        uint8_t head[2] = {0U, 0U};
-        FILE *fp;
-        int n;
-
-        iot_trace_reset();
-        IOT_TRACE(IOT_EVT_SWITCH, 0xAAU, 0xBBU);
-        n = iot_trace_export_json(json, (uint32_t)sizeof(json));
-        TF_CHECK(n > 0);
-        TF_CHECK_INT(json[0], '[');
-        TF_CHECK(strstr(json, "\"name\":\"switch\"") != NULL);
-        TF_CHECK(strstr(json, "\"ph\":\"i\"") != NULL);
-        TF_CHECK(strstr(json, "\"isr\":0") != NULL);
-
-        TF_CHECK_INT(iot_trace_dump_json_file("iot_trace_test.json"), IOT_OK);
-        fp = fopen("iot_trace_test.json", "rb");
-        TF_CHECK(fp != NULL);
-        if (fp != NULL) {
-            TF_CHECK_INT(fread(head, 1U, sizeof(head), fp), 2);
-            (void)fclose(fp);
-        }
-        (void)remove("iot_trace_test.json");
-        TF_CHECK_INT(head[0], '[');
-    }
-
-    /* 收尾：恢复默认关闭，避免影响后续测试 */
+    /* 收尾：恢复默认关闭 */
     iot_trace_disable();
-    iot_trace_reset();
 
     tf_end();
 #else

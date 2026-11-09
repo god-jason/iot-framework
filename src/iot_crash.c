@@ -23,15 +23,14 @@
 #include <string.h>
 
 #include "iot.h"
+#include "iot_port.h"
 
-/* 复位不清零的段：本仓库 board 链接脚本已提供 .noinit */
-#if defined(IOT_PLATFORM_STM32) && defined(__GNUC__)
-#define IOT_CRASH_NOINIT __attribute__((section(".noinit")))
-#else
-#define IOT_CRASH_NOINIT
-#endif
-
-static iot_crash_record_t s_record IOT_CRASH_NOINIT;
+/*
+ * 记录存储：优先使用平台提供的复位保持区（如 STM32 的 .noinit），
+ * 平台不支持时退回普通静态区（复位/断电后丢失）。
+ */
+static iot_crash_record_t s_record_fallback;
+static iot_crash_record_t *s_rec = &s_record_fallback;
 
 static bool s_valid;              /* 记录有效（魔数/版本/CRC 通过） */
 static bool s_recorded_this_boot; /* 本次启动是否已记录（只保留第一次） */
@@ -119,37 +118,43 @@ static void iot_crash_snapshot(const iot_crash_context_t *ctx)
         return;
     }
 
-    s_record.stack_sp = sp;
+    s_rec->stack_sp = sp;
     for (i = 0U; i < avail; i++) {
-        s_record.stack[i] = ((const uint32_t *)(uintptr_t)sp)[i];
+        s_rec->stack[i] = ((const uint32_t *)(uintptr_t)sp)[i];
     }
-    s_record.stack_words = (uint16_t)avail;
+    s_rec->stack_words = (uint16_t)avail;
 }
 
 /* ------------------------------ 对外接口 ------------------------------ */
 
 /*
- * 初始化崩溃记录：安装平台异常钩子，并校验 .noinit 中上次复位留下的记录。
+ * 初始化崩溃记录：安装平台异常钩子，并校验平台复位保持区中上次留下的记录。
  * 有效记录会立即打印一份完整报告。
  */
 void iot_crash_init(void)
 {
+    void *buf;
+
     s_recorded_this_boot = false;
     s_valid = false;
+
+    /* 选择持久化存储：平台提供复位保持区时优先使用 */
+    buf = iot_port_crash_buffer((uint32_t)sizeof(iot_crash_record_t));
+    s_rec = (buf != NULL) ? (iot_crash_record_t *)buf : &s_record_fallback;
 
     /* 安装异常捕获（PC 信号 / Cortex-M 故障处理） */
     iot_crash_port_install();
 
-    if (s_record.magic == IOT_CRASH_MAGIC &&
-        s_record.version == IOT_CRASH_VERSION &&
-        s_record.reason > (uint16_t)IOT_CRASH_NONE &&
-        s_record.reason <= (uint16_t)IOT_CRASH_USER &&
-        s_record.crc == iot_crash_crc(&s_record)) {
+    if (s_rec->magic == IOT_CRASH_MAGIC &&
+        s_rec->version == IOT_CRASH_VERSION &&
+        s_rec->reason > (uint16_t)IOT_CRASH_NONE &&
+        s_rec->reason <= (uint16_t)IOT_CRASH_USER &&
+        s_rec->crc == iot_crash_crc(s_rec)) {
         s_valid = true;
         /* 上次启动的现场：主动打印一份，串口/调试器第一时间可见 */
-        iot_crash_print(&s_record);
+        iot_crash_print(s_rec);
     } else {
-        memset(&s_record, 0, sizeof(s_record));
+        memset(s_rec, 0, sizeof(*s_rec));
     }
 }
 
@@ -162,13 +167,13 @@ int iot_crash_pending(void)
 /* 获取有效崩溃记录；无记录返回 NULL。 */
 const iot_crash_record_t *iot_crash_get(void)
 {
-    return s_valid ? &s_record : NULL;
+    return s_valid ? s_rec : NULL;
 }
 
 /* 清除崩溃记录，并允许本次启动重新记录。 */
 void iot_crash_clear(void)
 {
-    memset(&s_record, 0, sizeof(s_record));
+    memset(s_rec, 0, sizeof(*s_rec));
     s_valid = false;
     s_recorded_this_boot = false;
 }
@@ -193,50 +198,50 @@ int iot_crash_record(int reason, const iot_crash_context_t *ctx)
         return 0;   /* 保留第一次现场，后续异常多为连锁反应 */
     }
     if (s_valid) {
-        seq = s_record.seq + 1U;   /* 跨复位累加崩溃序号 */
+        seq = s_rec->seq + 1U;   /* 跨复位累加崩溃序号 */
     }
 
-    memset(&s_record, 0, sizeof(s_record));
-    s_record.magic = IOT_CRASH_MAGIC;
-    s_record.version = IOT_CRASH_VERSION;
-    s_record.reason = (uint16_t)reason;
-    s_record.seq = seq;
-    s_record.tick = iot_tick_get();
-    iot_copy_str(s_record.build, sizeof(s_record.build), __DATE__ " " __TIME__);
+    memset(s_rec, 0, sizeof(*s_rec));
+    s_rec->magic = IOT_CRASH_MAGIC;
+    s_rec->version = IOT_CRASH_VERSION;
+    s_rec->reason = (uint16_t)reason;
+    s_rec->seq = seq;
+    s_rec->tick = iot_tick_get();
+    iot_copy_str(s_rec->build, sizeof(s_rec->build), __DATE__ " " __TIME__);
 
     task = iot_current_task;
     if (task != NULL) {
-        iot_copy_str(s_record.task, sizeof(s_record.task), task->name);
-        s_record.task_priority = (uint16_t)task->priority;
-        s_record.task_state = (uint16_t)task->state;
+        iot_copy_str(s_rec->task, sizeof(s_rec->task), task->name);
+        s_rec->task_priority = (uint16_t)task->priority;
+        s_rec->task_state = (uint16_t)task->state;
 #if IOT_USE_STACK_CHECK
         {
             iot_task_stats_t st;
 
             if (iot_task_get_stats(task, &st) == IOT_OK) {
-                s_record.task_stack_free = st.stack_free_bytes;
+                s_rec->task_stack_free = st.stack_free_bytes;
             }
         }
 #endif
     }
 
     if (ctx != NULL) {
-        s_record.sp = ctx->sp;
-        memcpy(s_record.regs, ctx->regs, sizeof(s_record.regs));
-        s_record.cfsr = ctx->cfsr;
-        s_record.hfsr = ctx->hfsr;
-        s_record.mmfar = ctx->mmfar;
-        s_record.bfar = ctx->bfar;
-        s_record.afsr = ctx->afsr;
-        s_record.exc_return = ctx->exc_return;
-        s_record.code = ctx->code;
-        s_record.line = ctx->line;
-        iot_copy_str(s_record.file, sizeof(s_record.file), ctx->file);
-        iot_copy_str(s_record.expr, sizeof(s_record.expr), ctx->expr);
+        s_rec->sp = ctx->sp;
+        memcpy(s_rec->regs, ctx->regs, sizeof(s_rec->regs));
+        s_rec->cfsr = ctx->cfsr;
+        s_rec->hfsr = ctx->hfsr;
+        s_rec->mmfar = ctx->mmfar;
+        s_rec->bfar = ctx->bfar;
+        s_rec->afsr = ctx->afsr;
+        s_rec->exc_return = ctx->exc_return;
+        s_rec->code = ctx->code;
+        s_rec->line = ctx->line;
+        iot_copy_str(s_rec->file, sizeof(s_rec->file), ctx->file);
+        iot_copy_str(s_rec->expr, sizeof(s_rec->expr), ctx->expr);
         iot_crash_snapshot(ctx);
     }
 
-    s_record.crc = iot_crash_crc(&s_record);
+    s_rec->crc = iot_crash_crc(s_rec);
     s_valid = true;
     s_recorded_this_boot = true;
     return 0;

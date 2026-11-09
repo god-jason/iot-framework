@@ -24,6 +24,9 @@ void SystemInit(void);
 void board_led_init(void);
 void board_led_toggle(void);
 
+/* 初始化 USART1(PA9) 并把 trace 输出注册到该串口 */
+void board_trace_start(uint32_t baud);
+
 #ifdef __cplusplus
 }
 #endif

@@ -81,6 +81,18 @@ bool iot_port_in_isr(void);
 uint32_t iot_port_trace_time_us(void);
 
 /*
+ * 致命错误停机（断言失败等不可恢复错误）。
+ * 模拟端可退出进程，MCU 端关闭中断后死循环；该函数不返回。
+ */
+void iot_port_fatal_halt(void) __attribute__((noreturn));
+
+/*
+ * 返回一块复位不清零的内存（容量至少 size 字节），用于崩溃记录持久化。
+ * 不支持持久化的平台返回 NULL，内核退化为普通静态区。
+ */
+void *iot_port_crash_buffer(uint32_t size);
+
+/*
  * 进入/退出临界区，必须支持嵌套（内核存在嵌套调用路径），
  * 典型实现为 PRIMASK 保存/恢复 + 嵌套计数；PC 协作式为可空操作。
  */

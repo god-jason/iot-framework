@@ -73,6 +73,12 @@ option("trace")
     set_description("编译期启用 trace；off 时所有 IOT_TRACE_* 宏为空、零 RAM/ROM 开销")
 option_end()
 
+option("ctf")
+    set_default("off")
+    set_values("on", "off")
+    set_description("启用可选 barectf/CTF 后端（需要 CTF packet 缓冲，默认 off）")
+option_end()
+
 -- ============================================================================
 -- 工具链
 --   主机：xmake 内置的 gcc（系统 PATH 中的 gcc.exe / gcc）
@@ -155,6 +161,17 @@ local function iot_trace_defines()
     if get_config("trace") == "off" then
         add_defines("IOT_USE_TRACE=0")
     end
+    -- 主机模拟端输出 Chrome/Perfetto JSON；MCU 端保持紧凑十六进制文本
+    if is_plat("windows", "mingw", "linux") then
+        add_defines("IOT_TRACE_FORMAT_JSON=1")
+    end
+    -- PC 平台默认构建 CTF 后端：需同时输出 ctf 文件与 json 文件；
+    -- STM32 等仍由 --ctf 选项控制，避免默认占用 MCU 的 packet 缓冲。
+    if is_plat("windows", "mingw") then
+        add_defines("IOT_TRACE_BACKEND_BARECTF=1")
+    elseif get_config("ctf") == "on" then
+        add_defines("IOT_TRACE_BACKEND_BARECTF=1")
+    end
 end
 
 local function iot_host_links()
@@ -177,8 +194,8 @@ local function iot_host_common(with_tests)
     iot_framework_sources()
     iot_includedirs()
 
-    if get_config("trace") == "off" then
-        remove_files("vendor/barectf/**.c")   -- 编译期裁剪也要去掉 CTF 后端代码
+    if (get_config("trace") == "off") then
+        remove_files("vendor/barectf/**.c")   -- 裁剪模式下不编译 CTF 生成代码
     end
 
     if not with_tests then
@@ -280,7 +297,7 @@ if is_plat("cross") then
         add_files("vendor/tlsf/**.c")
         add_files("vendor/arena/**.c")
         add_files("vendor/cjson/**.c")
-        if get_config("trace") ~= "off" then
+        if (get_config("trace") ~= "off") and (get_config("ctf") == "on") then
             add_files("vendor/barectf/**.c")
         end
         add_files("networks/ml307/**.c")

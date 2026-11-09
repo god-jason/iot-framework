@@ -19,6 +19,7 @@
 #include "iot_port.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*
@@ -283,6 +284,12 @@ void iot_port_critical_enter(void)
 void iot_port_critical_exit(void)
 {
     /* 单线程协作式，无抢占，临界区为空 */
+}
+
+void iot_port_fatal_halt(void)
+{
+    /* 模拟端无法停住 CPU：退出进程，便于 CI 判定失败 */
+    exit(1);
 }
 
 #endif /* IOT_PLATFORM_PC */

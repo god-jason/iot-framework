@@ -128,6 +128,14 @@ void iot_port_critical_exit(void)
     }
 }
 
+void iot_port_fatal_halt(void)
+{
+    /* 关中断并停机，保留现场便于调试器连接 */
+    __asm volatile ("cpsid i" ::: "memory");
+    for (;;) {
+    }
+}
+
 bool iot_port_in_isr(void)
 {
     uint32_t ipsr;

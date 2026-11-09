@@ -18,6 +18,13 @@
 #include <stdint.h>
 #include <string.h>
 
+/* PC 进程退出后内存不保留，崩溃记录使用内核自带普通静态区 */
+void *iot_port_crash_buffer(uint32_t size)
+{
+    (void)size;
+    return NULL;
+}
+
 #if defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN

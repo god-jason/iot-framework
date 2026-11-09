@@ -41,6 +41,21 @@
 #define IOT_AIRCR_VECTKEY       (0x5FAUL << 16)
 #define IOT_AIRCR_SYSRESETREQ   (1UL << 2)
 
+/* 复位不清零的崩溃记录缓冲：链接脚本需提供 .noinit 段 */
+#if defined(__GNUC__)
+#define IOT_CRASH_BUF_ATTR __attribute__((section(".noinit"), aligned(8)))
+#else
+#define IOT_CRASH_BUF_ATTR
+#endif
+
+static uint64_t s_crash_buf[(sizeof(iot_crash_record_t) + 7U) / 8U]
+    IOT_CRASH_BUF_ATTR;
+
+void *iot_port_crash_buffer(uint32_t size)
+{
+    return (size <= sizeof(s_crash_buf)) ? (void *)s_crash_buf : NULL;
+}
+
 /* 取异常压栈帧：bit2=1 使用 PSP，否则使用 MSP */
 uint32_t *iot_crash_frame(void)
 {

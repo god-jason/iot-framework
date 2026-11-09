@@ -31,6 +31,7 @@ int main(void)
 
     iot_init();
     board_led_init();
+    board_trace_start(115200U);   /* trace 经 USART1/PA9 输出，串口助手 115200 8N1 */
 
     rc = iot_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));
