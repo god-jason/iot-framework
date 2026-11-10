@@ -66,7 +66,6 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
 {
     iot_task_t *cur = iot_current_task;
     iot_task_t *owner;
-    iot_task_t *next;
     int rc;
 
     if (!IOT_OBJ_VALID(mutex)) {
@@ -76,10 +75,7 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
     if (cur == NULL) {
         return IOT_NOT_READY;
     }
-    if (iot_in_isr() && timeout != IOT_TIMEOUT_NONE) {
-        /* mutex 自带阻塞路径，需单独拦截 */
-        IOT_ASSERT(!iot_in_isr());
-        LOG_E(IOT_TAG, "mutex_lock: blocking forbidden in ISR");
+    if (!iot_wait_blockable(timeout)) {
         return IOT_FORBIDDEN_IN_ISR;
     }
 
@@ -109,25 +105,13 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
         return IOT_TIMEOUT;
     }
 
-    /* 与 iot_block_current 等价，但把“入等待链 + 选择下一个任务”
-     * 放在同一个临界区内，避免与 unlock 的所有权交接竞态。 */
-    cur->state = IOT_TASK_BLOCKED;
-    cur->wait_result = IOT_OK;
-    iot_wait_queue_add(&mutex->wait, cur);
-
+    /* 与 iot_block_current 等价，但由调用者持有临界区：
+     * 「入等待链 + 选下一个任务」与 unlock 的所有权交接保持原子。 */
 #if IOT_USE_PRIORITY_INHERIT
     cur->wait_mutex = mutex;
 #endif
 
-    if (timeout != IOT_TIMEOUT_FOREVER) {
-        cur->wake_tick = iot_tick_count + timeout;
-        iot_delayed_add(cur);
-    }
-
-    next = iot_sched_pick();
-    iot_port_critical_exit();
-
-    iot_sched_switch(next);          /* 切走；被唤醒后从这里返回 */
+    iot_block_current_locked(&mutex->wait, timeout);
 
     rc = cur->wait_result;
 
@@ -217,6 +201,7 @@ int iot_mutex_destroy(iot_mutex_t *mutex)
         return IOT_INVALID_PARAM;
     }
 
+    /* 持有者与等待者检查需与失效标记在同一临界区 */
     iot_port_critical_enter();
     if (mutex->owner != NULL || !iot_wait_queue_empty(&mutex->wait)) {
         iot_port_critical_exit();

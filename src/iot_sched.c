@@ -32,33 +32,6 @@ static bool s_slice_expired;          /* 时间片耗尽，待切换 */
 static uint32_t s_ctx_switches;       /* 上下文切换总次数 */
 #endif
 
-/* ------------------------------ 内部工具 ------------------------------ */
-
-/*
- * 求 32 位整数最低置位的位置（0..31），返回 -1 表示 v 为 0。
- * 优先级 0 最高，因此结果直接就是最高优先级编号。
- */
-static int iot_ctz32(uint32_t v)
-{
-#if defined(__GNUC__) || defined(__clang__)
-    if (v == 0U) {
-        return -1;
-    }
-    return __builtin_ctz(v);
-#else
-    int n = 0;
-
-    if (v == 0U) {
-        return -1;
-    }
-    while ((v & 1U) == 0U) {
-        v >>= 1;
-        n++;
-    }
-    return n;
-#endif
-}
-
 /* ------------------------------ 就绪表 ------------------------------ */
 
 void iot_sched_init(void)
@@ -208,6 +181,7 @@ int iot_sched_resume(iot_task_t *task)
 
     iot_port_critical_enter();
     if (task->state == IOT_TASK_SUSPENDED) {
+        /* iot_make_ready() 会拒绝 SUSPENDED 态，必须先切到 READY 再挂链 */
         task->state = IOT_TASK_READY;
         iot_make_ready(task);
     }

@@ -1,8 +1,8 @@
 /*
- * iot_trace_test.c - 事件跟踪回归测试（流式输出模型）
+ * iot_trace_test.c - 事件跟踪回归测试（流式文本行模型）
  *
  * 覆盖：运行期动态开关、宏等级过滤、冻结、名称映射、µs 时钟、
- *       ISR 标记编码，以及 PC 平台直接产出的 JSON 内容。
+ *       ISR 标记编码，以及 PC 平台产出的文本行内容。
  */
 
 #include "test.h"
@@ -11,11 +11,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TRACE_FILE "iot_trace_test.json"
+#define TRACE_FILE "iot_trace_test.log"
+#define DEFAULT_TRACE_FILE "iot_trace.log"
 
-static size_t read_trace(char *buf, size_t cap)
+static size_t read_file(const char *path, char *buf, size_t cap)
 {
-    FILE *fp = fopen(TRACE_FILE, "rb");
+    FILE *fp = fopen(path, "rb");
     size_t n = 0U;
 
     if (fp != NULL) {
@@ -24,6 +25,11 @@ static size_t read_trace(char *buf, size_t cap)
     }
     buf[n] = '\0';
     return n;
+}
+
+static size_t read_trace(char *buf, size_t cap)
+{
+    return read_file(TRACE_FILE, buf, cap);
 }
 
 static uint32_t test_clock(void)
@@ -100,19 +106,36 @@ void ut_trace(void)
     iot_trace_set_clock(NULL);
     TF_CHECK_INT(iot_trace_count(), 11);
 
-    /* 9. 停止输出：文件里是一个完整合法的 JSON 数组 */
+    /* 9. 停止输出：文件内容为文本行 */
     iot_trace_stop_file();
     n = read_trace(out, sizeof(out));
     TF_CHECK(n > 0U);
-    TF_CHECK_INT(out[0], '[');
-    TF_CHECK(strstr(out, "\"name\":\"switch\"") != NULL);
-    TF_CHECK(strstr(out, "\"name\":\"sem_give\"") != NULL);
-    TF_CHECK(strstr(out, "\"name\":\"name_begin\"") != NULL);
-    TF_CHECK(strstr(out, "\"ph\":\"i\"") != NULL);
-    TF_CHECK(strstr(out, "\"isr\":0") != NULL);
-    TF_CHECK(strstr(out, "\"ts\":305419896") != NULL);  /* 0x12345678 */
-    TF_CHECK_INT(out[n - 2U], ']');
+    TF_CHECK_INT(out[0], 'T');
+    TF_CHECK(strstr(out, " switch ") != NULL);
+    TF_CHECK(strstr(out, " sem_give ") != NULL);
+    TF_CHECK(strstr(out, " name_begin ") != NULL);
+    TF_CHECK(strstr(out, "task=0x") != NULL);
+    TF_CHECK(strstr(out, "v1=") != NULL);
+    TF_CHECK(strstr(out, "v2=") != NULL);
+    /* 非中断上下文产生的事件不带 isr 标记 */
+    TF_CHECK(strstr(out, "isr=1") == NULL);
+    /* 自定义 µs 时钟写入行首时间戳（0x12345678 = 305419896） */
+    TF_CHECK(strstr(out, "T 305419896 ") != NULL);
+    /* 每行以 CRLF 结束 */
+    TF_CHECK_INT(out[n - 2U], '\r');
+    TF_CHECK_INT(out[n - 1U], '\n');
     (void)remove(TRACE_FILE);
+
+    /* 9b. 未指定文件时，PC 端默认写入 iot_trace.log */
+    (void)remove(DEFAULT_TRACE_FILE);
+    iot_trace_start_file(NULL);
+    iot_trace_set_level(IOT_TRACE_LEVEL_CORE);
+    IOT_TRACE_CORE(IOT_EVT_TICK, 0U, 0U);
+    iot_trace_stop_file();
+    n = read_file(DEFAULT_TRACE_FILE, out, sizeof(out));
+    TF_CHECK(n > 0U);
+    TF_CHECK(strstr(out, " tick ") != NULL);
+    (void)remove(DEFAULT_TRACE_FILE);
 
     /* 10. 启用 CTF 后端时同时输出 CTF 文件（二进制流 + metadata 侧车文件） */
 #if IOT_TRACE_BACKEND_BARECTF

@@ -121,14 +121,10 @@ int iot_sem_destroy(iot_sem_t *sem)
         return IOT_INVALID_PARAM;
     }
 
-    iot_port_critical_enter();
-    if (!iot_wait_queue_empty(&sem->wait)) {
-        iot_port_critical_exit();
+    if (iot_obj_destroy_begin(&sem->initialized, &sem->wait, NULL) != IOT_OK) {
         LOG_W(IOT_TAG, "sem_destroy: still has waiters");
         return IOT_BUSY;
     }
-    sem->initialized = false;
-    iot_port_critical_exit();
 
     iot_mem_free(sem);
     return IOT_OK;

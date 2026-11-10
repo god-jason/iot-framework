@@ -216,6 +216,7 @@ int iot_queue_destroy(iot_queue_t *queue)
         return IOT_INVALID_PARAM;
     }
 
+    /* 队列内仍有消息时同样视为忙；与失效标记放在同一临界区 */
     iot_port_critical_enter();
     if (queue->count != 0U ||
         !iot_wait_queue_empty(&queue->send_wait) ||

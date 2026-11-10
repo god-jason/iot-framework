@@ -1,9 +1,9 @@
 /*
  * iot_trace.c - 事件流式发射（无内存快照、无环形缓冲）
  *
- * 事件产生即格式化成一行，直接交给 iot_port_trace_write()：
- *   - PC : Chrome/Perfetto Trace Event JSON（stdout 或文件），惰性包好 JSON 数组；
- *   - MCU: 紧凑十六进制文本行，由串口发出。
+ * 事件产生即格式化成一行文本，直接交给 iot_port_trace_write()：
+ *   PC : 写入文件（默认 iot_trace.log，可用 iot_trace_start_file 指定）；
+ *   MCU: 由指定串口发出。
  *
  * 约束（由 RTOS 上下文决定）：
  *   - emit 可能来自任务、SysTick ISR、PendSV、崩溃路径；
@@ -36,10 +36,6 @@ static volatile uint32_t s_count;
 static volatile uint32_t s_dropped;
 static volatile int      s_in_emit;
 static volatile int      s_frozen;
-#if IOT_TRACE_FORMAT_JSON
-static int s_json_open;
-static int s_first_event;
-#endif
 static iot_trace_clock_fn s_clock;
 static uint8_t            s_last_level = 0xFFU;
 
@@ -120,7 +116,6 @@ static void dec(char *buf, uint32_t cap, uint32_t *n, uint32_t v)
     }
 }
 
-#if !IOT_TRACE_FORMAT_JSON
 static void hex8(char *buf, uint32_t cap, uint32_t *n, uint32_t v)
 {
     static const char digits[] = "0123456789ABCDEF";
@@ -132,68 +127,36 @@ static void hex8(char *buf, uint32_t cap, uint32_t *n, uint32_t v)
         }
     }
 }
-#endif
 
 /* ------------------------------ 单行输出 ------------------------------ */
 
+/*
+ * 文本行格式（一行一次输出）：
+ *   T <ts_us> <evt_name> task=0x<指针> v1=<十进制> v2=<十进制> [isr=1]\r\n
+ * 时间戳为微秒，事件名来自事件名表，ISR 标记只出现在中断上下文产生的事件上。
+ */
 static void iot_trace_emit_line(uint16_t evt, uint32_t ts, uint32_t task,
                                 uint32_t v1, uint32_t v2)
 {
-    char line[192];
+    char line[160];
     uint32_t n = 0U;
 
-#if IOT_TRACE_FORMAT_JSON
-    /* 惰性开启 JSON 数组，保证默认关闭时 stdout 完全干净 */
-    if (!s_json_open) {
-        put(line, sizeof(line), &n, "[");
-        s_json_open = 1;
-        s_first_event = 1;
-    }
-    if (!s_first_event) {
-        put(line, sizeof(line), &n, ",");
-    }
-    s_first_event = 0;
-
-    put(line, sizeof(line), &n, "{\"name\":\"");
-    put(line, sizeof(line), &n, iot_trace_event_name(evt));
-    put(line, sizeof(line), &n, "\",\"ph\":\"i\",\"s\":\"t\",\"ts\":");
-    dec(line, sizeof(line), &n, ts);
-    put(line, sizeof(line), &n, ",\"pid\":1,\"tid\":");
-    dec(line, sizeof(line), &n, task);
-    put(line, sizeof(line), &n, ",\"args\":{\"v\":");
-    dec(line, sizeof(line), &n, v1);
-    put(line, sizeof(line), &n, ",\"a\":");
-    dec(line, sizeof(line), &n, v2);
-    put(line, sizeof(line), &n, ",\"isr\":");
-    dec(line, sizeof(line), &n, IOT_TRACE_IN_ISR(evt) ? 1U : 0U);
-    put(line, sizeof(line), &n, "}}\n");
-#else
-    /* MCU：紧凑十六进制文本行，一行一次串口发送 */
     put(line, sizeof(line), &n, "T ");
-    hex8(line, sizeof(line), &n, ts);
+    dec(line, sizeof(line), &n, ts);
     put(line, sizeof(line), &n, " ");
-    hex8(line, sizeof(line), &n, evt);
-    put(line, sizeof(line), &n, " ");
+    put(line, sizeof(line), &n, iot_trace_event_name(evt));
+    put(line, sizeof(line), &n, " task=0x");
     hex8(line, sizeof(line), &n, task);
-    put(line, sizeof(line), &n, " ");
-    hex8(line, sizeof(line), &n, v1);
-    put(line, sizeof(line), &n, " ");
-    hex8(line, sizeof(line), &n, v2);
+    put(line, sizeof(line), &n, " v1=");
+    dec(line, sizeof(line), &n, v1);
+    put(line, sizeof(line), &n, " v2=");
+    dec(line, sizeof(line), &n, v2);
+    if (IOT_TRACE_IN_ISR(evt)) {
+        put(line, sizeof(line), &n, " isr=1");
+    }
     put(line, sizeof(line), &n, "\r\n");
-#endif
 
     iot_port_trace_write(line, n);
-}
-
-void iot_trace_close_stream(void)
-{
-#if IOT_TRACE_FORMAT_JSON
-    if (s_json_open) {
-        iot_port_trace_write("]\n", 2U);
-        s_json_open = 0;
-        s_first_event = 1;
-    }
-#endif
 }
 
 /* ------------------------------ 生命周期 ------------------------------ */
@@ -206,10 +169,6 @@ void iot_trace_init(void)
     s_frozen = 0;
     s_clock = NULL;
     s_last_level = 0xFFU;
-#if IOT_TRACE_FORMAT_JSON
-    s_json_open = 0;
-    s_first_event = 1;
-#endif
 
     iot_trace_barectf_init();
     iot_trace_barectf_enable(g_iot_trace_level < IOT_TRACE_LEVEL_OFF);
@@ -268,7 +227,6 @@ void iot_trace_enable(void)
 void iot_trace_disable(void)
 {
     iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
-    iot_trace_close_stream();
     iot_trace_sync_backend();
 }
 
@@ -291,7 +249,6 @@ void iot_trace_set_sink(iot_trace_sink_fn fn, void *user)
 
 int iot_trace_flush(void)
 {
-    iot_trace_close_stream();
     return iot_trace_barectf_flush();
 }
 
@@ -352,7 +309,6 @@ void iot_trace_set_sink(iot_trace_sink_fn fn, void *user)
     (void)fn; (void)user;
 }
 int  iot_trace_flush(void) { return IOT_NOT_READY; }
-void iot_trace_close_stream(void) {}
 void iot_trace_name(const void *obj, uint8_t type, const char *name)
 {
     (void)obj; (void)type; (void)name;

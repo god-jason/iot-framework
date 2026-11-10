@@ -14,10 +14,9 @@
  *   IOT_TRACE     (evt, v1, v2)   CORE 的简写
  *
  * 输出模型（无内存快照、无环形缓冲）：
- *   事件产生即格式化为一行并交给平台的 iot_port_trace_write()：
- *     - IOT_TRACE_FORMAT_JSON=1：Chrome/Perfetto Trace Event JSON 行；
- *     - 否则：紧凑十六进制文本行（适合 MCU 串口）。
- *   平台通过 iot_trace_set_output() 注册输出通道。
+ *   事件产生即格式化为一行文本并交给平台的 iot_port_trace_write()：
+ *     T <ts_us> <evt_name> task=0x<指针> v1=<n> v2=<n> [isr=1]
+ *   PC 平台写入文件，MCU 平台由 iot_trace_set_output() 指定的串口发出。
  *   可选 barectf/CTF 后端（IOT_TRACE_BACKEND_BARECTF=1）因 CTF packet 协议
  *   固有要求仍需要一块 packet 缓冲，默认关闭。
  *
@@ -178,13 +177,13 @@ uint32_t    iot_trace_dropped(void);  /* 因重入/冻结丢弃的事件数 */
 /*
  * 注册 trace 输出通道（平台解释 handle 的含义）：
  *   - MCU：handle 为已初始化的 hal_uart_t *，timeout_ms 为发送超时；
- *   - PC ：handle 忽略，输出到 stdout / iot_trace_start_file() 指定的文件。
+ *   - PC ：handle 忽略，输出到 iot_trace_start_file() 指定的文件。
  */
 void iot_trace_set_output(void *handle, uint32_t timeout_ms);
 
 /*
- * 文本/JSON 流输出（PC 写入文件；不支持文件系统的平台为空实现）。
- * start_file 会惰性包好 JSON 数组，stop_file 负责收尾。
+ * 文本行流输出（PC 写入文件；不支持文件系统的平台为空实现）。
+ * 未调用 start_file 时 PC 端默认写入 "iot_trace.log"；stop_file 关闭文件。
  */
 void iot_trace_start_file(const char *path);
 void iot_trace_stop_file(void);
@@ -204,9 +203,6 @@ void iot_trace_sink_itm_init(void);
 
 /* 平台输出钩子：由各平台目录下的 trace 实现文件提供 */
 void iot_port_trace_write(const char *data, uint32_t len);
-
-/* 关闭当前 JSON 数组（PC 平台切换输出文件/停止时使用） */
-void iot_trace_close_stream(void);
 
 /* 后端桥接（内部） */
 void iot_trace_barectf_init(void);

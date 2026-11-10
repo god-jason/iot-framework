@@ -42,6 +42,14 @@
 
 /* ------------------------------ 调度 ------------------------------ */
 
+/*
+ * tick 频率（Hz）。内核把所有 *_ms 参数与定时器周期都直接当作 tick 计数，
+ * 因此该值必须为 1000；改用其它时基时需同步引入 ms→tick 换算。
+ */
+#ifndef IOT_TICK_HZ
+#define IOT_TICK_HZ 1000U
+#endif
+
 /* 同优先级时间片轮转：每 N 个 tick 把当前任务放回同优先级队尾 */
 #ifndef IOT_USE_TIME_SLICING
 #define IOT_USE_TIME_SLICING 1
@@ -133,15 +141,6 @@
  */
 #ifndef IOT_USE_TRACE
 #define IOT_USE_TRACE 1
-#endif
-
-/*
- * trace 行格式：1 = Chrome/Perfetto Trace Event JSON（主机模拟端），
- *               0 = 紧凑十六进制文本（MCU 串口）。
- * 由构建系统按目标能力定义，内核不判断具体平台。
- */
-#ifndef IOT_TRACE_FORMAT_JSON
-#define IOT_TRACE_FORMAT_JSON 0
 #endif
 
 /*

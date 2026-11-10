@@ -16,25 +16,6 @@
 #include "iot_port.h"
 #include "iot_assert.h"
 
-/* 求最低置位编号，返回 -1 表示 0 */
-static int iot_wait_ctz32(uint32_t v)
-{
-#if defined(__GNUC__) || defined(__clang__)
-    return (v == 0U) ? -1 : __builtin_ctz(v);
-#else
-    int n = 0;
-
-    if (v == 0U) {
-        return -1;
-    }
-    while ((v & 1U) == 0U) {
-        v >>= 1;
-        n++;
-    }
-    return n;
-#endif
-}
-
 /* ------------------------------ 等待队列 ------------------------------ */
 
 void iot_wait_queue_init(iot_wait_queue_t *queue)
@@ -99,7 +80,7 @@ iot_task_t *iot_wait_queue_pop_highest(iot_wait_queue_t *queue)
         return NULL;
     }
 
-    prio = iot_wait_ctz32(queue->bitmap);
+    prio = iot_ctz32(queue->bitmap);
     if (prio < 0) {
         return NULL;
     }
@@ -129,7 +110,7 @@ uint8_t iot_wait_queue_top_priority(const iot_wait_queue_t *queue)
         return 0xFFU;
     }
 
-    prio = iot_wait_ctz32(queue->bitmap);
+    prio = iot_ctz32(queue->bitmap);
     return (prio < 0) ? 0xFFU : (uint8_t)prio;
 }
 
@@ -149,12 +130,37 @@ bool iot_wait_queue_empty(const iot_wait_queue_t *queue)
 /* 返回位图最低置位对应的优先级（事件组广播遍历用）。 */
 uint8_t iot_wait_queue_first_prio(uint32_t bitmap)
 {
-    int prio = iot_wait_ctz32(bitmap);
+    int prio = iot_ctz32(bitmap);
 
     return (prio < 0) ? 0xFFU : (uint8_t)prio;
 }
 
+/* 唤醒队列中的全部等待者（拥塞解除后让所有等待者重试）。 */
+void iot_wait_queue_wake_all(iot_wait_queue_t *queue)
+{
+    iot_task_t *task;
+
+    while ((task = iot_wait_queue_pop_highest(queue)) != NULL) {
+        iot_task_wake(task, IOT_OK);
+    }
+}
+
 /* ------------------------------ 唤醒 / 阻塞 ------------------------------ */
+
+/* 中断上下文只允许非阻塞调用；违例时断言并让调用方直接返回错误。 */
+bool iot_wait_blockable(uint32_t timeout)
+{
+    if (timeout == IOT_TIMEOUT_NONE) {
+        return true;
+    }
+    if (iot_in_isr()) {
+        IOT_ASSERT(!iot_in_isr());
+        LOG_E(IOT_TAG, "blocking API called in ISR, timeout=%u",
+                  (unsigned)timeout);
+        return false;
+    }
+    return true;
+}
 
 /*
  * 唤醒任务：摘除等待/延时节点、写入唤醒结果并加入就绪表；
@@ -199,21 +205,34 @@ void iot_task_wake(iot_task_t *task, int result)
 int iot_block_current(iot_wait_queue_t *wait_queue, uint32_t timeout)
 {
     iot_task_t *cur = iot_current_task;
-    iot_task_t *next;
 
     if (cur == NULL || wait_queue == NULL) {
         return IOT_NOT_READY;
     }
-    if (iot_in_isr()) {
-        /* ISR 中阻塞会挂死调度器：调试期停机，生产构建返回错误码 */
-        IOT_ASSERT(!iot_in_isr());
-        LOG_E(IOT_TAG, "block: forbidden in ISR");
+    if (!iot_wait_blockable(timeout)) {
         return IOT_FORBIDDEN_IN_ISR;
     }
 
     IOT_TRACE(IOT_EVT_TASK_BLOCK, (uint32_t)(uintptr_t)cur, timeout);
 
+    LOG_D(IOT_TAG, "block: task=%s timeout=%u",
+              cur->name != NULL ? cur->name : "?", (unsigned)timeout);
+
     iot_port_critical_enter();
+    iot_block_current_locked(wait_queue, timeout);
+
+    return cur->wait_result;
+}
+
+/*
+ * 临界区内版本的阻塞：完成状态切换、入等待链、挂延时表与选任务，
+ * 退出临界区后执行实际切换。被唤醒后从 iot_sched_switch() 返回。
+ */
+void iot_block_current_locked(iot_wait_queue_t *wait_queue, uint32_t timeout)
+{
+    iot_task_t *cur = iot_current_task;
+    iot_task_t *next;
+
     cur->state = IOT_TASK_BLOCKED;
     cur->wait_result = IOT_OK;
     iot_wait_queue_add(wait_queue, cur);
@@ -231,10 +250,48 @@ int iot_block_current(iot_wait_queue_t *wait_queue, uint32_t timeout)
     next = iot_sched_pick();
     iot_port_critical_exit();
 
-    LOG_D(IOT_TAG, "block: task=%s timeout=%u",
-              cur->name != NULL ? cur->name : "?", (unsigned)timeout);
-
     iot_sched_switch(next);    /* 切走；被唤醒后从这里返回 */
+}
 
-    return cur->wait_result;
+/*
+ * 带 deadline 语义的等待一步：虚假唤醒后按剩余时间续等，
+ * 防止「被唤醒但条件仍不满足」时提前返回超时。
+ */
+int iot_wait_retry(iot_wait_queue_t *queue, uint32_t deadline, uint32_t timeout)
+{
+    uint32_t wait;
+
+    if (timeout == IOT_TIMEOUT_NONE) {
+        return IOT_TIMEOUT;
+    }
+    if (timeout == IOT_TIMEOUT_FOREVER) {
+        wait = IOT_TIMEOUT_FOREVER;
+    } else {
+        uint32_t now = iot_tick_get();
+
+        if (!IOT_TICK_AFTER(deadline, now)) {
+            return IOT_TIMEOUT;
+        }
+        wait = deadline - now;
+    }
+
+    return iot_block_current(queue, wait);
+}
+
+/* 销毁对象前的统一收尾：等待者清空后标记失效。 */
+int iot_obj_destroy_begin(bool *initialized,
+                          iot_wait_queue_t *wait1,
+                          iot_wait_queue_t *wait2)
+{
+    int rc = IOT_OK;
+
+    iot_port_critical_enter();
+    if (!iot_wait_queue_empty(wait1) || !iot_wait_queue_empty(wait2)) {
+        rc = IOT_BUSY;
+    } else {
+        *initialized = false;
+    }
+    iot_port_critical_exit();
+
+    return rc;
 }

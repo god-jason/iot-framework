@@ -134,6 +134,7 @@ int iot_timer_init(iot_timer_t *timer, const char *name,
     timer->period = period_ms;
     timer->periodic = periodic;
     timer->running = false;
+    timer->initialized = true;
     list_node_init(&timer->node);
     list_node_init(&timer->pending_node);
 
@@ -152,7 +153,7 @@ int iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
     int rc;
 #endif
 
-    if (timer == NULL || timer->cb == NULL || period_ms == 0U) {
+    if (!IOT_OBJ_VALID(timer) || period_ms == 0U) {
         LOG_E(IOT_TAG, "timer_start: invalid param");
         return IOT_INVALID_PARAM;
     }
@@ -183,8 +184,8 @@ int iot_timer_start(iot_timer_t *timer, uint32_t period_ms)
 /* 停止定时器：从定时链表摘除，并取消尚未执行的到期回调。 */
 int iot_timer_stop(iot_timer_t *timer)
 {
-    if (timer == NULL) {
-        LOG_E(IOT_TAG, "timer_stop: null timer");
+    if (!IOT_OBJ_VALID(timer)) {
+        LOG_E(IOT_TAG, "timer_stop: invalid timer");
         return IOT_INVALID_PARAM;
     }
 
@@ -304,12 +305,12 @@ iot_timer_t *iot_timer_create(const char *name, iot_timer_cb_t cb, void *arg,
 /* 销毁动态定时器：先停止并摘链，避免释放后仍被 tick 访问，再释放内存。 */
 int iot_timer_destroy(iot_timer_t *timer)
 {
-    if (timer == NULL || timer->cb == NULL) {
+    if (!IOT_OBJ_VALID(timer)) {
         return IOT_INVALID_PARAM;
     }
 
     (void)iot_timer_stop(timer);    /* 运行中先摘链，避免释放后仍被 tick 访问 */
-    memset(timer, 0, sizeof(*timer));
+    timer->initialized = false;
     iot_mem_free(timer);
     return IOT_OK;
 }

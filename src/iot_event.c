@@ -118,7 +118,7 @@ int iot_event_wait(iot_event_t *event, uint32_t bits, uint8_t options,
                    uint32_t timeout, uint32_t *out_flags)
 {
     iot_task_t *cur;
-    uint32_t remaining = timeout;
+    uint32_t deadline = iot_tick_get() + timeout;
 
     if (!IOT_OBJ_VALID(event) || bits == 0U) {
         return IOT_INVALID_PARAM;
@@ -130,8 +130,6 @@ int iot_event_wait(iot_event_t *event, uint32_t bits, uint8_t options,
     }
 
     for (;;) {
-        int rc;
-
         iot_port_critical_enter();
         if (iot_event_match(event->flags, bits, options)) {
             if (out_flags != NULL) {
@@ -145,21 +143,17 @@ int iot_event_wait(iot_event_t *event, uint32_t bits, uint8_t options,
         }
         iot_port_critical_exit();
 
-        if (remaining == IOT_TIMEOUT_NONE) {
-            return IOT_TIMEOUT;
-        }
-
         cur->wait_bits = bits;
         cur->wait_opt = options;
 
-        rc = iot_block_current(&event->wait, remaining);
-        if (rc != IOT_OK) {
-            return rc;      /* 超时 */
-        }
+        /* 被唤醒后重查条件：可能已被其他等待者清位，按剩余时间续等 */
+        {
+            int rc = iot_wait_retry(&event->wait, deadline, timeout);
 
-        /* 被唤醒后重查；永久等待可继续，有限超时不重复计时 */
-        remaining = (timeout == IOT_TIMEOUT_FOREVER)
-                    ? IOT_TIMEOUT_FOREVER : IOT_TIMEOUT_NONE;
+            if (rc != IOT_OK) {
+                return rc;      /* IOT_TIMEOUT / IOT_FORBIDDEN_IN_ISR */
+            }
+        }
     }
 }
 
@@ -189,14 +183,10 @@ int iot_event_destroy(iot_event_t *event)
         return IOT_INVALID_PARAM;
     }
 
-    iot_port_critical_enter();
-    if (!iot_wait_queue_empty(&event->wait)) {
-        iot_port_critical_exit();
+    if (iot_obj_destroy_begin(&event->initialized, &event->wait, NULL) != IOT_OK) {
         LOG_W(IOT_TAG, "event_destroy: still has waiters");
         return IOT_BUSY;
     }
-    event->initialized = false;
-    iot_port_critical_exit();
 
     iot_mem_free(event);
     return IOT_OK;

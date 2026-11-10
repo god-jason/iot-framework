@@ -21,16 +21,6 @@
 
 #if IOT_USE_MSGQ
 
-/* 唤醒队列中的全部任务 */
-static void iot_msgq_wake_all(iot_wait_queue_t *queue)
-{
-    iot_task_t *task;
-
-    while ((task = iot_wait_queue_pop_highest(queue)) != NULL) {
-        iot_task_wake(task, IOT_OK);
-    }
-}
-
 /* 向环形缓冲写入 len 字节（调用者已保证空间足够） */
 static void iot_msgq_put(iot_msgq_t *mq, const void *src, uint32_t len)
 {
@@ -108,8 +98,7 @@ int iot_msgq_send(iot_msgq_t *mq, const void *msg, uint32_t len,
         len > (mq->size - IOT_MSGQ_HDR_SIZE)) {
         return IOT_INVALID_PARAM;
     }
-    if (iot_in_isr() && timeout != IOT_TIMEOUT_NONE) {
-        IOT_ASSERT(!iot_in_isr());
+    if (!iot_wait_blockable(timeout)) {
         return IOT_FORBIDDEN_IN_ISR;
     }
 
@@ -124,31 +113,14 @@ int iot_msgq_send(iot_msgq_t *mq, const void *msg, uint32_t len,
             iot_msgq_put(mq, &header, IOT_MSGQ_HDR_SIZE);
             iot_msgq_put(mq, msg, len);
             mq->count++;
-            iot_msgq_wake_all(&mq->recv_wait);
+            iot_wait_queue_wake_all(&mq->recv_wait);
             iot_port_critical_exit();
             return IOT_OK;
         }
         iot_port_critical_exit();
 
-        if (timeout == IOT_TIMEOUT_NONE) {
+        if (iot_wait_retry(&mq->send_wait, deadline, timeout) != IOT_OK) {
             return IOT_TIMEOUT;
-        }
-
-        {
-            uint32_t now = iot_tick_get();
-            uint32_t wait;
-
-            if (timeout == IOT_TIMEOUT_FOREVER) {
-                wait = IOT_TIMEOUT_FOREVER;
-            } else {
-                if (!IOT_TICK_AFTER(deadline, now)) {
-                    return IOT_TIMEOUT;
-                }
-                wait = deadline - now;
-            }
-            if (iot_block_current(&mq->send_wait, wait) != IOT_OK) {
-                return IOT_TIMEOUT;
-            }
         }
     }
 }
@@ -165,8 +137,7 @@ int iot_msgq_recv(iot_msgq_t *mq, void *msg, uint32_t max_len,
     if (!IOT_OBJ_VALID(mq) || (msg == NULL && max_len != 0U)) {
         return IOT_INVALID_PARAM;
     }
-    if (iot_in_isr() && timeout != IOT_TIMEOUT_NONE) {
-        IOT_ASSERT(!iot_in_isr());
+    if (!iot_wait_blockable(timeout)) {
         return IOT_FORBIDDEN_IN_ISR;
     }
 
@@ -197,31 +168,14 @@ int iot_msgq_recv(iot_msgq_t *mq, void *msg, uint32_t max_len,
             iot_msgq_peek_at(mq, IOT_MSGQ_HDR_SIZE, msg, len);
             iot_msgq_skip(mq, len + IOT_MSGQ_HDR_SIZE);
             mq->count--;
-            iot_msgq_wake_all(&mq->send_wait);
+            iot_wait_queue_wake_all(&mq->send_wait);
             iot_port_critical_exit();
             return IOT_OK;
         }
         iot_port_critical_exit();
 
-        if (timeout == IOT_TIMEOUT_NONE) {
+        if (iot_wait_retry(&mq->recv_wait, deadline, timeout) != IOT_OK) {
             return IOT_TIMEOUT;
-        }
-
-        {
-            uint32_t now = iot_tick_get();
-            uint32_t wait;
-
-            if (timeout == IOT_TIMEOUT_FOREVER) {
-                wait = IOT_TIMEOUT_FOREVER;
-            } else {
-                if (!IOT_TICK_AFTER(deadline, now)) {
-                    return IOT_TIMEOUT;
-                }
-                wait = deadline - now;
-            }
-            if (iot_block_current(&mq->recv_wait, wait) != IOT_OK) {
-                return IOT_TIMEOUT;
-            }
         }
     }
 }
@@ -250,7 +204,7 @@ int iot_msgq_reset(iot_msgq_t *mq)
     mq->tail = 0U;
     mq->used = 0U;
     mq->count = 0U;
-    iot_msgq_wake_all(&mq->send_wait);
+    iot_wait_queue_wake_all(&mq->send_wait);
     iot_port_critical_exit();
     return IOT_OK;
 }
@@ -295,15 +249,11 @@ int iot_msgq_destroy(iot_msgq_t *mq)
         return IOT_INVALID_PARAM;
     }
 
-    iot_port_critical_enter();
-    if (!iot_wait_queue_empty(&mq->send_wait) ||
-        !iot_wait_queue_empty(&mq->recv_wait)) {
-        iot_port_critical_exit();
+    if (iot_obj_destroy_begin(&mq->initialized,
+                              &mq->send_wait, &mq->recv_wait) != IOT_OK) {
         LOG_W(IOT_TAG, "msgq_destroy: still has waiters");
         return IOT_BUSY;
     }
-    mq->initialized = false;
-    iot_port_critical_exit();
 
     if (mq->buffer_owned) {
         iot_mem_free(mq->buffer);

@@ -49,7 +49,16 @@ bool iot_wait_queue_empty(const iot_wait_queue_t *queue);
 /* 按位图从小到大遍历各非空优先级链（事件组广播唤醒用） */
 uint8_t iot_wait_queue_first_prio(uint32_t bitmap);
 
+/* 唤醒队列中的全部等待者（sbuf/msgq 的广播语义） */
+void iot_wait_queue_wake_all(iot_wait_queue_t *queue);
+
 /* ------------------------------ 阻塞 / 唤醒 ------------------------------ */
+
+/*
+ * 阻塞可行性检查：中断上下文只允许非阻塞调用（timeout == IOT_TIMEOUT_NONE）。
+ * 返回 false 时调用方应直接返回 IOT_FORBIDDEN_IN_ISR。
+ */
+bool iot_wait_blockable(uint32_t timeout);
 
 /*
  * 将当前任务挂到 wait_queue 并阻塞，然后触发调度。
@@ -58,8 +67,32 @@ uint8_t iot_wait_queue_first_prio(uint32_t bitmap);
  */
 int iot_block_current(iot_wait_queue_t *wait_queue, uint32_t timeout);
 
+/*
+ * 与 iot_block_current() 等价，但要求调用者已持有临界区。
+ * 入等待链、挂延时表、选下一个任务都在同一临界区完成，函数返回前已退出
+ * 临界区并完成任务切换（被唤醒后从这里返回）。
+ * 供互斥量等需要「状态修改 + 入链 + 选任务」原子的对象复用。
+ */
+void iot_block_current_locked(iot_wait_queue_t *wait_queue, uint32_t timeout);
+
+/*
+ * 「检查条件 → 阻塞 → 重试」循环的等待一步，配合 deadline 实现可续等超时。
+ *   deadline : 首次调用的 iot_tick_get() + timeout
+ * 返回 IOT_OK 表示应重新检查条件；其它值（IOT_TIMEOUT /
+ * IOT_FORBIDDEN_IN_ISR）由调用方直接作为本次 API 的返回值。
+ */
+int iot_wait_retry(iot_wait_queue_t *queue, uint32_t deadline, uint32_t timeout);
+
 /* 唤醒任务：摘除等待/延时节点，写入结果并加入就绪表 */
 void iot_task_wake(iot_task_t *task, int result);
+
+/*
+ * 销毁对象前的统一收尾：等待队列均空时在临界区内把 *initialized 置 false。
+ * 返回 IOT_BUSY 表示仍有等待者，调用方不得释放内存。
+ */
+int iot_obj_destroy_begin(bool *initialized,
+                          iot_wait_queue_t *wait1,
+                          iot_wait_queue_t *wait2);
 
 #ifdef __cplusplus
 }

@@ -26,6 +26,7 @@ struct iot_timer {
     bool running;                   /* 是否已启动 */
     bool pending;                   /* 已到期、等待回调任务执行 */
     uint32_t deadline;              /* 下次到期时刻 */
+    bool initialized;               /* 已初始化（动态销毁校验用） */
 };
 
 /*

@@ -44,11 +44,7 @@ void iot_init(void)
  */
 void iot_sched_start(void)
 {
-    iot_task_t *first = iot_sched_select();
-
-    if (first == NULL) {
-        first = iot_idle_task;    /* 没有用户任务时只运行空闲任务 */
-    }
+    iot_task_t *first = iot_sched_pick();   /* 无用户任务时返回空闲任务 */
 
     iot_current_task = first;
     first->state = IOT_TASK_RUNNING;

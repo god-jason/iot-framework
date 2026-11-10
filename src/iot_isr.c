@@ -48,6 +48,13 @@ int iot_queue_send_from_isr(iot_queue_t *queue, const void *item,
                           need_yield);
 }
 
+/* 中断中接收定长消息：强制非阻塞，队列空立即返回 IOT_TIMEOUT。 */
+int iot_queue_recv_from_isr(iot_queue_t *queue, void *item, bool *need_yield)
+{
+    return iot_isr_finish(iot_queue_recv(queue, item, IOT_TIMEOUT_NONE),
+                          need_yield);
+}
+
 #if IOT_USE_SBUF
 /* 中断中写入流式缓冲：非阻塞，只写当前可用空间并返回实际字节数。 */
 int iot_sbuf_write_from_isr(iot_sbuf_t *sb, const void *data, uint32_t len,

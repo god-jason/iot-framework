@@ -20,16 +20,6 @@
 
 #if IOT_USE_SBUF
 
-/* 唤醒队列中的全部任务（拥塞解除后让所有等待者重试） */
-static void iot_sbuf_wake_all(iot_wait_queue_t *queue)
-{
-    iot_task_t *task;
-
-    while ((task = iot_wait_queue_pop_highest(queue)) != NULL) {
-        iot_task_wake(task, IOT_OK);
-    }
-}
-
 /* 写入环形缓冲（调用者已保证 len <= 剩余空间） */
 static void iot_sbuf_put(iot_sbuf_t *sb, const uint8_t *src, uint32_t len)
 {
@@ -95,8 +85,7 @@ int iot_sbuf_write(iot_sbuf_t *sb, const void *data, uint32_t len,
     if (!IOT_OBJ_VALID(sb) || data == NULL || len == 0U) {
         return IOT_INVALID_PARAM;
     }
-    if (iot_in_isr() && timeout != IOT_TIMEOUT_NONE) {
-        IOT_ASSERT(!iot_in_isr());
+    if (!iot_wait_blockable(timeout)) {
         return IOT_FORBIDDEN_IN_ISR;
     }
 
@@ -111,31 +100,14 @@ int iot_sbuf_write(iot_sbuf_t *sb, const void *data, uint32_t len,
         if (space > 0U) {
             n = (len < space) ? len : space;
             iot_sbuf_put(sb, src, n);
-            iot_sbuf_wake_all(&sb->recv_wait);
+            iot_wait_queue_wake_all(&sb->recv_wait);
             iot_port_critical_exit();
             return (int)n;
         }
         iot_port_critical_exit();
 
-        if (timeout == IOT_TIMEOUT_NONE) {
+        if (iot_wait_retry(&sb->send_wait, deadline, timeout) != IOT_OK) {
             return 0;
-        }
-
-        {
-            uint32_t now = iot_tick_get();
-            uint32_t wait;
-
-            if (timeout == IOT_TIMEOUT_FOREVER) {
-                wait = IOT_TIMEOUT_FOREVER;
-            } else {
-                if (!IOT_TICK_AFTER(deadline, now)) {
-                    return 0;
-                }
-                wait = deadline - now;
-            }
-            if (iot_block_current(&sb->send_wait, wait) != IOT_OK) {
-                return 0;
-            }
         }
     }
 }
@@ -152,8 +124,7 @@ int iot_sbuf_read(iot_sbuf_t *sb, void *data, uint32_t len, uint32_t timeout)
     if (!IOT_OBJ_VALID(sb) || data == NULL || len == 0U) {
         return IOT_INVALID_PARAM;
     }
-    if (iot_in_isr() && timeout != IOT_TIMEOUT_NONE) {
-        IOT_ASSERT(!iot_in_isr());
+    if (!iot_wait_blockable(timeout)) {
         return IOT_FORBIDDEN_IN_ISR;
     }
 
@@ -168,31 +139,14 @@ int iot_sbuf_read(iot_sbuf_t *sb, void *data, uint32_t len, uint32_t timeout)
         if (avail > 0U) {
             n = (len < avail) ? len : avail;
             iot_sbuf_get(sb, dst, n);
-            iot_sbuf_wake_all(&sb->send_wait);
+            iot_wait_queue_wake_all(&sb->send_wait);
             iot_port_critical_exit();
             return (int)n;
         }
         iot_port_critical_exit();
 
-        if (timeout == IOT_TIMEOUT_NONE) {
+        if (iot_wait_retry(&sb->recv_wait, deadline, timeout) != IOT_OK) {
             return 0;
-        }
-
-        {
-            uint32_t now = iot_tick_get();
-            uint32_t wait;
-
-            if (timeout == IOT_TIMEOUT_FOREVER) {
-                wait = IOT_TIMEOUT_FOREVER;
-            } else {
-                if (!IOT_TICK_AFTER(deadline, now)) {
-                    return 0;
-                }
-                wait = deadline - now;
-            }
-            if (iot_block_current(&sb->recv_wait, wait) != IOT_OK) {
-                return 0;
-            }
         }
     }
 }
@@ -220,7 +174,7 @@ int iot_sbuf_reset(iot_sbuf_t *sb)
     sb->head = 0U;
     sb->tail = 0U;
     sb->count = 0U;
-    iot_sbuf_wake_all(&sb->send_wait);
+    iot_wait_queue_wake_all(&sb->send_wait);
     iot_port_critical_exit();
     return IOT_OK;
 }
@@ -265,15 +219,11 @@ int iot_sbuf_destroy(iot_sbuf_t *sb)
         return IOT_INVALID_PARAM;
     }
 
-    iot_port_critical_enter();
-    if (!iot_wait_queue_empty(&sb->send_wait) ||
-        !iot_wait_queue_empty(&sb->recv_wait)) {
-        iot_port_critical_exit();
+    if (iot_obj_destroy_begin(&sb->initialized,
+                              &sb->send_wait, &sb->recv_wait) != IOT_OK) {
         LOG_W(IOT_TAG, "sbuf_destroy: still has waiters");
         return IOT_BUSY;
     }
-    sb->initialized = false;
-    iot_port_critical_exit();
 
     if (sb->buffer_owned) {
         iot_mem_free(sb->buffer);

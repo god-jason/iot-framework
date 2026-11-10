@@ -1,8 +1,9 @@
 /*
  * stm32_trace.c - MCU 平台 trace 串口流式输出
  *
- * 事件由 iot_trace.c 格式化成紧凑十六进制文本行，这里一行一次串口发送。
- * 通过 iot_trace_set_output() 注册已初始化的 hal_uart_t 句柄。
+ * 事件由 iot_trace.c 格式化成一行文本，这里一行一次串口发送。
+ * 通过 iot_trace_set_output() 注册已初始化的 hal_uart_t 句柄（指定串口）；
+ * 未注册时输出自动丢弃。
  *
  * hal_uart_transmit() 以 weak 方式引用：没有启用 Cube HAL 的工程也能链接
  * （未注册句柄时输出自动丢弃），不会因为 trace 引入额外库依赖。

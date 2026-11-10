@@ -353,12 +353,15 @@ int iot_task_suspend(iot_task_t *task)
         return IOT_INVALID_PARAM;
     }
 
+    /* 状态迁移与嵌套计数在同一临界区完成，避免与并发 resume 丢计数 */
+    iot_port_critical_enter();
     rc = iot_sched_suspend(task);
+    if (rc == IOT_OK && task->suspend_count < 0xFFU) {
+        task->suspend_count++;
+    }
+    iot_port_critical_exit();
     if (rc != IOT_OK) {
         return rc;
-    }
-    if (task->suspend_count < 0xFFU) {
-        task->suspend_count++;
     }
 
     IOT_TRACE(IOT_EVT_TASK_SUSPEND, (uint32_t)(uintptr_t)task,
@@ -377,16 +380,24 @@ int iot_task_suspend(iot_task_t *task)
 
 int iot_task_resume(iot_task_t *task)
 {
+    bool resume_now;
+
     if (task == NULL) {
         return IOT_INVALID_PARAM;
     }
+
+    /* 计数递减与状态判断在同一临界区，ISR 与任务并发 resume 不会丢计数 */
+    iot_port_critical_enter();
     if ((task->suspend_count == 0U) ||
         (task->state != IOT_TASK_SUSPENDED)) {
+        iot_port_critical_exit();
         return IOT_NOT_READY;
     }
-
     task->suspend_count--;
-    if (task->suspend_count > 0U) {
+    resume_now = (task->suspend_count == 0U);
+    iot_port_critical_exit();
+
+    if (!resume_now) {
         return IOT_OK;               /* 仍有嵌套挂起，保持挂起态 */
     }
 

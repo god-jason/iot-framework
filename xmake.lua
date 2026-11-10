@@ -161,11 +161,7 @@ local function iot_trace_defines()
     if get_config("trace") == "off" then
         add_defines("IOT_USE_TRACE=0")
     end
-    -- 主机模拟端输出 Chrome/Perfetto JSON；MCU 端保持紧凑十六进制文本
-    if is_plat("windows", "mingw", "linux") then
-        add_defines("IOT_TRACE_FORMAT_JSON=1")
-    end
-    -- PC 平台默认构建 CTF 后端：需同时输出 ctf 文件与 json 文件；
+    -- PC 平台默认构建 CTF 后端：可与文本行文件同时输出；
     -- STM32 等仍由 --ctf 选项控制，避免默认占用 MCU 的 packet 缓冲。
     if is_plat("windows", "mingw") then
         add_defines("IOT_TRACE_BACKEND_BARECTF=1")

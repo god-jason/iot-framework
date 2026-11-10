@@ -62,6 +62,31 @@ extern "C" {
 /* 对象是否已初始化（所有内核对象都带 initialized 字段） */
 #define IOT_OBJ_VALID(p) ((p) != NULL && (p)->initialized)
 
+/* ============================== 内部工具 ============================== */
+
+/*
+ * 取 32 位整数最低置位编号（0..31），v 为 0 时返回 -1。
+ * 优先级 0 最高，因此结果直接就是最高优先级编号。
+ * 就绪位图与等待队列位图共用：GCC/Clang 走硬件指令，其他编译器用循环。
+ */
+static inline int iot_ctz32(uint32_t v)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return (v == 0U) ? -1 : __builtin_ctz(v);
+#else
+    int n = 0;
+
+    if (v == 0U) {
+        return -1;
+    }
+    while ((v & 1U) == 0U) {
+        v >>= 1;
+        n++;
+    }
+    return n;
+#endif
+}
+
 /* ============================== 状态码 ============================== */
 
 /* 状态值统一以 int 返回，枚举仅用于定义常量名 */
