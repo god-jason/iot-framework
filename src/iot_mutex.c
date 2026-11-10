@@ -85,6 +85,7 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
     if (owner == NULL) {
         mutex->owner = cur;
         iot_port_critical_exit();
+        IOT_TRACE_OBJ(IOT_EVT_MUTEX_LOCK, (uint32_t)(uintptr_t)mutex, 0U);
         return IOT_OK;
     }
 
@@ -129,6 +130,10 @@ int iot_mutex_lock(iot_mutex_t *mutex, uint32_t timeout)
     }
     iot_port_critical_exit();
 
+    if (rc == IOT_OK) {
+        /* v2=1：经历阻塞后由持有者转交获得 */
+        IOT_TRACE_OBJ(IOT_EVT_MUTEX_LOCK, (uint32_t)(uintptr_t)mutex, 1U);
+    }
     return rc;
 }
 
@@ -167,10 +172,12 @@ int iot_mutex_unlock(iot_mutex_t *mutex)
         iot_port_critical_exit();
         LOG_D(IOT_TAG, "mutex unlock: handoff to %s",
                   task->name != NULL ? task->name : "?");
+        IOT_TRACE_OBJ(IOT_EVT_MUTEX_UNLOCK, (uint32_t)(uintptr_t)mutex, 1U);
     } else {
         mutex->owner = NULL;
         iot_port_critical_exit();
         LOG_D(IOT_TAG, "mutex unlock: released");
+        IOT_TRACE_OBJ(IOT_EVT_MUTEX_UNLOCK, (uint32_t)(uintptr_t)mutex, 0U);
     }
     return IOT_OK;
 }

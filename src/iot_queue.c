@@ -89,6 +89,7 @@ int iot_queue_send(iot_queue_t *queue, const void *item,
         }
         iot_task_wake(receiver, IOT_OK);
         iot_port_critical_exit();
+        IOT_TRACE_OBJ(IOT_EVT_QUEUE_SEND, (uint32_t)(uintptr_t)queue, queue->count);
         LOG_D(IOT_TAG, "queue send: handoff to %s",
                   receiver->name != NULL ? receiver->name : "?");
         return IOT_OK;
@@ -101,6 +102,7 @@ int iot_queue_send(iot_queue_t *queue, const void *item,
         queue->head = iot_queue_next(queue, queue->head);
         queue->count++;
         iot_port_critical_exit();
+        IOT_TRACE_OBJ(IOT_EVT_QUEUE_SEND, (uint32_t)(uintptr_t)queue, queue->count);
         LOG_D(IOT_TAG, "queue send: queued, count=%u", (unsigned)queue->count);
         return IOT_OK;
     }
@@ -153,6 +155,7 @@ int iot_queue_recv(iot_queue_t *queue, void *item, uint32_t timeout)
         }
 
         iot_port_critical_exit();
+        IOT_TRACE_OBJ(IOT_EVT_QUEUE_RECV, (uint32_t)(uintptr_t)queue, queue->count);
         LOG_D(IOT_TAG, "queue recv: ok, count=%u", (unsigned)queue->count);
         return IOT_OK;
     }

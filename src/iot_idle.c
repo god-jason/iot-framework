@@ -24,12 +24,20 @@ static void idle_entry(void *arg)
     (void)arg;
 
     for (;;) {
+        IOT_TRACE_DBG(IOT_EVT_IDLE_ENTER, iot_tick_get(), 0U);
 #if IOT_USE_TICKLESS
         /* 按最近的唤醒/定时截止点休眠，避免固定 tick 周期性唤醒 */
-        iot_port_idle_timeout(iot_idle_next_timeout());
+        {
+            uint32_t timeout = iot_idle_next_timeout();
+
+            IOT_TRACE_DBG(IOT_EVT_TICKLESS_ENTER, timeout, 0U);
+            iot_port_idle_timeout(timeout);
+            IOT_TRACE_DBG(IOT_EVT_TICKLESS_EXIT, iot_tick_get(), 0U);
+        }
 #else
         iot_port_idle();
 #endif
+        IOT_TRACE_DBG(IOT_EVT_IDLE_EXIT, iot_tick_get(), 0U);
         iot_yield();
     }
 }

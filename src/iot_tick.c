@@ -142,8 +142,17 @@ void iot_tick_increment(uint32_t delta)
 
     /* 4) 临界区外逐个唤醒，避免长时间关中断 */
     while ((node = list_pop_first(&expired)) != NULL) {
+        int rc;
+
         task = IOT_CONTAINER_OF(node, iot_task_t, delayed_node);
-        iot_task_wake(task, task->wait_result);
+        rc = task->wait_result;
+        iot_task_wake(task, rc);
+
+        if (rc == IOT_TIMEOUT) {
+            /* 因超时到期：对象等待链已摘除，结果为 IOT_TIMEOUT */
+            IOT_TRACE(IOT_EVT_TASK_TIMEOUT, (uint32_t)(uintptr_t)task,
+                      iot_tick_count);
+        }
 
         LOG_D(IOT_TAG, "timeout/wake: task=%s tick=%u",
                   task->name != NULL ? task->name : "?",
@@ -156,6 +165,8 @@ void iot_tick_increment(uint32_t delta)
     /* 6) 时间片耗尽：请求一次重新调度（MCU 端触发 PendSV） */
 #if IOT_USE_TIME_SLICING
     if (iot_sched_slice_expired()) {
+        IOT_TRACE(IOT_EVT_SLICE_EXPIRE, (uint32_t)(uintptr_t)iot_current_task,
+                  iot_tick_count);
         iot_port_request_switch();
     }
 #endif

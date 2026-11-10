@@ -11,6 +11,7 @@
 
 #include "board.h"
 #include "iot.h"
+#include "shell.h"
 
 static iot_task_t s_blink_task;
 static uint8_t    s_blink_stack[1024];
@@ -32,6 +33,10 @@ int main(void)
     iot_init();
     board_led_init();
     board_trace_start(115200U);   /* trace 经 USART1/PA9 输出，串口助手 115200 8N1 */
+
+    /* Shell 默认绑定 UART1（PA9 发送 / PA10 接收）；
+     * log 的 printf 由 syscalls.c 的 _write 同样走 UART1 */
+    (void)shell_platform_start("f103c8");
 
     rc = iot_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

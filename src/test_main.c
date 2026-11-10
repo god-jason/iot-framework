@@ -94,12 +94,10 @@ void ut_motion_error(void);
 /* ---------------- 其它组件 ---------------- */
 void ut_breath_led(void);
 void ut_fan(void);
+void ut_shell(void);
 
-/* ---------------- 启动升级 ---------------- */
-void ut_boot(void);
-void ut_image(void);
-void ut_partition(void);
-void ut_upgrade(void);
+/* ---------------- 启动升级（实现在 platforms/stm32/stm32_bootloader.c） ---------------- */
+void ut_bootloader(void);
 
 /* ---------------- 内核 ---------------- */
 void ut_crash(void);
@@ -113,7 +111,7 @@ void ut_msgq(void);
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
-    printf("=== iot-frame 单元测试 ===\n\n");
+    printf("=== iot-os 单元测试 ===\n\n");
 
     printf("--- 基础组件 ---\n");
     ut_list();
@@ -177,12 +175,10 @@ int main(void)
     printf("\n--- 其它组件 ---\n");
     ut_breath_led();
     ut_fan();
+    ut_shell();
 
     printf("\n--- 启动升级 ---\n");
-    ut_boot();
-    ut_image();
-    ut_partition();
-    ut_upgrade();
+    ut_bootloader();
 
     printf("\n--- 内核 ---\n");
     ut_crash();

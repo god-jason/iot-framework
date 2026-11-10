@@ -17,6 +17,7 @@
 #include "iot_types.h"
 #include "iot_port.h"
 #include "iot_crash.h"
+#include "iot_trace.h"
 
 /*
  * 断言失败入口（由 IOT_ASSERT 宏调用）。
@@ -31,6 +32,9 @@ void iot_assert_fail(const char *file, int line, const char *expr)
     ctx.file = file;
     ctx.line = (uint32_t)line;
     ctx.expr = expr;
+
+    /* 崩溃记录会冻结 trace，断言事件要先于写现场发出 */
+    IOT_TRACE(IOT_EVT_ASSERT, (uint32_t)line, (uint32_t)(uintptr_t)expr);
 
     /* 同一次启动内只保留第一次现场，后续断言不会覆盖根因 */
     (void)iot_crash_record(IOT_CRASH_ASSERT, &ctx);

@@ -81,6 +81,7 @@ int iot_event_set(iot_event_t *event, uint32_t bits)
     event->flags &= ~clear_mask;
     iot_port_critical_exit();
 
+    IOT_TRACE_OBJ(IOT_EVT_EVENT_SET, (uint32_t)(uintptr_t)event, bits);
     return IOT_OK;
 }
 
@@ -139,6 +140,7 @@ int iot_event_wait(iot_event_t *event, uint32_t bits, uint8_t options,
                 event->flags &= ~bits;
             }
             iot_port_critical_exit();
+            IOT_TRACE_OBJ(IOT_EVT_EVENT_WAIT, (uint32_t)(uintptr_t)event, bits);
             return IOT_OK;
         }
         iot_port_critical_exit();

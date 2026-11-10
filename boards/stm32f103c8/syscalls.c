@@ -1,9 +1,8 @@
 /*
  * syscalls.c - newlib 系统调用桩（裸机固件）
  *
- * 内核日志走 printf，因此 newlib 需要一组 syscall 实现。
- * 这里把 stdout 输出直接丢弃（不占用 UART），堆由 _sbrk 在
- * .bss 之后到主栈预留区之间分配，避免引入半主机依赖。
+ * 内核日志走 printf：_write 把 stdout 重定向到 UART1（与 Shell 同一路），
+ * 堆由 _sbrk 在 .bss 之后到主栈预留区之间分配，避免引入半主机依赖。
  */
 
 #include <errno.h>
@@ -11,6 +10,10 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+/* 板级 UART1 输出（board_uart.c），未初始化时返回 -1，日志自然丢弃 */
+extern int hal_uart_transmit(void *handle, const uint8_t *data,
+                             size_t length, uint32_t timeout);
 
 extern char end[];        /* 链接脚本 PROVIDE(end)：.noinit 之后的堆起点 */
 extern char _estack[];
@@ -43,8 +46,12 @@ void *_sbrk(ptrdiff_t incr)
 int _write(int fd, const void *buf, size_t count)
 {
     (void)fd;
-    (void)buf;
-    return (int)count;    /* 丢弃输出 */
+    if (buf == NULL || count == 0U) {
+        return 0;
+    }
+    /* 与 Shell 共用 UART1；板级未初始化时返回 -1，日志自然丢弃 */
+    (void)hal_uart_transmit((void *)1, (const uint8_t *)buf, count, 0U);
+    return (int)count;
 }
 
 int _read(int fd, void *buf, size_t count)

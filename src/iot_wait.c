@@ -168,6 +168,8 @@ bool iot_wait_blockable(uint32_t timeout)
  */
 void iot_task_wake(iot_task_t *task, int result)
 {
+    bool preempt = false;
+
     if (task == NULL) {
         return;
     }
@@ -187,10 +189,15 @@ void iot_task_wake(iot_task_t *task, int result)
      */
     if (iot_current_task != NULL &&
         task->priority < iot_current_task->priority) {
+        preempt = true;
         iot_port_request_switch();
     }
     iot_port_critical_exit();
 
+    if (preempt) {
+        IOT_TRACE(IOT_EVT_PREEMPT, (uint32_t)(uintptr_t)task,
+                  (uint32_t)(uintptr_t)iot_current_task);
+    }
     IOT_TRACE(IOT_EVT_TASK_WAKE, (uint32_t)(uintptr_t)task, (uint32_t)result);
 
     LOG_D(IOT_TAG, "wake: task=%s result=%d",

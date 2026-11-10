@@ -115,6 +115,7 @@ int iot_msgq_send(iot_msgq_t *mq, const void *msg, uint32_t len,
             mq->count++;
             iot_wait_queue_wake_all(&mq->recv_wait);
             iot_port_critical_exit();
+            IOT_TRACE_OBJ(IOT_EVT_MSGQ_SEND, (uint32_t)(uintptr_t)mq, len);
             return IOT_OK;
         }
         iot_port_critical_exit();
@@ -170,6 +171,7 @@ int iot_msgq_recv(iot_msgq_t *mq, void *msg, uint32_t max_len,
             mq->count--;
             iot_wait_queue_wake_all(&mq->send_wait);
             iot_port_critical_exit();
+            IOT_TRACE_OBJ(IOT_EVT_MSGQ_RECV, (uint32_t)(uintptr_t)mq, len);
             return IOT_OK;
         }
         iot_port_critical_exit();

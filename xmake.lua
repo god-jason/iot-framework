@@ -1,5 +1,5 @@
 --[[
-    iot-frame 统一构建脚本（xmake >= 2.8）
+    iot-os 统一构建脚本（xmake >= 2.8）
 
     主机（Windows / Linux）使用系统 gcc：
         xmake f -c                          # 重新配置（自动识别主机平台）
@@ -29,12 +29,13 @@
         iot-pc      主机框架静态库（无 main，供外部集成）
         iot-test    单元测试可执行文件
         iot-demo    综合示例可执行文件
+        iot-shell   Shell 交互示例（stdin/stdout）
         iot-stm32   STM32 交叉编译静态库（仅 -p cross 时可见）
 ]]
 
 add_rules("mode.debug", "mode.release")
 
-set_project("iot-frame")
+set_project("iot-os")
 set_version("1.0.0")
 
 -- ============================================================================
@@ -107,7 +108,7 @@ local function iot_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena", "vendor/mongoose", "vendor/barectf",
-        "boot", "networks", "networks/ml307", "networks/eth",
+        "bootloader", "networks", "networks/ml307", "networks/eth",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
     for _, dir in ipairs(os.dirs("components/*")) do
@@ -118,9 +119,9 @@ end
 -- 框架全量源码（平台层由各目标单独 add_files）
 local function iot_framework_sources()
     add_files("src/**.c")
+    add_files("bootloader/**.c")
     add_files("components/**.c")
     add_files("vendor/**.c")
-    add_files("boot/**.c")
     add_files("networks/**.c")
     add_files("drivers/**.c")
 end
@@ -130,17 +131,18 @@ local function iot_exclude_tests()
     remove_files(
         "src/*_test.c", "src/**/*_test.c",
         "src/test_*.c", "src/**/test_*.c",
+        "bootloader/*_test.c", "bootloader/**/*_test.c",
+        "bootloader/test_*.c", "bootloader/**/test_*.c",
         "components/*_test.c", "components/**/*_test.c",
         "components/test_*.c", "components/**/test_*.c",
         "vendor/*_test.c", "vendor/**/*_test.c",
         "vendor/test_*.c", "vendor/**/test_*.c",
-        "boot/*_test.c", "boot/**/*_test.c",
-        "boot/test_*.c", "boot/**/test_*.c",
         "networks/*_test.c", "networks/**/*_test.c",
         "networks/test_*.c", "networks/**/test_*.c",
         "drivers/*_test.c", "drivers/**/*_test.c",
         "drivers/test_*.c", "drivers/**/test_*.c",
-        "platforms/pc/*_test.c"
+        "platforms/*_test.c", "platforms/**/*_test.c",
+        "platforms/test_*.c", "platforms/**/test_*.c"
     )
 end
 
@@ -253,6 +255,15 @@ if not is_plat("cross") then
         iot_host_links()
     target_end()
 
+    -- Shell 交互示例：标准输入输出 + 内核任务（默认绑定见 platforms/pc/pc_shell.c）
+    target("iot-shell")
+        set_kind("binary")
+        iot_host_common(false)
+        add_defines("SHELL_SHELL_STACK=8192", "SHELL_JOB_STACK=4096")
+        add_files("examples/shell_demo.c")
+        iot_host_links()
+    target_end()
+
 end
 
 -- ============================================================================
@@ -284,11 +295,11 @@ if is_plat("cross") then
         add_cflags("-ffunction-sections", "-fdata-sections", "-fno-common",
                    {force = true})
 
-        -- 内核 + 组件 + 驱动 + 启动/升级 + 内存后端 + 蜂窝模组
+        -- 内核 + Bootloader 公共逻辑 + 组件 + 驱动 + 平台层 + 内存后端 + 蜂窝模组
         add_files("src/**.c")
+        add_files("bootloader/**.c")
         add_files("components/**.c")
         add_files("drivers/**.c")
-        add_files("boot/**.c")
         add_files("platforms/stm32/**.c")
         add_files("vendor/tlsf/**.c")
         add_files("vendor/arena/**.c")

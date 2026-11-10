@@ -85,6 +85,7 @@ struct iot_task {
 
     bool created;                   /* 是否已创建（调试用） */
     bool stack_owned;               /* 栈是否由 iot_task_create_dynamic 分配 */
+    uint16_t tid;                   /* 任务 ID：注册时分配，0 表示未注册 */
 };
 
 /*
@@ -160,6 +161,17 @@ void iot_task_module_init(void);
 
 /* 把任务 TCB 挂入任务注册表（iot_idle_init 使用） */
 void iot_task_register(iot_task_t *task);
+
+/*
+ * 任务注册表遍历（供 ps / state 等诊断使用）：
+ *   iot_task_first()      返回注册表中的首个任务，NULL 表示没有
+ *   iot_task_next(task)   返回下一个任务，task 为 NULL 时从头开始
+ *   iot_task_total()      当前注册任务数（含 idle，不含已退出任务）
+ * 遍历期间不做临界区保护，只适用于诊断场景。
+ */
+iot_task_t *iot_task_first(void);
+iot_task_t *iot_task_next(const iot_task_t *task);
+uint32_t    iot_task_total(void);
 
 /* 遍历任务注册表，清零每个任务的运行统计（iot_stats_reset 调用） */
 void iot_task_reset_stats_all(void);

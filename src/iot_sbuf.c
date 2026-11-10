@@ -102,6 +102,7 @@ int iot_sbuf_write(iot_sbuf_t *sb, const void *data, uint32_t len,
             iot_sbuf_put(sb, src, n);
             iot_wait_queue_wake_all(&sb->recv_wait);
             iot_port_critical_exit();
+            IOT_TRACE_OBJ(IOT_EVT_SBUF_WRITE, (uint32_t)(uintptr_t)sb, n);
             return (int)n;
         }
         iot_port_critical_exit();
@@ -141,6 +142,7 @@ int iot_sbuf_read(iot_sbuf_t *sb, void *data, uint32_t len, uint32_t timeout)
             iot_sbuf_get(sb, dst, n);
             iot_wait_queue_wake_all(&sb->send_wait);
             iot_port_critical_exit();
+            IOT_TRACE_OBJ(IOT_EVT_SBUF_READ, (uint32_t)(uintptr_t)sb, n);
             return (int)n;
         }
         iot_port_critical_exit();

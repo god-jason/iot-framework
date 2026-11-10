@@ -1,5 +1,5 @@
 --- !<tag:barectf.org,2020/3/config>
-# iot-frame RTOS CTF tracing configuration (barectf 3.x)
+# iot-os RTOS CTF tracing configuration (barectf 3.x)
 #
 # Regenerate with: python configs/trace/gen.py
 # All event records share one data stream `dflt`; clock frequency is 1 MHz

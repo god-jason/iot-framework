@@ -22,6 +22,8 @@
 
 /* 任务注册表：供 iot_stats_reset() 遍历所有任务清零运行统计 */
 static list_t s_all_tasks;
+/* 任务 ID 分配器：单调递增，永不复用（ps/kill 按 #tid 定位） */
+static uint16_t s_next_tid;
 
 #if IOT_USE_NOTIFY
 /* 所有等待通知的任务共用一条 O(1) 等待队列 */
@@ -32,6 +34,7 @@ static iot_wait_queue_t s_notify_wait;
 void iot_task_module_init(void)
 {
     list_init(&s_all_tasks);
+    s_next_tid = 0U;
 #if IOT_USE_NOTIFY
     iot_notify_init();
 #endif
@@ -46,8 +49,50 @@ void iot_task_register(iot_task_t *task)
 
     list_node_init(&task->all_node);
     iot_port_critical_enter();
+    task->tid = ++s_next_tid;
+    if (task->tid == 0U) {
+        task->tid = ++s_next_tid;       /* 回绕时跳过 0 */
+    }
     list_add_tail(&s_all_tasks, &task->all_node);
     iot_port_critical_exit();
+}
+
+/* 返回注册表首个任务；空表或未初始化返回 NULL。 */
+iot_task_t *iot_task_first(void)
+{
+    list_node_t *node = s_all_tasks.head.next;
+
+    if (node == NULL || node == &s_all_tasks.head) {
+        return NULL;
+    }
+    return IOT_CONTAINER_OF(node, iot_task_t, all_node);
+}
+
+/* 返回 task 之后的注册表节点；task 为 NULL 时从表头开始。 */
+iot_task_t *iot_task_next(const iot_task_t *task)
+{
+    list_node_t *node;
+
+    if (task == NULL) {
+        return iot_task_first();
+    }
+    node = task->all_node.next;
+    if (node == &s_all_tasks.head) {
+        return NULL;
+    }
+    return IOT_CONTAINER_OF(node, iot_task_t, all_node);
+}
+
+/* 当前注册任务总数（含 idle）。 */
+uint32_t iot_task_total(void)
+{
+    uint32_t n = 0U;
+    const iot_task_t *task;
+
+    for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
+        n++;
+    }
+    return n;
 }
 
 /* 遍历任务注册表，清零每个任务的运行统计。 */
@@ -228,6 +273,8 @@ int iot_task_destroy(iot_task_t *task)
     LOG_I(IOT_TAG, "task destroy: name=%s",
               task->name != NULL ? task->name : "?");
 
+    IOT_TRACE(IOT_EVT_TASK_DESTROY, (uint32_t)(uintptr_t)task, 0U);
+
     iot_port_stack_deinit(task);
     iot_mem_free(task->stack_mem);
     iot_mem_free(task);
@@ -268,6 +315,8 @@ void iot_task_exit(void)
 
     LOG_I(IOT_TAG, "task exit: %s",
               (cur != NULL && cur->name != NULL) ? cur->name : "?");
+
+    IOT_TRACE(IOT_EVT_TASK_EXIT, (uint32_t)(uintptr_t)cur, 0U);
 
     iot_sched_switch(next);    /* 切走，通常不再返回 */
 
@@ -312,6 +361,9 @@ void iot_sleep_until(uint32_t wake_tick)
 
     LOG_D(IOT_TAG, "sleep: task=%s until=%u",
               cur->name != NULL ? cur->name : "?", (unsigned)wake_tick);
+
+    IOT_TRACE(IOT_EVT_TASK_SLEEP, (uint32_t)(uintptr_t)cur,
+              wake_tick - iot_tick_count);
 
     iot_sched_switch(next);    /* 切走，tick 到期后由 iot_tick.c 唤醒 */
 }
@@ -449,6 +501,7 @@ int iot_task_notify(iot_task_t *task, uint32_t value)
     }
     iot_port_critical_exit();
 
+    IOT_TRACE_OBJ(IOT_EVT_NOTIFY, (uint32_t)(uintptr_t)task, value);
     return IOT_OK;
 }
 

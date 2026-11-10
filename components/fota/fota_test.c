@@ -7,19 +7,36 @@
 
 #include "test.h"
 #include "fota.h"
-#include "upgrade.h"
-#include "partition.h"
+#include "bootloader.h"
 
-static const uint8_t s_firmware[32] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-    0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
-};
+#define TEST_PAYLOAD 16U
 
+static uint8_t  s_firmware[sizeof(image_header_t) + TEST_PAYLOAD];
+static uint32_t s_firmware_size;
 static uint32_t s_read_offset;
-static int s_apply_calls;
-static bool s_short_source;
+static int      s_apply_calls;
+static bool     s_short_source;
+
+/* 构造一个带合法镜像头与 CRC 的固件，供升级流程校验 */
+static void build_firmware(uint32_t version)
+{
+    image_header_t header;
+    uint32_t i;
+
+    for (i = 0U; i < TEST_PAYLOAD; i++) {
+        s_firmware[sizeof(header) + i] = (uint8_t)(0xA0U + i);
+    }
+    memset(&header, 0, sizeof(header));
+    header.magic = IMAGE_MAGIC;
+    header.header_size = (uint16_t)sizeof(header);
+    header.header_version = 1U;
+    header.version = version;
+    header.image_size = TEST_PAYLOAD;
+    header.crc32 = image_crc32(&s_firmware[sizeof(header)], TEST_PAYLOAD);
+    memcpy(s_firmware, &header, sizeof(header));
+
+    s_firmware_size = (uint32_t)sizeof(header) + TEST_PAYLOAD;
+}
 
 static int read_source(uint8_t *buf, uint32_t max, void *user)
 {
@@ -29,7 +46,7 @@ static int read_source(uint8_t *buf, uint32_t max, void *user)
     if (s_short_source) {
         return 0;
     }
-    left = (uint32_t)sizeof(s_firmware) - s_read_offset;
+    left = s_firmware_size - s_read_offset;
     if (left == 0U) {
         return 0;
     }
@@ -58,10 +75,11 @@ void ut_fota(void)
     TF_CHECK_INT(fota_set_read(read_source, NULL), 0);
     TF_CHECK_INT(fota_set_apply(NULL), 0);
 
+    /* 与默认布局一致地重新注册 OTA，验证注册路径且不影响其它分区 */
     memset(&ota, 0, sizeof(ota));
     ota.type = PART_OTA;
-    ota.address = 0x5000U;
-    ota.size = 0x1000U;
+    ota.address = 0xB000U;
+    ota.size = 0x4000U;
     ota.erase_size = 0x400U;
     ota.writable = true;
     TF_CHECK_INT(partition_register(&ota), 0);
@@ -85,12 +103,13 @@ void ut_fota(void)
     s_short_source = false;
     s_apply_calls = 0;
 
-    TF_CHECK_INT(fota_run(0x0100U, (uint32_t)sizeof(s_firmware)), 0);
+    build_firmware(0x0100U);
+    TF_CHECK_INT(fota_run(0x0100U, s_firmware_size), 0);
     TF_CHECK_INT(s_apply_calls, 1);
 
     TF_CHECK_INT(upgrade_get_status(&status), 0);
     TF_CHECK_INT(status.state, UPGRADE_SUCCESS);
-    TF_CHECK_INT(status.received_size, (int)sizeof(s_firmware));
+    TF_CHECK_INT(status.received_size, (int)s_firmware_size);
 
     tf_end();
 

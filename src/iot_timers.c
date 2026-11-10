@@ -267,6 +267,8 @@ void iot_timer_tick(uint32_t now)
         iot_port_critical_exit();
 #endif
 
+        IOT_TRACE_OBJ(IOT_EVT_TIMER_FIRE, (uint32_t)(uintptr_t)timer,
+                      timer->periodic ? 1U : 0U);
         LOG_D(IOT_TAG, "timer fire: %s deadline=%u",
                   timer->name != NULL ? timer->name : "?", (unsigned)now);
 

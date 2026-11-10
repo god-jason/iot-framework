@@ -1,4 +1,4 @@
-# iot-frame
+# iot-os
 
 面向 MCU 的轻量实时内核 + 硬件抽象 + 机器人/物联网组件库。
 
@@ -27,14 +27,14 @@
 ## 目录结构
 
 ```
-iot-frame/
+iot-os/
 ├── src/            实时内核（iot_*），实现与测试同目录
 ├── hal/            硬件抽象接口（hal_*）
 ├── components/     业务/算法组件（40 个模块）
 ├── drivers/        器件驱动（174 个）
 ├── networks/       网络门面 + eth / ml307 后端
-├── boot/           镜像、分区、升级、Bootloader
-├── platforms/      pc / stm32 / avr 平台实现
+├── bootloader/     分区、镜像校验、升级、串口升级协议（平台无关）
+├── platforms/      pc / stm32 / avr 平台实现（含 *_bootloader 移植层）
 ├── boards/         板级工程（启动文件、链接脚本、main）
 ├── vendor/         mongoose、cjson、tlsf、arena
 ├── examples/       综合示例

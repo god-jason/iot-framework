@@ -258,6 +258,8 @@ static void iot_stack_guard(const iot_task_t *task)
         /* 先记录专用原因，随后 IOT_ASSERT 不会覆盖它（只保留第一次） */
         memset(&ctx, 0, sizeof(ctx));
         ctx.expr = "stack overflow";
+        IOT_TRACE(IOT_EVT_STACK_OVERFLOW, (uint32_t)(uintptr_t)task,
+                  task->stack_size);
         (void)iot_crash_record(IOT_CRASH_STACK_OVERFLOW, &ctx);
 
         LOG_E(IOT_TAG, "stack overflow detected: task=%s size=%u",

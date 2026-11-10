@@ -11,7 +11,7 @@
  *   upgrade_finish 标记就绪 -> s_apply() 或 boot_request_upgrade()。
  *
  * 依赖：
- *   upgrade.h（升级分区读写/校验）、boot.h（请求进入 Bootloader）、
+ *   bootloader.h（分区读写/镜像校验/请求进入 Bootloader）、
  *   log.h（日志）。
  *
  * 静态状态与边界：
@@ -22,8 +22,7 @@
  *   - 写入/校验/完成失败时不自动 abort（写入失败路径会 abort）。
  */
 #include "fota.h"
-#include "upgrade.h"
-#include "boot.h"
+#include "bootloader.h"
 #include "log.h"
 #include <string.h>
 
