@@ -271,14 +271,22 @@ int shell_vars_init(shell_vars_t *vars)
     if (vars == NULL) {
         return -1;
     }
-    memset(vars, 0, sizeof(*vars));
+    shell_vars_release(vars);      /* 释放旧表，表本身保持为空指针 */
     return 0;
 }
 
 void shell_vars_clear(shell_vars_t *vars)
 {
-    if (vars != NULL) {
-        memset(vars, 0, sizeof(*vars));
+    if (vars != NULL && vars->items != NULL) {
+        memset(vars->items, 0, SHELL_VAR_MAX * sizeof(shell_var_t));
+    }
+}
+
+void shell_vars_release(shell_vars_t *vars)
+{
+    if (vars != NULL && vars->items != NULL) {
+        iot_mem_free(vars->items);
+        vars->items = NULL;
     }
 }
 
@@ -286,7 +294,7 @@ shell_var_t *shell_var_find(shell_vars_t *vars, const char *name, uint16_t len)
 {
     uint16_t i;
 
-    if (vars == NULL || name == NULL || len == 0U ||
+    if (vars == NULL || vars->items == NULL || name == NULL || len == 0U ||
         len >= SHELL_VAR_NAME_MAX) {
         return NULL;
     }
@@ -316,6 +324,13 @@ static int shell_var_alloc(shell_vars_t *vars, const char *name, uint16_t len)
 {
     uint16_t i;
 
+    if (vars->items == NULL) {
+        vars->items = (shell_var_t *)iot_mem_calloc(SHELL_VAR_MAX,
+                                                    sizeof(shell_var_t));
+        if (vars->items == NULL) {
+            return -1;
+        }
+    }
     for (i = 0U; i < SHELL_VAR_MAX; i++) {
         if (!vars->items[i].used) {
             uint16_t k;

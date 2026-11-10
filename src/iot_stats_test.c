@@ -31,6 +31,10 @@ void iot_test_stats(void)
     TF_CHECK(task_stats.stack_free_bytes <= 8192U);
     TF_CHECK(task_stats.switches > 0U);
 
+    /* CPU 占用率：千分比，范围 0..1000 */
+    TF_CHECK_INT(iot_task_cpu_permille(NULL), 0);
+    TF_CHECK(iot_task_cpu_permille(iot_current()) <= 1000U);
+
     tf_end();
 
     tf_begin("iot/统计-重置");
@@ -42,6 +46,7 @@ void iot_test_stats(void)
     TF_CHECK_INT(iot_task_get_stats(iot_current(), &task_stats), IOT_OK);
     TF_CHECK_INT(task_stats.run_ticks, 0);
     TF_CHECK_INT(task_stats.switches, 0);
+    TF_CHECK_INT(iot_task_cpu_permille(iot_current()), 0);
 
     tf_end();
 }

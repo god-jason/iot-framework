@@ -17,8 +17,8 @@
 #define SHELL_EXT_MAX 8U
 
 typedef struct {
-    shell_cmd_t items[SHELL_EXT_MAX];
-    uint8_t     count;
+    shell_cmd_t *items;     /* [SHELL_EXT_MAX]，注册时动态分配 */
+    uint8_t      count;
 } shell_ext_table_t;
 
 static shell_ext_table_t *s_ext;    /* 首个扩展命令注册时从堆分配 */
@@ -451,7 +451,7 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
     }
     shell_printf(sh, "\n");
     shell_printf(sh, "Shell Vars:");
-    for (i = 0U; i < SHELL_VAR_MAX; i++) {
+    for (i = 0U; sh->vars.items != NULL && i < SHELL_VAR_MAX; i++) {
         const shell_var_t *v = &sh->vars.items[i];
 
         if (v->used) {
@@ -496,7 +496,12 @@ static void shell_ps_line(shell_t *sh, const iot_task_t *task)
 
     (void)snprintf(stack, sizeof(stack), "%u", (unsigned)task->stack_size);
 #if SHELL_HAS_CPU_STATS
-    (void)snprintf(cpu, sizeof(cpu), "%.1f", 0.0);
+    {
+        uint32_t pm = iot_task_cpu_permille(task);
+
+        (void)snprintf(cpu, sizeof(cpu), "%u.%u", (unsigned)(pm / 10U),
+                       (unsigned)(pm % 10U));
+    }
 #endif
     shell_printf(sh, "%3u  %-8s  %-4s  %-9s  %4u  %6s  %s  %s\n",
                  (unsigned)task->tid,
@@ -746,7 +751,7 @@ static int cmd_job(shell_t *sh, int argc, char **argv)
     shell_printf(sh, "Stack   : %u\n", (unsigned)job->stack);
     shell_printf(sh, "PC      : L%u\n", (unsigned)job->pc);
     shell_printf(sh, "Vars    :");
-    for (i = 0U; i < SHELL_VAR_MAX; i++) {
+    for (i = 0U; job->vars.items != NULL && i < SHELL_VAR_MAX; i++) {
         if (job->vars.items[i].used) {
             shell_printf(sh, " $%s", job->vars.items[i].name);
         }
@@ -1008,6 +1013,13 @@ int shell_cmd_add(const shell_cmd_t *cmd)
     if (s_ext == NULL) {
         s_ext = (shell_ext_table_t *)iot_mem_calloc(1U, sizeof(*s_ext));
         if (s_ext == NULL) {
+            return -1;
+        }
+        s_ext->items = (shell_cmd_t *)iot_mem_calloc(SHELL_EXT_MAX,
+                                                     sizeof(shell_cmd_t));
+        if (s_ext->items == NULL) {
+            iot_mem_free(s_ext);
+            s_ext = NULL;
             return -1;
         }
     }

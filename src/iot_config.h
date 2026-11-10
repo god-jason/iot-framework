@@ -143,18 +143,4 @@
 #define IOT_USE_TRACE 1
 #endif
 
-/*
- * 可选 barectf/CTF 后端。默认关闭：CTF 是 packet 协议，必须缓冲整包，
- * 与「事件即输出、零内存缓冲」的模型冲突。需要标准 CTF 流时通过
- * `xmake f --ctf=on -c` 或编译期定义 IOT_TRACE_BACKEND_BARECTF=1 启用。
- */
-#ifndef IOT_TRACE_BACKEND_BARECTF
-#define IOT_TRACE_BACKEND_BARECTF 0
-#endif
-
-/* 可选 CTF 后端的单个 packet 缓冲字节数（流式输出路径不使用） */
-#ifndef IOT_TRACE_PACKET_SIZE
-#define IOT_TRACE_PACKET_SIZE 1024U
-#endif
-
 #endif /* IOT_CONFIG_H */

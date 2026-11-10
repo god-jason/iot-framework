@@ -308,6 +308,11 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
     );
 }
 
+/* Cube HAL 构建时，HAL_GetTick()/HAL_Delay() 依赖 SysTick 递增时基 */
+#if defined(USE_HAL_DRIVER)
+extern void HAL_IncTick(void);
+#endif
+
 /*
  * SysTick 默认处理：推进 tick。tick 内部会在时间片耗尽或
  * iot_task_wake() 唤醒高优先级任务时调用 iot_port_request_switch()。
@@ -315,6 +320,9 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
  */
 __attribute__((weak)) void SysTick_Handler(void)
 {
+#if defined(USE_HAL_DRIVER)
+    HAL_IncTick();
+#endif
     if (s_tickless_active) {
         /* 长睡眠到期：只置标志，由 iot_port_idle_timeout() 统一补偿 tick */
         s_tickless_expired = 1U;

@@ -14,7 +14,7 @@
  */
 #include "hal.h"
 #include "stm32.h"
-#include "stm32f4xx_hal.h"
+#include "stm32_cube.h"
 
 #include <string.h>
 
@@ -24,14 +24,15 @@
 
 static int f4_hal_status(HAL_StatusTypeDef status)
 {
+    /* Cube 的 HAL_OK 等被重命名为 CUBE_HAL_*，避免与框架状态码重定义 */
     switch (status) {
-    case HAL_OK:
+    case CUBE_HAL_OK:
         return HAL_OK;
-    case HAL_BUSY:
+    case CUBE_HAL_BUSY:
         return HAL_BUSY;
-    case HAL_TIMEOUT:
+    case CUBE_HAL_TIMEOUT:
         return HAL_TIMEOUT;
-    case HAL_ERROR:
+    case CUBE_HAL_ERROR:
     default:
         return HAL_ERROR;
     }
@@ -2036,6 +2037,8 @@ static void f4_can_frame_to_header(const hal_can_frame_t *frame,
     header->TransmitGlobalTime = DISABLE;
 }
 
+static uint32_t *f4_can_filter_bank(const hal_can_t *handle);
+
 int hal_can_init(hal_can_t *handle,
                             const hal_can_config_t *config)
 {
@@ -2065,15 +2068,15 @@ int hal_can_init(hal_can_t *handle,
     memset(&hcan->Init, 0, sizeof(hcan->Init));
     hcan->Init.Prescaler = prescaler;
     hcan->Init.Mode = f4_can_mode(config->mode);
-    hcan->Init.SJW = sjw;
-    hcan->Init.BS1 = bs1;
-    hcan->Init.BS2 = bs2;
-    hcan->Init.TTCM = DISABLE;
-    hcan->Init.ABOM = ENABLE;
-    hcan->Init.AWUM = ENABLE;
-    hcan->Init.NART = DISABLE;
-    hcan->Init.RFLM = DISABLE;
-    hcan->Init.TXFP = DISABLE;
+    hcan->Init.SyncJumpWidth = sjw;
+    hcan->Init.TimeSeg1 = bs1;
+    hcan->Init.TimeSeg2 = bs2;
+    hcan->Init.TimeTriggeredMode = DISABLE;
+    hcan->Init.AutoBusOff = ENABLE;
+    hcan->Init.AutoWakeUp = ENABLE;
+    hcan->Init.AutoRetransmission = ENABLE;
+    hcan->Init.ReceiveFifoLocked = DISABLE;
+    hcan->Init.TransmitFifoPriority = DISABLE;
 
     if (HAL_CAN_Init(hcan) != HAL_OK) {
         handle->base.state = HAL_STATE_ERROR;
@@ -2451,7 +2454,6 @@ int hal_adc_init(hal_adc_t *handle,
     hadc->Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
     hadc->Init.DMAContinuousRequests = DISABLE;
     hadc->Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-    hadc->Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
 
     if (HAL_ADC_Init(hadc) != HAL_OK) {
         handle->base.state = HAL_STATE_ERROR;
@@ -2612,16 +2614,11 @@ int hal_adc_start_dma(hal_adc_t *handle,
 
 int hal_adc_calibrate(hal_adc_t *handle)
 {
-    ADC_HandleTypeDef *hadc;
-
     if ((handle == NULL) || (handle->base.state == HAL_STATE_RESET)) {
         return HAL_NOT_READY;
     }
-    hadc = (ADC_HandleTypeDef *)handle->base.instance;
-    if (hadc == NULL) {
-        return HAL_NOT_READY;
-    }
-    return f4_hal_status(HAL_ADCEx_Calibration_Start(hadc));
+    /* STM32F4 的 ADC 没有硬件自校准，保持跨平台 API 一致返回不支持 */
+    return HAL_NOT_SUPPORTED;
 }
 
 uint32_t hal_adc_get_max_value(hal_adc_t *handle)
@@ -2851,10 +2848,6 @@ static uint32_t f4_tim_channel(uint32_t channel)
         return TIM_CHANNEL_3;
     case 4U:
         return TIM_CHANNEL_4;
-    case 5U:
-        return TIM_CHANNEL_5;
-    case 6U:
-        return TIM_CHANNEL_6;
     default:
         return 0U;
     }
@@ -3122,7 +3115,6 @@ static int f4_pwm_config_output(hal_pwm_t *handle,
     oc.OCPolarity = (handle->config.polarity == HAL_PWM_POLARITY_LOW) ?
                     TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
     oc.OCFastMode = TIM_OCFAST_DISABLE;
-    oc.OCPreload = TIM_OCPRELOAD_ENABLE;
 
     return f4_hal_status(HAL_TIM_PWM_ConfigChannel(htim, &oc, channel));
 }
@@ -3708,7 +3700,6 @@ int hal_wdg_init(hal_wdg_t *handle,
         memset(&hiwdg->Init, 0, sizeof(hiwdg->Init));
         hiwdg->Init.Prescaler = f4_iwdg_prescaler(divider);
         hiwdg->Init.Reload = reload;
-        hiwdg->Init.Window = 0x0FFFU;
 
         if (HAL_IWDG_Init(hiwdg) != HAL_OK) {
             handle->base.state = HAL_STATE_ERROR;
@@ -4879,7 +4870,7 @@ int hal_clock_init(const hal_clock_config_t *config)
             oscillator.PLL.PLLM = pll_m;
             oscillator.PLL.PLLN = pll_n;
             oscillator.PLL.PLLP = RCC_PLLP_DIV2;
-            oscillator.PLL.PLLQ = RCC_PLLQ_DIV7;
+            oscillator.PLL.PLLQ = 7U;   /* F4 HAL 的 PLLQ 直接写 2..15 */
         }
         if (HAL_RCC_OscConfig(&oscillator) != HAL_OK) {
             return HAL_ERROR;

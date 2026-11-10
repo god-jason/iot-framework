@@ -164,8 +164,9 @@ shell_t *shell_instance_create(const shell_config_t *cfg)
     }
     sh->cfg = *cfg;
 
-    sh->jobs = (shell_job_t *)iot_mem_calloc(SHELL_JOB_MAX,
-                                             sizeof(shell_job_t));
+    /* JOB 槽位只分配指针表，实际 shell_job_t 在加载时按需分配 */
+    sh->jobs = (shell_job_t **)iot_mem_calloc(SHELL_JOB_MAX,
+                                              sizeof(shell_job_t *));
     sh->rx = (char *)iot_mem_malloc(SHELL_RX_MAX);
     sh->line = (char *)iot_mem_malloc(SHELL_LINE_MAX);
     sh->hist = (char (*)[SHELL_LINE_MAX])iot_mem_calloc(SHELL_HISTORY_MAX,
@@ -193,6 +194,7 @@ void shell_instance_destroy(shell_t *sh)
         return;
     }
     shell_jobs_clear(sh);
+    shell_vars_release(&sh->vars);
     iot_mem_free(sh->jobs);
     iot_mem_free(sh->rx);
     iot_mem_free(sh->line);

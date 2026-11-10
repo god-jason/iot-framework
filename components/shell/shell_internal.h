@@ -42,7 +42,7 @@ typedef struct {
 } shell_var_t;
 
 typedef struct {
-    shell_var_t items[SHELL_VAR_MAX];
+    shell_var_t *items;     /* [SHELL_VAR_MAX]，首次写入时动态分配 */
 } shell_vars_t;
 
 typedef struct {
@@ -150,8 +150,8 @@ typedef struct shell_job {
     uint32_t stack;
 
     iot_task_t *task;
-    iot_sem_t wake;             /* stop 唤醒可中断 WAIT */
-    iot_sem_t done;             /* JOB 结束通知 */
+    iot_sem_t *wake;            /* 按需分配：stop 唤醒可中断 WAIT */
+    iot_sem_t *done;            /* 按需分配：JOB 结束通知 */
 
     shell_vars_t vars;
     uint16_t pc;
@@ -166,7 +166,7 @@ struct shell {
     shell_config_t cfg;              /* version / write / user / reset */
 
     shell_vars_t   vars;             /* Shell 上下文变量表 */
-    shell_job_t   *jobs;             /* [SHELL_JOB_MAX]，堆分配 */
+    shell_job_t  **jobs;             /* [SHELL_JOB_MAX]，槽位按需分配 */
     uint16_t       job_seq;
 
     char          *rx;               /* [SHELL_RX_MAX] */
@@ -204,6 +204,7 @@ void shell_value_format(const shell_value_t *v, char *buf, uint16_t cap,
 
 int  shell_vars_init(shell_vars_t *vars);
 void shell_vars_clear(shell_vars_t *vars);
+void shell_vars_release(shell_vars_t *vars);
 shell_var_t *shell_var_find(shell_vars_t *vars, const char *name, uint16_t len);
 int  shell_vars_set(shell_vars_t *vars, const char *name, uint16_t nlen,
                     const shell_value_t *val, bool readonly, shell_err_t *err);

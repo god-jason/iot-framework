@@ -76,6 +76,26 @@ int iot_task_get_stats(const iot_task_t *task, iot_task_stats_t *out)
     return IOT_OK;
 }
 
+/* 任务 CPU 占用率（千分比）：run_ticks / 系统 tick 总数。 */
+uint32_t iot_task_cpu_permille(const iot_task_t *task)
+{
+#if IOT_USE_STATS
+    uint32_t total;
+
+    if (task == NULL) {
+        return 0U;
+    }
+    total = iot_tick_get();
+    if (total == 0U) {
+        return 0U;
+    }
+    return (uint32_t)(((uint64_t)task->run_ticks * 1000ULL) / total);
+#else
+    (void)task;
+    return 0U;
+#endif
+}
+
 /* 清零全局切换计数与所有任务的运行统计。 */
 void iot_stats_reset(void)
 {

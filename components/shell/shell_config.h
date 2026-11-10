@@ -9,16 +9,16 @@
 
 /* ------------------------------ 缓冲区 ------------------------------ */
 #ifndef SHELL_RX_MAX
-#define SHELL_RX_MAX            256U    /* 输入环形缓冲（堆分配） */
+#define SHELL_RX_MAX            128U    /* 输入环形缓冲（堆分配） */
 #endif
 #ifndef SHELL_LINE_MAX
-#define SHELL_LINE_MAX          256U    /* 单行最大字节数 */
+#define SHELL_LINE_MAX          128U    /* 单行最大字节数 */
 #endif
 #ifndef SHELL_PASTE_MAX
-#define SHELL_PASTE_MAX         8192U   /* 粘贴 / 块缓冲上限 */
+#define SHELL_PASTE_MAX         1024U   /* 粘贴 / 块缓冲上限 */
 #endif
 #ifndef SHELL_HISTORY_MAX
-#define SHELL_HISTORY_MAX       32U     /* 历史条数 */
+#define SHELL_HISTORY_MAX       8U      /* 历史条数 */
 #endif
 #ifndef SHELL_BLOCK_DEPTH
 #define SHELL_BLOCK_DEPTH       8U      /* 块嵌套 / 调用栈深度 */
@@ -26,7 +26,7 @@
 
 /* ------------------------------ JOB ------------------------------ */
 #ifndef SHELL_JOB_MAX
-#define SHELL_JOB_MAX           8U      /* 并发 JOB 上限 */
+#define SHELL_JOB_MAX           4U      /* 并发 JOB 上限（槽位按需分配） */
 #endif
 #ifndef SHELL_JOB_PRIO
 #define SHELL_JOB_PRIO          22U     /* 默认优先级（0 最高，idle=31） */
@@ -57,24 +57,24 @@
 
 /* ------------------------------ 变量 / 表达式 ------------------------------ */
 #ifndef SHELL_VAR_MAX
-#define SHELL_VAR_MAX           32U     /* 单张变量表容量 */
+#define SHELL_VAR_MAX           16U     /* 单张变量表容量 */
 #endif
 #ifndef SHELL_VAR_NAME_MAX
 #define SHELL_VAR_NAME_MAX      17U     /* 变量名最大长度（不含 $） */
 #endif
 #ifndef SHELL_STR_MAX
-#define SHELL_STR_MAX           64U     /* 字符串值最大长度 */
+#define SHELL_STR_MAX           48U     /* 字符串值最大长度 */
 #endif
 #ifndef SHELL_TOKEN_MAX
-#define SHELL_TOKEN_MAX         64U     /* 单行最多 token 数 */
+#define SHELL_TOKEN_MAX         48U     /* 单行最多 token 数 */
 #endif
 #ifndef SHELL_INSTR_MAX
-#define SHELL_INSTR_MAX         128U    /* 单个脚本最多指令数 */
+#define SHELL_INSTR_MAX         64U     /* 单个脚本最多指令数 */
 #endif
 
 /* ------------------------------ 能力开关 ------------------------------ */
 #ifndef SHELL_HAS_CPU_STATS
-#define SHELL_HAS_CPU_STATS     0       /* CPU% 统计（无统计时填 -） */
+#define SHELL_HAS_CPU_STATS     1       /* ps 的 CPU% 列（来自 iot_task_cpu_permille） */
 #endif
 #ifndef SHELL_HAS_FS
 #define SHELL_HAS_FS            0       /* 是否存在文件系统；0 时 run <file> 报 1002 */

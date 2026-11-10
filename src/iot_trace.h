@@ -17,8 +17,6 @@
  *   事件产生即格式化为一行文本并交给平台的 iot_port_trace_write()：
  *     T <ts_us> <evt_name> task=0x<指针> v1=<n> v2=<n> [isr=1]
  *   PC 平台写入文件，MCU 平台由 iot_trace_set_output() 指定的串口发出。
- *   可选 barectf/CTF 后端（IOT_TRACE_BACKEND_BARECTF=1）因 CTF packet 协议
- *   固有要求仍需要一块 packet 缓冲，默认关闭。
  *
  * 运行期开关（宏，直接读写全局变量，与 log_set_level 同风格）：
  *   iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
@@ -157,7 +155,7 @@ void     iot_trace_init(void);
 void     iot_trace_emit(uint16_t evt, uint32_t v1, uint32_t v2);
 void     iot_trace_enable(void);
 void     iot_trace_disable(void);
-void     iot_trace_reset(void);       /* 复位计数与 JSON 流状态 */
+void     iot_trace_reset(void);       /* 复位事件计数 */
 void     iot_trace_set_clock(iot_trace_clock_fn fn);
 
 /* 名称映射：直接输出 NAME_BEGIN / NAME_CHUNK 事件行 */
@@ -188,29 +186,8 @@ void iot_trace_set_output(void *handle, uint32_t timeout_ms);
 void iot_trace_start_file(const char *path);
 void iot_trace_stop_file(void);
 
-/*
- * CTF 文件输出（二进制流 + path + ".metadata"）；
- * 不支持或未启用 CTF 后端时为空实现。
- */
-void iot_trace_start_ctf_file(const char *path);
-void iot_trace_stop_ctf_file(void);
-
-/* 可选 CTF 后端：仅 IOT_TRACE_BACKEND_BARECTF=1 时有效 */
-typedef void (*iot_trace_sink_fn)(const uint8_t *data, uint32_t len, void *user);
-void iot_trace_set_sink(iot_trace_sink_fn fn, void *user);
-int  iot_trace_flush(void);
-void iot_trace_sink_itm_init(void);
-
 /* 平台输出钩子：由各平台目录下的 trace 实现文件提供 */
 void iot_port_trace_write(const char *data, uint32_t len);
-
-/* 后端桥接（内部） */
-void iot_trace_barectf_init(void);
-void iot_trace_barectf_enable(int enable);
-void iot_trace_barectf_set_sink(iot_trace_sink_fn fn, void *user);
-void iot_trace_barectf_emit(uint16_t evt, uint32_t ts, uint32_t task,
-                            uint32_t v1, uint32_t v2);
-int  iot_trace_barectf_flush(void);
 
 #ifdef __cplusplus
 }

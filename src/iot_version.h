@@ -67,19 +67,18 @@ extern "C" {
 /* ============================== 编译期特性位 ============================== */
 
 #define IOT_FEATURE_TRACE          (1UL << 0)    /* 事件跟踪 */
-#define IOT_FEATURE_TRACE_CTF      (1UL << 1)    /* barectf/CTF 后端 */
-#define IOT_FEATURE_ASSERT         (1UL << 2)    /* 断言 */
-#define IOT_FEATURE_CRASH          (1UL << 3)    /* 崩溃现场记录 */
-#define IOT_FEATURE_STACK_CHECK    (1UL << 4)    /* 栈溢出检测 */
-#define IOT_FEATURE_PRIO_INHERIT   (1UL << 5)    /* 互斥量优先级继承 */
-#define IOT_FEATURE_TIME_SLICING   (1UL << 6)    /* 同优先级时间片 */
-#define IOT_FEATURE_STATS          (1UL << 7)    /* 运行时统计 */
-#define IOT_FEATURE_EVENT          (1UL << 8)    /* 事件组 */
-#define IOT_FEATURE_SBUF           (1UL << 9)    /* 流式缓冲 */
-#define IOT_FEATURE_MSGQ           (1UL << 10)   /* 变长消息队列 */
-#define IOT_FEATURE_NOTIFY         (1UL << 11)   /* 任务通知 */
-#define IOT_FEATURE_TICKLESS       (1UL << 12)   /* tickless 空闲 */
-#define IOT_FEATURE_TIMER_TASK     (1UL << 13)   /* 定时器回调独立任务 */
+#define IOT_FEATURE_ASSERT         (1UL << 1)    /* 断言 */
+#define IOT_FEATURE_CRASH          (1UL << 2)    /* 崩溃现场记录 */
+#define IOT_FEATURE_STACK_CHECK    (1UL << 3)    /* 栈溢出检测 */
+#define IOT_FEATURE_PRIO_INHERIT   (1UL << 4)    /* 互斥量优先级继承 */
+#define IOT_FEATURE_TIME_SLICING   (1UL << 5)    /* 同优先级时间片 */
+#define IOT_FEATURE_STATS          (1UL << 6)    /* 运行时统计 */
+#define IOT_FEATURE_EVENT          (1UL << 7)    /* 事件组 */
+#define IOT_FEATURE_SBUF           (1UL << 8)    /* 流式缓冲 */
+#define IOT_FEATURE_MSGQ           (1UL << 9)    /* 变长消息队列 */
+#define IOT_FEATURE_NOTIFY         (1UL << 10)   /* 任务通知 */
+#define IOT_FEATURE_TICKLESS       (1UL << 11)   /* tickless 空闲 */
+#define IOT_FEATURE_TIMER_TASK     (1UL << 12)   /* 定时器回调独立任务 */
 
 /* ============================== 描述符 ============================== */
 

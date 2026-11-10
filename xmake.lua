@@ -8,29 +8,40 @@
         xmake r iot-demo                    # 运行综合示例
         xmake f -p linux -c && xmake b -r   # 在 Linux 主机上构建
 
-    STM32 使用 arm-none-eabi-gcc（产出静态库，由 CubeMX 工程链接）：
+    STM32 使用 arm-none-eabi-gcc：
         # 先把工具链 bin 目录加入 PATH；cross 工具链检测必须显式给 --sdk/--bin
         set PATH=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin;%PATH%
+
+        # 静态库（由外部 CubeMX 工程链接）
         xmake f -p cross --stm32_family=f4 ^
                 --sdk=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1 ^
                 --bin=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin -c
         xmake b iot-stm32
 
-        # Linux 下换成 --sdk=/opt/xpack-arm-none-eabi-gcc-15.2.1-1.1 等安装路径
-        # 接入 STM32Cube HAL（启用完整平台外设层）时追加：
-        #   --cube_hal_dir=/path/to/STM32CubeF4/Drivers/STM32F4xx_HAL_Driver/Inc
+        # 可烧录固件：STM32F407VET6（需要 Cube HAL，产物含 .elf/.hex/.bin）
+        xmake f -p cross --stm32_family=f4 --stm32_chip=STM32F407xx ^
+                --cube_hal_dir=C:\path\to\STM32F4xx_HAL_Driver ^
+                --sdk=... --bin=... -c
+        xmake b iot-fw-f407
 
-    仓库不含启动文件、链接脚本与 Cube HAL，因此 STM32 产物为静态库：
-    由用户的 CubeMX 工程提供 main / startup / linker script 并链接本库。
+        # 可烧录固件：STM32F103C8T6（纯寄存器实现，不需要 Cube HAL）
+        xmake f -p cross --stm32_family=f1 --cube_hal_dir="" ... -c
+        xmake b iot-fw-f103c8
+
+        # Linux 下换成 --sdk=/opt/xpack-arm-none-eabi-gcc-15.2.1-1.1 等安装路径
+        # --cube_hal_dir 可传 .../STM32F4xx_HAL_Driver 或其 Inc 子目录
+
     未指定 --cube_hal_dir 时，依赖 Cube HAL 的 stm32_os.c / stm32_<family>.c
     会自动跳过，只产出内核 + 组件 + 驱动层。
 
     目标一览：
-        iot-pc      主机框架静态库（无 main，供外部集成）
-        iot-test    单元测试可执行文件
-        iot-demo    综合示例可执行文件
-        iot-shell   Shell 交互示例（stdin/stdout）
-        iot-stm32   STM32 交叉编译静态库（仅 -p cross 时可见）
+        iot-pc        主机框架静态库（无 main，供外部集成）
+        iot-test      单元测试可执行文件
+        iot-demo      综合示例可执行文件
+        iot-shell     Shell 交互示例（stdin/stdout）
+        iot-stm32     STM32 交叉编译静态库（仅 -p cross 时可见）
+        iot-fw-f407   STM32F407VET6 可烧录固件（PA6/PA7 LED，USART1）
+        iot-fw-f103c8 STM32F103C8T6 可烧录固件（PC13 LED，USART1）
 ]]
 
 add_rules("mode.debug", "mode.release")
@@ -50,7 +61,12 @@ option_end()
 
 option("cube_hal_dir")
     set_default("")
-    set_description("STM32Cube HAL 头文件目录；留空则跳过依赖 Cube HAL 的平台文件")
+    set_description("STM32Cube HAL 目录（可传 .../STM32F4xx_HAL_Driver 或其 Inc）；留空则跳过依赖 Cube HAL 的平台文件")
+option_end()
+
+option("stm32_chip")
+    set_default("STM32F407xx")
+    set_description("目标芯片型号宏（如 STM32F407xx），仅 cross 平台使用")
 option_end()
 
 option("stm32_toolchain")
@@ -72,12 +88,6 @@ option("trace")
     set_default("on")
     set_values("on", "off")
     set_description("编译期启用 trace；off 时所有 IOT_TRACE_* 宏为空、零 RAM/ROM 开销")
-option_end()
-
-option("ctf")
-    set_default("off")
-    set_values("on", "off")
-    set_description("启用可选 barectf/CTF 后端（需要 CTF packet 缓冲，默认 off）")
 option_end()
 
 -- ============================================================================
@@ -107,7 +117,7 @@ toolchain_end()
 local function iot_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
-        "vendor/tlsf", "vendor/arena", "vendor/mongoose", "vendor/barectf",
+        "vendor/tlsf", "vendor/arena", "vendor/mongoose",
         "bootloader", "networks", "networks/ml307", "networks/eth",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
@@ -163,13 +173,6 @@ local function iot_trace_defines()
     if get_config("trace") == "off" then
         add_defines("IOT_USE_TRACE=0")
     end
-    -- PC 平台默认构建 CTF 后端：可与文本行文件同时输出；
-    -- STM32 等仍由 --ctf 选项控制，避免默认占用 MCU 的 packet 缓冲。
-    if is_plat("windows", "mingw") then
-        add_defines("IOT_TRACE_BACKEND_BARECTF=1")
-    elseif get_config("ctf") == "on" then
-        add_defines("IOT_TRACE_BACKEND_BARECTF=1")
-    end
 end
 
 local function iot_host_links()
@@ -191,10 +194,6 @@ local function iot_host_common(with_tests)
     add_files("platforms/pc/**.c")
     iot_framework_sources()
     iot_includedirs()
-
-    if (get_config("trace") == "off") then
-        remove_files("vendor/barectf/**.c")   -- 裁剪模式下不编译 CTF 生成代码
-    end
 
     if not with_tests then
         iot_exclude_tests()
@@ -274,7 +273,27 @@ if is_plat("cross") then
 
     local family  = get_config("stm32_family") or "f4"
     local hal_dir = get_config("cube_hal_dir") or ""
+    local chip    = get_config("stm32_chip") or "STM32F407xx"
     local cpuflags = iot_stm32_cpuflags(family)
+
+    -- 归一化到 <...>/STM32F4xx_HAL_Driver 目录：允许传该目录或其中的 Inc
+    local hal_root = ""
+    if hal_dir ~= "" then
+        hal_root = (hal_dir:gsub("[/\\]+$", ""))
+        if path.basename(hal_root):lower() == "inc" then
+            hal_root = path.directory(hal_root)
+        end
+    end
+    local hal_drivers = (hal_root ~= "") and path.directory(hal_root) or ""
+    local hal_inc     = (hal_root ~= "") and path.join(hal_root, "Inc") or ""
+    local hal_src     = (hal_root ~= "") and path.join(hal_root, "Src") or ""
+    local cmsis_dev_inc = (hal_drivers ~= "")
+        and path.join(hal_drivers, "CMSIS", "Device", "ST", "STM32F4xx", "Include") or ""
+    local cmsis_pack = iot_find_pack_version("ARM/CMSIS")
+    local cmsis_core = get_config("cmsis_inc") or ""
+    if cmsis_core == "" and cmsis_pack then
+        cmsis_core = path.join(cmsis_pack, "CMSIS", "Core", "Include")
+    end
 
     target("iot-stm32")
         set_kind("static")
@@ -304,9 +323,6 @@ if is_plat("cross") then
         add_files("vendor/tlsf/**.c")
         add_files("vendor/arena/**.c")
         add_files("vendor/cjson/**.c")
-        if (get_config("trace") ~= "off") and (get_config("ctf") == "on") then
-            add_files("vendor/barectf/**.c")
-        end
         add_files("networks/ml307/**.c")
 
         iot_exclude_tests()
@@ -314,8 +330,19 @@ if is_plat("cross") then
         -- 主机网络栈依赖 socket/winsock，MCU 上不编译
         remove_files("vendor/mongoose/**.c", "networks/eth/**.c")
 
-        if hal_dir ~= "" then
-            add_includedirs(hal_dir)
+        if hal_root ~= "" then
+            add_includedirs(hal_inc)
+            if family == "f4" then
+                -- stm32_f4.c / stm32_os.c 需要 Cube + CMSIS 头文件与器件宏
+                add_defines("USE_HAL_DRIVER", chip)
+                add_defines("IOT_TRACE_CLOCK_HZ=168000000")
+                if cmsis_dev_inc ~= "" then
+                    add_includedirs(cmsis_dev_inc)
+                end
+                if cmsis_core ~= "" then
+                    add_includedirs(cmsis_core)
+                end
+            end
         else
             -- 这些文件直接 include stm32fxxx_hal.h，无 Cube HAL 时跳过
             remove_files("platforms/stm32/stm32_os.c",
@@ -384,7 +411,8 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
-            add_includedirs(board_dir, "src", "components/common")
+            add_includedirs(board_dir)
+            iot_includedirs()
             if dfp_inc then
                 add_includedirs(dfp_inc)
             end
@@ -407,6 +435,100 @@ if is_plat("cross") then
                     cprint("${dim}[firmware] DFP: %s${clear}", dfp_inc)
                     cprint("${dim}[firmware] CMSIS: %s${clear}", cmsis_inc)
                 end
+            end)
+
+            after_build(function (target)
+                local elf = target:targetfile()
+                if not os.isfile(elf) then
+                    return
+                end
+                local oc  = target:tool("objcopy") or "arm-none-eabi-objcopy"
+                local dir = target:targetdir()
+                local hex = path.join(dir, target:basename() .. ".hex")
+                local bin = path.join(dir, target:basename() .. ".bin")
+                os.execv(oc, {"-O", "ihex", elf, hex})
+                os.execv(oc, {"-O", "binary", elf, bin})
+                cprint("${green}[firmware] HEX: %s${clear}", hex)
+                cprint("${green}[firmware] BIN: %s${clear}", bin)
+            end)
+        target_end()
+    end
+
+    -- ========================================================================
+    -- 可烧录固件（STM32F407VET6 / Cortex-M4 / PA6+PA7 LED / USART1）
+    -- 链接 iot-stm32 + Cube HAL 子集 + 板级启动代码，产出 .elf/.hex/.bin
+    -- 需要 --cube_hal_dir 指向 STM32F4xx_HAL_Driver
+    -- ========================================================================
+    if family == "f4" then
+        local board_dir = "boards/stm32f407"
+        local sys_src   = (hal_drivers ~= "")
+            and path.join(hal_drivers, "CMSIS", "Device", "ST", "STM32F4xx",
+                          "Source", "Templates", "system_stm32f4xx.c") or ""
+        local hal_modules = {
+            "stm32f4xx_hal.c", "stm32f4xx_hal_cortex.c",
+            "stm32f4xx_hal_rcc.c", "stm32f4xx_hal_rcc_ex.c",
+            "stm32f4xx_hal_gpio.c", "stm32f4xx_hal_uart.c",
+            "stm32f4xx_hal_dma.c", "stm32f4xx_hal_dma_ex.c",
+            "stm32f4xx_hal_pwr.c", "stm32f4xx_hal_pwr_ex.c",
+            "stm32f4xx_hal_flash.c", "stm32f4xx_hal_flash_ex.c"
+        }
+
+        target("iot-fw-f407")
+            set_kind("binary")
+            set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
+            set_languages("c99")
+            set_warnings("all")
+            set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
+            add_deps("iot-stm32")
+
+            add_defines("IOT_PLATFORM_STM32", "IOT_STM32_F4",
+                        "USE_HAL_DRIVER", chip, "HSE_VALUE=8000000")
+            iot_trace_defines()
+            add_defines("LOG_LEVEL=LOG_LEVEL_INFO")
+
+            for _, flag in ipairs(cpuflags) do
+                add_cflags(flag, {force = true})
+                add_asflags(flag, {force = true})
+                add_ldflags(flag, {force = true})
+            end
+            add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
+
+            add_files(path.join(board_dir, "*.c"))
+            add_files(path.join(board_dir, "*.S"))
+            add_includedirs(board_dir)
+            iot_includedirs()
+
+            if hal_src ~= "" then
+                for _, name in ipairs(hal_modules) do
+                    add_files(path.join(hal_src, name))
+                end
+                add_files(sys_src)
+                add_includedirs(hal_inc)
+                if cmsis_dev_inc ~= "" then
+                    add_includedirs(cmsis_dev_inc)
+                end
+                if cmsis_core ~= "" then
+                    add_includedirs(cmsis_core)
+                end
+            end
+
+            -- 自定义启动文件与向量表，禁用 crt0；nano newlib 减小体积
+            add_ldflags("-nostartfiles",
+                        "-T" .. path.join(board_dir, "stm32f407ve.ld"),
+                        "--specs=nano.specs",
+                        "-Wl,--gc-sections",
+                        {force = true})
+
+            on_load(function (target)
+                if hal_src == "" or not os.isdir(hal_src) then
+                    cprint("${yellow}[f407] 未找到 Cube HAL 源码，请用 " ..
+                           "--cube_hal_dir=<.../STM32F4xx_HAL_Driver> 指定${clear}")
+                end
+                if cmsis_dev_inc ~= "" and not os.isdir(cmsis_dev_inc) then
+                    cprint("${yellow}[f407] 未找到 CMSIS Device 头文件目录: %s${clear}",
+                           cmsis_dev_inc)
+                end
+                cprint("${dim}[f407] chip=%s${clear}", chip)
             end)
 
             after_build(function (target)

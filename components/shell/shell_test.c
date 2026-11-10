@@ -742,6 +742,7 @@ static void test_jobs(void)
     shell_err_t err;
     char *text = "PRINT 1\n";
     uint32_t len = (uint32_t)strlen(text);
+    char name[8];
     int i;
 
     tf_begin("shell/JOB 生命周期");
@@ -798,11 +799,9 @@ static void test_jobs(void)
     TF_CHECK(shell_job_find(def, "T1", 2U) == NULL);
     TF_CHECK_INT(shell_exec_line("unload T1"), -SHELL_ERR_NOT_FOUND);
 
-    /* 表满：第 9 个失败 */
+    /* 表满：第 SHELL_JOB_MAX + 1 个失败 */
     shell_reset_all();
     for (i = 0; i < (int)SHELL_JOB_MAX; i++) {
-        char name[8];
-
         (void)snprintf(name, sizeof(name), "J%d", i);
         TF_CHECK(shell_job_load(def, text, len, name, 0U, 0U, &err) != NULL);
     }
@@ -810,7 +809,8 @@ static void test_jobs(void)
     TF_CHECK_INT(err.code, SHELL_ERR_RESOURCE);
     out_reset();
     TF_CHECK_INT(shell_exec_line("loads"), 0);
-    TF_CHECK(out_has("J7"));
+    (void)snprintf(name, sizeof(name), "J%d", (int)SHELL_JOB_MAX - 1);
+    TF_CHECK(out_has(name));
     shell_jobs_clear(def);
     TF_CHECK(shell_job_find(def, "J0", 2U) == NULL);
 
@@ -979,9 +979,10 @@ static void test_input_buffer(void)
     TF_CHECK_INT(shell_feed(NULL, 0U), 0);
     TF_CHECK_INT(shell_feed("x", 0U), 0);
 
-    /* 环形缓冲上限：容量 256，可用 255 */
+    /* 环形缓冲上限：可用 SHELL_RX_MAX - 1 */
     memset(big, 'a', sizeof(big));
-    TF_CHECK_INT(shell_feed(big, (uint32_t)sizeof(big)), 255);
+    TF_CHECK_INT(shell_feed(big, (uint32_t)sizeof(big)),
+                 (int)SHELL_RX_MAX - 1);
     TF_CHECK_INT(shell_feed("x", 1U), 0);
 
     shell_reset_all();

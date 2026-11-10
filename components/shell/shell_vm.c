@@ -161,8 +161,11 @@ shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len)
         return NULL;
     }
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (sh->jobs[i].used && shell_name_eq(sh->jobs[i].name, name, len)) {
-            return &sh->jobs[i];
+        shell_job_t *job = sh->jobs[i];
+
+        if (job != NULL && job->used &&
+            shell_name_eq(job->name, name, len)) {
+            return job;
         }
     }
     return NULL;
@@ -176,8 +179,10 @@ shell_job_t *shell_job_find_by_task(shell_t *sh, const iot_task_t *task)
         return NULL;
     }
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (sh->jobs[i].used && sh->jobs[i].task == task) {
-            return &sh->jobs[i];
+        shell_job_t *job = sh->jobs[i];
+
+        if (job != NULL && job->used && job->task == task) {
+            return job;
         }
     }
     return NULL;
@@ -198,7 +203,11 @@ static void shell_job_reap(shell_job_t *job)
 
 static void shell_job_free(shell_job_t *job)
 {
+    if (job == NULL) {
+        return;
+    }
     if (!job->used) {
+        iot_mem_free(job);
         return;
     }
     if (job->task != NULL) {
@@ -216,7 +225,16 @@ static void shell_job_free(shell_job_t *job)
         iot_mem_free(job->text);
         job->text = NULL;
     }
-    memset(job, 0, sizeof(*job));
+    if (job->wake != NULL) {
+        (void)iot_sem_destroy(job->wake);
+        job->wake = NULL;
+    }
+    if (job->done != NULL) {
+        (void)iot_sem_destroy(job->done);
+        job->done = NULL;
+    }
+    shell_vars_release(&job->vars);
+    iot_mem_free(job);
 }
 
 void shell_jobs_clear(shell_t *sh)
@@ -228,7 +246,10 @@ void shell_jobs_clear(shell_t *sh)
     }
     if (sh->jobs != NULL) {
         for (i = 0U; i < SHELL_JOB_MAX; i++) {
-            shell_job_free(&sh->jobs[i]);
+            if (sh->jobs[i] != NULL) {
+                shell_job_free(sh->jobs[i]);
+                sh->jobs[i] = NULL;
+            }
         }
     }
     sh->job_seq = 0U;
@@ -238,16 +259,30 @@ void shell_jobs_clear(shell_t *sh)
 /* 按槽位取 JOB（空槽返回 NULL），供 jobs/loads 遍历 */
 shell_job_t *shell_job_slot(shell_t *sh, uint16_t index)
 {
-    if (sh == NULL || sh->jobs == NULL || index >= SHELL_JOB_MAX ||
-        !sh->jobs[index].used) {
+    if (sh == NULL || sh->jobs == NULL || index >= SHELL_JOB_MAX) {
         return NULL;
     }
-    return &sh->jobs[index];
+    return sh->jobs[index];
 }
 
 /* 卸载单个 JOB（调用方已校验状态） */
 void shell_job_unload(shell_job_t *job)
 {
+    shell_t *sh;
+    uint16_t i;
+
+    if (job == NULL) {
+        return;
+    }
+    sh = job->owner;
+    if (sh != NULL && sh->jobs != NULL) {
+        for (i = 0U; i < SHELL_JOB_MAX; i++) {
+            if (sh->jobs[i] == job) {
+                sh->jobs[i] = NULL;
+                break;
+            }
+        }
+    }
     shell_job_free(job);
 }
 
@@ -294,22 +329,30 @@ shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
         return NULL;
     }
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (!sh->jobs[i].used) {
-            job = &sh->jobs[i];
+        if (sh->jobs[i] == NULL) {
             break;
         }
     }
-    if (job == NULL) {
+    if (i >= SHELL_JOB_MAX) {
         err->code = SHELL_ERR_RESOURCE;
         snprintf(err->msg, sizeof(err->msg), "too many jobs");
         return NULL;
     }
 
-    memset(job, 0, sizeof(*job));
+    job = (shell_job_t *)iot_mem_calloc(1U, sizeof(*job));
+    if (job == NULL) {
+        err->code = SHELL_ERR_RESOURCE;
+        snprintf(err->msg, sizeof(err->msg), "out of memory");
+        return NULL;
+    }
+    sh->jobs[i] = job;
+
     job->text = (char *)iot_mem_malloc(len + 1U);
     if (job->text == NULL) {
         err->code = SHELL_ERR_RESOURCE;
         snprintf(err->msg, sizeof(err->msg), "out of memory");
+        iot_mem_free(job);
+        sh->jobs[i] = NULL;
         return NULL;
     }
     memcpy(job->text, text, len);
@@ -318,7 +361,8 @@ shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
 
     if (shell_script_parse(&job->script, job->text, err) != 0) {
         iot_mem_free(job->text);
-        memset(job, 0, sizeof(*job));
+        iot_mem_free(job);
+        sh->jobs[i] = NULL;
         return NULL;
     }
 
@@ -616,7 +660,9 @@ static bool shell_vm_wait_ms(shell_job_t *job, uint32_t ms)
         if (job->stop_flag) {
             return false;
         }
-        (void)iot_sem_take(&job->wake, slice);
+        if (job->wake != NULL) {
+            (void)iot_sem_take(job->wake, slice);
+        }
         if (job->stop_flag) {
             return false;
         }
@@ -942,11 +988,11 @@ int shell_vm_run(shell_job_t *job, bool verbose)
     return rc;
 }
 
-/* 同步执行一段脚本（不创建任务） */
+/* 同步执行一段脚本（不创建任务；JOB 对象从堆分配，避免占用任务栈） */
 int shell_job_run_sync(shell_t *sh, const char *text, const char *name,
                        bool verbose)
 {
-    shell_job_t job;
+    shell_job_t *job;
     shell_err_t err;
     int rc;
 
@@ -954,23 +1000,32 @@ int shell_job_run_sync(shell_t *sh, const char *text, const char *name,
         return -SHELL_ERR_PARAM;
     }
 
-    memset(&job, 0, sizeof(job));
-    shell_vars_init(&job.vars);
-    job.used = true;
-    job.owner = sh;
-    job.state = JOB_RUNNING;
-    (void)snprintf(job.name, sizeof(job.name), "%s",
+    job = (shell_job_t *)iot_mem_calloc(1U, sizeof(*job));
+    if (job == NULL) {
+        return -SHELL_ERR_RESOURCE;
+    }
+    shell_vars_init(&job->vars);
+    job->used = true;
+    job->owner = sh;
+    job->state = JOB_RUNNING;
+    (void)snprintf(job->name, sizeof(job->name), "%s",
                    (name != NULL) ? name : "@interactive");
 
-    if (shell_script_parse(&job.script, text, &err) != 0) {
+    if (shell_script_parse(&job->script, text, &err) != 0) {
         shell_report_error(sh, &err, NULL);
-        shell_script_free(&job.script);
+        shell_script_free(&job->script);
+        iot_mem_free(job);
         return -SHELL_ERR_PARSE;
     }
 
-    rc = shell_vm_run(&job, verbose);
-    shell_script_free(&job.script);
-    return (rc == 0) ? 0 : -((job.err_code != 0) ? job.err_code : SHELL_ERR_PROGRAM);
+    rc = shell_vm_run(job, verbose);
+    shell_script_free(&job->script);
+    rc = (rc == 0) ? 0
+                   : -((job->err_code != 0) ? job->err_code
+                                            : SHELL_ERR_PROGRAM);
+    shell_vars_release(&job->vars);
+    iot_mem_free(job);
+    return rc;
 }
 
 int shell_job_run_sync_script(shell_job_t *job, bool verbose)
@@ -989,7 +1044,9 @@ static void shell_job_task(void *arg)
     shell_job_t *job = (shell_job_t *)arg;
 
     (void)shell_vm_run(job, true);
-    (void)iot_sem_give(&job->done);
+    if (job->done != NULL) {
+        (void)iot_sem_give(job->done);
+    }
     iot_task_exit();
 }
 
@@ -1015,8 +1072,19 @@ int shell_job_start(shell_job_t *job)
     job->err_code = 0;
     job->err_line = 0U;
     shell_vars_init(&job->vars);
-    (void)iot_sem_init(&job->wake, 0U);
-    (void)iot_sem_init(&job->done, 0U);
+
+    /* 同步信号量按需创建，未启动过的 JOB 不占用这部分内存 */
+    if (job->wake == NULL) {
+        job->wake = iot_sem_create(0U);
+    }
+    if (job->done == NULL) {
+        job->done = iot_sem_create(0U);
+    }
+    if (job->wake == NULL || job->done == NULL) {
+        return -1;
+    }
+    (void)iot_sem_init(job->wake, 0U);
+    (void)iot_sem_init(job->done, 0U);
 
     job->task = iot_task_create_dynamic(job->name, job->prio, shell_job_task,
                                         job, job->stack);
@@ -1038,13 +1106,13 @@ int shell_job_stop(shell_job_t *job, bool force)
     }
     job->stop_flag = true;
     job->state = JOB_STOPPING;
-    if (job->task != NULL) {
-        (void)iot_sem_give(&job->wake);
+    if (job->task != NULL && job->wake != NULL) {
+        (void)iot_sem_give(job->wake);
     }
-    if (force && job->task != NULL) {
+    if (force && job->task != NULL && job->wake != NULL) {
         /* 强制：置位后由任务在指令边界退出；不执行钩子由 VM 内部的
          * stop_flag 分支决定，这里保持同一路径以保证设备收尾执行 */
-        (void)iot_sem_give(&job->wake);
+        (void)iot_sem_give(job->wake);
     }
     return 0;
 }
@@ -1056,10 +1124,10 @@ int shell_job_wait(shell_job_t *job, uint32_t timeout_ms)
     if (job == NULL) {
         return -1;
     }
-    if (job->task == NULL) {
+    if (job->task == NULL || job->done == NULL) {
         return 0;       /* 已结束（同步执行） */
     }
-    if (iot_sem_take(&job->done, wait) != IOT_OK) {
+    if (iot_sem_take(job->done, wait) != IOT_OK) {
         return -1;
     }
     return 0;

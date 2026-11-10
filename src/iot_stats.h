@@ -31,6 +31,13 @@ int iot_stats_get(iot_stats_t *out);
 /* 读取任务级统计 */
 int iot_task_get_stats(const iot_task_t *task, iot_task_stats_t *out);
 
+/*
+ * 任务 CPU 占用率，单位千分比（0..1000，1000 = 100.0%）。
+ * 统计窗口为内核启动至今的 tick 总数（含空闲任务），各任务占比之和
+ * 约为 100%。未启用统计、task 为 NULL 或 tick 计数为 0 时返回 0。
+ */
+uint32_t iot_task_cpu_permille(const iot_task_t *task);
+
 /* 重置内核计数与所有任务的运行统计 */
 void iot_stats_reset(void);
 

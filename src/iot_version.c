@@ -64,7 +64,6 @@
 
 #define IOT_VERSION_FEATURES                                        \
     ((IOT_USE_TRACE            ? IOT_FEATURE_TRACE          : 0UL) | \
-     (IOT_TRACE_BACKEND_BARECTF ? IOT_FEATURE_TRACE_CTF     : 0UL) | \
      (IOT_ASSERT_ENABLE        ? IOT_FEATURE_ASSERT         : 0UL) | \
      (IOT_CRASH_ENABLE         ? IOT_FEATURE_CRASH          : 0UL) | \
      (IOT_USE_STACK_CHECK      ? IOT_FEATURE_STACK_CHECK    : 0UL) | \
@@ -130,7 +129,6 @@ static void iot_version_features_text(uint32_t features, char *buf, size_t cap)
         const char *name;
     } table[] = {
         { IOT_FEATURE_TRACE,        "trace" },
-        { IOT_FEATURE_TRACE_CTF,    "trace_ctf" },
         { IOT_FEATURE_ASSERT,       "assert" },
         { IOT_FEATURE_CRASH,        "crash" },
         { IOT_FEATURE_STACK_CHECK,  "stack_check" },

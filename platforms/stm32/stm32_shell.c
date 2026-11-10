@@ -27,8 +27,23 @@ extern int hal_uart_receive(hal_uart_t *handle, uint8_t *data,
     __attribute__((weak));
 extern void hal_system_reset(void) __attribute__((weak));
 
-/* 板级约定：UART1 用非空句柄 1 表示 */
-#define STM32_SHELL_UART ((hal_uart_t *)(void *)1)
+/* 板级约定：未提供 board_shell_uart() 时用非空句柄 1 表示 UART1 */
+#define STM32_SHELL_UART_DEFAULT ((hal_uart_t *)(void *)1)
+
+/* 板级可选钩子：返回实际使用的 UART 句柄（Cube HAL 下必须是有效句柄） */
+extern hal_uart_t *board_shell_uart(void) __attribute__((weak));
+
+static hal_uart_t *stm32_shell_uart(void)
+{
+    if (board_shell_uart != NULL) {
+        hal_uart_t *handle = board_shell_uart();
+
+        if (handle != NULL) {
+            return handle;
+        }
+    }
+    return STM32_SHELL_UART_DEFAULT;
+}
 
 static void *s_rx_task;
 
@@ -41,7 +56,7 @@ static int stm32_shell_write(const char *data, uint32_t len, void *user)
     if (hal_uart_transmit == NULL) {
         return -1;
     }
-    return (hal_uart_transmit(STM32_SHELL_UART, (const uint8_t *)data,
+    return (hal_uart_transmit(stm32_shell_uart(), (const uint8_t *)data,
                               (size_t)len, 100U) == HAL_OK) ? (int)len : -1;
 }
 
@@ -53,7 +68,7 @@ static void stm32_shell_rx_task(void *arg)
     (void)arg;
     for (;;) {
         if (hal_uart_receive != NULL &&
-            hal_uart_receive(STM32_SHELL_UART, &ch, 1U, 20U) == HAL_OK) {
+            hal_uart_receive(stm32_shell_uart(), &ch, 1U, 20U) == HAL_OK) {
             (void)shell_feed((const char *)&ch, 1U);
         } else {
             iot_sleep_ms(5U);

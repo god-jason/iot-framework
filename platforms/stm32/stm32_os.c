@@ -10,15 +10,12 @@
 
 #include "hal.h"
 
-#if defined(IOT_STM32_H7)
-#include "stm32h7xx_hal.h"
-#elif defined(IOT_STM32_F4)
-#include "stm32f4xx_hal.h"
-#elif defined(IOT_STM32_F1)
-#include "stm32f1xx_hal.h"
-#else
+#if !defined(IOT_STM32_F1) && !defined(IOT_STM32_F4) && !defined(IOT_STM32_H7)
 #error "请定义 IOT_STM32_F1 / IOT_STM32_F4 / IOT_STM32_H7 之一"
 #endif
+
+/* Cube 头文件与框架的 HAL_OK 等常量同名，统一由该包装头处理 */
+#include "stm32_cube.h"
 
 static bool s_dwt_ready = false;
 

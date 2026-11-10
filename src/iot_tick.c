@@ -125,9 +125,9 @@ void iot_tick_increment(uint32_t delta)
         list_add_tail(&expired, &task->delayed_node);
     }
 
-    /* 2) 运行统计：当前任务累计运行 tick */
+    /* 2) 运行统计：当前任务累计运行 tick（含空闲任务，占比之和约 100%） */
 #if IOT_USE_STATS
-    if (iot_current_task != NULL && iot_current_task != iot_idle_task &&
+    if (iot_current_task != NULL &&
         iot_current_task->state == IOT_TASK_RUNNING) {
         iot_current_task->run_ticks += delta;
     }

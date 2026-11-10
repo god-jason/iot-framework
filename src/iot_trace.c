@@ -37,7 +37,6 @@ static volatile uint32_t s_dropped;
 static volatile int      s_in_emit;
 static volatile int      s_frozen;
 static iot_trace_clock_fn s_clock;
-static uint8_t            s_last_level = 0xFFU;
 
 /* ------------------------------ 事件名表 ------------------------------ */
 
@@ -168,21 +167,6 @@ void iot_trace_init(void)
     s_in_emit = 0;
     s_frozen = 0;
     s_clock = NULL;
-    s_last_level = 0xFFU;
-
-    iot_trace_barectf_init();
-    iot_trace_barectf_enable(g_iot_trace_level < IOT_TRACE_LEVEL_OFF);
-    s_last_level = g_iot_trace_level;
-}
-
-static void iot_trace_sync_backend(void)
-{
-    uint8_t level = g_iot_trace_level;
-
-    if (level != s_last_level) {
-        s_last_level = level;
-        iot_trace_barectf_enable(level < IOT_TRACE_LEVEL_OFF);
-    }
 }
 
 void iot_trace_emit(uint16_t evt, uint32_t v1, uint32_t v2)
@@ -200,8 +184,6 @@ void iot_trace_emit(uint16_t evt, uint32_t v1, uint32_t v2)
         return;
     }
 
-    iot_trace_sync_backend();
-
     if (iot_port_in_isr()) {
         evt |= IOT_TRACE_FLAG_ISR;
     }
@@ -211,45 +193,28 @@ void iot_trace_emit(uint16_t evt, uint32_t v1, uint32_t v2)
     (void)__sync_fetch_and_add(&s_count, 1U);
     iot_trace_emit_line(evt, ts, task, v1, v2);
 
-#if IOT_TRACE_BACKEND_BARECTF
-    iot_trace_barectf_emit(evt, ts, task, v1, v2);
-#endif
-
     __sync_lock_release(&s_in_emit);
 }
 
 void iot_trace_enable(void)
 {
     iot_trace_set_level(IOT_TRACE_LEVEL_DEBUG);
-    iot_trace_sync_backend();
 }
 
 void iot_trace_disable(void)
 {
     iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
-    iot_trace_sync_backend();
 }
 
 void iot_trace_reset(void)
 {
     s_count = 0U;
     s_dropped = 0U;
-    s_last_level = 0xFFU;
 }
 
 void iot_trace_set_clock(iot_trace_clock_fn fn)
 {
     s_clock = fn;
-}
-
-void iot_trace_set_sink(iot_trace_sink_fn fn, void *user)
-{
-    iot_trace_barectf_set_sink(fn, user);
-}
-
-int iot_trace_flush(void)
-{
-    return iot_trace_barectf_flush();
 }
 
 /* ------------------------------ 名称映射 ------------------------------ */
@@ -304,11 +269,6 @@ void iot_trace_enable(void) {}
 void iot_trace_disable(void) {}
 void iot_trace_reset(void) {}
 void iot_trace_set_clock(iot_trace_clock_fn fn) { (void)fn; }
-void iot_trace_set_sink(iot_trace_sink_fn fn, void *user)
-{
-    (void)fn; (void)user;
-}
-int  iot_trace_flush(void) { return IOT_NOT_READY; }
 void iot_trace_name(const void *obj, uint8_t type, const char *name)
 {
     (void)obj; (void)type; (void)name;

@@ -137,59 +137,7 @@ void ut_trace(void)
     TF_CHECK(strstr(out, " tick ") != NULL);
     (void)remove(DEFAULT_TRACE_FILE);
 
-    /* 10. 启用 CTF 后端时同时输出 CTF 文件（二进制流 + metadata 侧车文件） */
-#if IOT_TRACE_BACKEND_BARECTF
-    {
-        const char *ctf = "iot_trace_test.ctf";
-        char meta_path[64];
-        uint8_t head[4];
-        FILE *fp;
-        long size;
-        char md[8192];
-        size_t mdn;
-
-        iot_trace_set_level(IOT_TRACE_LEVEL_DEBUG);
-        iot_trace_start_ctf_file(ctf);
-        IOT_TRACE_CORE(IOT_EVT_SWITCH, 0x11U, 0x22U);
-        IOT_TRACE_OBJ(IOT_EVT_SEM_GIVE, 0x33U, 0x44U);
-        IOT_TRACE_DBG(IOT_EVT_TICK, 1U, 1U);
-        iot_trace_stop_ctf_file();
-
-        /* 二进制流文件：CTF magic 0xC1 1F FC C1 (LE)，且非空 */
-        fp = fopen(ctf, "rb");
-        TF_CHECK(fp != NULL);
-        if (fp != NULL) {
-            size = 0; (void)fseek(fp, 0, SEEK_END); size = ftell(fp);
-            (void)fseek(fp, 0, SEEK_SET);
-            TF_CHECK(size > 4L);
-            TF_CHECK_INT((int)fread(head, 1U, sizeof(head), fp), 4);
-            (void)fclose(fp);
-        }
-        TF_CHECK_INT(head[0], 0xC1U);
-        TF_CHECK_INT(head[1], 0x1FU);
-        TF_CHECK_INT(head[2], 0xFCU);
-        TF_CHECK_INT(head[3], 0xC1U);
-
-        /* metadata 侧车文件存在且含语义事件类型 */
-        (void)snprintf(meta_path, sizeof(meta_path), "%s.metadata", ctf);
-        fp = fopen(meta_path, "rb");
-        TF_CHECK(fp != NULL);
-        mdn = 0U;
-        if (fp != NULL) {
-            mdn = fread(md, 1U, sizeof(md) - 1U, fp);
-            (void)fclose(fp);
-        }
-        TF_CHECK(mdn > 0U);
-        md[mdn] = '\0';
-        TF_CHECK(strstr(md, "sched_switch") != NULL);
-
-        (void)remove(ctf);
-        (void)remove(meta_path);
-        iot_trace_set_level(IOT_TRACE_LEVEL_OFF);
-    }
-#endif
-
-    /* 11. ISR 标记编码与事件名表 */
+    /* 10. ISR 标记编码与事件名表 */
     TF_CHECK(IOT_TRACE_IN_ISR(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR));
     TF_CHECK(!IOT_TRACE_IN_ISR(IOT_EVT_SWITCH));
     TF_CHECK_INT(IOT_TRACE_SEQ(IOT_EVT_SWITCH | IOT_TRACE_FLAG_ISR), 0);
