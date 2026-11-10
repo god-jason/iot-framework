@@ -100,6 +100,7 @@ void ut_shell(void);
 void ut_bootloader(void);
 
 /* ---------------- 内核 ---------------- */
+void ut_version(void);
 void ut_crash(void);
 void ut_trace(void);
 void ut_iot(void);
@@ -181,6 +182,7 @@ int main(void)
     ut_bootloader();
 
     printf("\n--- 内核 ---\n");
+    ut_version();
     ut_crash();
     ut_iot();
     ut_trace();

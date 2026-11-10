@@ -2,10 +2,13 @@
 #define SHELL_H
 
 /*
- * shell.h - IoT Shell V1.1 公共接口
+ * shell.h - IoT Shell V1.1 公共接口（多实例）
  *
- * 形态：运行在 RTOS 之上的交互式命令行，输入来自注入的字节流，
- * 输出经 shell_config_t.write 后端（串口 / RTT / 测试捕获）。
+ * 形态：运行在 RTOS 之上的交互式命令行。每个 shell_t 是独立实例，
+ * 拥有自己的变量表、JOB 表、行编辑 / 历史 / 粘贴缓冲和输出后端：
+ *   - 默认实例：由 shell_setup() 创建，平台层绑定 UART1 或 stdin/stdout；
+ *   - 虚拟实例：shell_instance_create() 创建，用于机器人任务、文件/网络
+ *     会话或嵌套执行，输出可接到任意 write 回调。
  *
  * 能力：
  *   - SHELL_CTX：内建命令（help/ver/echo/print/set/unset/wait/ps/kill/
@@ -13,8 +16,8 @@
  *   - VM_CTX：脚本语句（SET/PRINT/IF/FOR/WHILE/LOOP/BREAK/CONTINUE/
  *     WAIT TIME/START JOB/STOP JOB/ON ERROR/ON STOP/ENDJOB/LABEL/GOTO/CALL/RETURN/
  *     SHELL PRINT|LOG|STATE|PS）
- *   - 每个 JOB 由独立 RTOS 任务承载；shell_exec_script() 提供不建任务的同步执行，
- *     供单元测试与调试使用。
+ *   - 每个 JOB 由独立 RTOS 任务承载；shell_exec_script() 提供不建任务的同步执行。
+ *   - `run` 命令与 shell_exec_isolated() 会在新实例中解释执行脚本。
  *
  * 未实现（按 V1.1 §8 范围边界）：设备层（STEP/PWM/GPIO…）、文件系统、
  * 扩展命令段自动注册（用 shell_register_cmd() 显式注册）、调试模式。
@@ -49,7 +52,7 @@ enum {
     SHELL_ERR_READONLY   = 1013,   /* 变量只读 */
     SHELL_ERR_BUSY       = 1014,
     SHELL_ERR_NOT_CLAIM  = 1015,
-    SHELL_ERR_DANGER     = 1016,   /* 需要 confirm */
+    SHELL_ERR_DANGER     = 1016,   /* 危险操作被拒绝（如删 shell/idle） */
     SHELL_ERR_RESOURCE   = 1017,   /* 资源耗尽 */
     SHELL_ERR_NAME       = 1018,   /* 名称冲突 / 保留名 */
     SHELL_ERR_STATE      = 1019,   /* 当前状态不允许 */
@@ -60,16 +63,21 @@ enum {
 #define SHELL_CMD_OK        0
 #define SHELL_CMD_ERR(code) (-(code))
 
+/* ============================== 实例 ============================== */
+
+/* 不透明实例类型（定义在 shell_internal.h） */
+typedef struct shell shell_t;
+
 /* ============================== 扩展命令 ============================== */
 
 typedef enum {
     CMD_NONE      = 0,
-    CMD_DANGER    = (1U << 0),   /* 执行前要求 confirm */
     CMD_HIDDEN    = (1U << 1),   /* help 不列出 */
     CMD_REENTRANT = (1U << 2)    /* 允许被 SHELL <cmd> 透传 */
 } shell_cmd_flags_t;
 
-typedef int (*shell_cmd_fn)(int argc, char **argv);
+/* 命令处理函数：sh 为调用该命令的实例（输出 / 变量都绑定到它） */
+typedef int (*shell_cmd_fn)(shell_t *sh, int argc, char **argv);
 
 typedef struct shell_cmd {
     const char *name;
@@ -80,53 +88,71 @@ typedef struct shell_cmd {
     uint32_t    flags;
 } shell_cmd_t;
 
-/* 注册扩展命令（显式调用；重复名/与基础命令同名会被拒绝） */
+/* 注册扩展命令（全局命令表，所有实例共享；重复名/与基础命令同名会被拒绝） */
 int shell_register_cmd(const shell_cmd_t *cmd);
 
-/* ============================== 生命周期 ============================== */
+/* ============================== 配置 ============================== */
 
 typedef struct {
     const char *version;                              /* 版本字符串 */
-    int (*write)(const char *data, uint32_t len, void *user);
+    int (*write)(const char *data, uint32_t len, void *user);  /* 可空：丢弃输出 */
     void *user;
     void (*reset)(void);                              /* reboot 钩子，可空 */
 } shell_config_t;
 
+/* ============================== 实例生命周期 ============================== */
+
 /*
- * 初始化 Shell：清空变量表 / 命令表 / JOB 表，保存输出后端。
- * 返回 0 成功；-1 参数非法。
- * 命名说明：console 组件的旧 shell 已占用 shell_init/shell_input，
- * 本模块使用 shell_setup/shell_feed 作为入口。
+ * 创建虚拟实例：从 iot_mem 堆分配行缓冲 / 历史 / 粘贴缓冲 / JOB 表 /
+ * 变量表（大小由 shell_config.h 决定）。write 为 NULL 时丢弃输出。
+ * 返回实例指针；参数非法或内存不足返回 NULL。
+ */
+shell_t *shell_instance_create(const shell_config_t *cfg);
+
+/* 销毁实例并释放全部堆内存（实例内的任务应先停止） */
+void shell_instance_destroy(shell_t *sh);
+
+/* 复位实例状态（清空变量 / JOB / 行与粘贴缓冲），保留配置 */
+void shell_instance_reset(shell_t *sh);
+
+/* ============================== 实例输入 / 执行 ============================== */
+
+int shell_instance_feed(shell_t *sh, const char *data, uint32_t len);
+uint32_t shell_instance_pending(shell_t *sh);
+int shell_instance_exec_line(shell_t *sh, const char *line);
+int shell_instance_exec_script(shell_t *sh, const char *text);
+
+/*
+ * 为实例创建命令输入任务（从 shell_instance_feed 缓冲读取并交互）。
+ * 通常只给默认/串口实例调用；虚拟实例一般同步执行，不需要输入任务。
+ * 任务名为 "shell"，重复启动同一实例会复用已有任务。
+ */
+int shell_instance_start(shell_t *sh);
+
+/*
+ * 在临时虚拟实例中执行脚本：新实例拥有独立变量与 JOB 表，输出转发到
+ * parent 的 write 后端，执行完自动销毁。`run` 命令即此路径。
+ * 返回 0 / 负错误码。
+ */
+int shell_exec_isolated(shell_t *parent, const char *text);
+
+/* ============================== 默认实例 ============================== */
+
+/*
+ * 初始化默认实例（平台绑定使用）：首个调用创建，之后复用并复位。
+ * 返回 0 成功；-1 参数非法或内存不足。
+ * 未初始化时 shell_exec_line() 返回 -SHELL_ERR_STATE，shell_feed() 返回 0。
  */
 int shell_setup(const shell_config_t *cfg);
 
-/* 复位 Shell 状态（测试用） */
+/* 默认实例指针（未初始化返回 NULL） */
+shell_t *shell_default(void);
+
 void shell_reset(void);
-
-/* ============================== 输入 ============================== */
-
-/*
- * 注入输入字节（可在任务或 ISR 中调用，内部环形缓冲）。
- * 返回写入字节数；缓冲满丢弃多余字节并返回实际写入数。
- */
 int shell_feed(const char *data, uint32_t len);
-
-/* 尚未被 Shell 任务取走的输入字节数（输入泵据此做流控） */
 uint32_t shell_pending(void);
-
-/*
- * 同步执行一行（SHELL_CTX）：命令优先，其次是脚本语句（创建匿名 JOB
- * 并同步执行）。返回 0 成功，负值为错误码（-1001 …）。
- */
 int shell_exec_line(const char *line);
-
-/*
- * 同步执行一段脚本（不创建 RTOS 任务，便于测试/调试）。
- * 输出带 [JOB @interactive] 前缀。返回 0 / 负错误码。
- */
 int shell_exec_script(const char *text);
-
-/* 创建 Shell 任务（从 shell_feed() 缓冲读取并交互）；返回 0 / -1 */
 int shell_start(void);
 
 /*
@@ -138,12 +164,12 @@ int shell_start(void);
  */
 int shell_platform_start(const char *version);
 
-/* ============================== 输出 ============================== */
+/* ============================== 输出（实例级） ============================== */
 
-void shell_printf(const char *fmt, ...);
-void shell_puts(const char *s);
-void shell_putchar(char c);
-void shell_printf_job(const char *job, const char *fmt, ...);
+void shell_printf(shell_t *sh, const char *fmt, ...);
+void shell_puts(shell_t *sh, const char *s);
+void shell_putchar(shell_t *sh, char c);
+void shell_printf_job(shell_t *sh, const char *job, const char *fmt, ...);
 
 #ifdef __cplusplus
 }

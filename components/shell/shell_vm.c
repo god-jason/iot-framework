@@ -13,33 +13,35 @@
 #include <string.h>
 #include <stdio.h>
 
-#define SHELL_TAG "shell"
-
-shell_vars_t g_shell_vars;
-
-static shell_job_t s_jobs[SHELL_JOB_MAX];
-static uint16_t    s_job_seq;
-static iot_mutex_t s_out_mutex;      /* 输出原子性 */
+/* 全局输出互斥：所有实例共享，保证同一后端上的输出不交错 */
+static iot_mutex_t *s_out_mutex;
 
 /* ------------------------------ 输出互斥 ------------------------------ */
 
 int shell_out_init(void)
 {
-    return iot_mutex_init(&s_out_mutex);
+    if (s_out_mutex == NULL) {
+        s_out_mutex = (iot_mutex_t *)iot_mem_calloc(1U, sizeof(iot_mutex_t));
+        if (s_out_mutex == NULL) {
+            return -1;
+        }
+        return iot_mutex_init(s_out_mutex);
+    }
+    return 0;
 }
 
 void shell_out_lock(void)
 {
     /* 调度器未启动（初始化 / 同步测试）时不存在并发，跳过互斥 */
-    if (iot_current_task != NULL) {
-        (void)iot_mutex_lock(&s_out_mutex, IOT_TIMEOUT_FOREVER);
+    if (iot_current_task != NULL && s_out_mutex != NULL) {
+        (void)iot_mutex_lock(s_out_mutex, IOT_TIMEOUT_FOREVER);
     }
 }
 
 void shell_out_unlock(void)
 {
-    if (iot_current_task != NULL) {
-        (void)iot_mutex_unlock(&s_out_mutex);
+    if (iot_current_task != NULL && s_out_mutex != NULL) {
+        (void)iot_mutex_unlock(s_out_mutex);
     }
 }
 
@@ -151,28 +153,31 @@ static bool shell_name_eq(const char *a, const char *b, uint16_t len)
     return true;
 }
 
-shell_job_t *shell_job_find(const char *name, uint16_t len)
+shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len)
 {
     uint16_t i;
 
-    if (name == NULL || len == 0U) {
+    if (sh == NULL || sh->jobs == NULL || name == NULL || len == 0U) {
         return NULL;
     }
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (s_jobs[i].used && shell_name_eq(s_jobs[i].name, name, len)) {
-            return &s_jobs[i];
+        if (sh->jobs[i].used && shell_name_eq(sh->jobs[i].name, name, len)) {
+            return &sh->jobs[i];
         }
     }
     return NULL;
 }
 
-shell_job_t *shell_job_find_by_task(const iot_task_t *task)
+shell_job_t *shell_job_find_by_task(shell_t *sh, const iot_task_t *task)
 {
     uint16_t i;
 
+    if (sh == NULL || sh->jobs == NULL) {
+        return NULL;
+    }
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (s_jobs[i].used && s_jobs[i].task == task) {
-            return &s_jobs[i];
+        if (sh->jobs[i].used && sh->jobs[i].task == task) {
+            return &sh->jobs[i];
         }
     }
     return NULL;
@@ -214,24 +219,30 @@ static void shell_job_free(shell_job_t *job)
     memset(job, 0, sizeof(*job));
 }
 
-void shell_jobs_clear(void)
+void shell_jobs_clear(shell_t *sh)
 {
     uint16_t i;
 
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_free(&s_jobs[i]);
+    if (sh == NULL) {
+        return;
     }
-    s_job_seq = 0U;
-    shell_vars_clear(&g_shell_vars);
+    if (sh->jobs != NULL) {
+        for (i = 0U; i < SHELL_JOB_MAX; i++) {
+            shell_job_free(&sh->jobs[i]);
+        }
+    }
+    sh->job_seq = 0U;
+    shell_vars_clear(&sh->vars);
 }
 
 /* 按槽位取 JOB（空槽返回 NULL），供 jobs/loads 遍历 */
-shell_job_t *shell_job_slot(uint16_t index)
+shell_job_t *shell_job_slot(shell_t *sh, uint16_t index)
 {
-    if (index >= SHELL_JOB_MAX || !s_jobs[index].used) {
+    if (sh == NULL || sh->jobs == NULL || index >= SHELL_JOB_MAX ||
+        !sh->jobs[index].used) {
         return NULL;
     }
-    return &s_jobs[index];
+    return &sh->jobs[index];
 }
 
 /* 卸载单个 JOB（调用方已校验状态） */
@@ -240,7 +251,7 @@ void shell_job_unload(shell_job_t *job)
     shell_job_free(job);
 }
 
-shell_job_t *shell_job_load(const char *text, uint32_t len,
+shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
                             const char *name, uint8_t prio, uint32_t stack,
                             shell_err_t *err)
 {
@@ -254,7 +265,7 @@ shell_job_t *shell_job_load(const char *text, uint32_t len,
     }
     memset(err, 0, sizeof(*err));
 
-    if (text == NULL || len == 0U || name == NULL) {
+    if (sh == NULL || text == NULL || len == 0U || name == NULL) {
         err->code = SHELL_ERR_PARAM;
         snprintf(err->msg, sizeof(err->msg), "invalid script");
         return NULL;
@@ -271,15 +282,20 @@ shell_job_t *shell_job_load(const char *text, uint32_t len,
         snprintf(err->msg, sizeof(err->msg), "reserved name");
         return NULL;
     }
-    if (shell_job_find(name, nlen) != NULL) {
+    if (shell_job_find(sh, name, nlen) != NULL) {
         err->code = SHELL_ERR_NAME;
         snprintf(err->msg, sizeof(err->msg), "job %.*s already exists",
                  (int)nlen, name);
         return NULL;
     }
+    if (sh->jobs == NULL) {
+        err->code = SHELL_ERR_RESOURCE;
+        snprintf(err->msg, sizeof(err->msg), "shell not initialized");
+        return NULL;
+    }
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (!s_jobs[i].used) {
-            job = &s_jobs[i];
+        if (!sh->jobs[i].used) {
+            job = &sh->jobs[i];
             break;
         }
     }
@@ -307,7 +323,8 @@ shell_job_t *shell_job_load(const char *text, uint32_t len,
     }
 
     job->used = true;
-    job->job_id = ++s_job_seq;
+    job->owner = sh;
+    job->job_id = ++sh->job_seq;
     for (i = 0U; i < nlen; i++) {
         job->name[i] = (name[i] >= 'a' && name[i] <= 'z')
                        ? (char)(name[i] - 'a' + 'A') : name[i];
@@ -650,7 +667,8 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
             }
             shell_value_format(&val, buf, sizeof(buf), &out_len);
             if (verbose) {
-                shell_printf_job(job->name, "%.*s\n", (int)out_len, buf);
+                shell_printf_job(job->owner, job->name, "%.*s\n",
+                                 (int)out_len, buf);
             }
             break;
         }
@@ -707,7 +725,7 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
                 }
             }
             if (argc > 0) {
-                rc = shell_cmd_dispatch(argc, argv);
+                rc = shell_cmd_dispatch(job->owner, argc, argv);
             }
             break;
         }
@@ -817,7 +835,7 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
             shell_job_t *target;
 
             shell_arg_name(job, ins, &name, &len);
-            target = shell_job_find(name, len);
+            target = shell_job_find(job->owner, name, len);
             if (target == NULL) {
                 err.code = SHELL_ERR_NOT_FOUND;
                 err.line = ins->line;
@@ -872,6 +890,10 @@ int shell_vm_run(shell_job_t *job, bool verbose)
 {
     int rc;
 
+    if (job == NULL || job->owner == NULL) {
+        return -1;
+    }
+
     shell_set_str_var(&job->vars, "JOBNAME", job->name,
                       (uint16_t)strlen(job->name));
     shell_set_int_var(&job->vars, "TID",
@@ -915,27 +937,33 @@ int shell_vm_run(shell_job_t *job, bool verbose)
         err.code = (int)job->err_code;
         err.line = job->err_line;
         snprintf(err.msg, sizeof(err.msg), "%s", job->err_msg);
-        shell_report_error(&err, job->name);
+        shell_report_error(job->owner, &err, job->name);
     }
     return rc;
 }
 
 /* 同步执行一段脚本（不创建任务） */
-int shell_job_run_sync(const char *text, const char *name, bool verbose)
+int shell_job_run_sync(shell_t *sh, const char *text, const char *name,
+                       bool verbose)
 {
     shell_job_t job;
     shell_err_t err;
     int rc;
 
+    if (sh == NULL || text == NULL) {
+        return -SHELL_ERR_PARAM;
+    }
+
     memset(&job, 0, sizeof(job));
     shell_vars_init(&job.vars);
     job.used = true;
+    job.owner = sh;
     job.state = JOB_RUNNING;
     (void)snprintf(job.name, sizeof(job.name), "%s",
                    (name != NULL) ? name : "@interactive");
 
     if (shell_script_parse(&job.script, text, &err) != 0) {
-        shell_report_error(&err, NULL);
+        shell_report_error(sh, &err, NULL);
         shell_script_free(&job.script);
         return -SHELL_ERR_PARSE;
     }

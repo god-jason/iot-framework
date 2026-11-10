@@ -1,8 +1,9 @@
 /*
  * shell_expr.c - 词法分析、变量表与表达式求值
  *
- * 词法：剥离注释（字符串外、token 边界），识别字符串 / 数字（含单位后缀）/
- *      变量 / 运算符 / 标识符；标识符比较统一折叠大小写。
+ * 词法：剥离注释（字符串外、token 边界），识别字符串 / 数值（整数、小数、
+ *      科学计数法，不带单位后缀）/ 变量 / 运算符 / 标识符；
+ *      标识符比较统一折叠大小写。
  * 表达式：递归下降，优先级与 V1.1 §5.3 一致，AND/OR 短路求值。
  */
 
@@ -56,45 +57,6 @@ bool shell_tok_ieq(const shell_tok_t *t, const char *s)
 }
 
 /* ------------------------------ 词法 ------------------------------ */
-
-/* 匹配数字后缀单位；返回消耗的字符数（0 表示没有单位） */
-static uint16_t shell_unit_suffix(const char *p, uint16_t avail, uint8_t *unit)
-{
-    static const struct {
-        const char *name;
-        uint8_t unit;
-    } table[] = {
-        { "MS",   SHELL_UNIT_MS },
-        { "MIN",  SHELL_UNIT_MS },
-        { "S",    SHELL_UNIT_MS },
-        { "RPM",  SHELL_UNIT_RPM },
-        { "KHZ",  SHELL_UNIT_HZ },
-        { "HZ",   SHELL_UNIT_HZ },
-        { "STEPS", SHELL_UNIT_STEPS },
-        { "DEG",  SHELL_UNIT_STEPS },
-        { "MM",   SHELL_UNIT_STEPS }
-    };
-    uint16_t n = 0U;
-    uint32_t i;
-
-    while (n < avail && shell_is_alpha(p[n])) {
-        n++;
-    }
-    if (n > 0U) {
-        for (i = 0U; i < sizeof(table) / sizeof(table[0]); i++) {
-            if (shell_ieq(p, n, table[i].name)) {
-                *unit = table[i].unit;
-                return n;
-            }
-        }
-        return 0U;      /* 未识别：留给调用方按普通标识符处理 */
-    }
-    if (avail > 0U && p[0] == '%') {
-        *unit = SHELL_UNIT_PERCENT;
-        return 1U;
-    }
-    return 0U;
-}
 
 /*
  * 把一行文本切成 token。
@@ -173,7 +135,6 @@ int shell_lex(const char *text, uint16_t len, shell_tok_t *toks, uint16_t max)
         if (shell_is_digit(c) || (c == '.' && i + 1U < len && shell_is_digit(text[i + 1U]))) {
             uint16_t start = i;
             bool is_float = false;
-            uint16_t unit_len;
 
             while (i < len && shell_is_digit(text[i])) {
                 i++;
@@ -259,42 +220,6 @@ int shell_lex(const char *text, uint16_t len, shell_tok_t *toks, uint16_t max)
                 }
             }
 
-            unit_len = shell_unit_suffix(&text[i], (uint16_t)(len - i), &t->unit);
-            if (unit_len > 0U) {
-                uint16_t num_len;
-
-                i = (uint16_t)(i + unit_len);
-                t->len = (uint16_t)(i - start);
-
-                /* 数字与单位的分界：从尾部回退字母与 % */
-                num_len = t->len;
-                while (num_len > 0U) {
-                    char ch = t->p[num_len - 1U];
-
-                    if (shell_is_alpha(ch) || ch == '%') {
-                        num_len--;
-                    } else {
-                        break;
-                    }
-                }
-                if (t->unit == SHELL_UNIT_MS) {
-                    if (shell_ieq(&t->p[num_len],
-                                  (uint16_t)(t->len - num_len), "s")) {
-                        t->ival *= 1000;
-                        t->fval *= 1000.0f;
-                    } else if (shell_ieq(&t->p[num_len],
-                                         (uint16_t)(t->len - num_len), "min")) {
-                        t->ival *= 60000;
-                        t->fval *= 60000.0f;
-                    }
-                } else if (t->unit == SHELL_UNIT_HZ) {
-                    if (shell_ieq(&t->p[num_len],
-                                  (uint16_t)(t->len - num_len), "kHz")) {
-                        t->ival *= 1000;
-                        t->fval *= 1000.0f;
-                    }
-                }
-            }
             n++;
             continue;
         }
@@ -651,7 +576,6 @@ static int shell_expr_primary(shell_expr_ctx_t *c, bool eval, shell_value_t *out
     memset(out, 0, sizeof(*out));
 
     if (t->type == SHELL_TOK_NUMBER) {
-        out->unit = t->unit;
         if (t->is_float) {
             out->type = SHELL_VAL_FLOAT;
             out->f = t->fval;
@@ -790,7 +714,6 @@ static int shell_expr_mul(shell_expr_ctx_t *c, bool eval, shell_value_t *out)
                 return shell_expr_fail(c, SHELL_ERR_DIV_ZERO, "modulo by zero");
             }
             out->i = a % b;
-            out->unit = SHELL_UNIT_NONE;
             continue;
         }
         if (out->type == SHELL_VAL_FLOAT || rhs.type == SHELL_VAL_FLOAT) {
@@ -813,7 +736,6 @@ static int shell_expr_mul(shell_expr_ctx_t *c, bool eval, shell_value_t *out)
             }
             out->type = SHELL_VAL_INT;
         }
-        out->unit = SHELL_UNIT_NONE;
     }
 }
 
@@ -853,7 +775,6 @@ static int shell_expr_add(shell_expr_ctx_t *c, bool eval, shell_value_t *out)
             out->i = (op == '+') ? (out->i + rhs.i) : (out->i - rhs.i);
             out->type = SHELL_VAL_INT;
         }
-        out->unit = SHELL_UNIT_NONE;
     }
 }
 
@@ -900,7 +821,6 @@ static int shell_expr_rel(shell_expr_ctx_t *c, bool eval, shell_value_t *out)
             }
             out->type = SHELL_VAL_BOOL;
             out->b = r;
-            out->unit = SHELL_UNIT_NONE;
         }
     }
 }
@@ -946,7 +866,6 @@ static int shell_expr_eq(shell_expr_ctx_t *c, bool eval, shell_value_t *out)
             out->type = SHELL_VAL_BOOL;
             out->b = eq ? same : !same;
         }
-        out->unit = SHELL_UNIT_NONE;
     }
 }
 

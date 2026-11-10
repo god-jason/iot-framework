@@ -17,11 +17,11 @@
 
 #include <stdio.h>
 
-static int cmd_quit(int argc, char **argv)
+static int cmd_quit(shell_t *sh, int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    shell_printf("bye\n");
+    shell_printf(sh, "bye\n");
     iot_stop();
     return SHELL_OK;
 }

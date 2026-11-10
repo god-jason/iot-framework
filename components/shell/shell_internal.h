@@ -20,18 +20,8 @@ typedef enum {
     SHELL_VAL_STRING
 } shell_val_type_t;
 
-typedef enum {
-    SHELL_UNIT_NONE = 0,
-    SHELL_UNIT_MS,
-    SHELL_UNIT_RPM,
-    SHELL_UNIT_HZ,
-    SHELL_UNIT_PERCENT,
-    SHELL_UNIT_STEPS
-} shell_unit_t;
-
 typedef struct {
     uint8_t type;
-    uint8_t unit;
     int32_t i;
     float f;
     bool b;
@@ -79,7 +69,6 @@ typedef struct {
     int32_t ival;
     float fval;
     bool is_float;
-    uint8_t unit;
 } shell_tok_t;
 
 /* ============================== 脚本 ============================== */
@@ -145,6 +134,8 @@ typedef struct shell_job {
     uint16_t job_id;
     char name[SHELL_VAR_NAME_MAX];
 
+    shell_t *owner;             /* 所属 Shell 实例 */
+
     char *text;                 /* 脚本源（堆） */
     uint32_t text_len;
     shell_script_t script;
@@ -168,6 +159,37 @@ typedef struct shell_job {
     int32_t err_code;
     char err_msg[32];
 } shell_job_t;
+
+/* ============================== Shell 实例 ============================== */
+
+struct shell {
+    shell_config_t cfg;              /* version / write / user / reset */
+
+    shell_vars_t   vars;             /* Shell 上下文变量表 */
+    shell_job_t   *jobs;             /* [SHELL_JOB_MAX]，堆分配 */
+    uint16_t       job_seq;
+
+    char          *rx;               /* [SHELL_RX_MAX] */
+    uint16_t       rx_head;
+    uint16_t       rx_tail;
+    volatile bool  ctrlc;
+
+    char          *line;             /* [SHELL_LINE_MAX] */
+    uint16_t       line_len;
+    bool           last_esc;
+
+    char         (*hist)[SHELL_LINE_MAX];   /* [SHELL_HISTORY_MAX] */
+    uint16_t       hist_count;
+    uint16_t       hist_pos;
+
+    char          *paste;            /* [SHELL_PASTE_MAX] */
+    uint16_t       paste_len;
+
+    int            block_depth;
+    bool           in_paste;
+
+    iot_task_t    *task;             /* 输入任务（通常仅默认实例） */
+};
 
 /* ============================== shell_expr.c ============================== */
 
@@ -197,49 +219,46 @@ void shell_script_free(shell_script_t *script);
 
 /* ============================== shell_vm.c ============================== */
 
-extern shell_vars_t g_shell_vars;        /* Shell 上下文变量表 */
-
-int  shell_out_init(void);
+int  shell_out_init(void);        /* 全局输出互斥（一次分配，多实例共享） */
 void shell_out_lock(void);
 void shell_out_unlock(void);
 
 int  shell_vm_run(shell_job_t *job, bool verbose);
-int  shell_job_run_sync(const char *text, const char *name, bool verbose);
+int  shell_job_run_sync(shell_t *sh, const char *text, const char *name,
+                        bool verbose);
 int  shell_job_run_sync_script(shell_job_t *job, bool verbose);
 
-shell_job_t *shell_job_find(const char *name, uint16_t len);
-shell_job_t *shell_job_find_by_task(const iot_task_t *task);
-shell_job_t *shell_job_slot(uint16_t index);
+shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len);
+shell_job_t *shell_job_find_by_task(shell_t *sh, const iot_task_t *task);
+shell_job_t *shell_job_slot(shell_t *sh, uint16_t index);
 void shell_job_unload(shell_job_t *job);
-shell_job_t *shell_job_load(const char *text, uint32_t len,
+shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
                             const char *name, uint8_t prio, uint32_t stack,
                             shell_err_t *err);
 int  shell_job_start(shell_job_t *job);
 int  shell_job_stop(shell_job_t *job, bool force);
 int  shell_job_wait(shell_job_t *job, uint32_t timeout_ms);
-void shell_jobs_clear(void);
+void shell_jobs_clear(shell_t *sh);
 
 /* ============================== shell_cmd.c ============================== */
 
-int  shell_cmd_dispatch(int argc, char **argv);
+int  shell_cmd_dispatch(shell_t *sh, int argc, char **argv);
 int  shell_cmd_add(const shell_cmd_t *cmd);
 void shell_cmd_clear(void);
 const shell_cmd_t *shell_cmd_find(const char *name);
-void shell_error(int code, const char *fmt, ...);
+void shell_error(shell_t *sh, int code, const char *fmt, ...);
 
 /* ============================== shell.c ============================== */
 
-void shell_out(const char *data, uint32_t len);
-void shell_report_error(const shell_err_t *err, const char *job);
+void shell_out(shell_t *sh, const char *data, uint32_t len);
+void shell_report_error(shell_t *sh, const shell_err_t *err, const char *job);
 bool shell_is_script_keyword(const char *tok);
 bool shell_is_block_start(const char *tok);
 const char *shell_job_state_name(uint8_t state);
 
-/* shell.c 状态 */
-extern const char *g_shell_version;
-extern void (*g_shell_reset)(void);
-int  shell_run_paste_buffer(void);
-bool shell_ctrl_c_pending(void);
-void shell_clear_ctrl_c(void);
+int  shell_run_paste_buffer(shell_t *sh);
+const char *shell_paste_buffer(shell_t *sh, uint32_t *len);
+bool shell_ctrl_c_pending(shell_t *sh);
+void shell_clear_ctrl_c(shell_t *sh);
 
 #endif /* SHELL_INTERNAL_H */

@@ -6,6 +6,7 @@
  */
 
 #include "shell_internal.h"
+#include "iot_version.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -15,20 +16,16 @@
 #define SHELL_TAG "shell"
 #define SHELL_EXT_MAX 8U
 
-/* shell.c 提供的上下文 */
-extern const char *g_shell_version;
+typedef struct {
+    shell_cmd_t items[SHELL_EXT_MAX];
+    uint8_t     count;
+} shell_ext_table_t;
 
-/* shell.c 提供的粘贴缓冲执行入口 */
-int shell_run_paste_buffer(void);
-bool shell_ctrl_c_pending(void);
-void shell_clear_ctrl_c(void);
-
-static shell_cmd_t s_ext[SHELL_EXT_MAX];
-static uint8_t     s_ext_count;
+static shell_ext_table_t *s_ext;    /* 首个扩展命令注册时从堆分配 */
 
 /* ============================== 输出辅助 ============================== */
 
-void shell_error(int code, const char *fmt, ...)
+void shell_error(shell_t *sh, int code, const char *fmt, ...)
 {
     char msg[64];
     va_list ap;
@@ -40,10 +37,10 @@ void shell_error(int code, const char *fmt, ...)
     if (n < 0) {
         msg[0] = '\0';
     }
-    shell_printf("ERR %d: %s\n", code, msg);
+    shell_printf(sh, "ERR %d: %s\n", code, msg);
 }
 
-static void shell_warn(const char *fmt, ...)
+static void shell_warn(shell_t *sh, const char *fmt, ...)
 {
     char msg[64];
     va_list ap;
@@ -51,7 +48,7 @@ static void shell_warn(const char *fmt, ...)
     va_start(ap, fmt);
     (void)vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
-    shell_printf("WARN: %s\n", msg);
+    shell_printf(sh, "WARN: %s\n", msg);
 }
 
 /* 把 argv[from..] 用空格拼成一行（用于表达式 / echo 文本） */
@@ -143,23 +140,36 @@ static const char *shell_task_state_name(iot_task_state_e state)
 
 /* ============================== 基础命令 ============================== */
 
-static int cmd_help(int argc, char **argv);
+static int cmd_help(shell_t *sh, int argc, char **argv);
 
-static int cmd_ver(int argc, char **argv)
+static int cmd_ver(shell_t *sh, int argc, char **argv)
 {
+    char info[512];
+
     (void)argc;
     (void)argv;
-    shell_printf("IoT Shell v1.1\n");
-    shell_printf("Build: %s\n", g_shell_version != NULL ? g_shell_version : "-");
-    shell_printf("RTOS: iot-frame / per-job task model\n");
-    shell_printf("FS: %s | CPU stats: %s\n",
+    shell_printf(sh, "IoT Shell v1.1\n");
+    shell_printf(sh, "Build: %s\n",
+                 sh->cfg.version != NULL ? sh->cfg.version : "-");
+
+    /* 版本 / 编译时间 / 平台 / 编译器 / 内核参数 / 许可证 / 特性 */
+    {
+        int n = iot_version_format(info, sizeof(info));
+
+        if (n > 0) {
+            /* 多行摘要可能超过 shell_printf 的单次格式化缓冲，直接写后端 */
+            shell_out(sh, info, (uint32_t)n);
+        }
+    }
+
+    shell_printf(sh, "FS: %s | CPU stats: %s\n",
                  SHELL_HAS_FS ? "enabled" : "disabled",
                  SHELL_HAS_CPU_STATS ? "enabled" : "disabled");
     return SHELL_OK;
 }
 
 /* echo：逐个 token 做 $VAR 替换，引号内的内容原样输出，不求值 */
-static int cmd_echo(int argc, char **argv)
+static int cmd_echo(shell_t *sh, int argc, char **argv)
 {
     int a;
     bool first = true;
@@ -175,7 +185,7 @@ static int cmd_echo(int argc, char **argv)
             len = (uint16_t)(len - 2U);
         }
         if (!first) {
-            shell_putchar(' ');
+            shell_putchar(sh, ' ');
         }
         first = false;
 
@@ -195,32 +205,32 @@ static int cmd_echo(int argc, char **argv)
                     end++;
                 }
                 if (end == start) {
-                    shell_putchar('$');
+                    shell_putchar(sh, '$');
                     i++;
                     continue;
                 }
-                if (shell_vars_get(&g_shell_vars, &tok[start],
+                if (shell_vars_get(&sh->vars, &tok[start],
                                    (uint16_t)(end - start), &val, &err) == 0) {
                     shell_value_format(&val, buf, sizeof(buf), &out_len);
-                    shell_out(buf, out_len);
+                    shell_out(sh, buf, out_len);
                 } else {
-                    shell_warn("undefined variable $%.*s", (int)(end - start),
+                    shell_warn(sh, "undefined variable $%.*s", (int)(end - start),
                                &tok[start]);
-                    shell_putchar('$');
-                    shell_out(&tok[start], (uint32_t)(end - start));
+                    shell_putchar(sh, '$');
+                    shell_out(sh, &tok[start], (uint32_t)(end - start));
                 }
                 i = end;
                 continue;
             }
-            shell_putchar(tok[i]);
+            shell_putchar(sh, tok[i]);
             i++;
         }
     }
-    shell_putchar('\n');
+    shell_putchar(sh, '\n');
     return SHELL_OK;
 }
 
-static int cmd_print(int argc, char **argv)
+static int cmd_print(shell_t *sh, int argc, char **argv)
 {
     char text[SHELL_LINE_MAX];
     shell_tok_t toks[SHELL_TOKEN_MAX];
@@ -234,16 +244,16 @@ static int cmd_print(int argc, char **argv)
     len = shell_join(text, sizeof(text), argc, argv, 1);
     n = shell_lex(text, len, toks, SHELL_TOKEN_MAX);
     memset(&err, 0, sizeof(err));
-    if (shell_expr_eval(toks, (uint16_t)n, &g_shell_vars, &val, &err) != 0) {
-        shell_report_error(&err, NULL);
+    if (shell_expr_eval(toks, (uint16_t)n, &sh->vars, &val, &err) != 0) {
+        shell_report_error(sh, &err, NULL);
         return -err.code;
     }
     shell_value_format(&val, buf, sizeof(buf), &out_len);
-    shell_printf("%.*s\n", (int)out_len, buf);
+    shell_printf(sh, "%.*s\n", (int)out_len, buf);
     return SHELL_OK;
 }
 
-static int cmd_set(int argc, char **argv)
+static int cmd_set(shell_t *sh, int argc, char **argv)
 {
     char text[SHELL_LINE_MAX];
     shell_tok_t toks[SHELL_TOKEN_MAX];
@@ -257,7 +267,7 @@ static int cmd_set(int argc, char **argv)
     len = shell_join(text, sizeof(text), argc, argv, 1);
     n = shell_lex(text, len, toks, SHELL_TOKEN_MAX);
     if (n < 4 || toks[0].type != SHELL_TOK_VAR) {
-        shell_error(SHELL_ERR_PARSE, "SET expects $VAR = expr");
+        shell_error(sh, SHELL_ERR_PARSE, "SET expects $VAR = expr");
         return -SHELL_ERR_PARSE;
     }
     for (i = 1; i < n - 1; i++) {
@@ -268,51 +278,51 @@ static int cmd_set(int argc, char **argv)
         }
     }
     if (eq < 0) {
-        shell_error(SHELL_ERR_PARSE, "SET expects $VAR = expr");
+        shell_error(sh, SHELL_ERR_PARSE, "SET expects $VAR = expr");
         return -SHELL_ERR_PARSE;
     }
     memset(&err, 0, sizeof(err));
     if (shell_expr_eval(&toks[eq + 1], (uint16_t)(n - eq - 1),
-                        &g_shell_vars, &val, &err) != 0) {
-        shell_report_error(&err, NULL);
+                        &sh->vars, &val, &err) != 0) {
+        shell_report_error(sh, &err, NULL);
         return -err.code;
     }
-    if (shell_vars_set(&g_shell_vars, toks[0].p + 1,
+    if (shell_vars_set(&sh->vars, toks[0].p + 1,
                        (uint16_t)(toks[0].len - 1U), &val, false,
                        &err) != 0) {
-        shell_report_error(&err, NULL);
+        shell_report_error(sh, &err, NULL);
         return -err.code;
     }
     return SHELL_OK;
 }
 
-static int cmd_unset(int argc, char **argv)
+static int cmd_unset(shell_t *sh, int argc, char **argv)
 {
     const char *name;
 
     if (argc < 2 || argv[1][0] != '$') {
-        shell_error(SHELL_ERR_PARAM, "usage: unset $VAR");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: unset $VAR");
         return -SHELL_ERR_PARAM;
     }
     name = &argv[1][1];
-    if (shell_vars_unset(&g_shell_vars, name, (uint16_t)strlen(name)) != 0) {
-        shell_error(SHELL_ERR_NOT_FOUND, "variable not found");
+    if (shell_vars_unset(&sh->vars, name, (uint16_t)strlen(name)) != 0) {
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "variable not found");
         return -SHELL_ERR_NOT_FOUND;
     }
     return SHELL_OK;
 }
 
 /* 可被 Ctrl-C 打断的毫秒等待 */
-static bool shell_wait_ms(uint32_t ms)
+static bool shell_wait_ms(shell_t *sh, uint32_t ms)
 {
     uint32_t elapsed = 0U;
 
     while (elapsed < ms) {
         uint32_t step = (ms - elapsed > 20U) ? 20U : (ms - elapsed);
 
-        if (shell_ctrl_c_pending()) {
-            shell_clear_ctrl_c();
-            shell_puts("WARN: wait interrupted");
+        if (shell_ctrl_c_pending(sh)) {
+            shell_clear_ctrl_c(sh);
+            shell_puts(sh, "WARN: wait interrupted");
             return false;
         }
         iot_sleep_ms(step);
@@ -321,10 +331,10 @@ static bool shell_wait_ms(uint32_t ms)
     return true;
 }
 
-static int cmd_wait(int argc, char **argv)
+static int cmd_wait(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: wait <time> | wait task <name>");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: wait <time> | wait task <name>");
         return -SHELL_ERR_PARAM;
     }
     if (strcmp(argv[1], "task") == 0) {
@@ -334,7 +344,7 @@ static int cmd_wait(int argc, char **argv)
         int i;
 
         if (argc < 3) {
-            shell_error(SHELL_ERR_PARAM, "usage: wait task <name> [timeout <t>]");
+            shell_error(sh, SHELL_ERR_PARAM, "usage: wait task <name> [timeout <t>]");
             return -SHELL_ERR_PARAM;
         }
         for (i = 3; i + 1 < argc; i += 2) {
@@ -344,22 +354,22 @@ static int cmd_wait(int argc, char **argv)
         }
         task = shell_find_task(argv[2]);
         if (task == NULL) {
-            shell_error(SHELL_ERR_NOT_FOUND, "task %s not found", argv[2]);
+            shell_error(sh, SHELL_ERR_NOT_FOUND, "task %s not found", argv[2]);
             return -SHELL_ERR_NOT_FOUND;
         }
         if ((task->name != NULL && strcmp(task->name, "shell") == 0) ||
             task == iot_idle_task) {
-            shell_error(SHELL_ERR_PARAM, "cannot wait on shell/idle");
+            shell_error(sh, SHELL_ERR_PARAM, "cannot wait on shell/idle");
             return -SHELL_ERR_PARAM;
         }
         while (task->state != IOT_TASK_TERMINATED) {
             if (timeout != 0U && waited >= timeout) {
-                shell_error(SHELL_ERR_TIMEOUT, "wait task %s timeout", argv[2]);
+                shell_error(sh, SHELL_ERR_TIMEOUT, "wait task %s timeout", argv[2]);
                 return -SHELL_ERR_TIMEOUT;
             }
-            if (shell_ctrl_c_pending()) {
-                shell_clear_ctrl_c();
-                shell_puts("WARN: wait interrupted");
+            if (shell_ctrl_c_pending(sh)) {
+                shell_clear_ctrl_c(sh);
+                shell_puts(sh, "WARN: wait interrupted");
                 return SHELL_OK;
             }
             iot_sleep_ms(10U);
@@ -368,7 +378,7 @@ static int cmd_wait(int argc, char **argv)
         return SHELL_OK;
     }
 
-    /* wait <time>：表达式 + 单位（默认 ms） */
+    /* wait <time>：表达式，单位固定为 ms */
     {
         char text[32];
         shell_tok_t toks[8];
@@ -382,17 +392,17 @@ static int cmd_wait(int argc, char **argv)
         len = (uint16_t)strlen(text);
         n = shell_lex(text, len, toks, 8);
         memset(&err, 0, sizeof(err));
-        if (shell_expr_eval(toks, (uint16_t)n, &g_shell_vars, &val, &err) != 0 ||
+        if (shell_expr_eval(toks, (uint16_t)n, &sh->vars, &val, &err) != 0 ||
             shell_value_to_int(&val, &ms, &err) != 0) {
-            shell_error(SHELL_ERR_PARAM, "invalid argument for wait");
+            shell_error(sh, SHELL_ERR_PARAM, "invalid argument for wait");
             return -SHELL_ERR_PARAM;
         }
-        (void)shell_wait_ms((ms > 0) ? (uint32_t)ms : 0U);
+        (void)shell_wait_ms(sh, (ms > 0) ? (uint32_t)ms : 0U);
     }
     return SHELL_OK;
 }
 
-static int cmd_state(int argc, char **argv)
+static int cmd_state(shell_t *sh, int argc, char **argv)
 {
     uint32_t ready = 0U;
     uint32_t running = 0U;
@@ -419,66 +429,66 @@ static int cmd_state(int argc, char **argv)
         default: break;
         }
     }
-    shell_printf("RTOS Tasks: %u (RUNNING=%u READY=%u BLOCKED=%u SUSPENDED=%u)\n",
+    shell_printf(sh, "RTOS Tasks: %u (RUNNING=%u READY=%u BLOCKED=%u SUSPENDED=%u)\n",
                  (unsigned)total, (unsigned)running, (unsigned)ready,
                  (unsigned)blocked, (unsigned)suspended);
-    shell_printf("JOBs      :");
+    shell_printf(sh, "JOBs      :");
     {
         bool any = false;
 
         for (i = 0U; i < SHELL_JOB_MAX; i++) {
-            shell_job_t *job = shell_job_slot(i);
+            shell_job_t *job = shell_job_slot(sh, i);
 
             if (job != NULL) {
                 any = true;
-                shell_printf(" %s=%s", job->name,
+                shell_printf(sh, " %s=%s", job->name,
                              shell_job_state_name(job->state));
             }
         }
         if (!any) {
-            shell_printf(" (none)");
+            shell_printf(sh, " (none)");
         }
     }
-    shell_printf("\n");
-    shell_printf("Shell Vars:");
+    shell_printf(sh, "\n");
+    shell_printf(sh, "Shell Vars:");
     for (i = 0U; i < SHELL_VAR_MAX; i++) {
-        const shell_var_t *v = &g_shell_vars.items[i];
+        const shell_var_t *v = &sh->vars.items[i];
 
         if (v->used) {
-            shell_printf(" %s=", v->name);
+            shell_printf(sh, " %s=", v->name);
             if (v->type == SHELL_VAL_STRING) {
-                shell_printf("%s", v->str);
+                shell_printf(sh, "%s", v->str);
             } else if (v->type == SHELL_VAL_INT) {
-                shell_printf("%ld", (long)v->i);
+                shell_printf(sh, "%ld", (long)v->i);
             } else if (v->type == SHELL_VAL_FLOAT) {
-                shell_printf("%g", (double)v->f);
+                shell_printf(sh, "%g", (double)v->f);
             } else {
-                shell_printf("%s", v->b ? "TRUE" : "FALSE");
+                shell_printf(sh, "%s", v->b ? "TRUE" : "FALSE");
             }
         }
     }
-    shell_printf("\n");
+    shell_printf(sh, "\n");
     return SHELL_OK;
 }
 
-static int cmd_reboot(int argc, char **argv)
+static int cmd_reboot(shell_t *sh, int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    if (g_shell_reset == NULL) {
-        shell_error(SHELL_ERR_PARAM, "reset not supported");
+    if (sh->cfg.reset == NULL) {
+        shell_error(sh, SHELL_ERR_PARAM, "reset not supported");
         return -SHELL_ERR_PARAM;
     }
-    shell_puts("rebooting...");
-    g_shell_reset();
+    shell_puts(sh, "rebooting...");
+    sh->cfg.reset();
     return SHELL_OK;
 }
 
 /* ------------------------------ ps ------------------------------ */
 
-static void shell_ps_line(const iot_task_t *task)
+static void shell_ps_line(shell_t *sh, const iot_task_t *task)
 {
-    shell_job_t *job = shell_job_find_by_task(task);
+    shell_job_t *job = shell_job_find_by_task(sh, task);
     const char *type = (job != NULL) ? "JOB" : "SYS";
     const char *state = shell_task_state_name(task->state);
     char cpu[8] = "-";
@@ -488,14 +498,14 @@ static void shell_ps_line(const iot_task_t *task)
 #if SHELL_HAS_CPU_STATS
     (void)snprintf(cpu, sizeof(cpu), "%.1f", 0.0);
 #endif
-    shell_printf("%3u  %-8s  %-4s  %-9s  %4u  %6s  %s  %s\n",
+    shell_printf(sh, "%3u  %-8s  %-4s  %-9s  %4u  %6s  %s  %s\n",
                  (unsigned)task->tid,
                  task->name != NULL ? task->name : "?",
                  type, state, (unsigned)task->priority, stack, cpu,
                  job != NULL ? job->name : "-");
 }
 
-static int cmd_ps(int argc, char **argv)
+static int cmd_ps(shell_t *sh, int argc, char **argv)
 {
     iot_task_t *task;
     bool show_all = false;
@@ -510,10 +520,10 @@ static int cmd_ps(int argc, char **argv)
         only_sys = true;
     }
 
-    shell_printf("TID  NAME      TYPE   STATE      PRIO  STACK   CPU%%   JOB\n");
-    shell_printf("---  --------  -----  ---------  ----  ------  -----  ----\n");
+    shell_printf(sh, "TID  NAME      TYPE   STATE      PRIO  STACK   CPU%%   JOB\n");
+    shell_printf(sh, "---  --------  -----  ---------  ----  ------  -----  ----\n");
     for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
-        shell_job_t *job = shell_job_find_by_task(task);
+        shell_job_t *job = shell_job_find_by_task(sh, task);
 
         if (!show_all && task->state == IOT_TASK_TERMINATED) {
             continue;
@@ -524,7 +534,7 @@ static int cmd_ps(int argc, char **argv)
         if (only_sys && job != NULL) {
             continue;
         }
-        shell_ps_line(task);
+        shell_ps_line(sh, task);
     }
     return SHELL_OK;
 }
@@ -537,87 +547,87 @@ static bool shell_task_is_protected(const iot_task_t *task)
            (task->name != NULL && strcmp(task->name, "shell") == 0);
 }
 
-static int cmd_kill(int argc, char **argv)
+static int cmd_kill(shell_t *sh, int argc, char **argv)
 {
     iot_task_t *task;
     shell_job_t *job;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: kill <task|#tid> [confirm]");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: kill <task|#tid>");
         return -SHELL_ERR_PARAM;
     }
     task = shell_find_task(argv[1]);
     if (task == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (shell_task_is_protected(task)) {
-        shell_error(SHELL_ERR_DANGER, "refusing to kill shell/idle");
+        shell_error(sh, SHELL_ERR_DANGER, "refusing to kill shell/idle");
         return -SHELL_ERR_DANGER;
     }
-    job = shell_job_find_by_task(task);
+    job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
         (void)shell_job_stop(job, true);
         job->state = JOB_ABORTED;
         return SHELL_OK;
     }
-    /* 系统任务：必须有 confirm（由 dispatcher 统一校验），此处直接删除 */
+    /* 系统任务：直接删除（不再要求确认） */
     if (iot_task_destroy(task) != IOT_OK) {
-        shell_error(SHELL_ERR_STATE, "task busy or not destroyable");
+        shell_error(sh, SHELL_ERR_STATE, "task busy or not destroyable");
         return -SHELL_ERR_STATE;
     }
-    shell_warn("system task deleted");
+    shell_warn(sh, "system task deleted");
     return SHELL_OK;
 }
 
-static int cmd_pause(int argc, char **argv)
+static int cmd_pause(shell_t *sh, int argc, char **argv)
 {
     iot_task_t *task;
     shell_job_t *job;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: pause <task|#tid> [confirm]");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: pause <task|#tid>");
         return -SHELL_ERR_PARAM;
     }
     task = shell_find_task(argv[1]);
     if (task == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (shell_task_is_protected(task)) {
-        shell_error(SHELL_ERR_DANGER, "refusing to pause shell/idle");
+        shell_error(sh, SHELL_ERR_DANGER, "refusing to pause shell/idle");
         return -SHELL_ERR_DANGER;
     }
     if (iot_task_suspend(task) != IOT_OK) {
-        shell_error(SHELL_ERR_STATE, "task cannot be paused");
+        shell_error(sh, SHELL_ERR_STATE, "task cannot be paused");
         return -SHELL_ERR_STATE;
     }
-    job = shell_job_find_by_task(task);
+    job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
         job->state = JOB_PAUSED;
     }
     return SHELL_OK;
 }
 
-static int cmd_resume(int argc, char **argv)
+static int cmd_resume(shell_t *sh, int argc, char **argv)
 {
     iot_task_t *task;
     shell_job_t *job;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: resume <task|#tid>");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: resume <task|#tid>");
         return -SHELL_ERR_PARAM;
     }
     task = shell_find_task(argv[1]);
     if (task == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (iot_task_resume(task) != IOT_OK) {
-        shell_error(SHELL_ERR_STATE, "task is not suspended");
+        shell_error(sh, SHELL_ERR_STATE, "task is not suspended");
         return -SHELL_ERR_STATE;
     }
-    job = shell_job_find_by_task(task);
+    job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
         job->state = JOB_RUNNING;
     }
@@ -626,34 +636,34 @@ static int cmd_resume(int argc, char **argv)
 
 /* ------------------------------ JOB 管理 ------------------------------ */
 
-static int cmd_load(int argc, char **argv)
+static int cmd_load(shell_t *sh, int argc, char **argv)
 {
     (void)argc;
     (void)argv;
 #if SHELL_HAS_FS
-    shell_error(SHELL_ERR_NOT_FOUND, "load not implemented");
+    shell_error(sh, SHELL_ERR_NOT_FOUND, "load not implemented");
 #else
-    shell_error(SHELL_ERR_NOT_FOUND, "file system not available");
+    shell_error(sh, SHELL_ERR_NOT_FOUND, "file system not available");
 #endif
     return -SHELL_ERR_NOT_FOUND;
 }
 
-static int cmd_unload(int argc, char **argv)
+static int cmd_unload(shell_t *sh, int argc, char **argv)
 {
     shell_job_t *job;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: unload <name>");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: unload <name>");
         return -SHELL_ERR_PARAM;
     }
-    job = shell_job_find(argv[1], (uint16_t)strlen(argv[1]));
+    job = shell_job_find(sh, argv[1], (uint16_t)strlen(argv[1]));
     if (job == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (job->state == JOB_RUNNING || job->state == JOB_PAUSED ||
         job->state == JOB_STOPPING) {
-        shell_error(SHELL_ERR_STATE, "job %s is %s", argv[1],
+        shell_error(sh, SHELL_ERR_STATE, "job %s is %s", argv[1],
                     shell_job_state_name(job->state));
         return -SHELL_ERR_STATE;
     }
@@ -661,40 +671,40 @@ static int cmd_unload(int argc, char **argv)
     return SHELL_OK;
 }
 
-static int cmd_loads(int argc, char **argv)
+static int cmd_loads(shell_t *sh, int argc, char **argv)
 {
     uint16_t i;
     bool any = false;
 
     (void)argc;
     (void)argv;
-    shell_printf("NAME   STATE      SCRIPT\n");
+    shell_printf(sh, "NAME   STATE      SCRIPT\n");
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_t *job = shell_job_slot(i);
+        shell_job_t *job = shell_job_slot(sh, i);
 
         if (job != NULL) {
             any = true;
-            shell_printf("%-6s %-10s %s\n", job->name,
+            shell_printf(sh, "%-6s %-10s %s\n", job->name,
                          shell_job_state_name(job->state),
                          job->text_len > 0U ? "(inline)" : "-");
         }
     }
     if (!any) {
-        shell_puts("(no jobs)");
+        shell_puts(sh, "(no jobs)");
     }
     return SHELL_OK;
 }
 
-static int cmd_jobs(int argc, char **argv)
+static int cmd_jobs(shell_t *sh, int argc, char **argv)
 {
     uint16_t i;
     bool any = false;
 
     (void)argc;
     (void)argv;
-    shell_printf("NAME   TASK   TID  STATE      PC\n");
+    shell_printf(sh, "NAME   TASK   TID  STATE      PC\n");
     for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_t *job = shell_job_slot(i);
+        shell_job_t *job = shell_job_slot(sh, i);
 
         if (job == NULL) {
             continue;
@@ -702,86 +712,86 @@ static int cmd_jobs(int argc, char **argv)
         if (job->state == JOB_RUNNING || job->state == JOB_PAUSED ||
             job->state == JOB_STOPPING) {
             any = true;
-            shell_printf("%-6s %-6s %3u  %-10s L%u\n", job->name, job->name,
+            shell_printf(sh, "%-6s %-6s %3u  %-10s L%u\n", job->name, job->name,
                          (unsigned)(job->task != NULL ? job->task->tid : 0U),
                          shell_job_state_name(job->state), (unsigned)job->pc);
         }
     }
     if (!any) {
-        shell_puts("(no jobs)");
+        shell_puts(sh, "(no jobs)");
     }
     return SHELL_OK;
 }
 
-static int cmd_job(int argc, char **argv)
+static int cmd_job(shell_t *sh, int argc, char **argv)
 {
     shell_job_t *job;
     uint16_t i;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: job <name>");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: job <name>");
         return -SHELL_ERR_PARAM;
     }
-    job = shell_job_find(argv[1], (uint16_t)strlen(argv[1]));
+    job = shell_job_find(sh, argv[1], (uint16_t)strlen(argv[1]));
     if (job == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
-    shell_printf("Name    : %s\n", job->name);
-    shell_printf("JobID   : %u\n", (unsigned)job->job_id);
-    shell_printf("TID     : %u\n",
+    shell_printf(sh, "Name    : %s\n", job->name);
+    shell_printf(sh, "JobID   : %u\n", (unsigned)job->job_id);
+    shell_printf(sh, "TID     : %u\n",
                  (unsigned)(job->task != NULL ? job->task->tid : 0U));
-    shell_printf("State   : %s\n", shell_job_state_name(job->state));
-    shell_printf("Prio    : %u\n", (unsigned)job->prio);
-    shell_printf("Stack   : %u\n", (unsigned)job->stack);
-    shell_printf("PC      : L%u\n", (unsigned)job->pc);
-    shell_printf("Vars    :");
+    shell_printf(sh, "State   : %s\n", shell_job_state_name(job->state));
+    shell_printf(sh, "Prio    : %u\n", (unsigned)job->prio);
+    shell_printf(sh, "Stack   : %u\n", (unsigned)job->stack);
+    shell_printf(sh, "PC      : L%u\n", (unsigned)job->pc);
+    shell_printf(sh, "Vars    :");
     for (i = 0U; i < SHELL_VAR_MAX; i++) {
         if (job->vars.items[i].used) {
-            shell_printf(" $%s", job->vars.items[i].name);
+            shell_printf(sh, " $%s", job->vars.items[i].name);
         }
     }
-    shell_printf("\n");
+    shell_printf(sh, "\n");
     return SHELL_OK;
 }
 
-static int shell_job_cmd_start(const char *name)
+static int shell_job_cmd_start(shell_t *sh, const char *name)
 {
-    shell_job_t *job = shell_job_find(name, (uint16_t)strlen(name));
+    shell_job_t *job = shell_job_find(sh, name, (uint16_t)strlen(name));
 
     if (job == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "job %s not found", name);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", name);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (job->state == JOB_RUNNING || job->state == JOB_PAUSED) {
-        shell_error(SHELL_ERR_STATE, "job %s is %s", name,
+        shell_error(sh, SHELL_ERR_STATE, "job %s is %s", name,
                     shell_job_state_name(job->state));
         return -SHELL_ERR_STATE;
     }
     if (shell_job_start(job) != 0) {
-        shell_error(SHELL_ERR_STATE, "job %s is not LOADED", name);
+        shell_error(sh, SHELL_ERR_STATE, "job %s is not LOADED", name);
         return -SHELL_ERR_STATE;
     }
     return SHELL_OK;
 }
 
-static int cmd_start(int argc, char **argv)
+static int cmd_start(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: start <name>");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: start <name>");
         return -SHELL_ERR_PARAM;
     }
-    return shell_job_cmd_start(argv[1]);
+    return shell_job_cmd_start(sh, argv[1]);
 }
 
-static int cmd_stop(int argc, char **argv)
+static int cmd_stop(shell_t *sh, int argc, char **argv)
 {
     shell_job_t *job;
     bool force = false;
     int i;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: stop <name> [force]");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: stop <name> [force]");
         return -SHELL_ERR_PARAM;
     }
     for (i = 2; i < argc; i++) {
@@ -789,54 +799,54 @@ static int cmd_stop(int argc, char **argv)
             force = true;
         }
     }
-    job = shell_job_find(argv[1], (uint16_t)strlen(argv[1]));
+    job = shell_job_find(sh, argv[1], (uint16_t)strlen(argv[1]));
     if (job == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (shell_job_stop(job, force) != 0) {
-        shell_error(SHELL_ERR_STATE, "job %s is not running", argv[1]);
+        shell_error(sh, SHELL_ERR_STATE, "job %s is not running", argv[1]);
         return -SHELL_ERR_STATE;
     }
     return SHELL_OK;
 }
 
-static int cmd_fg(int argc, char **argv)
+static int cmd_fg(shell_t *sh, int argc, char **argv)
 {
     shell_job_t *job;
     uint32_t timeout = 0U;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: fg <name>");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: fg <name>");
         return -SHELL_ERR_PARAM;
     }
-    job = shell_job_find(argv[1], (uint16_t)strlen(argv[1]));
+    job = shell_job_find(sh, argv[1], (uint16_t)strlen(argv[1]));
     if (job == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     job->foreground = true;
     if (job->state == JOB_LOADED) {
         if (shell_job_start(job) != 0) {
-            shell_error(SHELL_ERR_STATE, "job %s start failed", argv[1]);
+            shell_error(sh, SHELL_ERR_STATE, "job %s start failed", argv[1]);
             return -SHELL_ERR_STATE;
         }
     }
     if (shell_job_wait(job, timeout) != 0) {
-        shell_error(SHELL_ERR_TIMEOUT, "fg %s timeout", argv[1]);
+        shell_error(sh, SHELL_ERR_TIMEOUT, "fg %s timeout", argv[1]);
         return -SHELL_ERR_TIMEOUT;
     }
     return SHELL_OK;
 }
 
-static int cmd_waitjob(int argc, char **argv)
+static int cmd_waitjob(shell_t *sh, int argc, char **argv)
 {
     shell_job_t *job;
     uint32_t timeout = SHELL_WAIT_DEFAULT_MS;
     int i;
 
     if (argc < 2) {
-        shell_error(SHELL_ERR_PARAM, "usage: waitjob <name> [timeout <t>]");
+        shell_error(sh, SHELL_ERR_PARAM, "usage: waitjob <name> [timeout <t>]");
         return -SHELL_ERR_PARAM;
     }
     for (i = 2; i + 1 < argc; i += 2) {
@@ -844,9 +854,9 @@ static int cmd_waitjob(int argc, char **argv)
             timeout = (uint32_t)strtoul(argv[i + 1], NULL, 10);
         }
     }
-    job = shell_job_find(argv[1], (uint16_t)strlen(argv[1]));
+    job = shell_job_find(sh, argv[1], (uint16_t)strlen(argv[1]));
     if (job == NULL) {
-        shell_error(SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
+        shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
     if (job->state != JOB_RUNNING && job->state != JOB_PAUSED &&
@@ -854,14 +864,14 @@ static int cmd_waitjob(int argc, char **argv)
         return SHELL_OK;        /* 已结束：立即返回 */
     }
     if (shell_job_wait(job, timeout) != 0) {
-        shell_error(SHELL_ERR_TIMEOUT, "waitjob %s timeout", argv[1]);
+        shell_error(sh, SHELL_ERR_TIMEOUT, "waitjob %s timeout", argv[1]);
         return -SHELL_ERR_TIMEOUT;
     }
     return SHELL_OK;
 }
 
-/* run：前台执行一段脚本（FS 关闭时只支持粘贴缓冲） */
-static int cmd_run(int argc, char **argv)
+/* run：在独立的虚拟 Shell 实例中解释执行（默认执行粘贴缓冲） */
+static int cmd_run(shell_t *sh, int argc, char **argv)
 {
     bool background = false;
     int i;
@@ -871,16 +881,27 @@ static int cmd_run(int argc, char **argv)
             background = true;
         }
     }
-    (void)background;
+    (void)background;       /* 同步执行；保留语法兼容 */
 
     if (argc < 2 || argv[1][0] == '&') {
-        return shell_run_paste_buffer();
+        uint32_t len = 0U;
+        const char *text = shell_paste_buffer(sh, &len);
+        int rc;
+
+        if (len == 0U) {
+            shell_puts(sh, "(empty)");
+            return SHELL_OK;
+        }
+        rc = shell_exec_isolated(sh, text);
+        sh->paste_len = 0U;         /* 已交给子实例 */
+        sh->block_depth = 0;
+        return rc;
     }
 #if !SHELL_HAS_FS
-    shell_error(SHELL_ERR_NOT_FOUND, "file system not available");
+    shell_error(sh, SHELL_ERR_NOT_FOUND, "file system not available");
     return -SHELL_ERR_NOT_FOUND;
 #else
-    shell_error(SHELL_ERR_NOT_FOUND, "run <file> not implemented");
+    shell_error(sh, SHELL_ERR_NOT_FOUND, "run <file> not implemented");
     return -SHELL_ERR_NOT_FOUND;
 #endif
 }
@@ -896,12 +917,12 @@ static const shell_cmd_t s_builtin[] = {
     { "unset",  cmd_unset,  "unset $VAR", "", "basic", CMD_NONE },
     { "wait",   cmd_wait,   "wait <time> | wait task <name> [timeout <t>]",
       "", "basic", CMD_NONE },
-    { "reboot", cmd_reboot, "reboot confirm", "", "basic", CMD_DANGER },
+    { "reboot", cmd_reboot, "reboot", "", "basic", CMD_NONE },
     { "state",  cmd_state,  "state", "", "basic", CMD_REENTRANT },
     { "ps",     cmd_ps,     "ps [all|job|sys|name <n>|#tid|-a]", "",
       "task", CMD_REENTRANT },
-    { "kill",   cmd_kill,   "kill <task|#tid> [confirm]", "", "task", CMD_NONE },
-    { "pause",  cmd_pause,  "pause <task|#tid> [confirm]", "", "task", CMD_NONE },
+    { "kill",   cmd_kill,   "kill <task|#tid>", "", "task", CMD_NONE },
+    { "pause",  cmd_pause,  "pause <task|#tid>", "", "task", CMD_NONE },
     { "resume", cmd_resume, "resume <task|#tid>", "", "task", CMD_NONE },
     { "load",   cmd_load,   "load <file> [as <n>] [inherit]", "",
       "job", CMD_NONE },
@@ -917,7 +938,7 @@ static const shell_cmd_t s_builtin[] = {
       "job", CMD_NONE }
 };
 
-static int cmd_help(int argc, char **argv)
+static int cmd_help(shell_t *sh, int argc, char **argv)
 {
     uint32_t i;
 
@@ -925,20 +946,20 @@ static int cmd_help(int argc, char **argv)
         const shell_cmd_t *cmd = shell_cmd_find(argv[1]);
 
         if (cmd != NULL) {
-            shell_printf("%s\n", cmd->usage != NULL ? cmd->usage : cmd->name);
+            shell_printf(sh, "%s\n", cmd->usage != NULL ? cmd->usage : cmd->name);
             if (cmd->help != NULL && cmd->help[0] != '\0') {
-                shell_printf("  %s\n", cmd->help);
+                shell_printf(sh, "  %s\n", cmd->help);
             }
             return SHELL_OK;
         }
-        shell_puts("help topics: ps script expr units errors");
+        shell_puts(sh, "help topics: ps script expr units errors");
         return SHELL_OK;
     }
 
-    shell_printf("Commands:\n");
+    shell_printf(sh, "Commands:\n");
     for (i = 0U; i < sizeof(s_builtin) / sizeof(s_builtin[0]); i++) {
         if ((s_builtin[i].flags & CMD_HIDDEN) == 0U) {
-            shell_printf("  %-28s %s\n",
+            shell_printf(sh, "  %-28s %s\n",
                          s_builtin[i].usage != NULL ? s_builtin[i].usage
                                                     : s_builtin[i].name,
                          s_builtin[i].group != NULL ? s_builtin[i].group : "");
@@ -964,10 +985,13 @@ const shell_cmd_t *shell_cmd_find(const char *name)
             return &s_builtin[i];
         }
     }
-    for (k = 0U; k < s_ext_count; k++) {
-        if (shell_ieq(s_ext[k].name, (uint16_t)strlen(s_ext[k].name), name) &&
-            strlen(s_ext[k].name) == strlen(name)) {
-            return &s_ext[k];
+    if (s_ext != NULL) {
+        for (k = 0U; k < s_ext->count; k++) {
+            if (shell_ieq(s_ext->items[k].name,
+                          (uint16_t)strlen(s_ext->items[k].name), name) &&
+                strlen(s_ext->items[k].name) == strlen(name)) {
+                return &s_ext->items[k];
+            }
         }
     }
     return NULL;
@@ -981,33 +1005,34 @@ int shell_cmd_add(const shell_cmd_t *cmd)
     if (shell_cmd_find(cmd->name) != NULL) {
         return -1;      /* 基础命令优先，重名拒绝 */
     }
-    if (s_ext_count >= SHELL_EXT_MAX) {
+    if (s_ext == NULL) {
+        s_ext = (shell_ext_table_t *)iot_mem_calloc(1U, sizeof(*s_ext));
+        if (s_ext == NULL) {
+            return -1;
+        }
+    }
+    if (s_ext->count >= SHELL_EXT_MAX) {
         return -1;
     }
-    s_ext[s_ext_count++] = *cmd;
+    s_ext->items[s_ext->count++] = *cmd;
     return 0;
 }
 
 void shell_cmd_clear(void)
 {
-    s_ext_count = 0U;
+    if (s_ext != NULL) {
+        s_ext->count = 0U;
+    }
 }
 
-/* 危险命令 / confirm 统一处理 */ 
-int shell_cmd_dispatch(int argc, char **argv)
+/* 命令分派：所有命令直接执行，不需要 confirm 之类的二次确认 */
+int shell_cmd_dispatch(shell_t *sh, int argc, char **argv)
 {
     const shell_cmd_t *cmd;
-    bool confirm = false;
-    int i;
     int rc;
 
     if (argc <= 0 || argv == NULL || argv[0] == NULL) {
         return -SHELL_ERR_PARAM;
-    }
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "confirm") == 0) {
-            confirm = true;
-        }
     }
 
     cmd = shell_cmd_find(argv[0]);
@@ -1015,14 +1040,9 @@ int shell_cmd_dispatch(int argc, char **argv)
         return -SHELL_ERR_NOT_FOUND;
     }
 
-    if ((cmd->flags & CMD_DANGER) != 0U && !confirm) {
-        shell_error(SHELL_ERR_DANGER, "dangerous command requires confirm");
-        return -SHELL_ERR_DANGER;
+    if (sh == NULL) {
+        return -SHELL_ERR_PARAM;
     }
-    if ((cmd->flags & CMD_DANGER) == 0U && confirm) {
-        shell_warn("confirm ignored");
-    }
-
-    rc = cmd->handler(argc, argv);
+    rc = cmd->handler(sh, argc, argv);
     return (rc < 0) ? rc : SHELL_OK;
 }

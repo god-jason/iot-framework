@@ -8,6 +8,9 @@
  */
 
 /* ------------------------------ 缓冲区 ------------------------------ */
+#ifndef SHELL_RX_MAX
+#define SHELL_RX_MAX            256U    /* 输入环形缓冲（堆分配） */
+#endif
 #ifndef SHELL_LINE_MAX
 #define SHELL_LINE_MAX          256U    /* 单行最大字节数 */
 #endif

@@ -22,6 +22,7 @@
  *   iot_isr.h     中断上下文 API                         iot_port.h    移植层接口
  *   iot_crash.h   崩溃现场记录  iot_mem.h     内存分配
  *   iot_trace.h   事件跟踪宏    iot_types.h   公共常量/状态码/前向声明
+ *   iot_version.h 版本/构建时间/编译配置/许可证
  *   iot_config.h  编译期裁剪开关
  *
  * 典型使用顺序：
@@ -49,6 +50,7 @@
 #include "iot_stats.h"
 #include "iot_isr.h"
 #include "iot_trace.h"
+#include "iot_version.h"
 
 #include "log.h"    /* 内核日志宏 LOG_D/I/W/E */
 
