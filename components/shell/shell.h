@@ -160,7 +160,14 @@ int shell_lazy_start(void);
 /* 默认实例是否已创建 */
 bool shell_active(void);
 
-/* 输入任务是否已因空闲超时自行退出（等待平台回收实例内存） */
+/*
+ * 请求关闭当前默认实例：输入任务在下一次循环中自行退出，
+ * 平台随后用 shell_task_finished() 感知并调用 shell_shutdown() 回收内存。
+ * 用于实现 exit 命令。
+ */
+void shell_request_exit(void);
+
+/* 输入任务是否已退出（等待平台回收实例内存） */
 bool shell_task_finished(void);
 
 /*
@@ -179,8 +186,8 @@ int shell_start(void);
 /*
  * 平台默认绑定并启动 Shell：
  *   STM32 : 输入 / 输出绑定 UART1（hal_uart_t instance=1 约定）；
- *           默认按需加载——只启动首字节监听任务，收到输入才创建实例，
- *           空闲 SHELL_IDLE_FREE_MS 后自动回收。
+ *           默认按需加载——只启动监听任务，收到约定的开启口令后才创建实例，
+ *           执行 exit 命令后回收实例，回到监听状态（日志输出不受影响）。
  *   PC    : 输入 / 输出绑定标准输入输出，立即创建实例与输入任务。
  * 返回 0 成功；平台不支持或资源不足返回 -1。
  */

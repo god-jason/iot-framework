@@ -1,16 +1,19 @@
 /*
- * stm32_shell.c - STM32 平台 Shell 默认绑定（UART1，按需加载）
+ * stm32_shell.c - STM32 平台 Shell 默认绑定（UART1，口令开启）
  *
  * 内存策略（RAM 紧张的 MCU）：
- *   - 默认只创建一个 768B 栈的监听任务，不分配任何 Shell 缓冲；
- *   - 收到第一笔串口输入才惰性创建实例（约 2.4KB）与输入任务（3KB）；
- *   - SHELL_IDLE_FREE_MS（默认 30s）内无输入，输入任务自行退出，
- *     监听任务随后回收实例缓冲，回到近零占用；
- *   - 有 JOB 正在执行时不回收（由 shell 任务内部判断）。
+ *   - 上电只创建一个 768B 栈的监听任务，不分配任何 Shell 缓冲；
+ *   - 串口收到口令 "hello"（连续 5 个字符，不需要回车）时回复 "hello!"，
+ *     并惰性创建 Shell 实例（约 1.4KB）与输入任务（3KB）；
+ *   - Shell 激活后常驻，不会因为长时间无操作自动关闭；
+ *   - 输入 exit 命令（按需实例内置）：打印 bye，输入任务退出，
+ *     监听任务回收实例内存，重新回到只监听口令的状态。
+ *
+ * 日志不受影响：log 的 printf 由工程的 _write 直接走 hal_uart_transmit，
+ * trace 也由 board_trace_start() 独立绑定，与 Shell 实例是否存在无关。
  *
  * 输出：hal_uart_transmit()（板级通常映射 USART1）
  * 输入：hal_uart_receive() 轮询，收到字节即 shell_feed()
- * 日志：log 的 printf 由工程的 _write 重定向到同一 UART1
  *
  * hal_uart_* 以 weak 方式引用：未链接 HAL/板级实现时仍可编译，
  * 此时 shell_platform_start() 返回 -1，不影响内核其余部分。
@@ -40,6 +43,9 @@ extern void hal_system_reset(void) __attribute__((weak));
 /* 板级可选钩子：返回实际使用的 UART 句柄（Cube HAL 下必须是有效句柄） */
 extern hal_uart_t *board_shell_uart(void) __attribute__((weak));
 
+#define STM32_OPEN_WORD "hello"
+#define STM32_OPEN_LEN  5U
+
 static hal_uart_t *stm32_shell_uart(void)
 {
     if (board_shell_uart != NULL) {
@@ -53,6 +59,7 @@ static hal_uart_t *stm32_shell_uart(void)
 }
 
 static void *s_watch_task;
+static size_t s_open_pos;               /* 口令匹配进度 */
 
 static int stm32_shell_write(const char *data, uint32_t len, void *user)
 {
@@ -67,13 +74,31 @@ static int stm32_shell_write(const char *data, uint32_t len, void *user)
                               (size_t)len, 100U) == HAL_OK) ? (int)len : -1;
 }
 
+/* 逐字节匹配开启口令；匹配过程中其它字符被丢弃 */
+static bool stm32_open_word_match(uint8_t ch)
+{
+    const char *word = STM32_OPEN_WORD;
+
+    if (ch == (uint8_t)word[s_open_pos]) {
+        s_open_pos++;
+    } else {
+        s_open_pos = (ch == (uint8_t)word[0]) ? 1U : 0U;
+    }
+    if (s_open_pos >= STM32_OPEN_LEN) {
+        s_open_pos = 0U;
+        return true;
+    }
+    return false;
+}
+
 /*
- * 首字节监听 + 输入泵：
- *   未激活时只等首字节（不占用 shell 缓冲）；
- *   激活后把字节投递给实例，并在实例因空闲超时退出后回收其内存。
+ * 口令监听 + 输入泵：
+ *   未激活时只匹配 "hello"，命中后回复并创建实例；
+ *   激活后把字节投递给实例，实例退出（exit）后回收内存并回到监听。
  */
 static void stm32_shell_watch_task(void *arg)
 {
+    static const char reply[] = "hello!\r\n";
     hal_uart_t *uart = (hal_uart_t *)arg;
     uint8_t ch;
 
@@ -81,15 +106,17 @@ static void stm32_shell_watch_task(void *arg)
         if (!shell_active()) {
             if (hal_uart_receive != NULL &&
                 hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK &&
-                shell_lazy_start() == 0) {
-                (void)shell_feed((const char *)&ch, 1U);
+                stm32_open_word_match(ch)) {
+                (void)stm32_shell_write(reply, sizeof(reply) - 1U, NULL);
+                (void)shell_lazy_start();
             }
             continue;
         }
 
         if (shell_task_finished()) {
-            /* 空闲超时后任务已退出：销毁任务并释放实例缓冲 */
+            /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
             (void)shell_shutdown();
+            s_open_pos = 0U;
             continue;
         }
 
@@ -116,7 +143,7 @@ int shell_platform_start(const char *version)
     cfg.user = NULL;
     cfg.reset = (hal_system_reset != NULL) ? hal_system_reset : NULL;
 
-    /* 只保存配置；实例与输入任务等第一笔输入到来才创建 */
+    /* 只保存配置；实例与输入任务等收到 "hello" 才创建 */
     if (shell_lazy_setup(&cfg) != 0) {
         return -1;
     }

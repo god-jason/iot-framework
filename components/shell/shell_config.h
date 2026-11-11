@@ -44,12 +44,8 @@
 #define SHELL_SHELL_STACK       3072U
 #endif
 
-/* ------------------------------ 按需加载 / 空闲回收 ------------------------------ */
-/* 超过该时间无输入即释放 Shell 实例与任务（0 = 常驻不回收） */
-#ifndef SHELL_IDLE_FREE_MS
-#define SHELL_IDLE_FREE_MS      30000U
-#endif
-/* 首字节监听任务栈（未激活 Shell 时的唯一常驻开销） */
+/* ------------------------------ 按需加载 ------------------------------ */
+/* 监听任务栈（未激活 Shell 时的唯一常驻开销） */
 #ifndef SHELL_WATCH_STACK
 #define SHELL_WATCH_STACK       768U
 #endif

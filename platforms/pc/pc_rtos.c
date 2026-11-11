@@ -241,9 +241,24 @@ void iot_port_return(void)
  * 单元测试不加该宏，保持"时间瞬间推进"以便快速回归。
  */
 #if defined(IOT_PC_REAL_TIME)
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <time.h>
 #endif
+
+/* 单调墙钟（毫秒） */
+static uint64_t pc_now_ms(void)
+{
+#if defined(_WIN32)
+    return (uint64_t)GetTickCount64();
+#else
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000U + (uint64_t)(ts.tv_nsec / 1000000L);
+#endif
+}
 
 static void pc_wait_ms(uint32_t ms)
 {
@@ -262,6 +277,32 @@ static void pc_wait_ms(uint32_t ms)
     }
 #endif
 }
+
+/*
+ * tick -> 墙钟映射：tick T 对应 base + T 毫秒。
+ *
+ * 直接每步 Sleep(delta) 会因为 Sleep 的固定超时（Windows 默认 ~15.6ms）
+ * 产生累计漂移，导致"睡 1s 实际 2s+"；这里改为对墙钟对齐：
+ * 只要还没到目标时刻就补睡，落后时不再睡，误差不累积。
+ */
+static uint64_t s_wall_base;
+static bool s_wall_base_set;
+
+static void pc_wait_until_tick(uint32_t tick)
+{
+    uint64_t now = pc_now_ms();
+
+    if (!s_wall_base_set) {
+        s_wall_base = (now > (uint64_t)tick) ? (now - (uint64_t)tick) : 0U;
+        s_wall_base_set = true;
+        return;                     /* 首个空闲建立基准，不等待 */
+    }
+    if ((uint64_t)s_wall_base + tick > now) {
+        pc_wait_ms((uint32_t)((uint64_t)s_wall_base + tick - now));
+    }
+}
+#else
+#define pc_wait_until_tick(tick) ((void)0)
 #endif /* IOT_PC_REAL_TIME */
 
 void iot_port_idle(void)
@@ -279,9 +320,7 @@ void iot_port_idle(void)
     } else {
         delta = 1U;
     }
-#if defined(IOT_PC_REAL_TIME)
-    pc_wait_ms(delta);
-#endif
+    pc_wait_until_tick(now + delta);
     iot_tick_increment(delta);
 }
 
@@ -293,9 +332,7 @@ void iot_port_idle_timeout(uint32_t ms)
 {
     uint32_t delta = (ms == 0U || ms == UINT32_MAX) ? 1U : ms;
 
-#if defined(IOT_PC_REAL_TIME)
-    pc_wait_ms(delta);
-#endif
+    pc_wait_until_tick(iot_tick_count + delta);
     iot_tick_increment(delta);
 }
 

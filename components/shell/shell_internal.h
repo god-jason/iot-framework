@@ -184,7 +184,7 @@ struct shell {
     int            block_depth;
     bool           in_paste;
 
-    bool           lazy_free;        /* 按需实例：空闲超时自动退出回收 */
+    bool           exit_req;         /* 平台请求关闭（exit 命令）：任务据此退出 */
 
     iot_task_t    *task;             /* 输入任务（通常仅默认实例） */
 };
@@ -239,7 +239,7 @@ int  shell_job_stop(shell_job_t *job, bool force);
 int  shell_job_wait(shell_job_t *job, uint32_t timeout_ms);
 void shell_jobs_clear(shell_t *sh);
 
-/* 是否有 JOB 正在执行（RUNNING / STOPPING）；空闲回收前必须为 false */
+/* 是否有 JOB 正在执行（RUNNING / STOPPING）；供平台在回收前查询 */
 bool shell_jobs_running(const shell_t *sh);
 
 /* ============================== shell_cmd.c ============================== */

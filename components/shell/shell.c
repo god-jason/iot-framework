@@ -715,29 +715,19 @@ static void shell_feed_char(shell_t *sh, int c)
 static void shell_task_entry(void *arg)
 {
     shell_t *sh = (shell_t *)arg;
-    uint32_t last_input = iot_tick_get();
 
     shell_prompt(sh);
     for (;;) {
         int c = shell_rx_pop(sh);
 
         if (c >= 0) {
-            last_input = iot_tick_get();
             shell_feed_char(sh, c);
-            continue;
-        }
-#if SHELL_IDLE_FREE_MS > 0
-        if (sh->lazy_free) {
-            if (shell_jobs_running(sh)) {
-                /* 有 JOB 在跑：不回收，并持续刷新空闲计时 */
-                last_input = iot_tick_get();
-            } else if ((uint32_t)(iot_tick_get() - last_input) >=
-                       (uint32_t)SHELL_IDLE_FREE_MS) {
-                /* 长时间无输入：任务自行退出，由平台监听任务回收实例内存 */
+            if (sh->exit_req) {
+                /* 平台已请求关闭（exit 命令）：任务自行退出，由监听任务回收 */
                 iot_task_exit();
             }
+            continue;
         }
-#endif
         iot_sleep_ms(10U);
     }
 }
@@ -764,7 +754,23 @@ int shell_start(void)
     return shell_instance_start(s_default);
 }
 
-/* ---------------------- 按需实例化 / 空闲回收 ---------------------- */
+/* ---------------------- 按需实例化 / 退出回收 ---------------------- */
+
+/* 按需实例内置 exit：请求任务退出，平台随后回收实例内存 */
+static int shell_cmd_exit_builtin(shell_t *sh, int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+
+    shell_printf(sh, "bye\n");
+    shell_request_exit();
+    return SHELL_OK;
+}
+
+static const shell_cmd_t s_exit_cmd = {
+    "exit", shell_cmd_exit_builtin, "exit", "close shell, back to listening",
+    "basic", CMD_NONE
+};
 
 int shell_lazy_setup(const shell_config_t *cfg)
 {
@@ -789,9 +795,9 @@ int shell_lazy_start(void)
     if (s_default == NULL) {
         return -1;
     }
-    s_default->lazy_free = true;      /* 空闲超时后自动退出并回收 */
-    shell_cmd_clear();
 
+    /* 扩展命令表跨多次开关保留（不清空）；exit 在每次激活时确保存在 */
+    (void)shell_register_cmd(&s_exit_cmd);
     if (shell_instance_start(s_default) != 0) {
         shell_instance_destroy(s_default);
         return -1;
@@ -802,6 +808,13 @@ int shell_lazy_start(void)
 bool shell_active(void)
 {
     return s_default != NULL;
+}
+
+void shell_request_exit(void)
+{
+    if (s_default != NULL) {
+        s_default->exit_req = true;
+    }
 }
 
 bool shell_task_finished(void)
