@@ -77,7 +77,7 @@ int shell_platform_start(const char *version)
     }
     if (s_rx_task == NULL) {
         /* 优先级低于 shell 任务：先让 shell 任务打印提示符 */
-        s_rx_task = iot_task_create_dynamic("uart_rx", 25U, pc_shell_rx_task,
+        s_rx_task = iot_task_create_dynamic("uart_rx", 6U, pc_shell_rx_task,
                                             NULL, 4096U);
     }
     return (s_rx_task != NULL) ? 0 : -1;

@@ -178,15 +178,13 @@ struct shell {
     uint16_t       line_len;
     bool           last_esc;
 
-    char         (*hist)[SHELL_LINE_MAX];   /* [SHELL_HISTORY_MAX] */
-    uint16_t       hist_count;
-    uint16_t       hist_pos;
-
     char          *paste;            /* [SHELL_PASTE_MAX] */
     uint16_t       paste_len;
 
     int            block_depth;
     bool           in_paste;
+
+    bool           lazy_free;        /* 按需实例：空闲超时自动退出回收 */
 
     iot_task_t    *task;             /* 输入任务（通常仅默认实例） */
 };
@@ -240,6 +238,9 @@ int  shell_job_start(shell_job_t *job);
 int  shell_job_stop(shell_job_t *job, bool force);
 int  shell_job_wait(shell_job_t *job, uint32_t timeout_ms);
 void shell_jobs_clear(shell_t *sh);
+
+/* 是否有 JOB 正在执行（RUNNING / STOPPING）；空闲回收前必须为 false */
+bool shell_jobs_running(const shell_t *sh);
 
 /* ============================== shell_cmd.c ============================== */
 

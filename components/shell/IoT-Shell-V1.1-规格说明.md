@@ -307,14 +307,14 @@ ps -a         含 DELETED 墓碑记录
 
 ```
 > ps
-TID  NAME      TYPE   STATE      PRIO  STACK   CPU%   JOB
----  --------  -----  ---------  ----  ------  -----  ----
-  1  shell     SYS    READY         3   1024   -      -
-  2  idle      SYS    RUNNING       0    256   -      -
-  3  timer     SYS    READY         5    512   -      -
-  4  uart_rx   SYS    BLOCKED       4    512   -      -
-  5  FEED      JOB    RUNNING       2   2048   -      FEED
-  6  MIX       JOB    SUSPENDED     2   2048   -      MIX
+TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%   CPU%   JOB
+---  --------  ----  ---------  ----  -----  ----  -----  -----  ----
+  1  shell     SYS    READY         3   1024   512  50.0%   -      -
+  2  idle      SYS    RUNNING       0    256    96  37.5%   -      -
+  3  timer     SYS    READY         5    512   208  40.6%   -      -
+  4  uart_rx   SYS    BLOCKED       4    512   184  35.9%   -      -
+  5  FEED      JOB    RUNNING       2   2048   960  46.9%   -    FEED
+  6  MIX       JOB    SUSPENDED     2   2048   688  33.6%   -    MIX
 ```
 
 | 列 | 说明 |
@@ -325,6 +325,8 @@ TID  NAME      TYPE   STATE      PRIO  STACK   CPU%   JOB
 | `STATE` | READY / RUNNING / BLOCKED / SUSPENDED / DELETED（仅 `ps -a`） |
 | `PRIO` | 优先级（数值越小越高，按 RTOS 约定调整） |
 | `STACK` | 栈大小（字节） |
+| `USED` | 已用栈字节数（栈魔数水位反推）；未启用栈检查时为 `-` |
+| `USE%` | 栈使用率 |
 | `CPU%` | 粗略 CPU 占用；无统计支持时为 `-` |
 | `JOB` | 若为 JOB 任务，对应 JOB 名；否则 `-` |
 
@@ -1142,7 +1144,6 @@ WARN: confirm ignored
 | `Backspace` / `DEL` | 删字符 |
 | `Ctrl-C` | 中断（§9.3） |
 | `Ctrl-D` | 粘贴结束 / EOF（等价 `run` 当前缓冲） |
-| `↑` `↓` | 历史（`SHELL_HISTORY_MAX`，默认 32 条） |
 | `Tab` | 补全（命令 / 任务名 / JOB 名 / 标签 / 变量 / 文件） |
 
 - `CMD_HIDDEN` 命令不参与 Tab 补全。
@@ -1550,7 +1551,6 @@ cleanup 步骤 3 按此表执行，与脚本钩子内容无关：
 typedef struct {
     uint16_t line_max;
     uint16_t paste_max;
-    uint8_t  history_max;
     uint8_t  block_depth;
     uint8_t  job_max;
     uint8_t  job_prio;
@@ -1573,7 +1573,6 @@ typedef struct {
 |---|---|---|
 | `SHELL_LINE_MAX` | 256 | 行缓冲 |
 | `SHELL_PASTE_MAX` | 8192 | 粘贴缓冲 |
-| `SHELL_HISTORY_MAX` | 32 | 历史条数 |
 | `SHELL_BLOCK_DEPTH` | 8 | 块嵌套 / 调用栈上限 |
 | `SHELL_JOB_MAX` | 8 | 并发 JOB 上限 |
 | `SHELL_JOB_STACK_MIN/MAX` | 1024 / 16384 | 栈合法区间 |

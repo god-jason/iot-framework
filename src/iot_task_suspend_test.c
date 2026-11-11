@@ -23,7 +23,7 @@ void iot_test_suspend(void)
 {
     tf_begin("iot/task suspend-resume");
 
-    TF_CHECK_INT(iot_task_create(&s_worker, "sus_worker", 8U,
+    TF_CHECK_INT(iot_task_create(&s_worker, "sus_worker", 6U,
                                  worker_entry, NULL,
                                  s_stack, sizeof(s_stack)), IOT_OK);
     TF_CHECK(!iot_task_is_suspended(&s_worker));

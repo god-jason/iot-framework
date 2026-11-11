@@ -24,3 +24,16 @@ void iot_mem_free(void *ptr)
 {
     free(ptr);
 }
+
+int iot_mem_get_info(iot_mem_info_t *out)
+{
+    if (out == NULL) {
+        return -1;
+    }
+    /* 标准库分配器不提供容量信息，状态显示按“未知”处理 */
+    out->total_bytes = 0U;
+    out->used_bytes = 0U;
+    out->free_bytes = 0U;
+    out->max_free_bytes = 0U;
+    return 0;
+}

@@ -43,7 +43,7 @@ extern "C" {
 /* ============================== 常量 ============================== */
 
 /* 优先级数量：0..IOT_MAX_PRIORITY-1 */
-#define IOT_MAX_PRIORITY       32
+#define IOT_MAX_PRIORITY       8
 /* 最高优先级（最紧急） */
 #define IOT_PRIORITY_HIGHEST   0U
 /* 最低优先级，保留给内置空闲任务 */

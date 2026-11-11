@@ -285,9 +285,9 @@ static void test_priority_set(void)
     TF_CHECK_INT(iot_task_create(&s_prio_task, "prio", 5U, prio_entry, NULL,
                                  s_prio_stack, sizeof(s_prio_stack)), IOT_OK);
 
-    TF_CHECK_INT(iot_task_set_priority(&s_prio_task, 8U), IOT_OK);
-    TF_CHECK_INT(s_prio_task.priority, 8);
-    TF_CHECK_INT(s_prio_task.base_priority, 8);
+    TF_CHECK_INT(iot_task_set_priority(&s_prio_task, 6U), IOT_OK);
+    TF_CHECK_INT(s_prio_task.priority, 6);
+    TF_CHECK_INT(s_prio_task.base_priority, 6);
 
     TF_CHECK_INT(iot_task_set_priority(&s_prio_task, IOT_PRIORITY_IDLE),
                  IOT_INVALID_PARAM);

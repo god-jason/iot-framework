@@ -303,6 +303,10 @@ if is_plat("cross") then
 
         add_defines("IOT_PLATFORM_STM32")
         add_defines("IOT_STM32_" .. family:upper())
+        -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
+        if family == "f1" then
+            add_defines("IOT_USE_TRACE=0", "IOT_CRASH_ENABLE=0")
+        end
         iot_trace_defines()
 
         -- force=true：CPU/FPU 选项必须原样传给 arm-none-eabi-gcc，
@@ -399,6 +403,8 @@ if is_plat("cross") then
 
             add_defines("IOT_PLATFORM_STM32", "IOT_STM32_F1")
             add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
+            -- 与 iot-stm32 库保持一致：F1 裁剪 trace 与崩溃记录
+            add_defines("IOT_USE_TRACE=0", "IOT_CRASH_ENABLE=0")
             iot_trace_defines()
             add_defines("LOG_LEVEL=LOG_LEVEL_NONE")
 

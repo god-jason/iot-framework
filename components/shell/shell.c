@@ -2,13 +2,13 @@
  * shell.c - Shell 实例管理、输出、行编辑与输入分派
  *
  * 每个 shell_t 实例拥有独立的变量表 / JOB 表 / 输入缓冲 / 行编辑 /
- * 历史 / 粘贴缓冲 / 输出后端；默认实例由 shell_setup() 创建并绑定串口
+ * 粘贴缓冲 / 输出后端；默认实例由 shell_setup() 创建并绑定串口
  * 或标准输入输出，虚拟实例由 shell_instance_create() 创建。
  *
  * 输出：先格式化到栈缓冲，再在全局输出互斥内一次性写出，保证
  *       "[JOB X] ..." 整行原子，不会被其他任务/实例插入。
  * 输入：shell_instance_feed() 投递字节到实例环形缓冲；输入任务取出后
- *       由行编辑器处理（回显、退格、历史、Ctrl-C/Ctrl-D、Tab）。
+ *       由行编辑器处理（回显、退格、Ctrl-C/Ctrl-D、Tab 补全）。
  * 分派：SHELL_CTX 命令优先 → 脚本语句；块（IF/FOR/WHILE…）累积到粘贴
  *       缓冲，闭合后作为匿名 JOB 同步执行。
  */
@@ -23,6 +23,10 @@
 
 static shell_t *s_default;              /* 默认实例（平台绑定） */
 static iot_mutex_t *s_out_mutex;        /* 全局输出互斥，所有实例共享 */
+
+/* 惰性实例化：只保存配置，首次 shell_lazy_start() 才真正分配 */
+static shell_config_t s_lazy_cfg;
+static bool s_lazy_ready;
 
 /* ------------------------------ 输出 ------------------------------ */
 
@@ -132,7 +136,6 @@ void shell_instance_reset(shell_t *sh)
 
     memset(sh->rx, 0, SHELL_RX_MAX);
     memset(sh->line, 0, SHELL_LINE_MAX);
-    memset(sh->hist, 0, (size_t)SHELL_HISTORY_MAX * SHELL_LINE_MAX);
     memset(sh->paste, 0, SHELL_PASTE_MAX);
 
     sh->rx_head = 0U;
@@ -140,8 +143,6 @@ void shell_instance_reset(shell_t *sh)
     sh->ctrlc = false;
     sh->line_len = 0U;
     sh->last_esc = false;
-    sh->hist_count = 0U;
-    sh->hist_pos = 0U;
     sh->paste_len = 0U;
     sh->block_depth = 0;
     sh->in_paste = false;
@@ -169,16 +170,13 @@ shell_t *shell_instance_create(const shell_config_t *cfg)
                                               sizeof(shell_job_t *));
     sh->rx = (char *)iot_mem_malloc(SHELL_RX_MAX);
     sh->line = (char *)iot_mem_malloc(SHELL_LINE_MAX);
-    sh->hist = (char (*)[SHELL_LINE_MAX])iot_mem_calloc(SHELL_HISTORY_MAX,
-                                                        SHELL_LINE_MAX);
     sh->paste = (char *)iot_mem_malloc(SHELL_PASTE_MAX);
 
     if (sh->jobs == NULL || sh->rx == NULL || sh->line == NULL ||
-        sh->hist == NULL || sh->paste == NULL) {
+        sh->paste == NULL) {
         iot_mem_free(sh->jobs);
         iot_mem_free(sh->rx);
         iot_mem_free(sh->line);
-        iot_mem_free(sh->hist);
         iot_mem_free(sh->paste);
         iot_mem_free(sh);
         return NULL;
@@ -198,7 +196,6 @@ void shell_instance_destroy(shell_t *sh)
     iot_mem_free(sh->jobs);
     iot_mem_free(sh->rx);
     iot_mem_free(sh->line);
-    iot_mem_free(sh->hist);
     iot_mem_free(sh->paste);
     if (s_default == sh) {
         s_default = NULL;
@@ -554,32 +551,6 @@ static void shell_prompt(shell_t *sh)
     }
 }
 
-static void shell_history_add(shell_t *sh, const char *line)
-{
-    if (line == NULL || line[0] == '\0') {
-        return;
-    }
-    if (sh->hist_count > 0U &&
-        strcmp(sh->hist[(sh->hist_count - 1U) % SHELL_HISTORY_MAX], line) == 0) {
-        return;
-    }
-    (void)snprintf(sh->hist[sh->hist_count % SHELL_HISTORY_MAX],
-                   SHELL_LINE_MAX, "%s", line);
-    sh->hist_count++;
-    sh->hist_pos = sh->hist_count;
-}
-
-static void shell_line_clear(shell_t *sh)
-{
-    uint16_t i;
-
-    for (i = 0U; i < sh->line_len; i++) {
-        shell_puts(sh, "\b \b");
-    }
-    sh->line_len = 0U;
-    sh->line[0] = '\0';
-}
-
 /* 提交一行：块累积或直接执行 */
 static void shell_submit_line(shell_t *sh)
 {
@@ -605,11 +576,8 @@ static void shell_submit_line(shell_t *sh)
         return;
     }
 
-    shell_history_add(sh, sh->line);
-
     (void)snprintf(tok_buf, sizeof(tok_buf), "%s", sh->line);
     tok = shell_first_token(tok_buf, &rest);
-
     /* 续行态或块起始：累积到粘贴缓冲 */
     if (sh->block_depth > 0 || (tok[0] != '\0' && shell_is_block_start(tok))) {
         if ((uint32_t)sh->paste_len + len + 2U > SHELL_PASTE_MAX) {
@@ -722,34 +690,18 @@ static void shell_feed_char(shell_t *sh, int c)
         shell_complete(sh);
         return;
     }
-    if (c == 0x1B) {                    /* ESC 序列（历史） */
+    if (c == 0x1B) {                    /* ESC：方向键等控制序列，整段丢弃 */
         sh->last_esc = true;
         return;
     }
-    if (sh->last_esc && c == '[') {
-        return;
-    }
-    if (sh->last_esc && (c == 'A' || c == 'B')) {
-        sh->last_esc = false;
-        if (sh->hist_count == 0U) {
+    if (sh->last_esc) {
+        /* CSI 序列 ESC [ 参数... 终止符：在终止字节前保持吞掉状态 */
+        if (c == '[' || (c >= '0' && c <= '9') || c == ';') {
             return;
         }
-        if (c == 'A' && sh->hist_pos > 0U) {
-            sh->hist_pos--;
-        } else if (c == 'B' && sh->hist_pos + 1U < sh->hist_count) {
-            sh->hist_pos++;
-        }
-        shell_line_clear(sh);
-        if (sh->hist_pos < sh->hist_count) {
-            const char *h = sh->hist[sh->hist_pos % SHELL_HISTORY_MAX];
-
-            (void)snprintf(sh->line, SHELL_LINE_MAX, "%s", h);
-            sh->line_len = (uint16_t)strlen(sh->line);
-            shell_out(sh, sh->line, sh->line_len);
-        }
+        sh->last_esc = false;
         return;
     }
-    sh->last_esc = false;
 
     if (c >= 0x20 && c < 0x7F && sh->line_len + 1U < SHELL_LINE_MAX) {
         sh->line[sh->line_len++] = (char)c;
@@ -763,16 +715,30 @@ static void shell_feed_char(shell_t *sh, int c)
 static void shell_task_entry(void *arg)
 {
     shell_t *sh = (shell_t *)arg;
+    uint32_t last_input = iot_tick_get();
 
     shell_prompt(sh);
     for (;;) {
         int c = shell_rx_pop(sh);
 
-        if (c < 0) {
-            iot_sleep_ms(10U);
+        if (c >= 0) {
+            last_input = iot_tick_get();
+            shell_feed_char(sh, c);
             continue;
         }
-        shell_feed_char(sh, c);
+#if SHELL_IDLE_FREE_MS > 0
+        if (sh->lazy_free) {
+            if (shell_jobs_running(sh)) {
+                /* 有 JOB 在跑：不回收，并持续刷新空闲计时 */
+                last_input = iot_tick_get();
+            } else if ((uint32_t)(iot_tick_get() - last_input) >=
+                       (uint32_t)SHELL_IDLE_FREE_MS) {
+                /* 长时间无输入：任务自行退出，由平台监听任务回收实例内存 */
+                iot_task_exit();
+            }
+        }
+#endif
+        iot_sleep_ms(10U);
     }
 }
 
@@ -796,4 +762,66 @@ int shell_start(void)
         return -1;
     }
     return shell_instance_start(s_default);
+}
+
+/* ---------------------- 按需实例化 / 空闲回收 ---------------------- */
+
+int shell_lazy_setup(const shell_config_t *cfg)
+{
+    if (cfg == NULL || cfg->write == NULL) {
+        return -1;
+    }
+    s_lazy_cfg = *cfg;
+    s_lazy_ready = true;
+    return 0;
+}
+
+int shell_lazy_start(void)
+{
+    if (s_default != NULL) {
+        return 0;
+    }
+    if (!s_lazy_ready) {
+        return -1;
+    }
+
+    s_default = shell_instance_create(&s_lazy_cfg);
+    if (s_default == NULL) {
+        return -1;
+    }
+    s_default->lazy_free = true;      /* 空闲超时后自动退出并回收 */
+    shell_cmd_clear();
+
+    if (shell_instance_start(s_default) != 0) {
+        shell_instance_destroy(s_default);
+        return -1;
+    }
+    return 0;
+}
+
+bool shell_active(void)
+{
+    return s_default != NULL;
+}
+
+bool shell_task_finished(void)
+{
+    return (s_default != NULL && s_default->task != NULL &&
+            s_default->task->state == IOT_TASK_TERMINATED);
+}
+
+int shell_shutdown(void)
+{
+    if (s_default == NULL) {
+        return 0;
+    }
+    if (s_default->task != NULL) {
+        if (s_default->task->state != IOT_TASK_TERMINATED) {
+            return -1;              /* 任务仍在运行，不能释放其栈 */
+        }
+        (void)iot_task_destroy(s_default->task);
+        s_default->task = NULL;
+    }
+    shell_instance_destroy(s_default);   /* 内部会把 s_default 置 NULL */
+    return 0;
 }

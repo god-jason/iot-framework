@@ -256,6 +256,24 @@ void shell_jobs_clear(shell_t *sh)
     shell_vars_clear(&sh->vars);
 }
 
+bool shell_jobs_running(const shell_t *sh)
+{
+    uint16_t i;
+
+    if (sh == NULL || sh->jobs == NULL) {
+        return false;
+    }
+    for (i = 0U; i < SHELL_JOB_MAX; i++) {
+        const shell_job_t *job = sh->jobs[i];
+
+        if (job != NULL && job->used &&
+            (job->state == JOB_RUNNING || job->state == JOB_STOPPING)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* 按槽位取 JOB（空槽返回 NULL），供 jobs/loads 遍历 */
 shell_job_t *shell_job_slot(shell_t *sh, uint16_t index)
 {

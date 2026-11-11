@@ -1,5 +1,12 @@
 /*
- * stm32_shell.c - STM32 平台 Shell 默认绑定（UART1）
+ * stm32_shell.c - STM32 平台 Shell 默认绑定（UART1，按需加载）
+ *
+ * 内存策略（RAM 紧张的 MCU）：
+ *   - 默认只创建一个 768B 栈的监听任务，不分配任何 Shell 缓冲；
+ *   - 收到第一笔串口输入才惰性创建实例（约 2.4KB）与输入任务（3KB）；
+ *   - SHELL_IDLE_FREE_MS（默认 30s）内无输入，输入任务自行退出，
+ *     监听任务随后回收实例缓冲，回到近零占用；
+ *   - 有 JOB 正在执行时不回收（由 shell 任务内部判断）。
  *
  * 输出：hal_uart_transmit()（板级通常映射 USART1）
  * 输入：hal_uart_receive() 轮询，收到字节即 shell_feed()
@@ -45,7 +52,7 @@ static hal_uart_t *stm32_shell_uart(void)
     return STM32_SHELL_UART_DEFAULT;
 }
 
-static void *s_rx_task;
+static void *s_watch_task;
 
 static int stm32_shell_write(const char *data, uint32_t len, void *user)
 {
@@ -60,18 +67,35 @@ static int stm32_shell_write(const char *data, uint32_t len, void *user)
                               (size_t)len, 100U) == HAL_OK) ? (int)len : -1;
 }
 
-/* 输入泵：每次读 1 字节，超时则让出 CPU */
-static void stm32_shell_rx_task(void *arg)
+/*
+ * 首字节监听 + 输入泵：
+ *   未激活时只等首字节（不占用 shell 缓冲）；
+ *   激活后把字节投递给实例，并在实例因空闲超时退出后回收其内存。
+ */
+static void stm32_shell_watch_task(void *arg)
 {
+    hal_uart_t *uart = (hal_uart_t *)arg;
     uint8_t ch;
 
-    (void)arg;
     for (;;) {
+        if (!shell_active()) {
+            if (hal_uart_receive != NULL &&
+                hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK &&
+                shell_lazy_start() == 0) {
+                (void)shell_feed((const char *)&ch, 1U);
+            }
+            continue;
+        }
+
+        if (shell_task_finished()) {
+            /* 空闲超时后任务已退出：销毁任务并释放实例缓冲 */
+            (void)shell_shutdown();
+            continue;
+        }
+
         if (hal_uart_receive != NULL &&
-            hal_uart_receive(stm32_shell_uart(), &ch, 1U, 20U) == HAL_OK) {
+            hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK) {
             (void)shell_feed((const char *)&ch, 1U);
-        } else {
-            iot_sleep_ms(5U);
         }
     }
 }
@@ -79,10 +103,12 @@ static void stm32_shell_rx_task(void *arg)
 int shell_platform_start(const char *version)
 {
     shell_config_t cfg;
+    hal_uart_t *uart;
 
     if (hal_uart_transmit == NULL) {
         return -1;
     }
+    uart = stm32_shell_uart();
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = version;
@@ -90,18 +116,17 @@ int shell_platform_start(const char *version)
     cfg.user = NULL;
     cfg.reset = (hal_system_reset != NULL) ? hal_system_reset : NULL;
 
-    if (shell_setup(&cfg) != 0) {
+    /* 只保存配置；实例与输入任务等第一笔输入到来才创建 */
+    if (shell_lazy_setup(&cfg) != 0) {
         return -1;
     }
-    if (shell_start() != 0) {
-        return -1;
+    if (s_watch_task == NULL) {
+        s_watch_task = iot_task_create_dynamic("sh_watch",
+                                               (uint8_t)SHELL_WATCH_PRIO,
+                                               stm32_shell_watch_task, uart,
+                                               (uint32_t)SHELL_WATCH_STACK);
     }
-    if (s_rx_task == NULL) {
-        /* 优先级低于 shell 任务：先让 shell 任务打印提示符 */
-        s_rx_task = iot_task_create_dynamic("uart_rx", 25U,
-                                            stm32_shell_rx_task, NULL, 1024U);
-    }
-    return (s_rx_task != NULL) ? 0 : -1;
+    return (s_watch_task != NULL) ? 0 : -1;
 }
 
 #endif /* IOT_PLATFORM_STM32 */

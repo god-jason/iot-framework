@@ -306,7 +306,6 @@ stop <name>           →  置 stop_flag 并 rtos_sem_give(wait_sem) 唤醒
 |---|---|---|
 | `SHELL_LINE_MAX` | 256 | 行缓冲 |
 | `SHELL_PASTE_MAX` | 8192 | 粘贴缓冲 |
-| `SHELL_HISTORY_MAX` | 32 | 历史条数 |
 | `SHELL_BLOCK_DEPTH` | 8 | 块嵌套 / 调用栈上限 |
 | `SHELL_JOB_MAX` | 8 | 并发 JOB 上限 |
 | `SHELL_JOB_PRIO` | 2 | 默认优先级 |

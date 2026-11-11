@@ -103,7 +103,7 @@ typedef struct {
 /* ============================== 实例生命周期 ============================== */
 
 /*
- * 创建虚拟实例：从 iot_mem 堆分配行缓冲 / 历史 / 粘贴缓冲 / JOB 表 /
+ * 创建虚拟实例：从 iot_mem 堆分配行缓冲 / 粘贴缓冲 / JOB 表 /
  * 变量表（大小由 shell_config.h 决定）。write 为 NULL 时丢弃输出。
  * 返回实例指针；参数非法或内存不足返回 NULL。
  */
@@ -148,6 +148,27 @@ int shell_setup(const shell_config_t *cfg);
 /* 默认实例指针（未初始化返回 NULL） */
 shell_t *shell_default(void);
 
+/*
+ * 按需（惰性）实例化：只保存配置，不分配任何内存。
+ * 首次 shell_lazy_start() 才创建实例缓冲与输入任务，适合 RAM 紧张的 MCU。
+ */
+int shell_lazy_setup(const shell_config_t *cfg);
+
+/* 已配置但未实例化时创建实例与输入任务；已激活直接返回 0 */
+int shell_lazy_start(void);
+
+/* 默认实例是否已创建 */
+bool shell_active(void);
+
+/* 输入任务是否已因空闲超时自行退出（等待平台回收实例内存） */
+bool shell_task_finished(void);
+
+/*
+ * 回收默认实例：要求输入任务已退出（shell_task_finished()），
+ * 销毁任务并释放全部缓冲，回到“零占用”状态。返回 0 成功。
+ */
+int shell_shutdown(void);
+
 void shell_reset(void);
 int shell_feed(const char *data, uint32_t len);
 uint32_t shell_pending(void);
@@ -157,9 +178,10 @@ int shell_start(void);
 
 /*
  * 平台默认绑定并启动 Shell：
- *   STM32 : 输入 / 输出绑定 UART1（hal_uart_t instance=1 约定）
- *   PC    : 输入 / 输出绑定标准输入输出
- * 内部完成 shell_setup() + 输入泵任务 + shell_start()。
+ *   STM32 : 输入 / 输出绑定 UART1（hal_uart_t instance=1 约定）；
+ *           默认按需加载——只启动首字节监听任务，收到输入才创建实例，
+ *           空闲 SHELL_IDLE_FREE_MS 后自动回收。
+ *   PC    : 输入 / 输出绑定标准输入输出，立即创建实例与输入任务。
  * 返回 0 成功；平台不支持或资源不足返回 -1。
  */
 int shell_platform_start(const char *version);

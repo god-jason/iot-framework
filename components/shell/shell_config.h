@@ -17,9 +17,6 @@
 #ifndef SHELL_PASTE_MAX
 #define SHELL_PASTE_MAX         1024U   /* 粘贴 / 块缓冲上限 */
 #endif
-#ifndef SHELL_HISTORY_MAX
-#define SHELL_HISTORY_MAX       8U      /* 历史条数 */
-#endif
 #ifndef SHELL_BLOCK_DEPTH
 #define SHELL_BLOCK_DEPTH       8U      /* 块嵌套 / 调用栈深度 */
 #endif
@@ -29,7 +26,7 @@
 #define SHELL_JOB_MAX           4U      /* 并发 JOB 上限（槽位按需分配） */
 #endif
 #ifndef SHELL_JOB_PRIO
-#define SHELL_JOB_PRIO          22U     /* 默认优先级（0 最高，idle=31） */
+#define SHELL_JOB_PRIO          5U      /* 默认优先级（0 最高，idle=7） */
 #endif
 #ifndef SHELL_JOB_STACK
 #define SHELL_JOB_STACK         2048U   /* 默认栈（字节） */
@@ -41,10 +38,24 @@
 #define SHELL_JOB_STACK_MAX     8192U
 #endif
 #ifndef SHELL_SHELL_PRIO
-#define SHELL_SHELL_PRIO        20U     /* Shell Task 优先级 */
+#define SHELL_SHELL_PRIO        4U      /* Shell Task 优先级 */
 #endif
 #ifndef SHELL_SHELL_STACK
 #define SHELL_SHELL_STACK       3072U
+#endif
+
+/* ------------------------------ 按需加载 / 空闲回收 ------------------------------ */
+/* 超过该时间无输入即释放 Shell 实例与任务（0 = 常驻不回收） */
+#ifndef SHELL_IDLE_FREE_MS
+#define SHELL_IDLE_FREE_MS      30000U
+#endif
+/* 首字节监听任务栈（未激活 Shell 时的唯一常驻开销） */
+#ifndef SHELL_WATCH_STACK
+#define SHELL_WATCH_STACK       768U
+#endif
+/* 监听任务优先级（须小于 idle） */
+#ifndef SHELL_WATCH_PRIO
+#define SHELL_WATCH_PRIO        6U
 #endif
 
 /* ------------------------------ 等待 ------------------------------ */

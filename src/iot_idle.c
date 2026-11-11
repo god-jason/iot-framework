@@ -11,7 +11,7 @@
 #include "iot_port.h"
 #include "iot_assert.h"
 
-#define IOT_IDLE_STACK_SIZE 4096
+#define IOT_IDLE_STACK_SIZE 1024
 
 iot_task_t *iot_idle_task = NULL;
 

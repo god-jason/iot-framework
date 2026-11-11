@@ -409,6 +409,8 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
     uint32_t blocked = 0U;
     uint32_t suspended = 0U;
     uint32_t total = 0U;
+    uint32_t stack_total = 0U;
+    uint32_t stack_used = 0U;
     iot_task_t *task;
     uint16_t i;
 
@@ -428,10 +430,68 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
         case IOT_TASK_SUSPENDED: suspended++; break;
         default: break;
         }
+
+        stack_total += task->stack_size;
+#if IOT_USE_STACK_CHECK
+        {
+            iot_task_stats_t st;
+
+            if (iot_task_get_stats(task, &st) == IOT_OK &&
+                st.stack_free_bytes <= task->stack_size) {
+                stack_used += task->stack_size - st.stack_free_bytes;
+            }
+        }
+#endif
     }
     shell_printf(sh, "RTOS Tasks: %u (RUNNING=%u READY=%u BLOCKED=%u SUSPENDED=%u)\n",
                  (unsigned)total, (unsigned)running, (unsigned)ready,
                  (unsigned)blocked, (unsigned)suspended);
+
+    /* CPU / 栈 / 堆概览 */
+    {
+        iot_stats_t sys;
+        iot_mem_info_t mem;
+        uint32_t uptime_s;
+
+        (void)iot_stats_get(&sys);
+        uptime_s = sys.tick_count / 1000U;
+#if SHELL_HAS_CPU_STATS
+        {
+            uint32_t idle_pm = (iot_idle_task != NULL)
+                ? iot_task_cpu_permille(iot_idle_task) : 0U;
+            uint32_t busy_pm = (idle_pm <= 1000U) ? (1000U - idle_pm) : 0U;
+
+            shell_printf(sh, "CPU       : %u.%u%% busy, uptime=%us, ctx=%u\n",
+                         (unsigned)(busy_pm / 10U), (unsigned)(busy_pm % 10U),
+                         (unsigned)uptime_s, (unsigned)sys.ctx_switches);
+        }
+#else
+        shell_printf(sh, "CPU       : n/a, uptime=%us, ctx=%u\n",
+                     (unsigned)uptime_s, (unsigned)sys.ctx_switches);
+#endif
+#if IOT_USE_STACK_CHECK
+        if (stack_total > 0U) {
+            uint32_t pm = (uint32_t)(((uint64_t)stack_used * 1000U) /
+                                     stack_total);
+
+            shell_printf(sh, "STACK     : %u/%u B (%u.%u%%)\n",
+                         (unsigned)stack_used, (unsigned)stack_total,
+                         (unsigned)(pm / 10U), (unsigned)(pm % 10U));
+        }
+#endif
+        if (iot_mem_get_info(&mem) == 0 && mem.total_bytes > 0U) {
+            uint32_t pm = (uint32_t)(((uint64_t)mem.used_bytes * 1000U) /
+                                     mem.total_bytes);
+
+            shell_printf(sh, "MEM-heap  : %u/%u B (%u.%u%%), free %u B\n",
+                         (unsigned)mem.used_bytes,
+                         (unsigned)mem.total_bytes,
+                         (unsigned)(pm / 10U), (unsigned)(pm % 10U),
+                         (unsigned)mem.free_bytes);
+        } else {
+            shell_printf(sh, "MEM-heap  : n/a\n");
+        }
+    }
     shell_printf(sh, "JOBs      :");
     {
         bool any = false;
@@ -493,6 +553,8 @@ static void shell_ps_line(shell_t *sh, const iot_task_t *task)
     const char *state = shell_task_state_name(task->state);
     char cpu[8] = "-";
     char stack[8];
+    char used[8] = "-";
+    char use[8] = "-";
 
     (void)snprintf(stack, sizeof(stack), "%u", (unsigned)task->stack_size);
 #if SHELL_HAS_CPU_STATS
@@ -503,10 +565,26 @@ static void shell_ps_line(shell_t *sh, const iot_task_t *task)
                        (unsigned)(pm % 10U));
     }
 #endif
-    shell_printf(sh, "%3u  %-8s  %-4s  %-9s  %4u  %6s  %s  %s\n",
+#if IOT_USE_STACK_CHECK
+    if (task->stack_size > 0U) {
+        iot_task_stats_t st;
+
+        if (iot_task_get_stats(task, &st) == IOT_OK &&
+            st.stack_free_bytes <= task->stack_size) {
+            uint32_t bytes = task->stack_size - st.stack_free_bytes;
+            uint32_t pm = (uint32_t)(((uint64_t)bytes * 1000U) /
+                                     task->stack_size);
+
+            (void)snprintf(used, sizeof(used), "%u", (unsigned)bytes);
+            (void)snprintf(use, sizeof(use), "%u.%u%%", (unsigned)(pm / 10U),
+                           (unsigned)(pm % 10U));
+        }
+    }
+#endif
+    shell_printf(sh, "%3u  %-8s  %-4s  %-9s  %4u  %5s  %4s  %5s  %5s  %s\n",
                  (unsigned)task->tid,
                  task->name != NULL ? task->name : "?",
-                 type, state, (unsigned)task->priority, stack, cpu,
+                 type, state, (unsigned)task->priority, stack, used, use, cpu,
                  job != NULL ? job->name : "-");
 }
 
@@ -525,8 +603,8 @@ static int cmd_ps(shell_t *sh, int argc, char **argv)
         only_sys = true;
     }
 
-    shell_printf(sh, "TID  NAME      TYPE   STATE      PRIO  STACK   CPU%%   JOB\n");
-    shell_printf(sh, "---  --------  -----  ---------  ----  ------  -----  ----\n");
+    shell_printf(sh, "TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%%   CPU%%   JOB\n");
+    shell_printf(sh, "---  --------  ----  ---------  ----  -----  ----  -----  -----  ----\n");
     for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
         shell_job_t *job = shell_job_find_by_task(sh, task);
 

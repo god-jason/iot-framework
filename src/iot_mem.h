@@ -16,6 +16,7 @@
  */
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,6 +33,20 @@ void *iot_mem_realloc(void *ptr, size_t size);
 
 /* 释放由 iot_mem_malloc/calloc/realloc 返回的内存 */
 void iot_mem_free(void *ptr);
+
+/* 堆使用情况，供状态显示/统计；字段由后端尽力提供 */
+typedef struct iot_mem_info {
+    uint32_t total_bytes;       /* 堆总容量；0 = 该后端不提供统计 */
+    uint32_t used_bytes;        /* 已分配的用户字节数（近似，不含分配器开销） */
+    uint32_t free_bytes;        /* 剩余可用字节数 */
+    uint32_t max_free_bytes;    /* 最大连续空闲块；0 = 未知 */
+} iot_mem_info_t;
+
+/*
+ * 查询堆使用情况。
+ * 返回 0 成功（后端不支持统计时 total_bytes 为 0）；out 为 NULL 返回 -1。
+ */
+int iot_mem_get_info(iot_mem_info_t *out);
 
 #ifdef __cplusplus
 }
