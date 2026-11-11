@@ -1,11 +1,15 @@
 /*
- * STM32 内存后端：基于 vendor/tlsf 的静态堆分配器。
+ * stm32_mem_tlsf.c - STM32 内存后端（TLSF 静态堆）
+ *
+ * 本文件只实现 port_mem_* 原语，供 src/iot_mem.c 的统一接口调用：
+ *   iot_mem_malloc/free/realloc 负责任务统计与 calloc/边界处理，
+ *   这里只做纯粹的块分配与堆容量上报。
  *
  * 堆大小可通过编译选项 IOT_MEM_HEAP_SIZE 覆盖；
  * 首次分配时惰性创建 TLSF 控制结构与初始内存池。
  *
- * iot_mem_get_info() 的“已用”是各块 tlsf_block_size() 之和（不含块头），
- * 因此百分比略低于真实占用；用于状态显示足够。
+ * port_mem_info() 的“已用”是各块 tlsf_block_size() 之和（含 iot_mem 的
+ * 统计头），因此百分比略低于真实占用；用于状态显示足够。
  */
 #include "iot_mem.h"
 
@@ -30,7 +34,7 @@ static void iot_mem_ensure(void)
     }
 }
 
-void *iot_mem_malloc(size_t size)
+void *port_mem_malloc(size_t size)
 {
     void *ptr;
 
@@ -42,23 +46,7 @@ void *iot_mem_malloc(size_t size)
     return ptr;
 }
 
-void *iot_mem_calloc(size_t count, size_t size)
-{
-    void *ptr;
-    size_t total;
-
-    if (count != 0U && size > ((size_t)-1) / count) {
-        return NULL;
-    }
-    total = count * size;
-    ptr = iot_mem_malloc(total);
-    if (ptr != NULL) {
-        memset(ptr, 0, total);
-    }
-    return ptr;
-}
-
-void *iot_mem_realloc(void *ptr, size_t size)
+void *port_mem_realloc(void *ptr, size_t size)
 {
     void *out;
     size_t old_size = 0U;
@@ -77,19 +65,20 @@ void *iot_mem_realloc(void *ptr, size_t size)
     return out;
 }
 
-void iot_mem_free(void *ptr)
+void port_mem_free(void *ptr)
 {
-    if (s_tlsf != NULL) {
-        if (ptr != NULL) {
-            size_t size = tlsf_block_size(ptr);
-
-            s_used = (s_used >= size) ? (s_used - size) : 0U;
-        }
-        tlsf_free(s_tlsf, ptr);
+    if (s_tlsf == NULL) {
+        return;
     }
+    if (ptr != NULL) {
+        size_t size = tlsf_block_size(ptr);
+
+        s_used = (s_used >= size) ? (s_used - size) : 0U;
+    }
+    tlsf_free(s_tlsf, ptr);
 }
 
-int iot_mem_get_info(iot_mem_info_t *out)
+int port_mem_info(iot_mem_info_t *out)
 {
     uint32_t total;
 

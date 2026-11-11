@@ -92,6 +92,14 @@
 #define IOT_USE_STATS 1
 #endif
 
+/*
+ * 堆内存归属统计：按任务记账 iot_mem_* 的分配/释放（ps 的 MEM 列、state 汇总）。
+ * 打开后每次分配多一个指针对齐的头部（ARM32 8 字节，x86-64 16 字节）。
+ */
+#ifndef IOT_USE_MEM_STATS
+#define IOT_USE_MEM_STATS 1
+#endif
+
 /* 事件组（多事件同步） */
 #ifndef IOT_USE_EVENT
 #define IOT_USE_EVENT 1

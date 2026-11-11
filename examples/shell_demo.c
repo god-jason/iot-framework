@@ -6,10 +6,19 @@
  *   - 输入：stdin，逐行投递到 shell_feed()
  * 输入结束（管道 EOF）或 quit 命令后停止内核，进程正常返回。
  *
+ * 额外创建两个测试任务，用于验证 ps / state 的统计：
+ *   cpu_load : 每轮把模拟时间推进 3 tick 再睡 15 tick → CPU 约 25%
+ *   mem_load : 逐秒 +512B 再逐秒 -512B（每块持有 1s）→ ps 的 MEM 列阶梯变化
+ *
+ * 本目标定义了 IOT_PC_REAL_TIME：模拟时间跟随墙钟，1 tick ≈ 1ms 真实时间，
+ * 因此上面说的"秒"就是现实中的秒。
+ *
  * 交互测试：
  *   xmake r iot-shell
+ *   > ps
+ *   > state
  * 管道测试：
- *   "ver`nprint 1+2`nquit`n" | iot-shell.exe
+ *   "ps`nstate`nquit`n" | iot-shell.exe
  */
 
 #include "shell.h"
@@ -26,6 +35,51 @@ static int cmd_quit(shell_t *sh, int argc, char **argv)
     return SHELL_OK;
 }
 
+/* ------------------------------ 测试任务 ------------------------------ */
+
+static iot_task_t s_cpu_task;
+static uint8_t    s_cpu_stack[1024];
+
+static iot_task_t s_mem_task;
+static uint8_t    s_mem_stack[1024];
+
+/*
+ * CPU 负载：模拟端的时间只在 idle 里推进，所以这里用 iot_tick_increment()
+ * 代表"本任务忙了 3 个 tick"，再真实睡眠 15 tick，占用约 25%。
+ * 上板时换成一个真实的忙等/计算循环即可，统计口径一致。
+ */
+static void cpu_load_entry(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        iot_tick_increment(3U);
+        iot_sleep_ms(15U);
+    }
+}
+
+/* 内存负载：持有 2KB 两秒，然后释放两秒，循环往复 */
+static void mem_load_entry(void *arg)
+{
+    void *blocks[4];
+    int i;
+
+    (void)arg;
+
+    for (;;) {
+        for (i = 0; i < 4; i++) {
+            blocks[i] = iot_mem_malloc(512U);
+            iot_sleep_ms(1000U);
+        }
+        for (i = 0; i < 4; i++) {
+            iot_mem_free(blocks[i]);
+            blocks[i] = NULL;
+            iot_sleep_ms(1000U);
+        }
+        iot_sleep_ms(2000U);
+    }
+}
+
 int main(void)
 {
     static const shell_cmd_t quit_cmd = {
@@ -40,6 +94,11 @@ int main(void)
     if (shell_register_cmd(&quit_cmd) != 0) {
         printf("register quit failed\n");
     }
+
+    (void)iot_task_create(&s_cpu_task, "cpu_load", 3U, cpu_load_entry, NULL,
+                          s_cpu_stack, sizeof(s_cpu_stack));
+    (void)iot_task_create(&s_mem_task, "mem_load", 5U, mem_load_entry, NULL,
+                          s_mem_stack, sizeof(s_mem_stack));
 
     iot_sched_start();          /* iot_stop() 后返回 */
 

@@ -17,7 +17,38 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <conio.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#include <sys/select.h>
+#endif
+
 static void *s_rx_task;
+
+/* stdin 是否已有数据可读（不阻塞） */
+static bool pc_stdin_ready(void)
+{
+#if defined(_WIN32)
+    /* 交互控制台：有按键才算就绪；管道/重定向：fgets 会立即返回数据或 EOF */
+    if (_isatty(_fileno(stdin))) {
+        return (_kbhit() != 0);
+    }
+    return true;
+#else
+    {
+        fd_set rfds;
+        struct timeval tv;
+
+        FD_ZERO(&rfds);
+        FD_SET(STDIN_FILENO, &rfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+        return (select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv) > 0);
+    }
+#endif
+}
 
 /* Shell 输出后端：stdout */
 static int pc_shell_write(const char *data, uint32_t len, void *user)
@@ -38,6 +69,12 @@ static void pc_shell_rx_task(void *arg)
 
     (void)arg;
     for (;;) {
+        /* 没有输入时用 RTOS 睡眠让出 CPU：模拟时间随 idle 继续推进，
+         * 否则阻塞在 fgets 里会让整个协作式调度器与时钟一起冻结。 */
+        if (!pc_stdin_ready()) {
+            iot_sleep_ms(5U);
+            continue;
+        }
         if (fgets(line, sizeof(line), stdin) == NULL) {
             /* 输入结束（管道 EOF）：先提交未带换行的最后一行，
              * 等 Shell 取完缓冲再停止内核 */

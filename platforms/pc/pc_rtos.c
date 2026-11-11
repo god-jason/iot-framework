@@ -235,21 +235,54 @@ void iot_port_return(void)
  *   - 没有任何时间点时每次推进 1 tick，避免空转过快；
  *   - 存在未来时间点时直接跳到该时刻；
  *   - 已到期时推进 1 tick 触发处理。
+ *
+ * 定义 IOT_PC_REAL_TIME 时（交互演示目标）额外按墙钟节奏真实等待，
+ * 使 1 个 tick ≈ 1ms 真实时间：任务里 iot_sleep_ms(1000) 就是现实 1 秒。
+ * 单元测试不加该宏，保持"时间瞬间推进"以便快速回归。
  */
+#if defined(IOT_PC_REAL_TIME)
+#if !defined(_WIN32)
+#include <time.h>
+#endif
+
+static void pc_wait_ms(uint32_t ms)
+{
+    if (ms == 0U) {
+        return;
+    }
+#if defined(_WIN32)
+    Sleep(ms);
+#else
+    {
+        struct timespec ts;
+
+        ts.tv_sec = (time_t)(ms / 1000U);
+        ts.tv_nsec = (long)(ms % 1000U) * 1000000L;
+        (void)nanosleep(&ts, NULL);
+    }
+#endif
+}
+#endif /* IOT_PC_REAL_TIME */
+
 void iot_port_idle(void)
 {
     uint32_t now = iot_tick_count;
     uint32_t delayed = iot_delayed_next_deadline();
     uint32_t timer = iot_timer_next_deadline();
     uint32_t next = (delayed < timer) ? delayed : timer;
+    uint32_t delta;
 
     if (next == UINT32_MAX) {
-        iot_tick_increment(1U);
+        delta = 1U;
     } else if (IOT_TICK_AFTER(next, now)) {
-        iot_tick_increment(next - now);
+        delta = next - now;
     } else {
-        iot_tick_increment(1U);
+        delta = 1U;
     }
+#if defined(IOT_PC_REAL_TIME)
+    pc_wait_ms(delta);
+#endif
+    iot_tick_increment(delta);
 }
 
 /*
@@ -258,11 +291,12 @@ void iot_port_idle(void)
  */
 void iot_port_idle_timeout(uint32_t ms)
 {
-    if (ms == 0U || ms == UINT32_MAX) {
-        iot_tick_increment(1U);
-    } else {
-        iot_tick_increment(ms);
-    }
+    uint32_t delta = (ms == 0U || ms == UINT32_MAX) ? 1U : ms;
+
+#if defined(IOT_PC_REAL_TIME)
+    pc_wait_ms(delta);
+#endif
+    iot_tick_increment(delta);
 }
 
 void iot_port_request_switch(void)

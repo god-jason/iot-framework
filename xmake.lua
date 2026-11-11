@@ -259,6 +259,8 @@ if not is_plat("cross") then
         set_kind("binary")
         iot_host_common(false)
         add_defines("SHELL_SHELL_STACK=8192", "SHELL_JOB_STACK=4096")
+        -- 交互演示：模拟时间跟随墙钟（1 tick = 1ms），便于观察 ps/state 变化
+        add_defines("IOT_PC_REAL_TIME")
         add_files("examples/shell_demo.c")
         iot_host_links()
     target_end()
@@ -303,6 +305,8 @@ if is_plat("cross") then
 
         add_defines("IOT_PLATFORM_STM32")
         add_defines("IOT_STM32_" .. family:upper())
+        -- 内存后端由平台提供（TLSF 静态堆），否则 iot_mem.c 默认走 libc
+        add_defines("IOT_MEM_PORT")
         -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
         if family == "f1" then
             add_defines("IOT_USE_TRACE=0", "IOT_CRASH_ENABLE=0")

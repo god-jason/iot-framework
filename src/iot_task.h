@@ -78,6 +78,11 @@ struct iot_task {
     uint32_t switches;              /* 被调度上 CPU 的次数 */
 #endif
 
+#if IOT_USE_MEM_STATS
+    uint32_t mem_used;              /* 当前持有的堆字节数（iot_mem_* 记账） */
+    uint32_t mem_peak;              /* 持有量峰值 */
+#endif
+
 #if IOT_USE_NOTIFY
     uint32_t notify_value;          /* 任务通知携带的值 */
     bool notify_pending;            /* 是否有未消费的通知 */

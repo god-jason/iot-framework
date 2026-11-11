@@ -303,18 +303,18 @@ ps #5         按 TID 查看
 ps -a         含 DELETED 墓碑记录
 ```
 
-**列表输出固定 8 列**（`SHELL_HAS_CPU_STATS = 0` 时 CPU% 填 `-`，**不删列**）：
+**列表输出固定 11 列**（`SHELL_HAS_CPU_STATS = 0` 时 CPU% 填 `-`，`IOT_USE_MEM_STATS = 0` 时 MEM 填 `-`，**不删列**）：
 
 ```
 > ps
-TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%   CPU%   JOB
----  --------  ----  ---------  ----  -----  ----  -----  -----  ----
-  1  shell     SYS    READY         3   1024   512  50.0%   -      -
-  2  idle      SYS    RUNNING       0    256    96  37.5%   -      -
-  3  timer     SYS    READY         5    512   208  40.6%   -      -
-  4  uart_rx   SYS    BLOCKED       4    512   184  35.9%   -      -
-  5  FEED      JOB    RUNNING       2   2048   960  46.9%   -    FEED
-  6  MIX       JOB    SUSPENDED     2   2048   688  33.6%   -    MIX
+TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%   MEM     CPU%   JOB
+---  --------  ----  ---------  ----  -----  ----  -----  ------  -----  ----
+  1  shell     SYS    READY         3   1024   512  50.0%     136   -      -
+  2  idle      SYS    RUNNING       0    256    96  37.5%       0   -      -
+  3  timer     SYS    READY         5    512   208  40.6%       0   -      -
+  4  uart_rx   SYS    BLOCKED       4    512   184  35.9%    1432   -      -
+  5  FEED      JOB    RUNNING       2   2048   960  46.9%    2352   -    FEED
+  6  MIX       JOB    SUSPENDED     2   2048   688  33.6%    2352   -    MIX
 ```
 
 | 列 | 说明 |
@@ -327,6 +327,7 @@ TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%   CPU%   JOB
 | `STACK` | 栈大小（字节） |
 | `USED` | 已用栈字节数（栈魔数水位反推）；未启用栈检查时为 `-` |
 | `USE%` | 栈使用率 |
+| `MEM` | 该任务当前持有的堆字节数（`IOT_USE_MEM_STATS`）；关闭统计时为 `-` |
 | `CPU%` | 粗略 CPU 占用；无统计支持时为 `-` |
 | `JOB` | 若为 JOB 任务，对应 JOB 名；否则 `-` |
 
