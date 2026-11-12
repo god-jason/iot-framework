@@ -20,7 +20,7 @@
  *   ldr_read(&ldr, &d);     d.raw 原始码值，d.percent 0~100%
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

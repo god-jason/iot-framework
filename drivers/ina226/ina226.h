@@ -23,14 +23,14 @@
  *   ina226_read(&mon, &d);   // bus_voltage(V) / current(A) / power(W)
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     float shunt_ohm;         /* 分流电阻，单位 Ω */
     float max_current_a;     /* 预期最大电流，单位 A */
     float current_lsb_a;     /* 电流寄存器 1 LSB 对应的安培数 */

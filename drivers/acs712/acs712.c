@@ -10,7 +10,7 @@ static int acs712_check(const acs712_handle_t *handle)
     if (!handle->initialized) {
         return (int)HAL_NOT_READY;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int acs712_init(acs712_handle_t *handle, hal_adc_t *adc, uint8_t channel)
@@ -42,7 +42,7 @@ int acs712_init(acs712_handle_t *handle, hal_adc_t *adc, uint8_t channel)
 
     LOG_I("acs712", "init ok, ch=%u, sens=%.0fmV/A, zero=%.0fmV",
           (unsigned)channel, (double)handle->sens_mv_per_a, (double)handle->zero_mv);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int acs712_deinit(acs712_handle_t *handle)
@@ -52,14 +52,14 @@ int acs712_deinit(acs712_handle_t *handle)
     }
     handle->adc = NULL;
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int acs712_read_raw(acs712_handle_t *handle, uint32_t *raw)
 {
     int ret = acs712_check(handle);
 
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     if (raw == NULL) {
@@ -69,7 +69,7 @@ int acs712_read_raw(acs712_handle_t *handle, uint32_t *raw)
         LOG_E("acs712", "adc read failed");
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int acs712_read(acs712_handle_t *handle, float *amps)
@@ -83,7 +83,7 @@ int acs712_read(acs712_handle_t *handle, float *amps)
         return (int)HAL_INVALID_PARAM;
     }
     ret = acs712_read_raw(handle, &raw);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     if (raw == 0U || raw >= handle->adc_max) {
@@ -96,11 +96,12 @@ int acs712_read(acs712_handle_t *handle, float *amps)
 
     if (current > ACS712_CURRENT_LIMIT_A || current < -ACS712_CURRENT_LIMIT_A) {
         LOG_W("acs712", "current %.1fA out of range, check vref/divider", (double)current);
-        current = DRIVER_CLAMP(current, -ACS712_CURRENT_LIMIT_A, ACS712_CURRENT_LIMIT_A);
+        current = (current > 0.0f) ? ACS712_CURRENT_LIMIT_A
+                                   : -ACS712_CURRENT_LIMIT_A;
     }
 
     *amps = current;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int acs712_set_calibration(acs712_handle_t *handle, float sens_mv_per_a, float zero_mv)
@@ -113,7 +114,7 @@ int acs712_set_calibration(acs712_handle_t *handle, float sens_mv_per_a, float z
     }
     handle->sens_mv_per_a = sens_mv_per_a;
     handle->zero_mv = zero_mv;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int acs712_set_reference(acs712_handle_t *handle, float vref_mv, uint32_t adc_max)
@@ -123,5 +124,5 @@ int acs712_set_reference(acs712_handle_t *handle, float vref_mv, uint32_t adc_ma
     }
     handle->vref_mv = vref_mv;
     handle->adc_max = adc_max;
-    return DRIVER_OK;
+    return HAL_OK;
 }

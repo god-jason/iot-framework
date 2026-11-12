@@ -15,10 +15,10 @@ static void ir_mark(ir_remote_handle_t *h, uint32_t duration_us)
     half = period / 2U;
     hal_irq_disable();
     while (elapsed + period <= duration_us) {
-        (void)driver_gpio_write(h->tx_pin, HAL_GPIO_HIGH);
-        driver_delay_us(half);
-        (void)driver_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-        driver_delay_us(period - half);
+        (void)hal_gpio_write(h->tx_pin, HAL_GPIO_HIGH);
+        hal_delay_us(half);
+        (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
+        hal_delay_us(period - half);
         elapsed += period;
     }
     hal_irq_enable();
@@ -26,8 +26,8 @@ static void ir_mark(ir_remote_handle_t *h, uint32_t duration_us)
 
 static void ir_space(ir_remote_handle_t *h, uint32_t duration_us)
 {
-    (void)driver_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-    driver_delay_us(duration_us);
+    (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
+    hal_delay_us(duration_us);
 }
 
 int ir_remote_set_carrier(ir_remote_handle_t *h, uint16_t carrier_khz)
@@ -35,7 +35,7 @@ int ir_remote_set_carrier(ir_remote_handle_t *h, uint16_t carrier_khz)
     IR_CHECK(h);
     if (carrier_khz < 20U || carrier_khz > 60U) { return (int)HAL_INVALID_PARAM; }
     h->carrier_khz = carrier_khz;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static void ir_send_bit(ir_remote_handle_t *h, uint8_t bit)
@@ -63,8 +63,8 @@ int ir_remote_send_nec(ir_remote_handle_t *h, uint8_t address, uint8_t command)
         }
     }
     ir_mark(h, IR_NEC_STOP_MARK);
-    (void)driver_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-    return DRIVER_OK;
+    (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
+    return HAL_OK;
 }
 
 int ir_remote_encode_nec(const ir_remote_frame_t *frame, uint16_t *timings,
@@ -93,7 +93,7 @@ int ir_remote_encode_nec(const ir_remote_frame_t *frame, uint16_t *timings,
     }
     timings[n++] = IR_NEC_STOP_MARK;
     *count = n;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ir_remote_decode_nec(const uint16_t *timings, size_t count, ir_remote_frame_t *frame)
@@ -122,7 +122,7 @@ int ir_remote_decode_nec(const uint16_t *timings, size_t count, ir_remote_frame_
     frame->address = bytes[0];
     frame->command = bytes[2];
     frame->address_inverted = ((bytes[0] ^ bytes[1]) == 0xFF);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ir_remote_recv(ir_remote_handle_t *h, uint16_t *timings, size_t max_timings,
@@ -137,34 +137,34 @@ int ir_remote_recv(ir_remote_handle_t *h, uint16_t *timings, size_t max_timings,
     if (h->rx_pin == 0U) { return (int)HAL_NOT_SUPPORTED; }
     if (count != NULL) { *count = 0U; }
 
-    level = driver_gpio_read(h->rx_pin);
+    level = hal_gpio_read_level(h->rx_pin);
     if (level < 0) { return (int)HAL_IO_ERROR; }
-    start = driver_tick_ms();
+    start = hal_tick_get();
     /* 等待引导 mark（接收头闲置为高，收到载波拉低） */
     while (level != 0) {
-        level = driver_gpio_read(h->rx_pin);
+        level = hal_gpio_read_level(h->rx_pin);
         if (level < 0) { return (int)HAL_IO_ERROR; }
-        if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
+        if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_us(IR_POLL_US);
+        hal_delay_us(IR_POLL_US);
     }
     /* 逐段测量电平持续时间，直到帧结束或缓冲满 */
     while (n < max_timings) {
         int current = level;
         uint32_t ticks = 0U;
-        while (driver_gpio_read(h->rx_pin) == current) {
-            driver_delay_us(IR_POLL_US);
+        while (hal_gpio_read_level(h->rx_pin) == current) {
+            hal_delay_us(IR_POLL_US);
             ticks++;
             if (ticks * IR_POLL_US > IR_MAX_SEGMENT_US) { break; }
         }
         timings[n++] = (uint16_t)(ticks * IR_POLL_US);
-        level = driver_gpio_read(h->rx_pin);
+        level = hal_gpio_read_level(h->rx_pin);
         if (level < 0) { return (int)HAL_IO_ERROR; }
         if (timings[n - 1U] >= IR_IDLE_US && level != 0) { break; }
     }
     if (count != NULL) { *count = n; }
-    return (n >= IR_NEC_TIMINGS_MIN) ? DRIVER_OK : (int)HAL_TIMEOUT;
+    return (n >= IR_NEC_TIMINGS_MIN) ? HAL_OK : (int)HAL_TIMEOUT;
 }
 
 int ir_remote_init(ir_remote_handle_t *handle, hal_pin_t tx_pin, hal_pin_t rx_pin)
@@ -177,22 +177,22 @@ int ir_remote_init(ir_remote_handle_t *handle, hal_pin_t tx_pin, hal_pin_t rx_pi
     handle->rx_pin = rx_pin;
     handle->carrier_khz = IR_NEC_CARRIER_KHZ_DEFAULT;
     handle->timeout_ms = 100U;
-    if (tx_pin != 0U && driver_gpio_output(tx_pin, HAL_GPIO_LOW) != DRIVER_OK) {
+    if (tx_pin != 0U && hal_gpio_config_output(tx_pin, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (rx_pin != 0U && driver_gpio_input(rx_pin, HAL_GPIO_PULLUP) != DRIVER_OK) {
+    if (rx_pin != 0U && hal_gpio_config_input(rx_pin, HAL_GPIO_PULLUP) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     handle->initialized = true;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ir_remote_deinit(ir_remote_handle_t *handle)
 {
     if (handle == NULL) { return (int)HAL_INVALID_PARAM; }
     if (handle->tx_pin != 0U) {
-        (void)driver_gpio_write(handle->tx_pin, HAL_GPIO_LOW);
+        (void)hal_gpio_write(handle->tx_pin, HAL_GPIO_LOW);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }

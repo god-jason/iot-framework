@@ -6,13 +6,13 @@
  *
  * 参考 libdriver 设计：
  *   dht11_init / dht11_deinit / dht11_read
- * 引脚操作只使用 driver_gpio_* 与 driver_delay_us。
+ * 引脚操作只使用 hal_gpio_* 与 hal_delay_us。
  *
  * 注意：位时序对中断敏感，临界区通过 hal_irq_disable/enable 保护
- *       （driver_io.h 未提供中断接口，沿用 ds18b20 的既有做法）。
+ *       （hal.h 未提供中断接口，沿用 ds18b20 的既有做法）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

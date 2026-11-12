@@ -18,6 +18,7 @@
 
 #include "hal_clock.h"
 #include "hal_pin.h"
+#include "hal_util.h"
 
 #include "hal_gpio.h"
 #include "hal_exti.h"

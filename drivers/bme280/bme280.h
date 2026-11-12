@@ -12,7 +12,7 @@
  * 湿度使用双精度算法（H4/H5 为 12 位补码，需符号扩展）。支持多实例。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +42,7 @@ typedef struct {
 } bme280_calib_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bme280_calib_t calib;
     int32_t t_fine;
     bool initialized;

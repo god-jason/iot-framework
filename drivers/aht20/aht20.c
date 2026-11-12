@@ -4,20 +4,20 @@
 
 static int aht20_wait_ready(aht20_handle_t *handle)
 {
-    uint32_t start = driver_tick_ms();
+    uint32_t start = hal_tick_get();
     uint8_t status = 0U;
 
     for (;;) {
-        if (driver_i2c_read_reg(&handle->i2c, AHT20_CMD_STATUS, &status, 1U) != DRIVER_OK) {
+        if (hal_i2c_dev_read_reg(&handle->i2c, AHT20_CMD_STATUS, &status, 1U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
         if ((status & AHT20_STATUS_BUSY) == 0U) {
-            return DRIVER_OK;
+            return HAL_OK;
         }
-        if ((uint32_t)(driver_tick_ms() - start) > AHT20_MEASURE_DELAY_MS * 3U) {
+        if ((uint32_t)(hal_tick_get() - start) > AHT20_MEASURE_DELAY_MS * 3U) {
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_ms(1U);
+        hal_delay_ms(1U);
     }
 }
 
@@ -34,41 +34,41 @@ int aht20_init(aht20_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : AHT20_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->initialized = false;
 
-    driver_delay_ms(AHT20_POWER_ON_DELAY_MS);
+    hal_delay_ms(AHT20_POWER_ON_DELAY_MS);
 
     /* 软复位，部分模组不支持，失败不视为致命 */
-    ret = driver_i2c_write(&handle->i2c, &reset, 1U);
-    if (ret != DRIVER_OK) {
+    ret = hal_i2c_dev_write(&handle->i2c, &reset, 1U);
+    if (ret != HAL_OK) {
         LOG_W("aht20", "soft reset failed: %d", ret);
     }
-    driver_delay_ms(AHT20_RESET_DELAY_MS);
+    hal_delay_ms(AHT20_RESET_DELAY_MS);
 
-    if (aht20_wait_ready(handle) != DRIVER_OK) {
+    if (aht20_wait_ready(handle) != HAL_OK) {
         LOG_E("aht20", "device not ready");
         return (int)HAL_NOT_READY;
     }
 
     /* 读取状态并检查是否已校准 */
-    if (driver_i2c_read_reg(&handle->i2c, AHT20_CMD_STATUS, &status, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, AHT20_CMD_STATUS, &status, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if ((status & AHT20_STATUS_CALIBRATED) == 0U) {
         uint8_t cmd = AHT20_CMD_CALIBRATE;
 
-        if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK ||
-            driver_i2c_write(&handle->i2c, calibrate, sizeof(calibrate)) != DRIVER_OK) {
+        if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK ||
+            hal_i2c_dev_write(&handle->i2c, calibrate, sizeof(calibrate)) != HAL_OK) {
             LOG_E("aht20", "calibrate failed");
             return (int)HAL_IO_ERROR;
         }
-        driver_delay_ms(AHT20_CALIBRATE_DELAY_MS);
+        hal_delay_ms(AHT20_CALIBRATE_DELAY_MS);
     }
 
     handle->initialized = true;
     LOG_I("aht20", "init ok, status=0x%02X", status);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int aht20_deinit(aht20_handle_t *handle)
@@ -78,7 +78,7 @@ int aht20_deinit(aht20_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int aht20_get_status(aht20_handle_t *handle, uint8_t *status)
@@ -86,7 +86,7 @@ int aht20_get_status(aht20_handle_t *handle, uint8_t *status)
     if (handle == NULL || status == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_read_reg(&handle->i2c, AHT20_CMD_STATUS, status, 1U);
+    return hal_i2c_dev_read_reg(&handle->i2c, AHT20_CMD_STATUS, status, 1U);
 }
 
 int aht20_read(aht20_handle_t *handle, float *temperature, float *humidity)
@@ -103,16 +103,16 @@ int aht20_read(aht20_handle_t *handle, float *temperature, float *humidity)
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_write(&handle->i2c, cmd, sizeof(cmd)) != DRIVER_OK) {
+    if (hal_i2c_dev_write(&handle->i2c, cmd, sizeof(cmd)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(AHT20_MEASURE_DELAY_MS);
+    hal_delay_ms(AHT20_MEASURE_DELAY_MS);
 
-    if (aht20_wait_ready(handle) != DRIVER_OK) {
+    if (aht20_wait_ready(handle) != HAL_OK) {
         return (int)HAL_TIMEOUT;
     }
 
-    if (driver_i2c_read(&handle->i2c, data, sizeof(data)) != DRIVER_OK) {
+    if (hal_i2c_dev_read(&handle->i2c, data, sizeof(data)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -134,5 +134,5 @@ int aht20_read(aht20_handle_t *handle, float *temperature, float *humidity)
     if (temperature != NULL) {
         *temperature = (float)raw_temperature * 200.0f / AHT20_DATA_SCALE - 50.0f;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

@@ -9,7 +9,7 @@
  *
  * 实现说明：与 drivers/sht30 使用同一套命令集与 CRC 算法，为了不复制两份
  * CRC 逻辑，本驱动是对 sht30 的薄封装（句柄内嵌 sht30_handle_t），
- * 硬件访问仍只经由 drivers/common/driver_io.h。
+ * 硬件访问仍只经由 hal.h。
  *
  * 输出单位：温度 ℃，相对湿度 %RH。
  *
@@ -22,7 +22,7 @@
  * 地址/测量命令/CRC 参数另有 sht3x_register.h 中的编译期断言兜底。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 #include "sht30/sht30.h"
 
 #ifdef __cplusplus

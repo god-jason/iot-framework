@@ -13,7 +13,7 @@ static int sht3x_check(const sht3x_handle_t *handle)
     if (handle == NULL || !handle->dev.initialized) {
         return (int)HAL_INVALID_PARAM;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sht3x_init(sht3x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
@@ -26,13 +26,13 @@ int sht3x_init(sht3x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     ret = sht30_init(&handle->dev, i2c,
                      (address != 0U) ? address : SHT3X_DEFAULT_ADDRESS);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("sht3x", "init failed at 0x%02X: %d", (unsigned)address, ret);
         return ret;
     }
 
     LOG_I("sht3x", "init ok at 0x%02X", (unsigned)handle->dev.i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sht3x_deinit(sht3x_handle_t *handle)
@@ -53,7 +53,7 @@ int sht3x_soft_reset(sht3x_handle_t *handle)
 
 int sht3x_set_heater(sht3x_handle_t *handle, bool enable)
 {
-    if (sht3x_check(handle) != DRIVER_OK) {
+    if (sht3x_check(handle) != HAL_OK) {
         return (int)HAL_INVALID_PARAM;
     }
     return sht30_set_heater(&handle->dev, enable);
@@ -61,7 +61,7 @@ int sht3x_set_heater(sht3x_handle_t *handle, bool enable)
 
 int sht3x_read_raw(sht3x_handle_t *handle, uint16_t *raw_temperature, uint16_t *raw_humidity)
 {
-    if (sht3x_check(handle) != DRIVER_OK) {
+    if (sht3x_check(handle) != HAL_OK) {
         return (int)HAL_INVALID_PARAM;
     }
     if (raw_temperature == NULL && raw_humidity == NULL) {
@@ -75,7 +75,7 @@ int sht3x_read(sht3x_handle_t *handle, float *temperature, float *humidity)
     sht30_data_t data;
     int ret;
 
-    if (sht3x_check(handle) != DRIVER_OK) {
+    if (sht3x_check(handle) != HAL_OK) {
         return (int)HAL_INVALID_PARAM;
     }
     if (temperature == NULL && humidity == NULL) {
@@ -86,7 +86,7 @@ int sht3x_read(sht3x_handle_t *handle, float *temperature, float *humidity)
     data.humidity = 0.0f;
 
     ret = sht30_read(&handle->dev, &data);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -96,5 +96,5 @@ int sht3x_read(sht3x_handle_t *handle, float *temperature, float *humidity)
     if (humidity != NULL) {
         *humidity = data.humidity;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

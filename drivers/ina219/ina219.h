@@ -8,14 +8,14 @@
  * 之后可直接读取总线电压、电流与功率。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     float shunt_ohm;
     float current_lsb_a;
     float power_lsb_w;

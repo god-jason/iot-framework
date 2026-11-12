@@ -9,7 +9,7 @@
  * 所有总线访问经由 hal 的 I2C 抽象。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +22,7 @@ typedef enum {
 } sht30_repeatability_e;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     sht30_repeatability_e repeatability;
     bool crc_enabled;
     bool initialized;

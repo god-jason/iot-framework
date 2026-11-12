@@ -9,14 +9,14 @@
  * 支持面板偏移（x_offset / y_offset），便于 135x240、240x240 等小尺寸面板复用。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     hal_pin_t dc;          /* 命令/数据选择，必填 */
     hal_pin_t res;         /* 复位，可为 0 */
     hal_pin_t bl;          /* 背光，可为 0 */

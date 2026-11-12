@@ -11,13 +11,13 @@ static int nrf24l01_write_reg(nrf24l01_handle_t *h, uint8_t reg,
 {
     uint8_t cmd = (uint8_t)(NRF24L01_CMD_W_REGISTER | (reg & NRF_REG_MASK));
     int ret;
-    driver_spi_select(&h->spi);
-    ret = driver_spi_write(&h->spi, &cmd, 1U);
-    if (ret == DRIVER_OK) {
-        ret = driver_spi_write(&h->spi, data, len);
+    hal_spi_dev_select(&h->spi);
+    ret = hal_spi_dev_write(&h->spi, &cmd, 1U);
+    if (ret == HAL_OK) {
+        ret = hal_spi_dev_write(&h->spi, data, len);
     }
-    driver_spi_deselect(&h->spi);
-    return (ret == DRIVER_OK) ? DRIVER_OK : (int)HAL_IO_ERROR;
+    hal_spi_dev_deselect(&h->spi);
+    return (ret == HAL_OK) ? HAL_OK : (int)HAL_IO_ERROR;
 }
 
 static int nrf24l01_write_reg8(nrf24l01_handle_t *h, uint8_t reg, uint8_t value)
@@ -28,58 +28,58 @@ static int nrf24l01_write_reg8(nrf24l01_handle_t *h, uint8_t reg, uint8_t value)
 static int nrf24l01_read_reg(nrf24l01_handle_t *h, uint8_t reg, uint8_t *data, size_t len)
 {
     uint8_t cmd = (uint8_t)(NRF24L01_CMD_R_REGISTER | (reg & NRF_REG_MASK));
-    driver_spi_select(&h->spi);
-    if (driver_spi_write(&h->spi, &cmd, 1U) != DRIVER_OK ||
-        driver_spi_read(&h->spi, data, len) != DRIVER_OK) {
-        driver_spi_deselect(&h->spi);
+    hal_spi_dev_select(&h->spi);
+    if (hal_spi_dev_write(&h->spi, &cmd, 1U) != HAL_OK ||
+        hal_spi_dev_read(&h->spi, data, len) != HAL_OK) {
+        hal_spi_dev_deselect(&h->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&h->spi);
-    return DRIVER_OK;
+    hal_spi_dev_deselect(&h->spi);
+    return HAL_OK;
 }
 
 static int nrf24l01_cmd(nrf24l01_handle_t *h, uint8_t cmd, uint8_t *status)
 {
     uint8_t rx = 0U;
-    driver_spi_select(&h->spi);
-    if (driver_spi_transfer(&h->spi, &cmd, &rx, 1U) != DRIVER_OK) {
-        driver_spi_deselect(&h->spi);
+    hal_spi_dev_select(&h->spi);
+    if (hal_spi_dev_transfer(&h->spi, &cmd, &rx, 1U) != HAL_OK) {
+        hal_spi_dev_deselect(&h->spi);
         LOG_E("nrf24l01", "spi cmd 0x%02X failed", cmd);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&h->spi);
+    hal_spi_dev_deselect(&h->spi);
     if (status != NULL) {
         *status = rx;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_e mode)
 {
     uint8_t config = 0U;
     NRF_CHECK(handle);
-    if (nrf24l01_read_reg(handle, NRF24L01_REG_CONFIG, &config, 1U) != DRIVER_OK) {
+    if (nrf24l01_read_reg(handle, NRF24L01_REG_CONFIG, &config, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (mode == NRF24L01_MODE_POWER_DOWN) {
         config = (uint8_t)(config & ~NRF24L01_CONFIG_PWR_UP);
-        (void)driver_gpio_write(handle->ce, HAL_GPIO_LOW);
+        (void)hal_gpio_write(handle->ce, HAL_GPIO_LOW);
     } else if (mode == NRF24L01_MODE_RX) {
         config |= (uint8_t)(NRF24L01_CONFIG_PWR_UP | NRF24L01_CONFIG_PRIM_RX);
     } else if (mode == NRF24L01_MODE_STANDBY || mode == NRF24L01_MODE_TX) {
         config = (uint8_t)((config & ~NRF24L01_CONFIG_PRIM_RX) | NRF24L01_CONFIG_PWR_UP);
-        (void)driver_gpio_write(handle->ce, HAL_GPIO_LOW);
+        (void)hal_gpio_write(handle->ce, HAL_GPIO_LOW);
     } else {
         return (int)HAL_INVALID_PARAM;
     }
-    if (nrf24l01_write_reg8(handle, NRF24L01_REG_CONFIG, config) != DRIVER_OK) {
+    if (nrf24l01_write_reg8(handle, NRF24L01_REG_CONFIG, config) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (mode == NRF24L01_MODE_RX) {
-        driver_delay_us(NRF24L01_RX_SETTLE_US);
-        (void)driver_gpio_write(handle->ce, HAL_GPIO_HIGH);
+        hal_delay_us(NRF24L01_RX_SETTLE_US);
+        (void)hal_gpio_write(handle->ce, HAL_GPIO_HIGH);
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int nrf24l01_set_frequency(nrf24l01_handle_t *handle, uint32_t frequency_khz)
@@ -91,11 +91,11 @@ int nrf24l01_set_frequency(nrf24l01_handle_t *handle, uint32_t frequency_khz)
     }
     channel = (uint8_t)((frequency_khz - NRF24L01_FREQ_BASE_KHZ) / NRF24L01_FREQ_STEP_KHZ);
     if (channel > NRF24L01_CHANNEL_MAX ||
-        nrf24l01_write_reg8(handle, NRF24L01_REG_RF_CH, channel) != DRIVER_OK) {
+        nrf24l01_write_reg8(handle, NRF24L01_REG_RF_CH, channel) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     handle->channel = channel;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int nrf24l01_set_address(nrf24l01_handle_t *handle, const uint8_t *address, uint8_t width)
@@ -104,13 +104,13 @@ int nrf24l01_set_address(nrf24l01_handle_t *handle, const uint8_t *address, uint
     if (address == NULL || width < NRF24L01_ADDR_WIDTH_MIN || width > NRF24L01_ADDR_WIDTH_MAX) {
         return (int)HAL_INVALID_PARAM;
     }
-    if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, (uint8_t)(width - 2U)) != DRIVER_OK ||
-        nrf24l01_write_reg(handle, NRF24L01_REG_TX_ADDR, address, width) != DRIVER_OK ||
-        nrf24l01_write_reg(handle, NRF24L01_REG_RX_ADDR_P0, address, width) != DRIVER_OK) {
+    if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, (uint8_t)(width - 2U)) != HAL_OK ||
+        nrf24l01_write_reg(handle, NRF24L01_REG_TX_ADDR, address, width) != HAL_OK ||
+        nrf24l01_write_reg(handle, NRF24L01_REG_RX_ADDR_P0, address, width) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     handle->address_width = width;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
@@ -124,43 +124,43 @@ int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
     if (data == NULL || len == 0U || len > handle->payload_size) {
         return (int)HAL_INVALID_PARAM;
     }
-    if (nrf24l01_set_mode(handle, NRF24L01_MODE_STANDBY) != DRIVER_OK) {
+    if (nrf24l01_set_mode(handle, NRF24L01_MODE_STANDBY) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
     (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF_IRQ_CLEAR);
-    driver_spi_select(&handle->spi);
-    ret = driver_spi_write(&handle->spi, &cmd, 1U);
-    if (ret == DRIVER_OK) {
-        ret = driver_spi_write(&handle->spi, data, len);
+    hal_spi_dev_select(&handle->spi);
+    ret = hal_spi_dev_write(&handle->spi, &cmd, 1U);
+    if (ret == HAL_OK) {
+        ret = hal_spi_dev_write(&handle->spi, data, len);
     }
-    driver_spi_deselect(&handle->spi);
-    if (ret != DRIVER_OK) {
+    hal_spi_dev_deselect(&handle->spi);
+    if (ret != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     /* CE 高电平脉冲触发发射 */
-    (void)driver_gpio_write(handle->ce, HAL_GPIO_HIGH);
-    driver_delay_us(NRF24L01_CE_PULSE_US);
-    (void)driver_gpio_write(handle->ce, HAL_GPIO_LOW);
-    start = driver_tick_ms();
+    (void)hal_gpio_write(handle->ce, HAL_GPIO_HIGH);
+    hal_delay_us(NRF24L01_CE_PULSE_US);
+    (void)hal_gpio_write(handle->ce, HAL_GPIO_LOW);
+    start = hal_tick_get();
     for (;;) {
-        if (nrf24l01_cmd(handle, NRF24L01_CMD_NOP, &status) != DRIVER_OK) {
+        if (nrf24l01_cmd(handle, NRF24L01_CMD_NOP, &status) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
         if ((status & NRF24L01_STATUS_TX_DS) != 0U) {
             (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF24L01_STATUS_TX_DS);
-            return DRIVER_OK;
+            return HAL_OK;
         }
         if ((status & NRF24L01_STATUS_MAX_RT) != 0U) {
             (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF24L01_STATUS_MAX_RT);
             (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
             return (int)HAL_IO_ERROR;
         }
-        if ((uint32_t)(driver_tick_ms() - start) > handle->timeout_ms) {
+        if ((uint32_t)(hal_tick_get() - start) > handle->timeout_ms) {
             (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_us(50U);
+        hal_delay_us(50U);
     }
 }
 
@@ -174,7 +174,7 @@ int nrf24l01_poll(nrf24l01_handle_t *handle, uint8_t *data, size_t len, size_t *
     if (data == NULL || len == 0U) {
         return (int)HAL_INVALID_PARAM;
     }
-    if (nrf24l01_cmd(handle, NRF24L01_CMD_NOP, &status) != DRIVER_OK) {
+    if (nrf24l01_cmd(handle, NRF24L01_CMD_NOP, &status) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if ((status & NRF24L01_STATUS_RX_DR) == 0U ||
@@ -187,18 +187,18 @@ int nrf24l01_poll(nrf24l01_handle_t *handle, uint8_t *data, size_t len, size_t *
         (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF_IRQ_CLEAR);
         return (int)HAL_OVERFLOW;
     }
-    driver_spi_select(&handle->spi);
-    if (driver_spi_write(&handle->spi, &cmd, 1U) != DRIVER_OK ||
-        driver_spi_read(&handle->spi, data, width) != DRIVER_OK) {
-        driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    if (hal_spi_dev_write(&handle->spi, &cmd, 1U) != HAL_OK ||
+        hal_spi_dev_read(&handle->spi, data, width) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&handle->spi);
+    hal_spi_dev_deselect(&handle->spi);
     (void)nrf24l01_write_reg8(handle, NRF24L01_REG_STATUS, NRF24L01_STATUS_RX_DR);
     if (received != NULL) {
         *received = width;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int nrf24l01_recv(nrf24l01_handle_t *handle, uint8_t *data, size_t len,
@@ -211,19 +211,19 @@ int nrf24l01_recv(nrf24l01_handle_t *handle, uint8_t *data, size_t len,
     if (data == NULL || len == 0U) {
         return (int)HAL_INVALID_PARAM;
     }
-    if (nrf24l01_set_mode(handle, NRF24L01_MODE_RX) != DRIVER_OK) {
+    if (nrf24l01_set_mode(handle, NRF24L01_MODE_RX) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    start = driver_tick_ms();
+    start = hal_tick_get();
     for (;;) {
         ret = nrf24l01_poll(handle, data, len, received);
         if (ret != (int)HAL_NOT_READY) {
             return ret;
         }
-        if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
+        if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_us(100U);
+        hal_delay_us(100U);
     }
 }
 
@@ -245,7 +245,7 @@ int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
     }
     handle->spi.handle = spi;
     handle->spi.cs = cs;
-    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->spi.timeout_ms = HAL_SPI_TIMEOUT_DEFAULT;
     handle->ce = ce;
     handle->irq = irq;
     handle->channel = 76U;
@@ -253,24 +253,24 @@ int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
     handle->address_width = (uint8_t)NRF24L01_ADDR_WIDTH_MAX;
     handle->timeout_ms = 100U;
     handle->initialized = false;
-    if ((cs != 0U && driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) ||
-        driver_gpio_output(ce, HAL_GPIO_LOW) != DRIVER_OK) {
+    if ((cs != 0U && hal_gpio_config_output(cs, HAL_GPIO_HIGH) != HAL_OK) ||
+        hal_gpio_config_output(ce, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (irq != 0U && driver_gpio_input(irq, HAL_GPIO_PULLUP) != DRIVER_OK) {
+    if (irq != 0U && hal_gpio_config_input(irq, HAL_GPIO_PULLUP) != HAL_OK) {
         LOG_W("nrf24l01", "irq pin init failed");
     }
-    driver_delay_ms(100U);   /* Tpor */
+    hal_delay_ms(100U);   /* Tpor */
     /* 器件探测：SETUP_AW 仅 bit1:0 有效，回读必须等于写入值 */
-    if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, 0x03U) != DRIVER_OK ||
-        nrf24l01_read_reg(handle, NRF24L01_REG_SETUP_AW, &value, 1U) != DRIVER_OK) {
+    if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, 0x03U) != HAL_OK ||
+        nrf24l01_read_reg(handle, NRF24L01_REG_SETUP_AW, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if ((value & 0x03U) != 0x03U) {
         LOG_E("nrf24l01", "not found (SETUP_AW=0x%02X)", value);
         return (int)HAL_NOT_FOUND;
     }
-    for (i = 0U; i < DRIVER_ARRAY_SIZE(defaults); i++) {
+    for (i = 0U; i < (sizeof(defaults)/sizeof((defaults)[0])); i++) {
         (void)nrf24l01_write_reg8(handle, defaults[i][0], defaults[i][1]);
     }
     (void)nrf24l01_write_reg8(handle, NRF24L01_REG_RF_CH, handle->channel);
@@ -280,7 +280,7 @@ int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
     handle->initialized = true;
     (void)nrf24l01_write_reg8(handle, NRF24L01_REG_CONFIG,
                               (uint8_t)(NRF24L01_CONFIG_EN_CRC | NRF24L01_CONFIG_CRCO));
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int nrf24l01_deinit(nrf24l01_handle_t *handle)
@@ -295,5 +295,5 @@ int nrf24l01_deinit(nrf24l01_handle_t *handle)
         (void)hal_gpio_deinit(handle->ce);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }

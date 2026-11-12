@@ -8,14 +8,14 @@
  * 参考 libdriver 风格：max6675_init / max6675_read。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     bool initialized;
 } max6675_handle_t;
 

@@ -16,7 +16,7 @@ static int mq2_check(const mq2_handle_t *handle)
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int mq2_init(mq2_handle_t *handle, uint16_t vc_mv, uint16_t rl_ohm)
@@ -33,7 +33,7 @@ int mq2_init(mq2_handle_t *handle, uint16_t vc_mv, uint16_t rl_ohm)
 
     LOG_I("mq2", "init ok, vc=%umV rl=%uohm",
           (unsigned)handle->vc_mv, (unsigned)handle->rl_ohm);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int mq2_deinit(mq2_handle_t *handle)
@@ -44,7 +44,7 @@ int mq2_deinit(mq2_handle_t *handle)
     handle->initialized = false;
     handle->r0_ohm = 0U;
     handle->ppm_scale = 0.0f;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int mq2_calibrate_r0(mq2_handle_t *handle, uint16_t adc_mv, float clean_air_ratio)
@@ -52,7 +52,7 @@ int mq2_calibrate_r0(mq2_handle_t *handle, uint16_t adc_mv, float clean_air_rati
     float rs;
     int ret = mq2_check(handle);
 
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     if (clean_air_ratio <= 0.0f || adc_mv < MQ2_MIN_VALID_MV || adc_mv >= handle->vc_mv) {
@@ -69,28 +69,28 @@ int mq2_calibrate_r0(mq2_handle_t *handle, uint16_t adc_mv, float clean_air_rati
         return (int)HAL_INVALID_PARAM;
     }
     LOG_I("mq2", "R0 calibrated: %luohm", (unsigned long)handle->r0_ohm);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int mq2_set_ppm_scale(mq2_handle_t *handle, float ppm_scale)
 {
     int ret = mq2_check(handle);
 
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     if (ppm_scale < 0.0f) {
         return (int)HAL_INVALID_PARAM;
     }
     handle->ppm_scale = ppm_scale;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int mq2_read(mq2_handle_t *handle, uint16_t adc_mv, mq2_data_t *data)
 {
     int ret = mq2_check(handle);
 
-    if (ret != DRIVER_OK || data == NULL) {
+    if (ret != HAL_OK || data == NULL) {
         return (int)HAL_INVALID_PARAM;
     }
 
@@ -108,7 +108,7 @@ int mq2_read(mq2_handle_t *handle, uint16_t adc_mv, mq2_data_t *data)
     data->rs_ohm = mq2_rs_from_mv(adc_mv, handle->vc_mv, handle->rl_ohm);
     if (handle->r0_ohm == 0U) {
         /* 未标定 R0：只输出原始电压与 Rs，不编造浓度 */
-        return DRIVER_OK;
+        return HAL_OK;
     }
 
     data->ratio = data->rs_ohm / (float)handle->r0_ohm;
@@ -117,5 +117,5 @@ int mq2_read(mq2_handle_t *handle, uint16_t adc_mv, mq2_data_t *data)
         data->ppm_est = handle->ppm_scale * data->ratio;
         data->ppm_valid = true;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

@@ -25,7 +25,7 @@
  *   mpu9250_read(&imu, &d);
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,9 +63,9 @@ typedef struct {
 } mpu9250_data_t;
 
 typedef struct {
-    driver_i2c_t i2c;
-    driver_spi_t spi;
-    driver_i2c_t mag;               /* AK8963 访问通道（旁路到同一 I2C 主机） */
+    hal_i2c_dev_t i2c;
+    hal_spi_dev_t spi;
+    hal_i2c_dev_t mag;               /* AK8963 访问通道（旁路到同一 I2C 主机） */
     bool use_spi;
     bool mag_present;
     float mag_ut_per_lsb[3];        /* 按 ASA 修正后的 µT/LSB */

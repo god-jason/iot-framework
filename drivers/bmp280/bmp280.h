@@ -10,7 +10,7 @@
  * 校准系数保存在句柄内，支持多实例。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +33,7 @@ typedef struct {
 } bmp280_calib_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bmp280_calib_t calib;
     int32_t t_fine;
     bool initialized;

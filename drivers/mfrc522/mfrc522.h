@@ -9,14 +9,14 @@
  * 未实现：Crypto1 认证（扇区读写前必须由上层完成，或后续按 datasheet 补充）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     hal_pin_t reset;           /* 可传 0，则仅软件复位 */
     uint8_t version;
     uint32_t timeout_ms;

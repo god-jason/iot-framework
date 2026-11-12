@@ -18,7 +18,7 @@
  *       自行按角度跳变计数。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +41,7 @@ typedef struct {
 } as5600_data_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     as5600_power_mode_e power_mode;
     uint16_t conf;                  /* 最近一次读取的 CONF 值 */
     bool initialized;

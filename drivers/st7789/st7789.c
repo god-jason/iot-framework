@@ -7,14 +7,14 @@ static int st7789_send(st7789_handle_t *handle, bool is_data,
 {
     int ret;
 
-    driver_spi_select(&handle->config.spi);
-    if (driver_gpio_write(handle->config.dc,
-                          is_data ? HAL_GPIO_HIGH : HAL_GPIO_LOW) != DRIVER_OK) {
-        driver_spi_deselect(&handle->config.spi);
+    hal_spi_dev_select(&handle->config.spi);
+    if (hal_gpio_write(handle->config.dc,
+                          is_data ? HAL_GPIO_HIGH : HAL_GPIO_LOW) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->config.spi);
         return (int)HAL_IO_ERROR;
     }
-    ret = driver_spi_write(&handle->config.spi, data, len);
-    driver_spi_deselect(&handle->config.spi);
+    ret = hal_spi_dev_write(&handle->config.spi, data, len);
+    hal_spi_dev_deselect(&handle->config.spi);
     return ret;
 }
 
@@ -26,13 +26,13 @@ static int st7789_cmd(st7789_handle_t *handle, uint8_t cmd)
 static int st7789_cmd_arg(st7789_handle_t *handle, uint8_t cmd,
                           const uint8_t *arg, size_t len)
 {
-    if (st7789_cmd(handle, cmd) != DRIVER_OK) {
+    if (st7789_cmd(handle, cmd) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (st7789_send(handle, true, arg, len) != DRIVER_OK) {
+    if (st7789_send(handle, true, arg, len) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static int st7789_set_window(st7789_handle_t *handle, uint16_t x0, uint16_t y0,
@@ -48,7 +48,7 @@ static int st7789_set_window(st7789_handle_t *handle, uint16_t x0, uint16_t y0,
     buf[1] = (uint8_t)(xs & 0xFFU);
     buf[2] = (uint8_t)(xe >> 8);
     buf[3] = (uint8_t)(xe & 0xFFU);
-    if (st7789_cmd_arg(handle, ST7789_CMD_CASET, buf, sizeof(buf)) != DRIVER_OK) {
+    if (st7789_cmd_arg(handle, ST7789_CMD_CASET, buf, sizeof(buf)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -56,10 +56,10 @@ static int st7789_set_window(st7789_handle_t *handle, uint16_t x0, uint16_t y0,
     buf[1] = (uint8_t)(ys & 0xFFU);
     buf[2] = (uint8_t)(ye >> 8);
     buf[3] = (uint8_t)(ye & 0xFFU);
-    if (st7789_cmd_arg(handle, ST7789_CMD_RASET, buf, sizeof(buf)) != DRIVER_OK) {
+    if (st7789_cmd_arg(handle, ST7789_CMD_RASET, buf, sizeof(buf)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 /* 整屏推送：单次 CS 期间逐行发送，避免构造大缓冲 */
@@ -67,31 +67,31 @@ static int st7789_push(st7789_handle_t *handle)
 {
     size_t stride = (size_t)handle->width * 2U;
     uint16_t row;
-    int ret = DRIVER_OK;
+    int ret = HAL_OK;
 
     if (st7789_set_window(handle, 0U, 0U,
                           (uint16_t)(handle->width - 1U),
-                          (uint16_t)(handle->height - 1U)) != DRIVER_OK) {
+                          (uint16_t)(handle->height - 1U)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (st7789_cmd(handle, ST7789_CMD_RAMWR) != DRIVER_OK) {
+    if (st7789_cmd(handle, ST7789_CMD_RAMWR) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
-    driver_spi_select(&handle->config.spi);
-    if (driver_gpio_write(handle->config.dc, HAL_GPIO_HIGH) != DRIVER_OK) {
-        driver_spi_deselect(&handle->config.spi);
+    hal_spi_dev_select(&handle->config.spi);
+    if (hal_gpio_write(handle->config.dc, HAL_GPIO_HIGH) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->config.spi);
         return (int)HAL_IO_ERROR;
     }
     for (row = 0U; row < handle->height; row++) {
-        ret = driver_spi_write(&handle->config.spi,
+        ret = hal_spi_dev_write(&handle->config.spi,
                                &handle->config.gram[(size_t)row * stride], stride);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             break;
         }
     }
-    driver_spi_deselect(&handle->config.spi);
-    return (ret == DRIVER_OK) ? DRIVER_OK : (int)HAL_IO_ERROR;
+    hal_spi_dev_deselect(&handle->config.spi);
+    return (ret == HAL_OK) ? HAL_OK : (int)HAL_IO_ERROR;
 }
 
 static void st7789_gram_fill(st7789_handle_t *handle, uint16_t color)
@@ -143,27 +143,27 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
     handle->config.height = handle->height;
     handle->initialized = false;
 
-    if (driver_gpio_output(config->dc, HAL_GPIO_LOW) != DRIVER_OK) {
+    if (hal_gpio_config_output(config->dc, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (config->bl != 0U && driver_gpio_output(config->bl, HAL_GPIO_HIGH) != DRIVER_OK) {
+    if (config->bl != 0U && hal_gpio_config_output(config->bl, HAL_GPIO_HIGH) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (config->res != 0U) {
-        (void)driver_gpio_output(config->res, HAL_GPIO_LOW);
-        driver_delay_ms(ST7789_RESET_LOW_MS);
-        (void)driver_gpio_write(config->res, HAL_GPIO_HIGH);
-        driver_delay_ms(ST7789_RESET_WAIT_MS);
+        (void)hal_gpio_config_output(config->res, HAL_GPIO_LOW);
+        hal_delay_ms(ST7789_RESET_LOW_MS);
+        (void)hal_gpio_write(config->res, HAL_GPIO_HIGH);
+        hal_delay_ms(ST7789_RESET_WAIT_MS);
     }
 
-    if (st7789_cmd(handle, ST7789_CMD_SWRESET) != DRIVER_OK) {
+    if (st7789_cmd(handle, ST7789_CMD_SWRESET) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(ST7789_RESET_WAIT_MS);
-    if (st7789_cmd(handle, ST7789_CMD_SLPOUT) != DRIVER_OK) {
+    hal_delay_ms(ST7789_RESET_WAIT_MS);
+    if (st7789_cmd(handle, ST7789_CMD_SLPOUT) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(ST7789_SLPOUT_MS);
+    hal_delay_ms(ST7789_SLPOUT_MS);
 
     if (config->mirror_x) {
         madctl |= ST7789_MADCTL_MX;
@@ -175,37 +175,37 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
         madctl |= ST7789_MADCTL_BGR;
     }
 
-    if (st7789_cmd_arg(handle, ST7789_CMD_COLMOD, &colmod, 1U) != DRIVER_OK ||
-        st7789_cmd_arg(handle, ST7789_CMD_MADCTL, &madctl, 1U) != DRIVER_OK ||
-        st7789_cmd_arg(handle, ST7789_CMD_PORCTRL, porctrl, sizeof(porctrl)) != DRIVER_OK) {
+    if (st7789_cmd_arg(handle, ST7789_CMD_COLMOD, &colmod, 1U) != HAL_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_MADCTL, &madctl, 1U) != HAL_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_PORCTRL, porctrl, sizeof(porctrl)) != HAL_OK) {
         LOG_E("st7789", "init sequence failed");
         return (int)HAL_IO_ERROR;
     }
 
-    for (i = 0U; i < DRIVER_ARRAY_SIZE(single_regs); i++) {
-        if (st7789_cmd_arg(handle, single_regs[i][0], &single_regs[i][1], 1U) != DRIVER_OK) {
+    for (i = 0U; i < (sizeof(single_regs)/sizeof((single_regs)[0])); i++) {
+        if (st7789_cmd_arg(handle, single_regs[i][0], &single_regs[i][1], 1U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
 
-    if (st7789_cmd_arg(handle, ST7789_CMD_PWCTRL1, pwctrl1, sizeof(pwctrl1)) != DRIVER_OK ||
-        st7789_cmd_arg(handle, ST7789_CMD_PVGAMCTRL, pgamma, sizeof(pgamma)) != DRIVER_OK ||
-        st7789_cmd_arg(handle, ST7789_CMD_NVGAMCTRL, ngamma, sizeof(ngamma)) != DRIVER_OK ||
-        st7789_cmd(handle, config->invert ? ST7789_CMD_INVON : ST7789_CMD_INVOFF) != DRIVER_OK ||
-        st7789_cmd(handle, ST7789_CMD_NORON) != DRIVER_OK ||
-        st7789_cmd(handle, ST7789_CMD_DISPON) != DRIVER_OK) {
+    if (st7789_cmd_arg(handle, ST7789_CMD_PWCTRL1, pwctrl1, sizeof(pwctrl1)) != HAL_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_PVGAMCTRL, pgamma, sizeof(pgamma)) != HAL_OK ||
+        st7789_cmd_arg(handle, ST7789_CMD_NVGAMCTRL, ngamma, sizeof(ngamma)) != HAL_OK ||
+        st7789_cmd(handle, config->invert ? ST7789_CMD_INVON : ST7789_CMD_INVOFF) != HAL_OK ||
+        st7789_cmd(handle, ST7789_CMD_NORON) != HAL_OK ||
+        st7789_cmd(handle, ST7789_CMD_DISPON) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(ST7789_DISPON_MS);
+    hal_delay_ms(ST7789_DISPON_MS);
 
     st7789_gram_fill(handle, ST7789_COLOR_BLACK);
-    if (st7789_push(handle) != DRIVER_OK) {
+    if (st7789_push(handle) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
     LOG_I("st7789", "init ok (%ux%u)", (unsigned)handle->width, (unsigned)handle->height);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int st7789_deinit(st7789_handle_t *handle)
@@ -217,11 +217,11 @@ int st7789_deinit(st7789_handle_t *handle)
         (void)st7789_cmd(handle, ST7789_CMD_DISPOFF);
         (void)st7789_cmd(handle, ST7789_CMD_SLPIN);
         if (handle->config.bl != 0U) {
-            (void)driver_gpio_write(handle->config.bl, HAL_GPIO_LOW);
+            (void)hal_gpio_write(handle->config.bl, HAL_GPIO_LOW);
         }
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int st7789_write_cmd(st7789_handle_t *handle, const uint8_t *cmd, size_t len)
@@ -274,7 +274,7 @@ int st7789_draw_pixel(st7789_handle_t *handle, uint16_t x, uint16_t y, uint16_t 
     index = ((size_t)y * handle->width + x) * 2U;
     handle->config.gram[index] = (uint8_t)(color >> 8);
     handle->config.gram[index + 1U] = (uint8_t)(color & 0xFFU);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int st7789_show(st7789_handle_t *handle)
@@ -293,8 +293,8 @@ int st7789_set_backlight(st7789_handle_t *handle, bool on)
     if (handle->config.bl == 0U) {
         return (int)HAL_NOT_SUPPORTED;
     }
-    return (driver_gpio_write(handle->config.bl,
-                              on ? HAL_GPIO_HIGH : HAL_GPIO_LOW) == DRIVER_OK)
-           ? DRIVER_OK : (int)HAL_IO_ERROR;
+    return (hal_gpio_write(handle->config.bl,
+                              on ? HAL_GPIO_HIGH : HAL_GPIO_LOW) == HAL_OK)
+           ? HAL_OK : (int)HAL_IO_ERROR;
 }
 

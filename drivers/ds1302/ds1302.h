@@ -14,7 +14,7 @@
  *   ds1302_set_time(&rtc, &t);
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

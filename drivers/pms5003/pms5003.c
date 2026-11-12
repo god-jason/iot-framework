@@ -14,7 +14,7 @@ int pms5003_init(pms5003_handle_t *handle)
     }
     handle->initialized = true;
     LOG_I("pms5003", "init ok");
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pms5003_deinit(pms5003_handle_t *handle)
@@ -23,7 +23,7 @@ int pms5003_deinit(pms5003_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pms5003_parse(pms5003_handle_t *handle, const uint8_t *buffer, size_t length,
@@ -73,5 +73,5 @@ int pms5003_parse(pms5003_handle_t *handle, const uint8_t *buffer, size_t length
     data->nc_50 = pms5003_u16(&buffer[PMS5003_OFF_NC_50]);
     data->nc_100 = pms5003_u16(&buffer[PMS5003_OFF_NC_100]);
     data->version = pms5003_u16(&buffer[PMS5003_OFF_VERSION]);
-    return DRIVER_OK;
+    return HAL_OK;
 }

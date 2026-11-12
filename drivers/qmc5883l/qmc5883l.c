@@ -11,12 +11,12 @@ static const float s_lsb_per_gauss[QMC5883L_RANGE_COUNT] = {
 
 static int qmc5883l_write_reg(qmc5883l_handle_t *handle, uint8_t reg, uint8_t value)
 {
-    return (int)driver_i2c_write_reg(&handle->i2c, reg, &value, 1U);
+    return (int)hal_i2c_dev_write_reg(&handle->i2c, reg, &value, 1U);
 }
 
 static int qmc5883l_read_regs(qmc5883l_handle_t *handle, uint8_t reg, uint8_t *buf, size_t len)
 {
-    return (int)driver_i2c_read_reg(&handle->i2c, reg, buf, len);
+    return (int)hal_i2c_dev_read_reg(&handle->i2c, reg, buf, len);
 }
 
 static void qmc5883l_update_sensitivity(qmc5883l_handle_t *handle)
@@ -31,11 +31,11 @@ static int qmc5883l_write_ctrl1(qmc5883l_handle_t *handle, uint8_t value)
     int ret;
 
     ret = qmc5883l_write_reg(handle, QMC5883L_REG_CTRL1, value);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     ret = qmc5883l_read_regs(handle, QMC5883L_REG_CTRL1, &check, 1U);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     if (check != value) {
@@ -43,7 +43,7 @@ static int qmc5883l_write_ctrl1(qmc5883l_handle_t *handle, uint8_t value)
               (unsigned)check, (unsigned)value);
         return (int)HAL_HW_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int qmc5883l_soft_reset(qmc5883l_handle_t *handle)
@@ -56,13 +56,13 @@ int qmc5883l_soft_reset(qmc5883l_handle_t *handle)
 
     /* CTRL2.SOFT_RST 复位全部寄存器，复位后必须重新下发配置 */
     ret = qmc5883l_write_reg(handle, QMC5883L_REG_CTRL2, QMC5883L_CTRL2_SOFT_RST);
-    driver_delay_ms(QMC5883L_RESET_DELAY_MS);
-    if (ret != DRIVER_OK) {
+    hal_delay_ms(QMC5883L_RESET_DELAY_MS);
+    if (ret != HAL_OK) {
         return ret;
     }
 
     ret = qmc5883l_write_reg(handle, QMC5883L_REG_SET_RESET, QMC5883L_SET_RESET_PERIOD);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     return qmc5883l_write_ctrl1(handle, handle->ctrl1);
@@ -85,18 +85,18 @@ int qmc5883l_set_range(qmc5883l_handle_t *handle, qmc5883l_range_e range)
     if (value == old_ctrl1) {
         handle->range = range;
         qmc5883l_update_sensitivity(handle);
-        return DRIVER_OK;
+        return HAL_OK;
     }
 
     ret = qmc5883l_write_ctrl1(handle, value);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
     handle->ctrl1 = value;
     handle->range = range;
     qmc5883l_update_sensitivity(handle);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int qmc5883l_get_status(qmc5883l_handle_t *handle, uint8_t *status)
@@ -118,35 +118,35 @@ int qmc5883l_init(qmc5883l_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : QMC5883L_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->range = QMC5883L_RANGE_8G;
     handle->ctrl1 = QMC5883L_CTRL1_DEFAULT;
     handle->initialized = false;
     qmc5883l_update_sensitivity(handle);
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("qmc5883l", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
 
     ret = qmc5883l_soft_reset(handle);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("qmc5883l", "config failed at 0x%02X", (unsigned)handle->i2c.address);
         return ret;
     }
 
     /* 识别寄存器仅作参考，非致命 */
-    if (qmc5883l_read_regs(handle, QMC5883L_REG_CHIP_ID, &id, 1U) == DRIVER_OK &&
+    if (qmc5883l_read_regs(handle, QMC5883L_REG_CHIP_ID, &id, 1U) == HAL_OK &&
         id != QMC5883L_CHIP_ID_VALUE) {
         LOG_W("qmc5883l", "chip id 0x%02X (datasheet 0xFF)", (unsigned)id);
     }
 
-    driver_delay_ms(QMC5883L_START_DELAY_MS);
+    hal_delay_ms(QMC5883L_START_DELAY_MS);
     handle->initialized = true;
     LOG_I("qmc5883l", "init ok at 0x%02X, range=%s",
           (unsigned)handle->i2c.address,
           (handle->range == QMC5883L_RANGE_8G) ? "8G" : "2G");
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int qmc5883l_deinit(qmc5883l_handle_t *handle)
@@ -160,7 +160,7 @@ int qmc5883l_deinit(qmc5883l_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int qmc5883l_read_raw(qmc5883l_handle_t *handle, int16_t xyz[3])
@@ -175,30 +175,30 @@ int qmc5883l_read_raw(qmc5883l_handle_t *handle, int16_t xyz[3])
     }
 
     /* 等一次转换完成：数据手册要求 DRDY 置位后再读 */
-    start = driver_tick_ms();
+    start = hal_tick_get();
     for (;;) {
         ret = qmc5883l_read_regs(handle, QMC5883L_REG_STATUS, &status, 1U);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
         if ((status & QMC5883L_STATUS_DRDY) != 0U) {
             break;
         }
-        if ((uint32_t)(driver_tick_ms() - start) > QMC5883L_DATA_TIMEOUT_MS) {
+        if ((uint32_t)(hal_tick_get() - start) > QMC5883L_DATA_TIMEOUT_MS) {
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_ms(1U);
+        hal_delay_ms(1U);
     }
 
     ret = qmc5883l_read_regs(handle, QMC5883L_REG_DATA_X_LSB, data, sizeof(data));
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
-    xyz[0] = driver_le16(&data[0]);
-    xyz[1] = driver_le16(&data[2]);
-    xyz[2] = driver_le16(&data[4]);
-    return DRIVER_OK;
+    xyz[0] = hal_le16(&data[0]);
+    xyz[1] = hal_le16(&data[2]);
+    xyz[2] = hal_le16(&data[4]);
+    return HAL_OK;
 }
 
 int qmc5883l_read(qmc5883l_handle_t *handle, qmc5883l_data_t *data)
@@ -212,7 +212,7 @@ int qmc5883l_read(qmc5883l_handle_t *handle, qmc5883l_data_t *data)
     }
 
     ret = qmc5883l_read_raw(handle, xyz);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -225,12 +225,12 @@ int qmc5883l_read(qmc5883l_handle_t *handle, qmc5883l_data_t *data)
         data->heading_deg += 360.0f;
     }
 
-    if (qmc5883l_read_regs(handle, QMC5883L_REG_STATUS, &status, 1U) == DRIVER_OK) {
+    if (qmc5883l_read_regs(handle, QMC5883L_REG_STATUS, &status, 1U) == HAL_OK) {
         data->data_ready = ((status & QMC5883L_STATUS_DRDY) != 0U);
         data->overflow = ((status & QMC5883L_STATUS_OVL) != 0U);
     } else {
         data->data_ready = true;
         data->overflow = false;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

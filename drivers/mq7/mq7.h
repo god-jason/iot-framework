@@ -5,7 +5,7 @@
  * MQ-7 一氧化碳传感器驱动（模拟量，ADC 电压输入）。
  *
  * 单位：mv -> mV；rs_ohm -> Ω；ratio -> Rs/R0；ppm_est -> ppm 估算。
- * ADC 采样由上层完成（driver_io.h 未封装 ADC），本驱动只做电压 -> 浓度换算。
+ * ADC 采样由上层完成（hal.h 未封装 ADC），本驱动只做电压 -> 浓度换算。
  * adc_mv 单位 mV，uint16_t 类型可表示 0..65535mV，但这只是类型上限，
  * **实际可用量程由所选 ADC 的 PGA/基准决定**：如 ads1115 默认 PGA=±2.048V、
  * mcp3421/ads1110 固定 ±2.048V（增益×1），超量程表现为码值饱和而非数值溢出，
@@ -19,7 +19,7 @@
  * 真实关系 ppm = A*(Rs/R0)^B，需按 datasheet 标定，ppm_est 仅为线性近似。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

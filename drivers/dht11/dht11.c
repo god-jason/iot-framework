@@ -5,19 +5,19 @@
 /* 释放总线：切换为输入 + 上拉，由上拉电阻拉高 */
 static void dht11_release(dht11_handle_t *handle)
 {
-    (void)driver_gpio_input(handle->pin, HAL_GPIO_PULLUP);
+    (void)hal_gpio_config_input(handle->pin, HAL_GPIO_PULLUP);
 }
 
 /* 主机拉低总线 */
 static void dht11_drive_low(dht11_handle_t *handle)
 {
-    (void)driver_gpio_output(handle->pin, HAL_GPIO_LOW);
-    (void)driver_gpio_write(handle->pin, HAL_GPIO_LOW);
+    (void)hal_gpio_config_output(handle->pin, HAL_GPIO_LOW);
+    (void)hal_gpio_write(handle->pin, HAL_GPIO_LOW);
 }
 
 static int dht11_line(dht11_handle_t *handle)
 {
-    int level = driver_gpio_read(handle->pin);
+    int level = hal_gpio_read_level(handle->pin);
 
     return (level < 0) ? level : (level != 0) ? 1 : 0;
 }
@@ -34,9 +34,9 @@ static int dht11_wait_level(dht11_handle_t *handle, int level, uint32_t timeout_
             return cur;
         }
         if (cur == level) {
-            return DRIVER_OK;
+            return HAL_OK;
         }
-        driver_delay_us(1U);
+        hal_delay_us(1U);
         elapsed++;
     }
     return (int)HAL_TIMEOUT;
@@ -53,10 +53,10 @@ static int dht11_read_byte(dht11_handle_t *handle, uint8_t *value)
     for (i = 0U; i < 8U; i++) {
         /* 每位以约 50us 低电平开始 */
         ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);
-        if (ret == DRIVER_OK) {
+        if (ret == HAL_OK) {
             ret = dht11_wait_level(handle, 1, DHT11_TIMEOUT_US);
         }
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
 
@@ -65,7 +65,7 @@ static int dht11_read_byte(dht11_handle_t *handle, uint8_t *value)
             if (dht11_line(handle) != 1) {
                 break;
             }
-            driver_delay_us(1U);
+            hal_delay_us(1U);
             high_us++;
         }
 
@@ -76,7 +76,7 @@ static int dht11_read_byte(dht11_handle_t *handle, uint8_t *value)
     }
 
     *value = data;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
@@ -92,31 +92,31 @@ int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
     hal_irq_disable();
 
     dht11_drive_low(handle);
-    driver_delay_ms(DHT11_START_LOW_MS);
+    hal_delay_ms(DHT11_START_LOW_MS);
     dht11_release(handle);
-    driver_delay_us(DHT11_RELEASE_US);
+    hal_delay_us(DHT11_RELEASE_US);
 
     /* 从机响应：低约 80us 再高约 80us */
     ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);
-    if (ret == DRIVER_OK) {
+    if (ret == HAL_OK) {
         ret = dht11_wait_level(handle, 1, DHT11_TIMEOUT_US);
     }
-    if (ret == DRIVER_OK) {
+    if (ret == HAL_OK) {
         ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);
     }
 
-    for (i = 0U; (i < DHT11_FRAME_BYTES) && (ret == DRIVER_OK); i++) {
+    for (i = 0U; (i < DHT11_FRAME_BYTES) && (ret == HAL_OK); i++) {
         ret = dht11_read_byte(handle, &frame[i]);
     }
 
     hal_irq_enable();
     dht11_release(handle);
 
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("dht11", "bus timeout");
         return (int)HAL_TIMEOUT;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht11_init(dht11_handle_t *handle, hal_pin_t pin)
@@ -131,8 +131,8 @@ int dht11_init(dht11_handle_t *handle, hal_pin_t pin)
     handle->last_read_ms = 0U;
     handle->initialized = false;
 
-    ret = driver_gpio_input(pin, HAL_GPIO_PULLUP);
-    if (ret != DRIVER_OK) {
+    ret = hal_gpio_config_input(pin, HAL_GPIO_PULLUP);
+    if (ret != HAL_OK) {
         LOG_E("dht11", "gpio init failed: %d", ret);
         return ret;
     }
@@ -144,7 +144,7 @@ int dht11_init(dht11_handle_t *handle, hal_pin_t pin)
 
     handle->initialized = true;
     LOG_I("dht11", "init ok, pin %u", (unsigned int)pin);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht11_deinit(dht11_handle_t *handle)
@@ -153,10 +153,10 @@ int dht11_deinit(dht11_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     if (handle->initialized) {
-        (void)driver_gpio_input(handle->pin, HAL_GPIO_PULLUP);
+        (void)hal_gpio_config_input(handle->pin, HAL_GPIO_PULLUP);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity)
@@ -175,14 +175,14 @@ int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity)
     }
 
     /* DHT11 采样间隔不得小于 1s */
-    now = driver_tick_ms();
+    now = hal_tick_get();
     if (handle->last_read_ms != 0U &&
         (uint32_t)(now - handle->last_read_ms) < DHT11_MIN_INTERVAL_MS) {
         return (int)HAL_BUSY;
     }
 
     ret = dht11_read_raw(handle, frame);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -209,5 +209,5 @@ int dht11_read(dht11_handle_t *handle, float *temperature, float *humidity)
         *temperature = t;
     }
 
-    return DRIVER_OK;
+    return HAL_OK;
 }

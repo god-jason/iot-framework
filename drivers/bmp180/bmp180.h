@@ -17,7 +17,7 @@
  *   bmp180_read(&bmp180, &d);
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +38,7 @@ typedef struct {
 } bmp180_calib_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bmp180_calib_t calib;
     uint8_t oversampling;   /* 0..3，见 BMP180_OSS_* */
     int32_t b5;             /* 温度补偿中间量，压力补偿复用 */

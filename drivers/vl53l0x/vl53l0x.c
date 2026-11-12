@@ -23,34 +23,34 @@
 
 static int vl53l0x_write_u8(vl53l0x_handle_t *handle, uint8_t reg, uint8_t value)
 {
-    return driver_i2c_write_reg(&handle->i2c, reg, &value, 1U);
+    return hal_i2c_dev_write_reg(&handle->i2c, reg, &value, 1U);
 }
 
 static int vl53l0x_read_u8(vl53l0x_handle_t *handle, uint8_t reg, uint8_t *value)
 {
-    return driver_i2c_read_reg(&handle->i2c, reg, value, 1U);
+    return hal_i2c_dev_read_reg(&handle->i2c, reg, value, 1U);
 }
 
 /* 轮询 RESULT_INTERRUPT_STATUS 的"新样本就绪"位 */
 static int vl53l0x_wait_range_ready(vl53l0x_handle_t *handle)
 {
-    uint32_t start = driver_tick_ms();
+    uint32_t start = hal_tick_get();
     uint8_t status = 0U;
     int ret;
 
     for (;;) {
         ret = vl53l0x_read_u8(handle, VL53L0X_REG_RESULT_INTERRUPT_STATUS, &status);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
         if ((status & VL53L0X_INTERRUPT_NEW_SAMPLE_MASK) != 0U) {
-            return DRIVER_OK;
+            return HAL_OK;
         }
-        if ((driver_tick_ms() - start) >= VL53L0X_RANGE_TIMEOUT_MS) {
+        if ((hal_tick_get() - start) >= VL53L0X_RANGE_TIMEOUT_MS) {
             LOG_W("vl53l0x", "range timeout, int status=0x%02X", (unsigned)status);
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_ms(VL53L0X_POLL_INTERVAL_MS);
+        hal_delay_ms(VL53L0X_POLL_INTERVAL_MS);
     }
 }
 
@@ -60,19 +60,19 @@ static int vl53l0x_soft_reset(vl53l0x_handle_t *handle)
     int ret;
 
     ret = vl53l0x_write_u8(handle, VL53L0X_REG_SOFT_RESET, 0x00U);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         /* 冷启动时器件可能已处于复位态，不视为致命错误 */
         LOG_W("vl53l0x", "assert reset failed: %d", ret);
     }
-    driver_delay_ms(VL53L0X_RESET_DELAY_MS);
+    hal_delay_ms(VL53L0X_RESET_DELAY_MS);
 
     ret = vl53l0x_write_u8(handle, VL53L0X_REG_SOFT_RESET, 0x01U);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("vl53l0x", "release reset failed: %d", ret);
         return ret;
     }
-    driver_delay_ms(VL53L0X_RESET_DELAY_MS);
-    return DRIVER_OK;
+    hal_delay_ms(VL53L0X_RESET_DELAY_MS);
+    return HAL_OK;
 }
 
 int vl53l0x_init(vl53l0x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
@@ -87,23 +87,23 @@ int vl53l0x_init(vl53l0x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : VL53L0X_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->revision = 0U;
     handle->initialized = false;
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("vl53l0x", "probe failed at 0x%02X", (unsigned)handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
 
     ret = vl53l0x_soft_reset(handle);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
     /* ID 校验：model id 必须为 0xEE */
     ret = vl53l0x_read_u8(handle, VL53L0X_REG_MODEL_ID, &id);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("vl53l0x", "read model id failed: %d", ret);
         return ret;
     }
@@ -112,7 +112,7 @@ int vl53l0x_init(vl53l0x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         return (int)HAL_NOT_FOUND;
     }
 
-    if (vl53l0x_read_u8(handle, VL53L0X_REG_REVISION_ID, &revision) == DRIVER_OK) {
+    if (vl53l0x_read_u8(handle, VL53L0X_REG_REVISION_ID, &revision) == HAL_OK) {
         handle->revision = revision;
     }
 
@@ -120,7 +120,7 @@ int vl53l0x_init(vl53l0x_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->initialized = true;
     LOG_I("vl53l0x", "init ok, rev=0x%02X", (unsigned)handle->revision);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int vl53l0x_deinit(vl53l0x_handle_t *handle)
@@ -130,7 +130,7 @@ int vl53l0x_deinit(vl53l0x_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int vl53l0x_read(vl53l0x_handle_t *handle, vl53l0x_data_t *data)
@@ -144,19 +144,19 @@ int vl53l0x_read(vl53l0x_handle_t *handle, vl53l0x_data_t *data)
 
     ret = vl53l0x_write_u8(handle, VL53L0X_REG_SYSRANGE_START,
                            VL53L0X_SYSRANGE_START_SINGLE);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("vl53l0x", "start single shot failed: %d", ret);
         return ret;
     }
 
     ret = vl53l0x_wait_range_ready(handle);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
-    ret = driver_i2c_read_reg(&handle->i2c, VL53L0X_REG_RESULT_RANGE_STATUS,
+    ret = hal_i2c_dev_read_reg(&handle->i2c, VL53L0X_REG_RESULT_RANGE_STATUS,
                               block, sizeof(block));
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("vl53l0x", "read result block failed: %d", ret);
         return ret;
     }
@@ -167,13 +167,13 @@ int vl53l0x_read(vl53l0x_handle_t *handle, vl53l0x_data_t *data)
 
     data->range_status = (uint8_t)((block[0] & VL53L0X_RANGE_STATUS_MASK)
                                    >> VL53L0X_RANGE_STATUS_SHIFT);
-    data->distance_mm = (uint16_t)driver_be16(&block[VL53L0X_RESULT_RANGE_OFFSET]);
+    data->distance_mm = (uint16_t)hal_be16(&block[VL53L0X_RESULT_RANGE_OFFSET]);
 
     if (data->range_status != 0U) {
         LOG_D("vl53l0x", "range status %u, dist=%umm",
               (unsigned)data->range_status, (unsigned)data->distance_mm);
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int vl53l0x_read_distance(vl53l0x_handle_t *handle, uint16_t *distance_mm)
@@ -186,10 +186,10 @@ int vl53l0x_read_distance(vl53l0x_handle_t *handle, uint16_t *distance_mm)
     }
 
     ret = vl53l0x_read(handle, &data);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
     *distance_mm = data.distance_mm;
-    return (data.range_status == 0U) ? DRIVER_OK : (int)HAL_NOT_READY;
+    return (data.range_status == 0U) ? HAL_OK : (int)HAL_NOT_READY;
 }

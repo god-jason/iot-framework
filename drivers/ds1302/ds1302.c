@@ -18,25 +18,25 @@ static uint8_t ds1302_bcd_to_bin(uint8_t value)
 
 static void ds1302_ce(ds1302_handle_t *handle, hal_gpio_level_e level)
 {
-    (void)driver_gpio_write(handle->ce, level);
+    (void)hal_gpio_write(handle->ce, level);
 }
 
 static void ds1302_write_byte(ds1302_handle_t *handle, uint8_t value)
 {
     uint8_t i;
 
-    (void)driver_gpio_output(handle->io, HAL_GPIO_HIGH);
+    (void)hal_gpio_config_output(handle->io, HAL_GPIO_HIGH);
     for (i = 0U; i < 8U; i++) {
-        (void)driver_gpio_write(handle->sclk, HAL_GPIO_LOW);
-        (void)driver_gpio_write(handle->io,
-                                ((value & (uint8_t)DRIVER_BIT(i)) != 0U) ? HAL_GPIO_HIGH
+        (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
+        (void)hal_gpio_write(handle->io,
+                                ((value & (uint8_t)(1UL << (i))) != 0U) ? HAL_GPIO_HIGH
                                                                        : HAL_GPIO_LOW);
-        driver_delay_us(DS1302_TICK_US);
+        hal_delay_us(DS1302_TICK_US);
         /* DS1302 在 SCLK 上升沿采样 */
-        (void)driver_gpio_write(handle->sclk, HAL_GPIO_HIGH);
-        driver_delay_us(DS1302_TICK_US);
+        (void)hal_gpio_write(handle->sclk, HAL_GPIO_HIGH);
+        hal_delay_us(DS1302_TICK_US);
     }
-    (void)driver_gpio_write(handle->sclk, HAL_GPIO_LOW);
+    (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
 }
 
 static uint8_t ds1302_read_byte(ds1302_handle_t *handle)
@@ -44,19 +44,19 @@ static uint8_t ds1302_read_byte(ds1302_handle_t *handle)
     uint8_t i;
     uint8_t value = 0U;
 
-    (void)driver_gpio_input(handle->io, HAL_GPIO_PULLUP);
+    (void)hal_gpio_config_input(handle->io, HAL_GPIO_PULLUP);
     for (i = 0U; i < 8U; i++) {
-        (void)driver_gpio_write(handle->sclk, HAL_GPIO_LOW);
-        driver_delay_us(DS1302_TICK_US);
+        (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
+        hal_delay_us(DS1302_TICK_US);
         /* DS1302 在 SCLK 下降沿输出，此处采样 */
-        (void)driver_gpio_write(handle->sclk, HAL_GPIO_HIGH);
-        if (driver_gpio_read(handle->io) > 0) {
-            value = (uint8_t)(value | (uint8_t)DRIVER_BIT(i));
+        (void)hal_gpio_write(handle->sclk, HAL_GPIO_HIGH);
+        if (hal_gpio_read_level(handle->io) > 0) {
+            value = (uint8_t)(value | (uint8_t)(1UL << (i)));
         }
-        driver_delay_us(DS1302_TICK_US);
+        hal_delay_us(DS1302_TICK_US);
     }
-    (void)driver_gpio_write(handle->sclk, HAL_GPIO_LOW);
-    (void)driver_gpio_output(handle->io, HAL_GPIO_HIGH);
+    (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
+    (void)hal_gpio_config_output(handle->io, HAL_GPIO_HIGH);
     return value;
 }
 
@@ -66,13 +66,13 @@ static int ds1302_write_regs(ds1302_handle_t *handle, uint8_t cmd,
     size_t i;
 
     ds1302_ce(handle, HAL_GPIO_HIGH);
-    driver_delay_us(DS1302_CE_SETTLE_US);
+    hal_delay_us(DS1302_CE_SETTLE_US);
     ds1302_write_byte(handle, cmd);
     for (i = 0U; i < len; i++) {
         ds1302_write_byte(handle, data[i]);
     }
     ds1302_ce(handle, HAL_GPIO_LOW);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static int ds1302_read_regs(ds1302_handle_t *handle, uint8_t cmd, uint8_t *data, size_t len)
@@ -80,14 +80,14 @@ static int ds1302_read_regs(ds1302_handle_t *handle, uint8_t cmd, uint8_t *data,
     size_t i;
 
     ds1302_ce(handle, HAL_GPIO_HIGH);
-    driver_delay_us(DS1302_CE_SETTLE_US);
+    hal_delay_us(DS1302_CE_SETTLE_US);
     /* 读命令 = 写命令 | 0x01 */
     ds1302_write_byte(handle, (uint8_t)(cmd | 0x01U));
     for (i = 0U; i < len; i++) {
         data[i] = ds1302_read_byte(handle);
     }
     ds1302_ce(handle, HAL_GPIO_LOW);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 /* ---------------- 公开 API ---------------- */
@@ -103,9 +103,9 @@ int ds1302_init(ds1302_handle_t *handle, hal_pin_t ce, hal_pin_t sclk, hal_pin_t
     handle->io = io;
     handle->initialized = false;
 
-    if (driver_gpio_output(ce, HAL_GPIO_LOW) != DRIVER_OK ||
-        driver_gpio_output(sclk, HAL_GPIO_LOW) != DRIVER_OK ||
-        driver_gpio_output(io, HAL_GPIO_HIGH) != DRIVER_OK) {
+    if (hal_gpio_config_output(ce, HAL_GPIO_LOW) != HAL_OK ||
+        hal_gpio_config_output(sclk, HAL_GPIO_LOW) != HAL_OK ||
+        hal_gpio_config_output(io, HAL_GPIO_HIGH) != HAL_OK) {
         LOG_E("ds1302", "gpio init failed");
         return (int)HAL_IO_ERROR;
     }
@@ -114,7 +114,7 @@ int ds1302_init(ds1302_handle_t *handle, hal_pin_t ce, hal_pin_t sclk, hal_pin_t
     /* 解除写保护，便于后续设置时间 */
     (void)ds1302_set_write_protect(handle, false);
     LOG_I("ds1302", "init ok");
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds1302_deinit(ds1302_handle_t *handle)
@@ -128,11 +128,11 @@ int ds1302_deinit(ds1302_handle_t *handle)
 
     (void)ds1302_set_write_protect(handle, true);
     ds1302_ce(handle, HAL_GPIO_LOW);
-    (void)driver_gpio_input(handle->ce, HAL_GPIO_NOPULL);
-    (void)driver_gpio_input(handle->sclk, HAL_GPIO_NOPULL);
-    (void)driver_gpio_input(handle->io, HAL_GPIO_NOPULL);
+    (void)hal_gpio_config_input(handle->ce, HAL_GPIO_NOPULL);
+    (void)hal_gpio_config_input(handle->sclk, HAL_GPIO_NOPULL);
+    (void)hal_gpio_config_input(handle->io, HAL_GPIO_NOPULL);
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds1302_set_write_protect(ds1302_handle_t *handle, bool enable)
@@ -158,7 +158,7 @@ int ds1302_set_trickle_charger(ds1302_handle_t *handle, uint8_t config)
         return (int)HAL_INVALID_PARAM;
     }
     /* 涓流充电寄存器受写保护控制 */
-    if (ds1302_set_write_protect(handle, false) != DRIVER_OK) {
+    if (ds1302_set_write_protect(handle, false) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     return ds1302_write_regs(handle, DS1302_REG_TRICKLE_CHARGE, &value, 1U);
@@ -188,7 +188,7 @@ int ds1302_set_time(ds1302_handle_t *handle, const ds1302_time_t *time)
     buf[5] = time->weekday;
     buf[6] = ds1302_bin_to_bcd((uint8_t)(time->year - 2000U));
 
-    if (ds1302_set_write_protect(handle, false) != DRIVER_OK) {
+    if (ds1302_set_write_protect(handle, false) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     return ds1302_write_regs(handle, DS1302_REG_SECONDS, buf, sizeof(buf));
@@ -206,7 +206,7 @@ int ds1302_get_time(ds1302_handle_t *handle, ds1302_time_t *time)
     }
 
     ret = ds1302_read_regs(handle, DS1302_REG_SECONDS, buf, sizeof(buf));
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -232,7 +232,7 @@ int ds1302_get_time(ds1302_handle_t *handle, ds1302_time_t *time)
     time->month = ds1302_bcd_to_bin((uint8_t)(buf[4] & DS1302_MONTH_MASK));
     time->weekday = (uint8_t)(buf[5] & DS1302_WEEKDAY_MASK);
     time->year = (uint16_t)(2000U + ds1302_bcd_to_bin(buf[6]));
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds1302_read_ram(ds1302_handle_t *handle, uint8_t offset, uint8_t *data, size_t len)
@@ -262,7 +262,7 @@ int ds1302_write_ram(ds1302_handle_t *handle, uint8_t offset, const uint8_t *dat
     }
 
     cmd = (uint8_t)(DS1302_RAM_BASE + (uint8_t)(offset * 2U));
-    if (ds1302_set_write_protect(handle, false) != DRIVER_OK) {
+    if (ds1302_set_write_protect(handle, false) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     return ds1302_write_regs(handle, cmd, data, len);

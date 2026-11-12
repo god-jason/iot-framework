@@ -8,11 +8,11 @@
  * 接收：RX 脚接一体化接收头（空闲高、收到载波为低），轮询采样记录
  *       各段 mark/space 时长，再由 ir_remote_decode_nec() 解析。
  *
- * 说明：driver_io 层暂无输入捕获抽象，因此接收采用轮询计时；
- * 若需要高精度解码，应在 driver_io 增加定时器捕获接口后替换采样部分。
+ * 说明：HAL 层暂无输入捕获抽象，因此接收采用轮询计时；
+ * 若需要高精度解码，应在 HAL 增加定时器捕获接口后替换采样部分。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

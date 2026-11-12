@@ -13,7 +13,7 @@
  * 需要时可在上层替换实现（见 .c 注释）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 #include "hc_sr04_register.h"
 
 #ifdef __cplusplus

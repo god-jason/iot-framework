@@ -7,7 +7,7 @@
  * 支持连续/单次测量模式，输出单位 lux。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +23,7 @@ typedef enum {
 } bh1750_mode_e;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bh1750_mode_e mode;
     bool initialized;
 } bh1750_handle_t;

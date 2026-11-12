@@ -8,7 +8,7 @@
  * 参考 libdriver 风格：ds18b20_init / ds18b20_read / ds18b20_start。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

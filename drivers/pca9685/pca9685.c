@@ -4,14 +4,14 @@
 
 static int pca9685_write_reg(pca9685_handle_t *handle, uint8_t reg, uint8_t value)
 {
-    return (driver_i2c_write_reg(&handle->i2c, reg, &value, 1U) == DRIVER_OK)
-               ? DRIVER_OK : (int)HAL_IO_ERROR;
+    return (hal_i2c_dev_write_reg(&handle->i2c, reg, &value, 1U) == HAL_OK)
+               ? HAL_OK : (int)HAL_IO_ERROR;
 }
 
 static int pca9685_read_reg(pca9685_handle_t *handle, uint8_t reg, uint8_t *value)
 {
-    return (driver_i2c_read_reg(&handle->i2c, reg, value, 1U) == DRIVER_OK)
-               ? DRIVER_OK : (int)HAL_IO_ERROR;
+    return (hal_i2c_dev_read_reg(&handle->i2c, reg, value, 1U) == HAL_OK)
+               ? HAL_OK : (int)HAL_IO_ERROR;
 }
 
 static uint8_t pca9685_channel_reg(uint8_t channel)
@@ -39,7 +39,7 @@ int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : PCA9685_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->frequency = PCA9685_DEFAULT_FREQ_HZ;
     handle->initialized = false;
 
@@ -47,18 +47,18 @@ int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("pca9685", "probe failed at 0x%02X", handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
 
     /* 唤醒并打开地址自动递增，清除 RESTART */
-    if (pca9685_write_reg(handle, PCA9685_REG_MODE1, PCA9685_MODE1_DEFAULT) != DRIVER_OK) {
+    if (pca9685_write_reg(handle, PCA9685_REG_MODE1, PCA9685_MODE1_DEFAULT) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(PCA9685_WAKE_DELAY_MS);
+    hal_delay_ms(PCA9685_WAKE_DELAY_MS);
 
-    if (pca9685_read_reg(handle, PCA9685_REG_MODE1, &mode1) != DRIVER_OK) {
+    if (pca9685_read_reg(handle, PCA9685_REG_MODE1, &mode1) != HAL_OK) {
         return (int)HAL_NOT_FOUND;
     }
     if ((mode1 & PCA9685_MODE1_AI) == 0U) {
@@ -67,12 +67,12 @@ int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     }
 
     /* 推挽输出（如需开漏驱动 LED 可改为 MODE2_OUTDRV=0） */
-    if (pca9685_write_reg(handle, PCA9685_REG_MODE2, PCA9685_MODE2_DEFAULT) != DRIVER_OK) {
+    if (pca9685_write_reg(handle, PCA9685_REG_MODE2, PCA9685_MODE2_DEFAULT) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     /* 按实际 prescale 换算当前频率 */
-    if (pca9685_read_reg(handle, PCA9685_REG_PRESCALE, &prescale) == DRIVER_OK) {
+    if (pca9685_read_reg(handle, PCA9685_REG_PRESCALE, &prescale) == HAL_OK) {
         handle->frequency = (float)PCA9685_OSC_HZ /
                             ((float)PCA9685_RESOLUTION * (float)(prescale + 1U));
     }
@@ -80,7 +80,7 @@ int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     handle->initialized = true;
     LOG_I("pca9685", "init ok at 0x%02X, %.1f Hz",
           handle->i2c.address, (double)handle->frequency);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pca9685_deinit(pca9685_handle_t *handle)
@@ -93,7 +93,7 @@ int pca9685_deinit(pca9685_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pca9685_set_pwm_freq(pca9685_handle_t *handle, float freq_hz)
@@ -119,31 +119,31 @@ int pca9685_set_pwm_freq(pca9685_handle_t *handle, float freq_hz)
     }
     prescale = (uint8_t)(scaler - 1U);
 
-    if (pca9685_read_reg(handle, PCA9685_REG_MODE1, &mode1) != DRIVER_OK) {
+    if (pca9685_read_reg(handle, PCA9685_REG_MODE1, &mode1) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     /* PRESCALE 只能在 SLEEP 状态下写入 */
     if (pca9685_write_reg(handle, PCA9685_REG_MODE1,
                           (uint8_t)((mode1 & (uint8_t)~PCA9685_MODE1_RESTART) |
-                                    PCA9685_MODE1_SLEEP)) != DRIVER_OK) {
+                                    PCA9685_MODE1_SLEEP)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(PCA9685_SLEEP_DELAY_MS);
+    hal_delay_ms(PCA9685_SLEEP_DELAY_MS);
 
-    if (pca9685_write_reg(handle, PCA9685_REG_PRESCALE, prescale) != DRIVER_OK) {
+    if (pca9685_write_reg(handle, PCA9685_REG_PRESCALE, prescale) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     if (pca9685_write_reg(handle, PCA9685_REG_MODE1,
-                          (uint8_t)(mode1 & (uint8_t)~PCA9685_MODE1_SLEEP)) != DRIVER_OK) {
+                          (uint8_t)(mode1 & (uint8_t)~PCA9685_MODE1_SLEEP)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(PCA9685_WAKE_DELAY_MS);
+    hal_delay_ms(PCA9685_WAKE_DELAY_MS);
 
     handle->frequency = (float)PCA9685_OSC_HZ /
                         ((float)PCA9685_RESOLUTION * (float)(prescale + 1U));
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pca9685_set_pwm(pca9685_handle_t *handle, uint8_t channel, uint16_t on, uint16_t off)
@@ -158,10 +158,10 @@ int pca9685_set_pwm(pca9685_handle_t *handle, uint8_t channel, uint16_t on, uint
     }
 
     pca9685_pack(buf, on, off);
-    if (driver_i2c_write_reg(&handle->i2c, pca9685_channel_reg(channel), buf, 4U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, pca9685_channel_reg(channel), buf, 4U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pca9685_set_full_on(pca9685_handle_t *handle, uint8_t channel, bool full_on)
@@ -191,7 +191,7 @@ int pca9685_set_duty(pca9685_handle_t *handle, uint8_t channel, float duty)
     if (duty >= 1.0f) {
         int ret = pca9685_set_pwm(handle, channel, 0U, 0U);
 
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
         return pca9685_set_full_on(handle, channel, true);
@@ -216,10 +216,10 @@ int pca9685_set_all(pca9685_handle_t *handle, uint16_t on, uint16_t off)
     }
 
     pca9685_pack(buf, on, off);
-    if (driver_i2c_write_reg(&handle->i2c, PCA9685_REG_ALL_LED_ON_L, buf, 4U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, PCA9685_REG_ALL_LED_ON_L, buf, 4U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int pca9685_enable_output(pca9685_handle_t *handle, bool enable)

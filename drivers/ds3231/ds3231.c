@@ -21,19 +21,19 @@ int ds3231_init(ds3231_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? (uint16_t)(address & DS3231_ADDRESS_MASK)
                                           : DS3231_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->initialized = false;
 
-    driver_delay_ms(DS3231_POWER_ON_DELAY_MS);
+    hal_delay_ms(DS3231_POWER_ON_DELAY_MS);
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("ds3231", "probe failed, addr=0x%02X", handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
 
     handle->initialized = true;
     LOG_I("ds3231", "init ok");
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds3231_deinit(ds3231_handle_t *handle)
@@ -46,7 +46,7 @@ int ds3231_deinit(ds3231_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds3231_read(ds3231_handle_t *handle, uint8_t reg, uint8_t *data, size_t len)
@@ -54,7 +54,7 @@ int ds3231_read(ds3231_handle_t *handle, uint8_t reg, uint8_t *data, size_t len)
     if (handle == NULL || data == NULL || !handle->initialized || len == 0U) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_read_reg(&handle->i2c, reg, data, len);
+    return hal_i2c_dev_read_reg(&handle->i2c, reg, data, len);
 }
 
 int ds3231_write(ds3231_handle_t *handle, uint8_t reg, const uint8_t *data, size_t len)
@@ -62,7 +62,7 @@ int ds3231_write(ds3231_handle_t *handle, uint8_t reg, const uint8_t *data, size
     if (handle == NULL || data == NULL || !handle->initialized || len == 0U) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_write_reg(&handle->i2c, reg, data, len);
+    return hal_i2c_dev_write_reg(&handle->i2c, reg, data, len);
 }
 
 int ds3231_set_time(ds3231_handle_t *handle, const ds3231_time_t *time)
@@ -83,9 +83,9 @@ int ds3231_set_time(ds3231_handle_t *handle, const ds3231_time_t *time)
     }
 
     /* 清除 EOSC，保证电池供电时振荡器继续运行 */
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U) == DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U) == HAL_OK) {
         control = (uint8_t)(control & (uint8_t)~DS3231_CTRL_EOSC);
-        (void)driver_i2c_write_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U);
+        (void)hal_i2c_dev_write_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U);
     }
 
     buf[0] = ds3231_bin_to_bcd(time->second);
@@ -99,18 +99,18 @@ int ds3231_set_time(ds3231_handle_t *handle, const ds3231_time_t *time)
     }
     buf[6] = ds3231_bin_to_bcd((uint8_t)(time->year % 100U));
 
-    if (driver_i2c_write_reg(&handle->i2c, DS3231_REG_SECONDS, buf, sizeof(buf)) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, DS3231_REG_SECONDS, buf, sizeof(buf)) != HAL_OK) {
         LOG_E("ds3231", "write time failed");
         return (int)HAL_IO_ERROR;
     }
 
     /* 清除 OSF：时间已被重新设置，停振标志不再有效 */
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) == DRIVER_OK &&
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) == HAL_OK &&
         (status & DS3231_STATUS_OSF) != 0U) {
         status = (uint8_t)(status & (uint8_t)~DS3231_STATUS_OSF);
-        (void)driver_i2c_write_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U);
+        (void)hal_i2c_dev_write_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U);
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds3231_get_time(ds3231_handle_t *handle, ds3231_time_t *time)
@@ -123,7 +123,7 @@ int ds3231_get_time(ds3231_handle_t *handle, ds3231_time_t *time)
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_SECONDS, buf, sizeof(buf)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_SECONDS, buf, sizeof(buf)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -152,7 +152,7 @@ int ds3231_get_time(ds3231_handle_t *handle, ds3231_time_t *time)
     time->day = ds3231_bcd_to_bin((uint8_t)(buf[4] & DS3231_DATE_MASK));
     time->month = ds3231_bcd_to_bin((uint8_t)(buf[5] & DS3231_MONTH_MASK));
     time->year = year;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds3231_get_temperature(ds3231_handle_t *handle, float *celsius)
@@ -166,18 +166,18 @@ int ds3231_get_temperature(ds3231_handle_t *handle, float *celsius)
     }
 
     /* BSY=1 表示正在进行温度转换，等待其结束 */
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) == DRIVER_OK &&
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) == HAL_OK &&
         (status & DS3231_STATUS_BSY) != 0U) {
-        driver_delay_ms(DS3231_CONV_DELAY_MS);
+        hal_delay_ms(DS3231_CONV_DELAY_MS);
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_TEMP_MSB, reg, sizeof(reg)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_TEMP_MSB, reg, sizeof(reg)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     integer = (int8_t)reg[0];
     *celsius = (float)integer + (float)(reg[1] >> 6) * DS3231_LSB_CELSIUS;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds3231_set_square_wave(ds3231_handle_t *handle, uint8_t freq)
@@ -191,7 +191,7 @@ int ds3231_set_square_wave(ds3231_handle_t *handle, uint8_t freq)
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -203,10 +203,10 @@ int ds3231_set_square_wave(ds3231_handle_t *handle, uint8_t freq)
         control = (uint8_t)(control | DS3231_CTRL_BBSQW);   /* 电池供电时也输出 */
     }
 
-    if (driver_i2c_write_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, DS3231_REG_CONTROL, &control, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds3231_clear_oscillator_flag(ds3231_handle_t *handle, uint8_t *was_stopped)
@@ -217,16 +217,16 @@ int ds3231_clear_oscillator_flag(ds3231_handle_t *handle, uint8_t *was_stopped)
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     *was_stopped = ((status & DS3231_STATUS_OSF) != 0U) ? 1U : 0U;
     if (*was_stopped != 0U) {
         status = (uint8_t)(status & (uint8_t)~DS3231_STATUS_OSF);
-        if (driver_i2c_write_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) != DRIVER_OK) {
+        if (hal_i2c_dev_write_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

@@ -6,9 +6,9 @@ static int max7219_send_frame(max7219_handle_t *handle, const uint8_t *frame, si
 {
     int ret;
 
-    driver_spi_select(&handle->spi);
-    ret = driver_spi_write(&handle->spi, frame, len);
-    driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    ret = hal_spi_dev_write(&handle->spi, frame, len);
+    hal_spi_dev_deselect(&handle->spi);
     return ret;
 }
 
@@ -49,11 +49,11 @@ int max7219_write(max7219_handle_t *handle, uint8_t reg, uint8_t data)
 
     for (i = 0U; i < handle->chain_length; i++) {
         ret = max7219_write_index(handle, i, reg, data);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int max7219_init(max7219_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
@@ -66,31 +66,31 @@ int max7219_init(max7219_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
 
     handle->spi.handle = spi;
     handle->spi.cs = cs;
-    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->spi.timeout_ms = HAL_SPI_TIMEOUT_DEFAULT;
     handle->chain_length = chain_length;
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
+        if (hal_gpio_config_output(cs, HAL_GPIO_HIGH) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
 
     handle->initialized = true;
 
-    if (max7219_set_shutdown(handle, false) != DRIVER_OK ||
-        max7219_set_decode_mode(handle, MAX7219_DECODE_NONE) != DRIVER_OK ||
-        max7219_set_intensity(handle, MAX7219_INTENSITY_DEFAULT) != DRIVER_OK ||
-        max7219_set_scan_limit(handle, MAX7219_SCAN_ALL) != DRIVER_OK ||
-        max7219_display_test(handle, false) != DRIVER_OK ||
-        max7219_clear(handle) != DRIVER_OK) {
+    if (max7219_set_shutdown(handle, false) != HAL_OK ||
+        max7219_set_decode_mode(handle, MAX7219_DECODE_NONE) != HAL_OK ||
+        max7219_set_intensity(handle, MAX7219_INTENSITY_DEFAULT) != HAL_OK ||
+        max7219_set_scan_limit(handle, MAX7219_SCAN_ALL) != HAL_OK ||
+        max7219_display_test(handle, false) != HAL_OK ||
+        max7219_clear(handle) != HAL_OK) {
         handle->initialized = false;
         LOG_E("max7219", "init sequence failed");
         return (int)HAL_IO_ERROR;
     }
 
     LOG_I("max7219", "init ok, chain=%u", (unsigned)chain_length);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int max7219_deinit(max7219_handle_t *handle)
@@ -102,7 +102,7 @@ int max7219_deinit(max7219_handle_t *handle)
         (void)max7219_set_shutdown(handle, true);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int max7219_set_intensity(max7219_handle_t *handle, uint8_t intensity)
@@ -156,9 +156,9 @@ int max7219_clear(max7219_handle_t *handle)
     }
     for (digit = 0U; digit < MAX7219_DIGIT_COUNT; digit++) {
         ret = max7219_set_digit(handle, digit, 0x00U);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

@@ -10,8 +10,8 @@
  *   - ratio  : Rs/R0，无量纲（R0 未标定时为 0）
  *   - ppm_est: ppm 估算值，仅在调用过 mq2_set_ppm_scale 后有效（ppm_valid=true）
  *
- * 注意：MQ 系列为模拟量器件，硬件访问通过 driver_io.h 完成；由于
- * driver_io.h 未提供 ADC 封装，ADC 采样由上层完成（drivers/voltage.c 或
+ * 注意：MQ 系列为模拟量器件，硬件访问通过 hal.h 完成；由于
+ * hal.h 未提供 ADC 封装，ADC 采样由上层完成（drivers/voltage.c 或
  * hal_adc_read），本驱动只做电压 -> 电阻 -> 浓度的换算。
  *
  * adc_mv 单位为 mV（不是 V、也不是 ADC 原始码）。uint16_t 类型可表示
@@ -29,7 +29,7 @@
  * 线性近似 ppm，不做高次幂运算以避免引入 libm。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

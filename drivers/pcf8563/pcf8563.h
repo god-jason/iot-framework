@@ -8,7 +8,7 @@
  * 参考 libdriver 风格：pcf8563_init / pcf8563_set_time / pcf8563_get_time。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ typedef struct {
 } pcf8563_time_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bool initialized;
 } pcf8563_handle_t;
 

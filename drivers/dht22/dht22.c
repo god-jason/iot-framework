@@ -18,7 +18,7 @@ static int dht22_mode(dht22_handle_t *handle, hal_gpio_mode_e mode)
     cfg.alternate = 0U;
     cfg.initial_level = HAL_GPIO_LOW;
 
-    return (hal_gpio_init(handle->pin, &cfg) == HAL_OK) ? DRIVER_OK : (int)HAL_IO_ERROR;
+    return (hal_gpio_init(handle->pin, &cfg) == HAL_OK) ? HAL_OK : (int)HAL_IO_ERROR;
 }
 
 /* 采样数据线：1 高 / 0 低，负值为错误码 */
@@ -44,9 +44,9 @@ static int dht22_wait_level(dht22_handle_t *handle, int level, uint32_t timeout_
             return cur;
         }
         if (cur == level) {
-            return DRIVER_OK;
+            return HAL_OK;
         }
-        driver_delay_us(1U);
+        hal_delay_us(1U);
     }
     return (int)HAL_TIMEOUT;
 }
@@ -62,10 +62,10 @@ static int dht22_read_byte(dht22_handle_t *handle, uint8_t *value)
 
     for (i = 0U; i < 8U; i++) {
         ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);
-        if (ret == DRIVER_OK) {
+        if (ret == HAL_OK) {
             ret = dht22_wait_level(handle, 1, DHT22_LEVEL_TIMEOUT_US);
         }
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
         for (high_us = 0U; high_us < DHT22_BIT_HIGH_TIMEOUT_US; high_us++) {
@@ -76,7 +76,7 @@ static int dht22_read_byte(dht22_handle_t *handle, uint8_t *value)
             if (cur == 0) {
                 break;
             }
-            driver_delay_us(1U);
+            hal_delay_us(1U);
         }
         data = (uint8_t)(data << 1);
         if (high_us > (uint32_t)DHT22_BIT1_MIN_HIGH_US) {
@@ -84,7 +84,7 @@ static int dht22_read_byte(dht22_handle_t *handle, uint8_t *value)
         }
     }
     *value = data;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
@@ -97,7 +97,7 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
         return (int)HAL_INVALID_PARAM;
     }
     /* 传感器采样周期 >=2s，过密读取会造成数据陈旧与自热累积 */
-    now = driver_tick_ms();
+    now = hal_tick_get();
     if (handle->sampled &&
         (uint32_t)(now - handle->last_read_ms) < DHT22_MIN_INTERVAL_MS) {
         return (int)HAL_BUSY;
@@ -105,31 +105,31 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
     /* 起始信号 + 40 位数据全程关中断，避免位时序被中断拉长 */
     hal_irq_disable();
     (void)dht22_mode(handle, HAL_GPIO_MODE_OUTPUT);
-    driver_delay_us(DHT22_START_LOW_US);
+    hal_delay_us(DHT22_START_LOW_US);
     ret = dht22_mode(handle, HAL_GPIO_MODE_INPUT);
-    driver_delay_us(DHT22_RELEASE_US);
+    hal_delay_us(DHT22_RELEASE_US);
     /* 从机响应：低约 80us -> 高约 80us -> 低，随后即第 1 位的低电平 */
-    if (ret == DRIVER_OK) {
+    if (ret == HAL_OK) {
         ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);
     }
-    if (ret == DRIVER_OK) {
+    if (ret == HAL_OK) {
         ret = dht22_wait_level(handle, 1, DHT22_LEVEL_TIMEOUT_US);
     }
-    if (ret == DRIVER_OK) {
+    if (ret == HAL_OK) {
         ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);
     }
-    for (i = 0U; (i < DHT22_FRAME_BYTES) && (ret == DRIVER_OK); i++) {
+    for (i = 0U; (i < DHT22_FRAME_BYTES) && (ret == HAL_OK); i++) {
         ret = dht22_read_byte(handle, &frame[i]);
     }
     hal_irq_enable();
 
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("dht22", "frame error: %d", ret);
         return ret;
     }
     handle->last_read_ms = now;
     handle->sampled = true;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht22_init(dht22_handle_t *handle, hal_pin_t pin)
@@ -146,7 +146,7 @@ int dht22_init(dht22_handle_t *handle, hal_pin_t pin)
 
     /* 空闲态：输入 + 上拉，总线应由上拉电阻保持高电平 */
     ret = dht22_mode(handle, HAL_GPIO_MODE_INPUT);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         LOG_E("dht22", "gpio init failed: %d", ret);
         return ret;
     }
@@ -156,7 +156,7 @@ int dht22_init(dht22_handle_t *handle, hal_pin_t pin)
         LOG_W("dht22", "bus idle low, check pull-up");
     }
     LOG_I("dht22", "init ok, pin %u", (unsigned int)pin);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht22_deinit(dht22_handle_t *handle)
@@ -169,7 +169,7 @@ int dht22_deinit(dht22_handle_t *handle)
     }
     handle->initialized = false;
     handle->sampled = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity)
@@ -189,7 +189,7 @@ int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity)
     }
 
     ret = dht22_read_raw(handle, frame);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     sum = (uint8_t)(frame[DHT22_IDX_HUMI_MSB] + frame[DHT22_IDX_HUMI_LSB] +
@@ -216,5 +216,5 @@ int dht22_read(dht22_handle_t *handle, float *temperature, float *humidity)
     if (temperature != NULL) {
         *temperature = temp;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

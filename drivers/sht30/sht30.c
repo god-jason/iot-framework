@@ -8,7 +8,7 @@ static int sht30_write_cmd(sht30_handle_t *handle, uint16_t command)
 
     buf[0] = (uint8_t)(command >> 8);
     buf[1] = (uint8_t)(command & 0xFFU);
-    return driver_i2c_write(&handle->i2c, buf, sizeof(buf));
+    return hal_i2c_dev_write(&handle->i2c, buf, sizeof(buf));
 }
 
 static uint16_t sht30_measure_command(sht30_handle_t *handle)
@@ -26,7 +26,7 @@ static uint16_t sht30_measure_command(sht30_handle_t *handle)
 
 static int sht30_check_crc(const uint8_t *data, uint8_t crc)
 {
-    return (driver_crc8(data, 2U, SHT30_CRC_POLY, SHT30_CRC_INIT) == crc) ? DRIVER_OK
+    return (hal_crc8(data, 2U, SHT30_CRC_POLY, SHT30_CRC_INIT) == crc) ? HAL_OK
                                                                           : (int)HAL_CRC_ERROR;
 }
 
@@ -38,12 +38,12 @@ int sht30_init(sht30_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : SHT30_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->repeatability = SHT30_REPEAT_HIGH;
     handle->crc_enabled = true;
     handle->initialized = false;
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("sht30", "probe failed at 0x%02X", handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
@@ -51,7 +51,7 @@ int sht30_init(sht30_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     (void)sht30_soft_reset(handle);
     handle->initialized = true;
     LOG_I("sht30", "init ok at 0x%02X", handle->i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sht30_deinit(sht30_handle_t *handle)
@@ -61,7 +61,7 @@ int sht30_deinit(sht30_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sht30_soft_reset(sht30_handle_t *handle)
@@ -72,7 +72,7 @@ int sht30_soft_reset(sht30_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     ret = sht30_write_cmd(handle, SHT30_CMD_SOFT_RESET);
-    driver_delay_ms(SHT30_RESET_DELAY_MS);
+    hal_delay_ms(SHT30_RESET_DELAY_MS);
     return ret;
 }
 
@@ -95,20 +95,20 @@ int sht30_read_raw(sht30_handle_t *handle, uint16_t *raw_temperature, uint16_t *
     }
 
     ret = sht30_write_cmd(handle, sht30_measure_command(handle));
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
-    driver_delay_ms(SHT30_MEASURE_DELAY_MS);
+    hal_delay_ms(SHT30_MEASURE_DELAY_MS);
 
-    ret = driver_i2c_read(&handle->i2c, data, sizeof(data));
-    if (ret != DRIVER_OK) {
+    ret = hal_i2c_dev_read(&handle->i2c, data, sizeof(data));
+    if (ret != HAL_OK) {
         return ret;
     }
 
     if (handle->crc_enabled) {
-        if (sht30_check_crc(&data[0], data[2]) != DRIVER_OK ||
-            sht30_check_crc(&data[3], data[5]) != DRIVER_OK) {
+        if (sht30_check_crc(&data[0], data[2]) != HAL_OK ||
+            sht30_check_crc(&data[3], data[5]) != HAL_OK) {
             LOG_E("sht30", "crc error");
             return (int)HAL_CRC_ERROR;
         }
@@ -120,7 +120,7 @@ int sht30_read_raw(sht30_handle_t *handle, uint16_t *raw_temperature, uint16_t *
     if (raw_humidity != NULL) {
         *raw_humidity = (uint16_t)(((uint16_t)data[3] << 8) | data[4]);
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sht30_read(sht30_handle_t *handle, sht30_data_t *data)
@@ -134,7 +134,7 @@ int sht30_read(sht30_handle_t *handle, sht30_data_t *data)
     }
 
     ret = sht30_read_raw(handle, &raw_t, &raw_h);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -144,5 +144,5 @@ int sht30_read(sht30_handle_t *handle, sht30_data_t *data)
     if (data->humidity > 100.0f) {
         data->humidity = 100.0f;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

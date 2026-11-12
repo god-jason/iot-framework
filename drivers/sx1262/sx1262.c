@@ -6,18 +6,18 @@
     do { if ((h) == NULL || !(h)->initialized) { return (int)HAL_INVALID_PARAM; } } while (0)
 static int sx1262_wait_busy(sx1262_handle_t *h)
 {
-    uint32_t start = driver_tick_ms();
+    uint32_t start = hal_tick_get();
     int level;
-    if (h->busy == 0U) { return DRIVER_OK; }
+    if (h->busy == 0U) { return HAL_OK; }
     for (;;) {
-        level = driver_gpio_read(h->busy);
+        level = hal_gpio_read_level(h->busy);
         if (level < 0) { return (int)HAL_IO_ERROR; }
-        if (level == 0) { return DRIVER_OK; }
-        if ((uint32_t)(driver_tick_ms() - start) > h->timeout_ms) {
+        if (level == 0) { return HAL_OK; }
+        if ((uint32_t)(hal_tick_get() - start) > h->timeout_ms) {
             LOG_E("sx1262", "busy timeout");
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_us(10U);
+        hal_delay_us(10U);
     }
 }
 
@@ -25,26 +25,26 @@ static int sx1262_cmd(sx1262_handle_t *h, uint8_t opcode, const uint8_t *params,
 {
     uint8_t buf[9];
     if (len > 8U) { return (int)HAL_INVALID_PARAM; }
-    if (sx1262_wait_busy(h) != DRIVER_OK) { return (int)HAL_TIMEOUT; }
+    if (sx1262_wait_busy(h) != HAL_OK) { return (int)HAL_TIMEOUT; }
     buf[0] = opcode; if (len > 0U) { (void)memcpy(&buf[1], params, len); }
-    return (driver_spi_write_cs(&h->spi, buf, len + 1U) == DRIVER_OK)
-               ? DRIVER_OK : (int)HAL_IO_ERROR;
+    return (hal_spi_dev_write_cs(&h->spi, buf, len + 1U) == HAL_OK)
+               ? HAL_OK : (int)HAL_IO_ERROR;
 }
 
 /* 读命令：opcode 之后先返回 1 个状态字节，随后才是数据 */
 static int sx1262_rd(sx1262_handle_t *h, uint8_t opcode, uint8_t *data, size_t len)
 {
     uint8_t status = 0U;
-    if (sx1262_wait_busy(h) != DRIVER_OK) { return (int)HAL_TIMEOUT; }
-    driver_spi_select(&h->spi);
-    if (driver_spi_write(&h->spi, &opcode, 1U) != DRIVER_OK ||
-        driver_spi_read(&h->spi, &status, 1U) != DRIVER_OK ||
-        driver_spi_read(&h->spi, data, len) != DRIVER_OK) {
-        driver_spi_deselect(&h->spi);
+    if (sx1262_wait_busy(h) != HAL_OK) { return (int)HAL_TIMEOUT; }
+    hal_spi_dev_select(&h->spi);
+    if (hal_spi_dev_write(&h->spi, &opcode, 1U) != HAL_OK ||
+        hal_spi_dev_read(&h->spi, &status, 1U) != HAL_OK ||
+        hal_spi_dev_read(&h->spi, data, len) != HAL_OK) {
+        hal_spi_dev_deselect(&h->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&h->spi);
-    return DRIVER_OK;
+    hal_spi_dev_deselect(&h->spi);
+    return HAL_OK;
 }
 
 static int sx1262_clear_irq(sx1262_handle_t *h)
@@ -84,11 +84,11 @@ int sx1262_set_frequency(sx1262_handle_t *h, uint32_t frequency_hz)
     rf = (uint32_t)(((uint64_t)frequency_hz * SX126X_FREQ_MUL) / SX126X_XTAL_FREQ_HZ);
     p[0] = (uint8_t)(rf >> 24); p[1] = (uint8_t)(rf >> 16);
     p[2] = (uint8_t)(rf >> 8); p[3] = (uint8_t)rf;
-    if (sx1262_cmd(h, SX126X_SET_RF_FREQUENCY, p, 4U) != DRIVER_OK) {
+    if (sx1262_cmd(h, SX126X_SET_RF_FREQUENCY, p, 4U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     h->frequency_hz = frequency_hz;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sx1262_set_modulation(sx1262_handle_t *h, uint8_t sf, uint32_t bw_hz, uint8_t cr)
@@ -102,13 +102,13 @@ int sx1262_set_modulation(sx1262_handle_t *h, uint8_t sf, uint32_t bw_hz, uint8_
     if (p[1] == 0xFFU) { return (int)HAL_INVALID_PARAM; }
     p[0] = sf; p[2] = cr;
     p[3] = (sf >= 11U && bw_hz == 125000U) ? 1U : 0U;   /* LDRO */
-    if (sx1262_cmd(h, SX126X_SET_MODULATION_PARAMS, p, 4U) != DRIVER_OK) {
+    if (sx1262_cmd(h, SX126X_SET_MODULATION_PARAMS, p, 4U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     h->spreading_factor = sf;
     h->bandwidth_hz = bw_hz;
     h->coding_rate = cr;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sx1262_set_mode(sx1262_handle_t *h, sx1262_mode_e mode)
@@ -141,43 +141,43 @@ int sx1262_send(sx1262_handle_t *h, const uint8_t *data, size_t len)
         return (int)HAL_INVALID_PARAM;
     }
     p[0] = SX126X_STDBY_RC;   /* 发送前回到 STDBY_RC */
-    if (sx1262_cmd(h, SX126X_SET_STANDBY, p, 1U) != DRIVER_OK) { return (int)HAL_IO_ERROR; }
+    if (sx1262_cmd(h, SX126X_SET_STANDBY, p, 1U) != HAL_OK) { return (int)HAL_IO_ERROR; }
     /* WriteBuffer：opcode + offset + payload */
-    if (sx1262_wait_busy(h) != DRIVER_OK) { return (int)HAL_TIMEOUT; }
+    if (sx1262_wait_busy(h) != HAL_OK) { return (int)HAL_TIMEOUT; }
     p[0] = SX126X_WRITE_BUFFER; p[1] = 0x00U;
-    driver_spi_select(&h->spi);
-    if (driver_spi_write(&h->spi, p, 2U) != DRIVER_OK ||
-        driver_spi_write(&h->spi, data, len) != DRIVER_OK) {
-        driver_spi_deselect(&h->spi);
+    hal_spi_dev_select(&h->spi);
+    if (hal_spi_dev_write(&h->spi, p, 2U) != HAL_OK ||
+        hal_spi_dev_write(&h->spi, data, len) != HAL_OK) {
+        hal_spi_dev_deselect(&h->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&h->spi);
+    hal_spi_dev_deselect(&h->spi);
     /* SetPacketParams：前导码/显式包头/长度/CRC 开/IQ 不反转 */
     p[0] = (uint8_t)(h->preamble_len >> 8); p[1] = (uint8_t)h->preamble_len;
     p[2] = 0x00U; p[3] = (uint8_t)len; p[4] = 0x01U; p[5] = 0x00U;
-    if (sx1262_cmd(h, SX126X_SET_PACKET_PARAMS, p, 6U) != DRIVER_OK) {
+    if (sx1262_cmd(h, SX126X_SET_PACKET_PARAMS, p, 6U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     (void)sx1262_clear_irq(h);
     sx1262_timeout_code(h->timeout_ms, p);
-    if (sx1262_cmd(h, SX126X_SET_TX, p, 3U) != DRIVER_OK) { return (int)HAL_IO_ERROR; }
-    start = driver_tick_ms();
+    if (sx1262_cmd(h, SX126X_SET_TX, p, 3U) != HAL_OK) { return (int)HAL_IO_ERROR; }
+    start = hal_tick_get();
     for (;;) {
-        if (sx1262_rd(h, SX126X_GET_IRQ_STATUS, irq, 2U) != DRIVER_OK) {
+        if (sx1262_rd(h, SX126X_GET_IRQ_STATUS, irq, 2U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
         if ((irq[0] & 0x01U) != 0U) {          /* TxDone */
             (void)sx1262_clear_irq(h);
-            return DRIVER_OK;
+            return HAL_OK;
         }
         if ((irq[1] & 0x02U) != 0U) {          /* Timeout */
             (void)sx1262_clear_irq(h);
             return (int)HAL_TIMEOUT;
         }
-        if ((uint32_t)(driver_tick_ms() - start) > h->timeout_ms + 50U) {
+        if ((uint32_t)(hal_tick_get() - start) > h->timeout_ms + 50U) {
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_us(100U);
+        hal_delay_us(100U);
     }
 }
 
@@ -187,7 +187,7 @@ int sx1262_poll(sx1262_handle_t *h, uint8_t *data, size_t len, size_t *received)
     uint8_t st[2] = { 0U, 0U };
     SX126X_CHECK(h);
     if (data == NULL || len == 0U) { return (int)HAL_INVALID_PARAM; }
-    if (sx1262_rd(h, SX126X_GET_IRQ_STATUS, irq, 2U) != DRIVER_OK) {
+    if (sx1262_rd(h, SX126X_GET_IRQ_STATUS, irq, 2U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if ((irq[1] & 0x02U) != 0U) {              /* Timeout */
@@ -199,25 +199,25 @@ int sx1262_poll(sx1262_handle_t *h, uint8_t *data, size_t len, size_t *received)
         (void)sx1262_clear_irq(h);
         return (int)HAL_CRC_ERROR;
     }
-    if (sx1262_rd(h, SX126X_GET_RX_BUFFER_STATUS, st, 2U) != DRIVER_OK) {
+    if (sx1262_rd(h, SX126X_GET_RX_BUFFER_STATUS, st, 2U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (len < st[0]) {
         (void)sx1262_clear_irq(h);
         return (int)HAL_OVERFLOW;
     }
-    if (sx1262_wait_busy(h) != DRIVER_OK) { return (int)HAL_TIMEOUT; }
+    if (sx1262_wait_busy(h) != HAL_OK) { return (int)HAL_TIMEOUT; }
     irq[0] = SX126X_READ_BUFFER; irq[1] = st[1];
-    driver_spi_select(&h->spi);
-    if (driver_spi_write(&h->spi, irq, 2U) != DRIVER_OK ||
-        driver_spi_read(&h->spi, data, st[0]) != DRIVER_OK) {
-        driver_spi_deselect(&h->spi);
+    hal_spi_dev_select(&h->spi);
+    if (hal_spi_dev_write(&h->spi, irq, 2U) != HAL_OK ||
+        hal_spi_dev_read(&h->spi, data, st[0]) != HAL_OK) {
+        hal_spi_dev_deselect(&h->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&h->spi);
+    hal_spi_dev_deselect(&h->spi);
     (void)sx1262_clear_irq(h);
     if (received != NULL) { *received = st[0]; }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
@@ -230,22 +230,22 @@ int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
     }
     (void)memset(handle, 0, sizeof(*handle));
     handle->spi.handle = spi; handle->spi.cs = cs;
-    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->spi.timeout_ms = HAL_SPI_TIMEOUT_DEFAULT;
     handle->busy = busy; handle->reset = reset; handle->dio1 = dio1;
     handle->variant = variant;
     handle->frequency_hz = (variant == SX1262_VARIANT_SX1268) ? 433920000U : 868000000U;
     handle->spreading_factor = 7U; handle->bandwidth_hz = 125000U;
     handle->coding_rate = 1U; handle->tx_power_dbm = 14;
     handle->preamble_len = 8U; handle->timeout_ms = 1000U;
-    if ((cs != 0U && driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) ||
-        driver_gpio_output(reset, HAL_GPIO_HIGH) != DRIVER_OK ||
-        driver_gpio_input(busy, HAL_GPIO_NOPULL) != DRIVER_OK) {
+    if ((cs != 0U && hal_gpio_config_output(cs, HAL_GPIO_HIGH) != HAL_OK) ||
+        hal_gpio_config_output(reset, HAL_GPIO_HIGH) != HAL_OK ||
+        hal_gpio_config_input(busy, HAL_GPIO_NOPULL) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (dio1 != 0U && driver_gpio_input(dio1, HAL_GPIO_NOPULL) != DRIVER_OK) { return (int)HAL_IO_ERROR; }
-    (void)driver_gpio_write(reset, HAL_GPIO_LOW); driver_delay_ms(1U);   /* 硬复位 */
-    (void)driver_gpio_write(reset, HAL_GPIO_HIGH); driver_delay_ms(10U);
-    if (sx1262_wait_busy(handle) != DRIVER_OK) {
+    if (dio1 != 0U && hal_gpio_config_input(dio1, HAL_GPIO_NOPULL) != HAL_OK) { return (int)HAL_IO_ERROR; }
+    (void)hal_gpio_write(reset, HAL_GPIO_LOW); hal_delay_ms(1U);   /* 硬复位 */
+    (void)hal_gpio_write(reset, HAL_GPIO_HIGH); hal_delay_ms(10U);
+    if (sx1262_wait_busy(handle) != HAL_OK) {
         LOG_E("sx1262", "reset failed"); return (int)HAL_NOT_FOUND;
     }
     handle->initialized = true;
@@ -259,7 +259,7 @@ int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
     p[0] = SX126X_PACKET_TYPE_LORA;
     (void)sx1262_cmd(handle, SX126X_SET_PACKET_TYPE, p, 1U);
     /* SPI 自检：回读包类型，失败说明总线/器件异常 */
-    if (sx1262_rd(handle, SX126X_GET_PACKET_TYPE, p, 1U) != DRIVER_OK ||
+    if (sx1262_rd(handle, SX126X_GET_PACKET_TYPE, p, 1U) != HAL_OK ||
         p[0] != SX126X_PACKET_TYPE_LORA) {
         handle->initialized = false;
         LOG_E("sx1262", "device not responding");
@@ -276,14 +276,14 @@ int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
     (void)sx1262_cmd(handle, SX126X_SET_DIO_IRQ_PARAMS, p, 8U);
     p[0] = (uint8_t)handle->tx_power_dbm; p[1] = SX126X_PA_RAMP_200US;
     (void)sx1262_cmd(handle, SX126X_SET_TX_PARAMS, p, 2U);
-    if (sx1262_set_frequency(handle, handle->frequency_hz) != DRIVER_OK ||
+    if (sx1262_set_frequency(handle, handle->frequency_hz) != HAL_OK ||
         sx1262_set_modulation(handle, handle->spreading_factor, handle->bandwidth_hz,
-                              handle->coding_rate) != DRIVER_OK) {
+                              handle->coding_rate) != HAL_OK) {
         handle->initialized = false;
         return (int)HAL_IO_ERROR;
     }
     LOG_I("sx1262", "ok, variant=%d, %u Hz", (int)variant, (unsigned)handle->frequency_hz);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int sx1262_init(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
@@ -296,5 +296,5 @@ int sx1262_deinit(sx1262_handle_t *handle)
 {
     if (handle == NULL) { return (int)HAL_INVALID_PARAM; }
     if (handle->initialized) { (void)sx1262_set_mode(handle, SX1262_MODE_SLEEP); }
-    handle->initialized = false; return DRIVER_OK;
+    handle->initialized = false; return HAL_OK;
 }

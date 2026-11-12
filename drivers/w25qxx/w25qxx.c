@@ -10,14 +10,14 @@ static int w25qxx_send_cmd_addr(w25qxx_handle_t *handle, uint8_t cmd, uint32_t a
     buf[1] = (uint8_t)((address >> 16) & 0xFFU);
     buf[2] = (uint8_t)((address >> 8) & 0xFFU);
     buf[3] = (uint8_t)(address & 0xFFU);
-    return driver_spi_write(&handle->spi, buf, sizeof(buf));
+    return hal_spi_dev_write(&handle->spi, buf, sizeof(buf));
 }
 
 static int w25qxx_write_enable(w25qxx_handle_t *handle)
 {
     uint8_t cmd = W25QXX_CMD_WRITE_ENABLE;
 
-    return driver_spi_write_cs(&handle->spi, &cmd, 1U);
+    return hal_spi_dev_write_cs(&handle->spi, &cmd, 1U);
 }
 
 static int w25qxx_read_status(w25qxx_handle_t *handle, uint8_t *status)
@@ -28,14 +28,14 @@ static int w25qxx_read_status(w25qxx_handle_t *handle, uint8_t *status)
         return (int)HAL_INVALID_PARAM;
     }
 
-    driver_spi_select(&handle->spi);
-    if (driver_spi_write(&handle->spi, &cmd, 1U) != DRIVER_OK ||
-        driver_spi_read(&handle->spi, status, 1U) != DRIVER_OK) {
-        driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    if (hal_spi_dev_write(&handle->spi, &cmd, 1U) != HAL_OK ||
+        hal_spi_dev_read(&handle->spi, status, 1U) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&handle->spi);
-    return DRIVER_OK;
+    hal_spi_dev_deselect(&handle->spi);
+    return HAL_OK;
 }
 
 int w25qxx_wait_busy(w25qxx_handle_t *handle, uint32_t timeout_ms)
@@ -47,19 +47,19 @@ int w25qxx_wait_busy(w25qxx_handle_t *handle, uint32_t timeout_ms)
         return (int)HAL_INVALID_PARAM;
     }
 
-    start = driver_tick_ms();
+    start = hal_tick_get();
     for (;;) {
-        if (w25qxx_read_status(handle, &status) != DRIVER_OK) {
+        if (w25qxx_read_status(handle, &status) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
         if ((status & W25QXX_STATUS_BUSY) == 0U) {
-            return DRIVER_OK;
+            return HAL_OK;
         }
-        if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
+        if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             LOG_E("w25qxx", "busy timeout");
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_ms(1U);
+        hal_delay_ms(1U);
     }
 }
 
@@ -72,18 +72,18 @@ int w25qxx_read_id(w25qxx_handle_t *handle, w25qxx_id_t *id)
         return (int)HAL_INVALID_PARAM;
     }
 
-    driver_spi_select(&handle->spi);
-    if (driver_spi_write(&handle->spi, &cmd, 1U) != DRIVER_OK ||
-        driver_spi_read(&handle->spi, buf, sizeof(buf)) != DRIVER_OK) {
-        driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    if (hal_spi_dev_write(&handle->spi, &cmd, 1U) != HAL_OK ||
+        hal_spi_dev_read(&handle->spi, buf, sizeof(buf)) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&handle->spi);
+    hal_spi_dev_deselect(&handle->spi);
 
     id->manufacturer = buf[0];
     id->memory_type = buf[1];
     id->capacity_id = buf[2];
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
@@ -97,20 +97,20 @@ int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 
     handle->spi.handle = spi;
     handle->spi.cs = cs;
-    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->spi.timeout_ms = HAL_SPI_TIMEOUT_DEFAULT;
     handle->capacity = 0U;
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
+        if (hal_gpio_config_output(cs, HAL_GPIO_HIGH) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
 
-    (void)driver_spi_write_cs(&handle->spi, &cmd, 1U);
-    driver_delay_ms(1U);
+    (void)hal_spi_dev_write_cs(&handle->spi, &cmd, 1U);
+    hal_delay_ms(1U);
 
-    if (w25qxx_read_id(handle, &handle->id) != DRIVER_OK) {
+    if (w25qxx_read_id(handle, &handle->id) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (handle->id.manufacturer != 0xEFU) {
@@ -129,7 +129,7 @@ int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
     LOG_I("w25qxx", "init ok: %02X %02X %02X, %u KB",
           handle->id.manufacturer, handle->id.memory_type, handle->id.capacity_id,
           (unsigned)(handle->capacity / 1024U));
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int w25qxx_deinit(w25qxx_handle_t *handle)
@@ -140,10 +140,10 @@ int w25qxx_deinit(w25qxx_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     if (handle->spi.handle != NULL) {
-        (void)driver_spi_write_cs(&handle->spi, &cmd, 1U);
+        (void)hal_spi_dev_write_cs(&handle->spi, &cmd, 1U);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int w25qxx_read(w25qxx_handle_t *handle, uint32_t address, void *data, size_t len)
@@ -155,14 +155,14 @@ int w25qxx_read(w25qxx_handle_t *handle, uint32_t address, void *data, size_t le
         return (int)HAL_OVERFLOW;
     }
 
-    driver_spi_select(&handle->spi);
-    if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_READ_DATA, address) != DRIVER_OK ||
-        driver_spi_read(&handle->spi, (uint8_t *)data, len) != DRIVER_OK) {
-        driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_READ_DATA, address) != HAL_OK ||
+        hal_spi_dev_read(&handle->spi, (uint8_t *)data, len) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&handle->spi);
-    return DRIVER_OK;
+    hal_spi_dev_deselect(&handle->spi);
+    return HAL_OK;
 }
 
 int w25qxx_write(w25qxx_handle_t *handle, uint32_t address, const void *data, size_t len)
@@ -187,25 +187,25 @@ int w25qxx_write(w25qxx_handle_t *handle, uint32_t address, const void *data, si
             chunk = page_room;
         }
 
-        if (w25qxx_write_enable(handle) != DRIVER_OK) {
+        if (w25qxx_write_enable(handle) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
 
-        driver_spi_select(&handle->spi);
-        if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_PAGE_PROGRAM, current) != DRIVER_OK ||
-            driver_spi_write(&handle->spi, &src[written], chunk) != DRIVER_OK) {
-            driver_spi_deselect(&handle->spi);
+        hal_spi_dev_select(&handle->spi);
+        if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_PAGE_PROGRAM, current) != HAL_OK ||
+            hal_spi_dev_write(&handle->spi, &src[written], chunk) != HAL_OK) {
+            hal_spi_dev_deselect(&handle->spi);
             return (int)HAL_IO_ERROR;
         }
-        driver_spi_deselect(&handle->spi);
+        hal_spi_dev_deselect(&handle->spi);
 
         ret = w25qxx_wait_busy(handle, W25QXX_PAGE_PROGRAM_MS);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
         written += chunk;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int w25qxx_erase_sector(w25qxx_handle_t *handle, uint32_t address)
@@ -218,16 +218,16 @@ int w25qxx_erase_sector(w25qxx_handle_t *handle, uint32_t address)
     }
     address &= ~(uint32_t)(W25QXX_SECTOR_SIZE - 1U);
 
-    if (w25qxx_write_enable(handle) != DRIVER_OK) {
+    if (w25qxx_write_enable(handle) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
-    driver_spi_select(&handle->spi);
-    if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_SECTOR_ERASE, address) != DRIVER_OK) {
-        driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_SECTOR_ERASE, address) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&handle->spi);
+    hal_spi_dev_deselect(&handle->spi);
 
     return w25qxx_wait_busy(handle, W25QXX_SECTOR_ERASE_MS);
 }
@@ -242,16 +242,16 @@ int w25qxx_erase_block(w25qxx_handle_t *handle, uint32_t address)
     }
     address &= ~(uint32_t)(W25QXX_BLOCK_SIZE - 1U);
 
-    if (w25qxx_write_enable(handle) != DRIVER_OK) {
+    if (w25qxx_write_enable(handle) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
-    driver_spi_select(&handle->spi);
-    if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_BLOCK_ERASE_64K, address) != DRIVER_OK) {
-        driver_spi_deselect(&handle->spi);
+    hal_spi_dev_select(&handle->spi);
+    if (w25qxx_send_cmd_addr(handle, W25QXX_CMD_BLOCK_ERASE_64K, address) != HAL_OK) {
+        hal_spi_dev_deselect(&handle->spi);
         return (int)HAL_IO_ERROR;
     }
-    driver_spi_deselect(&handle->spi);
+    hal_spi_dev_deselect(&handle->spi);
 
     return w25qxx_wait_busy(handle, W25QXX_BLOCK_ERASE_MS);
 }
@@ -263,10 +263,10 @@ int w25qxx_erase_chip(w25qxx_handle_t *handle)
     if (handle == NULL || !handle->initialized) {
         return (int)HAL_INVALID_PARAM;
     }
-    if (w25qxx_write_enable(handle) != DRIVER_OK) {
+    if (w25qxx_write_enable(handle) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (driver_spi_write_cs(&handle->spi, &cmd, 1U) != DRIVER_OK) {
+    if (hal_spi_dev_write_cs(&handle->spi, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     return w25qxx_wait_busy(handle, W25QXX_CHIP_ERASE_MS);

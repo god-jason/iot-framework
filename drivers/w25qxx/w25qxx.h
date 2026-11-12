@@ -8,7 +8,7 @@
  * w25qxx_erase_sector。写操作前需保证目标区域已擦除。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,7 +21,7 @@ typedef struct {
 } w25qxx_id_t;
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     w25qxx_id_t id;
     uint32_t capacity;      /* 字节 */
     bool initialized;

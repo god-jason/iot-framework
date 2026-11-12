@@ -10,14 +10,14 @@
  * 尚未移植，详见 vl53l0x.c 内注释——这部分需按 datasheet / ST API 补充。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     uint8_t revision;      /* 0xC2 读到的版本号，仅作诊断 */
     bool initialized;
 } vl53l0x_handle_t;

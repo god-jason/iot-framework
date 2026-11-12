@@ -9,7 +9,7 @@
  * ssd1306_write_data / ssd1306_clear / ssd1306_show。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,10 +24,10 @@ typedef struct {
     ssd1306_bus_e bus_type;
 
     /* I2C 模式 */
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
 
     /* SPI 模式 */
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     hal_pin_t dc;      /* 数据/命令选择 */
     hal_pin_t res;     /* 复位，可为 0 */
 

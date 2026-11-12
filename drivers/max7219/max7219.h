@@ -10,14 +10,14 @@
  * 参考 libdriver 风格：max7219_init / max7219_write / max7219_clear。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     uint8_t chain_length;   /* 级联片数，至少 1 */
     bool initialized;
 } max7219_handle_t;

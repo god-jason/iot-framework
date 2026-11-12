@@ -6,7 +6,7 @@
  *
  * 参考 libdriver 风格：
  *   - hx711_init / hx711_deinit / hx711_read 为公开 API
- *   - 所有引脚操作经由 drivers/common/driver_io.h
+ *   - 所有引脚操作经由 hal.h
  *
  * 用法：
  *   hx711_handle_t hx711;
@@ -16,7 +16,7 @@
  *   hx711_read(&hx711, &weight);
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

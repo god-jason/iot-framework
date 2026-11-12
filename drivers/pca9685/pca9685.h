@@ -8,14 +8,14 @@
  * 参考 libdriver 风格：pca9685_init / pca9685_set_pwm / pca9685_set_pwm_freq。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     float frequency;        /* 当前 PWM 频率（Hz） */
     bool initialized;
 } pca9685_handle_t;

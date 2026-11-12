@@ -17,21 +17,21 @@ static int ads1115_write_config(ads1115_handle_t *handle, uint16_t config)
 
     buf[0] = (uint8_t)(config >> 8);
     buf[1] = (uint8_t)(config & 0xFFU);
-    if (driver_i2c_write_reg(&handle->i2c, ADS1115_REG_CONFIG, buf, 2U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, ADS1115_REG_CONFIG, buf, 2U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static int ads1115_read_config(ads1115_handle_t *handle, uint16_t *config)
 {
     uint8_t buf[2];
 
-    if (driver_i2c_read_reg(&handle->i2c, ADS1115_REG_CONFIG, buf, 2U) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, ADS1115_REG_CONFIG, buf, 2U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     *config = (uint16_t)(((uint16_t)buf[0] << 8) | (uint16_t)buf[1]);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static uint16_t ads1115_build_config(const ads1115_handle_t *handle,
@@ -60,7 +60,7 @@ int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : ADS1115_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->pga = ADS1115_PGA_2V048;
     handle->data_rate = ADS1115_DR_128;
     handle->initialized = false;
@@ -69,7 +69,7 @@ int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("ads1115", "probe failed at 0x%02X", handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
@@ -83,17 +83,17 @@ int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         lo[1] = (uint8_t)(ADS1115_LO_THRESH_DEFAULT & 0xFFU);
         hi[0] = (uint8_t)(ADS1115_HI_THRESH_DEFAULT >> 8);
         hi[1] = (uint8_t)(ADS1115_HI_THRESH_DEFAULT & 0xFFU);
-        (void)driver_i2c_write_reg(&handle->i2c, ADS1115_REG_LO_THRESH, lo, 2U);
-        (void)driver_i2c_write_reg(&handle->i2c, ADS1115_REG_HI_THRESH, hi, 2U);
+        (void)hal_i2c_dev_write_reg(&handle->i2c, ADS1115_REG_LO_THRESH, lo, 2U);
+        (void)hal_i2c_dev_write_reg(&handle->i2c, ADS1115_REG_HI_THRESH, hi, 2U);
     }
 
     written = ads1115_build_config(handle, ADS1115_MUX_SINGLE_0, false);
-    if (ads1115_write_config(handle, written) != DRIVER_OK) {
+    if (ads1115_write_config(handle, written) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     /* 回读配置校验（OS 位为转换状态，不参与比较） */
-    if (ads1115_read_config(handle, &readback) != DRIVER_OK) {
+    if (ads1115_read_config(handle, &readback) != HAL_OK) {
         return (int)HAL_NOT_FOUND;
     }
     if ((readback & (uint16_t)~ADS1115_CFG_OS) != (written & (uint16_t)~ADS1115_CFG_OS)) {
@@ -103,7 +103,7 @@ int ads1115_init(ads1115_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->initialized = true;
     LOG_I("ads1115", "init ok at 0x%02X", handle->i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ads1115_deinit(ads1115_handle_t *handle)
@@ -113,7 +113,7 @@ int ads1115_deinit(ads1115_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_e pga)
@@ -122,7 +122,7 @@ int ads1115_set_pga(ads1115_handle_t *handle, ads1115_pga_e pga)
         return (int)HAL_INVALID_PARAM;
     }
     handle->pga = pga;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_e data_rate)
@@ -131,7 +131,7 @@ int ads1115_set_data_rate(ads1115_handle_t *handle, ads1115_dr_e data_rate)
         return (int)HAL_INVALID_PARAM;
     }
     handle->data_rate = data_rate;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_e mux, int16_t *raw)
@@ -149,31 +149,31 @@ int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_e mux, int16_t *raw)
     }
 
     config = ads1115_build_config(handle, mux, true);
-    if (ads1115_write_config(handle, config) != DRIVER_OK) {
+    if (ads1115_write_config(handle, config) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     timeout_ms = (uint32_t)ads1115_conv_ms[handle->data_rate] + ADS1115_CONV_EXTRA_MS;
-    start = driver_tick_ms();
+    start = hal_tick_get();
     for (;;) {
-        if (ads1115_read_config(handle, &config) != DRIVER_OK) {
+        if (ads1115_read_config(handle, &config) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
         if ((config & ADS1115_CFG_OS) != 0U) {
             break;   /* 转换完成，OS 自动置 1 */
         }
-        if ((uint32_t)(driver_tick_ms() - start) > timeout_ms) {
+        if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             LOG_E("ads1115", "conversion timeout");
             return (int)HAL_TIMEOUT;
         }
-        driver_delay_ms(1U);
+        hal_delay_ms(1U);
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, ADS1115_REG_CONVERSION, buf, 2U) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, ADS1115_REG_CONVERSION, buf, 2U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    *raw = driver_be16(buf);
-    return DRIVER_OK;
+    *raw = hal_be16(buf);
+    return HAL_OK;
 }
 
 int ads1115_read_voltage(ads1115_handle_t *handle, uint8_t channel, float *volts)
@@ -186,11 +186,11 @@ int ads1115_read_voltage(ads1115_handle_t *handle, uint8_t channel, float *volts
     }
 
     ret = ads1115_read_raw(handle, (ads1115_mux_e)((uint16_t)ADS1115_MUX_SINGLE_0 + channel), &raw);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     *volts = (float)raw * (float)ads1115_fs_mv[handle->pga] / 32768.0f / 1000.0f;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ads1115_read(ads1115_handle_t *handle, int16_t *values, size_t count)
@@ -208,9 +208,9 @@ int ads1115_read(ads1115_handle_t *handle, int16_t *values, size_t count)
         int ret = ads1115_read_raw(handle,
                                    (ads1115_mux_e)((uint16_t)ADS1115_MUX_SINGLE_0 + i),
                                    &values[i]);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }

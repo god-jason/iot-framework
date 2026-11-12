@@ -19,20 +19,20 @@ static int ssd1306_send_cmd(ssd1306_handle_t *handle, const uint8_t *cmd, size_t
             for (size_t i = 0U; i < chunk; i++) {
                 buf[1 + i] = cmd[offset + i];
             }
-            ret = driver_i2c_write(&handle->config.i2c, buf, chunk + 1U);
-            if (ret != DRIVER_OK) {
+            ret = hal_i2c_dev_write(&handle->config.i2c, buf, chunk + 1U);
+            if (ret != HAL_OK) {
                 return ret;
             }
             offset += chunk;
         }
-        return DRIVER_OK;
+        return HAL_OK;
     }
 
-    driver_spi_select(&handle->config.spi);
-    (void)driver_gpio_write(handle->config.dc, HAL_GPIO_LOW);
+    hal_spi_dev_select(&handle->config.spi);
+    (void)hal_gpio_write(handle->config.dc, HAL_GPIO_LOW);
     {
-        int ret = driver_spi_write(&handle->config.spi, cmd, len);
-        driver_spi_deselect(&handle->config.spi);
+        int ret = hal_spi_dev_write(&handle->config.spi, cmd, len);
+        hal_spi_dev_deselect(&handle->config.spi);
         return ret;
     }
 }
@@ -54,20 +54,20 @@ static int ssd1306_send_data(ssd1306_handle_t *handle, const uint8_t *data, size
             for (size_t i = 0U; i < chunk; i++) {
                 buf[1 + i] = data[offset + i];
             }
-            ret = driver_i2c_write(&handle->config.i2c, buf, chunk + 1U);
-            if (ret != DRIVER_OK) {
+            ret = hal_i2c_dev_write(&handle->config.i2c, buf, chunk + 1U);
+            if (ret != HAL_OK) {
                 return ret;
             }
             offset += chunk;
         }
-        return DRIVER_OK;
+        return HAL_OK;
     }
 
-    driver_spi_select(&handle->config.spi);
-    (void)driver_gpio_write(handle->config.dc, HAL_GPIO_HIGH);
+    hal_spi_dev_select(&handle->config.spi);
+    (void)hal_gpio_write(handle->config.dc, HAL_GPIO_HIGH);
     {
-        int ret = driver_spi_write(&handle->config.spi, data, len);
-        driver_spi_deselect(&handle->config.spi);
+        int ret = hal_spi_dev_write(&handle->config.spi, data, len);
+        hal_spi_dev_deselect(&handle->config.spi);
         return ret;
     }
 }
@@ -114,14 +114,14 @@ int ssd1306_init(ssd1306_handle_t *handle, const ssd1306_config_t *config)
         if (config->spi.handle == NULL) {
             return (int)HAL_INVALID_PARAM;
         }
-        if (driver_gpio_output(config->dc, HAL_GPIO_LOW) != DRIVER_OK) {
+        if (hal_gpio_config_output(config->dc, HAL_GPIO_LOW) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
         if (config->res != 0U) {
-            (void)driver_gpio_output(config->res, HAL_GPIO_LOW);
-            driver_delay_ms(10U);
-            (void)driver_gpio_write(config->res, HAL_GPIO_HIGH);
-            driver_delay_ms(10U);
+            (void)hal_gpio_config_output(config->res, HAL_GPIO_LOW);
+            hal_delay_ms(10U);
+            (void)hal_gpio_write(config->res, HAL_GPIO_HIGH);
+            hal_delay_ms(10U);
         }
     }
 
@@ -130,18 +130,18 @@ int ssd1306_init(ssd1306_handle_t *handle, const ssd1306_config_t *config)
     handle->height = SSD1306_HEIGHT;
     handle->initialized = false;
 
-    if (ssd1306_send_cmd(handle, init_cmds, sizeof(init_cmds)) != DRIVER_OK) {
+    if (ssd1306_send_cmd(handle, init_cmds, sizeof(init_cmds)) != HAL_OK) {
         LOG_E("ssd1306", "init sequence failed");
         return (int)HAL_IO_ERROR;
     }
 
-    if (ssd1306_clear(handle) != DRIVER_OK) {
+    if (ssd1306_clear(handle) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
     LOG_I("ssd1306", "init ok (%s)", (config->bus_type == SSD1306_BUS_I2C) ? "I2C" : "SPI");
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ssd1306_deinit(ssd1306_handle_t *handle)
@@ -153,7 +153,7 @@ int ssd1306_deinit(ssd1306_handle_t *handle)
         (void)ssd1306_set_display(handle, false);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ssd1306_write_cmd(ssd1306_handle_t *handle, const uint8_t *cmd, size_t len)
@@ -196,12 +196,12 @@ int ssd1306_fill(ssd1306_handle_t *handle, uint8_t pattern)
         for (size_t i = 0U; i < SSD1306_WIDTH; i++) {
             handle->config.gram[offset + i] = pattern;
         }
-        if (ssd1306_set_window(handle, page) != DRIVER_OK ||
-            ssd1306_send_data(handle, line, sizeof(line)) != DRIVER_OK) {
+        if (ssd1306_set_window(handle, page) != HAL_OK ||
+            ssd1306_send_data(handle, line, sizeof(line)) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ssd1306_draw_pixel(ssd1306_handle_t *handle, uint8_t x, uint8_t y, bool on)
@@ -224,14 +224,14 @@ int ssd1306_draw_pixel(ssd1306_handle_t *handle, uint8_t x, uint8_t y, bool on)
     }
 
     index = (uint16_t)((y / 8U) * handle->width + x);
-    mask = (uint8_t)DRIVER_BIT(y % 8U);
+    mask = (uint8_t)(1UL << (y % 8U));
 
     if (on) {
         handle->config.gram[index] |= mask;
     } else {
         handle->config.gram[index] &= (uint8_t)~mask;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ssd1306_show(ssd1306_handle_t *handle)
@@ -245,12 +245,12 @@ int ssd1306_show(ssd1306_handle_t *handle)
     for (page = 0U; page < SSD1306_PAGES; page++) {
         size_t offset = (size_t)page * SSD1306_WIDTH;
 
-        if (ssd1306_set_window(handle, page) != DRIVER_OK ||
-            ssd1306_send_data(handle, &handle->config.gram[offset], SSD1306_WIDTH) != DRIVER_OK) {
+        if (ssd1306_set_window(handle, page) != HAL_OK ||
+            ssd1306_send_data(handle, &handle->config.gram[offset], SSD1306_WIDTH) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ssd1306_set_contrast(ssd1306_handle_t *handle, uint8_t contrast)

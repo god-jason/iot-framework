@@ -7,7 +7,7 @@
  * 参考 libdriver 设计：
  *   acs712_init / acs712_deinit / acs712_read / acs712_read_raw
  *
- * 硬件访问：drivers/common/driver_io.h 未封装 ADC，本驱动与 ntc 一致，
+ * 硬件访问：hal.h 未封装 ADC，本驱动与 ntc 一致，
  * 直接调用 iot_adc_*（不包含 bus 目录头文件，不依赖任何 HAL）。
  *
  * 句柄保存灵敏度与零流点两项标定参数：
@@ -25,7 +25,7 @@
  *       需分压或选用 5V 容忍的 ADC，否则读数在两端饱和。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

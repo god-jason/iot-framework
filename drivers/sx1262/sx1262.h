@@ -12,7 +12,7 @@
  * 需按 datasheet 补充。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,7 +32,7 @@ typedef enum {
 } sx1262_mode_e;
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     hal_pin_t busy;
     hal_pin_t reset;
     hal_pin_t dio1;            /* 可传 0，则仅轮询 IRQ 状态寄存器 */

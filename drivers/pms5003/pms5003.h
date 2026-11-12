@@ -10,7 +10,7 @@
  * （可含多帧，只解析第一帧）。驱动不做流式缓冲，缓冲区由调用方提供。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

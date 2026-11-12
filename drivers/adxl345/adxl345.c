@@ -14,11 +14,11 @@ int adxl345_init(adxl345_handle_t *handle, hal_i2c_t *i2c,
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : ADXL345_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->range = range;
     handle->initialized = false;
 
-    if (driver_i2c_read_reg(&handle->i2c, ADXL345_REG_DEVID, &devid, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, ADXL345_REG_DEVID, &devid, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (devid != ADXL345_DEVID_VALUE) {
@@ -28,23 +28,23 @@ int adxl345_init(adxl345_handle_t *handle, hal_i2c_t *i2c,
 
     /* 全分辨率 + 量程 */
     value = (uint8_t)(ADXL345_FORMAT_FULL_RES | (uint8_t)range);
-    if (driver_i2c_write_reg(&handle->i2c, ADXL345_REG_DATA_FORMAT, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, ADXL345_REG_DATA_FORMAT, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     /* 100Hz 输出率 */
     value = ADXL345_BW_RATE_100HZ;
-    if (driver_i2c_write_reg(&handle->i2c, ADXL345_REG_BW_RATE, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, ADXL345_REG_BW_RATE, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
-    if (adxl345_set_measure(handle, true) != DRIVER_OK) {
+    if (adxl345_set_measure(handle, true) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
     LOG_I("adxl345", "init ok at 0x%02X, range=%d", handle->i2c.address, (int)range);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int adxl345_deinit(adxl345_handle_t *handle)
@@ -57,7 +57,7 @@ int adxl345_deinit(adxl345_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int adxl345_set_measure(adxl345_handle_t *handle, bool enable)
@@ -67,7 +67,7 @@ int adxl345_set_measure(adxl345_handle_t *handle, bool enable)
     if (handle == NULL || handle->i2c.handle == NULL) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_write_reg(&handle->i2c, ADXL345_REG_POWER_CTL, &value, 1U);
+    return hal_i2c_dev_write_reg(&handle->i2c, ADXL345_REG_POWER_CTL, &value, 1U);
 }
 
 int adxl345_read_raw(adxl345_handle_t *handle, int16_t xyz[3])
@@ -78,14 +78,14 @@ int adxl345_read_raw(adxl345_handle_t *handle, int16_t xyz[3])
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, ADXL345_REG_DATAX0, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, ADXL345_REG_DATAX0, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     xyz[0] = (int16_t)((uint16_t)d[0] | ((uint16_t)d[1] << 8));
     xyz[1] = (int16_t)((uint16_t)d[2] | ((uint16_t)d[3] << 8));
     xyz[2] = (int16_t)((uint16_t)d[4] | ((uint16_t)d[5] << 8));
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int adxl345_read(adxl345_handle_t *handle, adxl345_accel_t *accel)
@@ -98,12 +98,12 @@ int adxl345_read(adxl345_handle_t *handle, adxl345_accel_t *accel)
     }
 
     ret = adxl345_read_raw(handle, xyz);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
     accel->x = (float)xyz[0] * ADXL345_SCALE_G_PER_LSB;
     accel->y = (float)xyz[1] * ADXL345_SCALE_G_PER_LSB;
     accel->z = (float)xyz[2] * ADXL345_SCALE_G_PER_LSB;
-    return DRIVER_OK;
+    return HAL_OK;
 }

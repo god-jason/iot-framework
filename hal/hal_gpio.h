@@ -107,6 +107,49 @@ int hal_gpio_set(hal_pin_t pin);
 /* 置低电平，等价于 write(pin, HAL_GPIO_LOW) */
 int hal_gpio_reset(hal_pin_t pin);
 
+/* ---------------- 常用配置便捷接口 ---------------- */
+
+/* 配置为推挽输出并设置初始电平 */
+static inline int hal_gpio_config_output(hal_pin_t pin,
+                                         hal_gpio_level_e initial)
+{
+    hal_gpio_config_t cfg;
+
+    cfg.mode = HAL_GPIO_MODE_OUTPUT;
+    cfg.output = HAL_GPIO_OUTPUT_PP;
+    cfg.pull = HAL_GPIO_NOPULL;
+    cfg.speed = HAL_GPIO_SPEED_HIGH;
+    cfg.alternate = 0U;
+    cfg.initial_level = initial;
+    return hal_gpio_init(pin, &cfg);
+}
+
+/* 配置为输入并指定上下拉 */
+static inline int hal_gpio_config_input(hal_pin_t pin, hal_gpio_pull_e pull)
+{
+    hal_gpio_config_t cfg;
+
+    cfg.mode = HAL_GPIO_MODE_INPUT;
+    cfg.output = HAL_GPIO_OUTPUT_PP;
+    cfg.pull = pull;
+    cfg.speed = HAL_GPIO_SPEED_LOW;
+    cfg.alternate = 0U;
+    cfg.initial_level = HAL_GPIO_LOW;
+    return hal_gpio_init(pin, &cfg);
+}
+
+/* 读电平：返回 0/1，负值为错误码（便于条件判断） */
+static inline int hal_gpio_read_level(hal_pin_t pin)
+{
+    hal_gpio_level_e level = HAL_GPIO_LOW;
+    int status = hal_gpio_read(pin, &level);
+
+    if (status != HAL_OK) {
+        return status;
+    }
+    return (level == HAL_GPIO_HIGH) ? 1 : 0;
+}
+
 #ifdef __cplusplus
 }
 #endif

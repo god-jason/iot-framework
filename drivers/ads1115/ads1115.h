@@ -8,7 +8,7 @@
  * 参考 libdriver 风格：ads1115_init / ads1115_read / ads1115_set_pga ...
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,7 +49,7 @@ typedef enum {
 } ads1115_mux_e;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     ads1115_pga_e pga;
     ads1115_dr_e data_rate;
     bool initialized;

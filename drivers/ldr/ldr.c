@@ -10,7 +10,7 @@ static int ldr_check(const ldr_handle_t *handle)
     if (!handle->initialized) {
         return (int)HAL_NOT_READY;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ldr_init(ldr_handle_t *handle, hal_adc_t *adc, uint8_t channel)
@@ -42,7 +42,7 @@ int ldr_init(ldr_handle_t *handle, hal_adc_t *adc, uint8_t channel)
 
     LOG_I("ldr", "init ok, ch=%u, dark=%.0fmV, bright=%.0fmV",
           (unsigned)channel, (double)handle->dark_mv, (double)handle->bright_mv);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ldr_deinit(ldr_handle_t *handle)
@@ -52,14 +52,14 @@ int ldr_deinit(ldr_handle_t *handle)
     }
     handle->adc = NULL;
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ldr_read_raw(ldr_handle_t *handle, uint32_t *raw)
 {
     int ret = ldr_check(handle);
 
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     if (raw == NULL) {
@@ -69,7 +69,7 @@ int ldr_read_raw(ldr_handle_t *handle, uint32_t *raw)
         LOG_E("ldr", "adc read failed");
         return (int)HAL_IO_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ldr_read(ldr_handle_t *handle, ldr_data_t *data)
@@ -86,7 +86,7 @@ int ldr_read(ldr_handle_t *handle, ldr_data_t *data)
     data->percent = 0.0f;
 
     ret = ldr_read_raw(handle, &data->raw);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -102,8 +102,13 @@ int ldr_read(ldr_handle_t *handle, ldr_data_t *data)
         LOG_W("ldr", "mv=%.0f out of calibrated span", (double)mv);
     }
 
-    data->percent = DRIVER_CLAMP(value, 0.0f, 100.0f);
-    return DRIVER_OK;
+    if (value < 0.0f) {
+        value = 0.0f;
+    } else if (value > 100.0f) {
+        value = 100.0f;
+    }
+    data->percent = value;
+    return HAL_OK;
 }
 
 int ldr_set_calibration(ldr_handle_t *handle, float dark_mv, float bright_mv)
@@ -122,7 +127,7 @@ int ldr_set_calibration(ldr_handle_t *handle, float dark_mv, float bright_mv)
     }
     handle->dark_mv = dark_mv;
     handle->bright_mv = bright_mv;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ldr_set_reference(ldr_handle_t *handle, float vref_mv, uint32_t adc_max)
@@ -132,5 +137,5 @@ int ldr_set_reference(ldr_handle_t *handle, float vref_mv, uint32_t adc_max)
     }
     handle->vref_mv = vref_mv;
     handle->adc_max = adc_max;
-    return DRIVER_OK;
+    return HAL_OK;
 }

@@ -7,7 +7,7 @@
  * 动态 payload / ACK payload / 多管道特性（需按 datasheet 补充）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,7 +21,7 @@ typedef enum {
 } nrf24l01_mode_e;
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     hal_pin_t ce;              /* 必需 */
     hal_pin_t irq;             /* 可传 0（不使用中断） */
     uint8_t channel;            /* 0..125 -> 2400..2525MHz */

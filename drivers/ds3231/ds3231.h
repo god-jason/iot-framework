@@ -8,7 +8,7 @@
  * 参考 libdriver 风格：ds3231_init / ds3231_set_time / ds3231_get_time。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ typedef struct {
 } ds3231_time_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bool initialized;
 } ds3231_handle_t;
 

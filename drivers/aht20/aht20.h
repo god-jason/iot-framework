@@ -15,14 +15,14 @@
  *   aht20_read(&aht20, &t, &h);
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bool initialized;
 } aht20_handle_t;
 

@@ -15,14 +15,14 @@
  * SPI 速率建议 2.4MHz（WS2812B 时序 0.4us/1.25us）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_spi_t spi;
+    hal_spi_dev_t spi;
     uint16_t led_count;
     uint8_t *pixels;
     uint8_t *encoded;

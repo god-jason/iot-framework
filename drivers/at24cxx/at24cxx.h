@@ -8,7 +8,7 @@
  * 参考 libdriver 风格：at24cxx_init / at24cxx_read / at24cxx_write。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,7 +30,7 @@ typedef enum {
 } at24cxx_model_e;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     at24cxx_model_e model;
     uint32_t capacity;
     uint16_t page_size;

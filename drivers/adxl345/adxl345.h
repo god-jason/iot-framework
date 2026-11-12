@@ -8,7 +8,7 @@
  * 参考 libdriver 风格：adxl345_init / adxl345_read / adxl345_read_raw。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +22,7 @@ typedef enum {
 } adxl345_range_e;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     adxl345_range_e range;
     bool initialized;
 } adxl345_handle_t;

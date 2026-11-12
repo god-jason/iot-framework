@@ -22,7 +22,7 @@
  *   mpu6050_read(&imu, &d);
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,7 +67,7 @@ typedef struct {
 } mpu6050_data_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     mpu6050_accel_range_e accel_range;
     mpu6050_gyro_range_e gyro_range;
     mpu6050_dlpf_e dlpf;

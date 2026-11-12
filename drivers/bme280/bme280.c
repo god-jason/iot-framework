@@ -17,26 +17,26 @@ static int bme280_read_calib(bme280_handle_t *handle)
     uint8_t h[BME280_CALIB_HUM_SIZE];
     bme280_calib_t *c = &handle->calib;
 
-    if (driver_i2c_read_reg(&handle->i2c, BME280_REG_CALIB_00, tp, sizeof(tp)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BME280_REG_CALIB_00, tp, sizeof(tp)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if (driver_i2c_read_reg(&handle->i2c, BME280_REG_CALIB_HUM, h, sizeof(h)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BME280_REG_CALIB_HUM, h, sizeof(h)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     /* 0x88..0xA1：T1(u16) T2(i16) T3(i16) P1(u16) P2..P9(i16)，小端 */
-    c->t1 = (uint16_t)driver_le16(&tp[0]);
-    c->t2 = driver_le16(&tp[2]);
-    c->t3 = driver_le16(&tp[4]);
-    c->p1 = (uint16_t)driver_le16(&tp[6]);
-    c->p2 = driver_le16(&tp[8]);
-    c->p3 = driver_le16(&tp[10]);
-    c->p4 = driver_le16(&tp[12]);
-    c->p5 = driver_le16(&tp[14]);
-    c->p6 = driver_le16(&tp[16]);
-    c->p7 = driver_le16(&tp[18]);
-    c->p8 = driver_le16(&tp[20]);
-    c->p9 = driver_le16(&tp[22]);
+    c->t1 = (uint16_t)hal_le16(&tp[0]);
+    c->t2 = hal_le16(&tp[2]);
+    c->t3 = hal_le16(&tp[4]);
+    c->p1 = (uint16_t)hal_le16(&tp[6]);
+    c->p2 = hal_le16(&tp[8]);
+    c->p3 = hal_le16(&tp[10]);
+    c->p4 = hal_le16(&tp[12]);
+    c->p5 = hal_le16(&tp[14]);
+    c->p6 = hal_le16(&tp[16]);
+    c->p7 = hal_le16(&tp[18]);
+    c->p8 = hal_le16(&tp[20]);
+    c->p9 = hal_le16(&tp[22]);
     c->h1 = tp[24];
 
     /* 0xE1..0xE7：H2(12 位) H3(u8) H4(12 位) H5(12 位) H6(i8) */
@@ -46,7 +46,7 @@ static int bme280_read_calib(bme280_handle_t *handle)
     c->h5 = bme280_sign12((uint16_t)(((uint16_t)h[5] << 4) | ((uint16_t)h[4] >> 4)));
     c->h6 = (int8_t)h[6];
 
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 /* 温度补偿：返回 0.01 ℃，同时保存 t_fine */
@@ -137,11 +137,11 @@ int bme280_init(bme280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : BME280_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->t_fine = 0;
     handle->initialized = false;
 
-    if (bme280_get_chip_id(handle, &chip_id) != DRIVER_OK) {
+    if (bme280_get_chip_id(handle, &chip_id) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (chip_id != BME280_CHIP_ID) {
@@ -150,10 +150,10 @@ int bme280_init(bme280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     }
 
     value = BME280_RESET_VALUE;
-    (void)driver_i2c_write_reg(&handle->i2c, BME280_REG_RESET, &value, 1U);
-    driver_delay_ms(BME280_RESET_DELAY_MS);
+    (void)hal_i2c_dev_write_reg(&handle->i2c, BME280_REG_RESET, &value, 1U);
+    hal_delay_ms(BME280_RESET_DELAY_MS);
 
-    if (bme280_read_calib(handle) != DRIVER_OK) {
+    if (bme280_read_calib(handle) != HAL_OK) {
         LOG_E("bme280", "read calibration failed");
         return (int)HAL_IO_ERROR;
     }
@@ -164,21 +164,21 @@ int bme280_init(bme280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     /* ctrl_hum 必须先写，再写 ctrl_meas 才生效 */
     value = BME280_CTRL_HUM_DEFAULT;
-    if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_HUM, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, BME280_REG_CTRL_HUM, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     value = BME280_CONFIG_DEFAULT;
-    if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CONFIG, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, BME280_REG_CONFIG, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     value = BME280_CTRL_MEAS_DEFAULT;
-    if (driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
     LOG_I("bme280", "init ok at 0x%02X", handle->i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bme280_deinit(bme280_handle_t *handle)
@@ -189,11 +189,11 @@ int bme280_deinit(bme280_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
-        (void)driver_i2c_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U);
+        (void)hal_i2c_dev_write_reg(&handle->i2c, BME280_REG_CTRL_MEAS, &value, 1U);
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bme280_get_chip_id(bme280_handle_t *handle, uint8_t *chip_id)
@@ -201,7 +201,7 @@ int bme280_get_chip_id(bme280_handle_t *handle, uint8_t *chip_id)
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_read_reg(&handle->i2c, BME280_REG_CHIP_ID, chip_id, 1U);
+    return hal_i2c_dev_read_reg(&handle->i2c, BME280_REG_CHIP_ID, chip_id, 1U);
 }
 
 int bme280_read_raw(bme280_handle_t *handle, int32_t *raw_temperature,
@@ -219,7 +219,7 @@ int bme280_read_raw(bme280_handle_t *handle, int32_t *raw_temperature,
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, BME280_REG_DATA, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BME280_REG_DATA, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -236,7 +236,7 @@ int bme280_read_raw(bme280_handle_t *handle, int32_t *raw_temperature,
     if (raw_humidity != NULL) {
         *raw_humidity = adc_h;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
@@ -254,7 +254,7 @@ int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
     }
 
     ret = bme280_read_raw(handle, &adc_t, &adc_p, &adc_h);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -271,5 +271,5 @@ int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
     data->temperature = (float)temp01 / 100.0f;
     data->pressure = (float)pressure;
     data->humidity = (float)humidity;
-    return DRIVER_OK;
+    return HAL_OK;
 }

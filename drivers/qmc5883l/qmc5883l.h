@@ -6,7 +6,7 @@
  *
  * 参考 libdriver 风格：
  *   qmc5883l_init / qmc5883l_deinit / qmc5883l_read / qmc5883l_read_raw
- * 所有硬件访问只经由 drivers/common/driver_io.h。
+ * 所有硬件访问只经由 hal.h。
  *
  * 设计要点：
  *   - 数据寄存器为 16 位小端，顺序 X/Y/Z（0x00~0x05）；
@@ -15,7 +15,7 @@
  *   - read 前检查 STATUS.DRDY，OVL 置位表示溢出（数据不可信）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +42,7 @@ typedef struct {
 } qmc5883l_data_t;
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     qmc5883l_range_e range;
     float ut_per_lsb;           /* 由量程换算得到 */
     uint8_t ctrl1;              /* 当前 CTRL1 影子值 */

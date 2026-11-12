@@ -32,29 +32,29 @@ int bh1750_init(bh1750_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : BH1750_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->mode = BH1750_MODE_CONT_HIGH;
     handle->initialized = false;
 
-    if (driver_i2c_probe(&handle->i2c) != DRIVER_OK) {
+    if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("bh1750", "probe failed at 0x%02X", handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
 
     cmd = BH1750_CMD_POWER_ON;
-    if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     cmd = bh1750_mode_command(handle->mode);
-    if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(BH1750_MEASURE_DELAY_MS);
+    hal_delay_ms(BH1750_MEASURE_DELAY_MS);
 
     handle->initialized = true;
     LOG_I("bh1750", "init ok at 0x%02X", handle->i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bh1750_deinit(bh1750_handle_t *handle)
@@ -65,11 +65,11 @@ int bh1750_deinit(bh1750_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
-        (void)driver_i2c_write(&handle->i2c, &cmd, 1U);
+        (void)hal_i2c_dev_write(&handle->i2c, &cmd, 1U);
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_e mode)
@@ -81,12 +81,12 @@ int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_e mode)
     }
 
     cmd = bh1750_mode_command(mode);
-    if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     handle->mode = mode;
-    driver_delay_ms(BH1750_MEASURE_DELAY_MS);
-    return DRIVER_OK;
+    hal_delay_ms(BH1750_MEASURE_DELAY_MS);
+    return HAL_OK;
 }
 
 int bh1750_read_raw(bh1750_handle_t *handle, uint16_t *raw)
@@ -100,17 +100,17 @@ int bh1750_read_raw(bh1750_handle_t *handle, uint16_t *raw)
     /* 单次模式需要重新触发一次转换 */
     if (handle->mode >= BH1750_MODE_ONE_HIGH) {
         uint8_t cmd = bh1750_mode_command(handle->mode);
-        if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK) {
+        if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
-        driver_delay_ms(BH1750_MEASURE_DELAY_MS);
+        hal_delay_ms(BH1750_MEASURE_DELAY_MS);
     }
 
-    if (driver_i2c_read(&handle->i2c, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read(&handle->i2c, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     *raw = (uint16_t)(((uint16_t)d[0] << 8) | d[1]);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bh1750_read(bh1750_handle_t *handle, float *lux)
@@ -123,9 +123,9 @@ int bh1750_read(bh1750_handle_t *handle, float *lux)
     }
 
     ret = bh1750_read_raw(handle, &raw);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     *lux = (float)raw / BH1750_LUX_DIVISOR;
-    return DRIVER_OK;
+    return HAL_OK;
 }

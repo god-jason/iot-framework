@@ -26,13 +26,13 @@ static void ds18b20_write_bit(ds18b20_handle_t *handle, uint8_t bit)
 {
     hal_irq_disable();
     ds18b20_low(handle);
-    driver_delay_us(DS18B20_WRITE_LOW_US);
+    hal_delay_us(DS18B20_WRITE_LOW_US);
     if (bit != 0U) {
         ds18b20_release(handle);
     }
-    driver_delay_us(DS18B20_WRITE_HOLD_US);
+    hal_delay_us(DS18B20_WRITE_HOLD_US);
     ds18b20_release(handle);
-    driver_delay_us(DS18B20_WRITE_LOW_US);
+    hal_delay_us(DS18B20_WRITE_LOW_US);
     hal_irq_enable();
 }
 
@@ -42,11 +42,11 @@ static uint8_t ds18b20_read_bit(ds18b20_handle_t *handle)
 
     hal_irq_disable();
     ds18b20_low(handle);
-    driver_delay_us(DS18B20_READ_LOW_US);
+    hal_delay_us(DS18B20_READ_LOW_US);
     ds18b20_release(handle);
-    driver_delay_us(DS18B20_READ_SAMPLE_US);
+    hal_delay_us(DS18B20_READ_SAMPLE_US);
     bit = (uint8_t)ds18b20_sample(handle);
-    driver_delay_us(DS18B20_READ_TAIL_US);
+    hal_delay_us(DS18B20_READ_TAIL_US);
     hal_irq_enable();
     return bit;
 }
@@ -67,7 +67,7 @@ static uint8_t ds18b20_read_byte(ds18b20_handle_t *handle)
 
     for (i = 0U; i < 8U; i++) {
         if (ds18b20_read_bit(handle) != 0U) {
-            value = (uint8_t)(value | DRIVER_BIT(i));
+            value = (uint8_t)(value | (1UL << (i)));
         }
     }
     return value;
@@ -101,7 +101,7 @@ int ds18b20_init(ds18b20_handle_t *handle, hal_pin_t pin)
     if (ds18b20_reset(handle) != 1) {
         LOG_W("ds18b20", "no device on bus");
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds18b20_deinit(ds18b20_handle_t *handle)
@@ -113,7 +113,7 @@ int ds18b20_deinit(ds18b20_handle_t *handle)
         (void)hal_gpio_deinit(handle->pin);
     }
     handle->initialized = false;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds18b20_reset(ds18b20_handle_t *handle)
@@ -126,11 +126,11 @@ int ds18b20_reset(ds18b20_handle_t *handle)
 
     hal_irq_disable();
     ds18b20_low(handle);
-    driver_delay_us(DS18B20_RESET_LOW_US);
+    hal_delay_us(DS18B20_RESET_LOW_US);
     ds18b20_release(handle);
-    driver_delay_us(DS18B20_RESET_RELEASE_US);
+    hal_delay_us(DS18B20_RESET_RELEASE_US);
     presence = ds18b20_sample(handle);
-    driver_delay_us(DS18B20_RESET_WAIT_US);
+    hal_delay_us(DS18B20_RESET_WAIT_US);
     hal_irq_enable();
 
     return (presence == 0) ? 1 : 0;
@@ -146,7 +146,7 @@ int ds18b20_start(ds18b20_handle_t *handle)
     }
     ds18b20_write_byte(handle, DS18B20_CMD_SKIP_ROM);
     ds18b20_write_byte(handle, DS18B20_CMD_CONVERT_T);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds18b20_read_scratchpad(ds18b20_handle_t *handle, uint8_t scratchpad[9])
@@ -165,11 +165,11 @@ int ds18b20_read_scratchpad(ds18b20_handle_t *handle, uint8_t scratchpad[9])
         scratchpad[i] = ds18b20_read_byte(handle);
     }
 
-    if (driver_crc8_maxim(scratchpad, DS18B20_SCRATCHPAD_SIZE - 1U) != scratchpad[8]) {
+    if (hal_crc8_maxim(scratchpad, DS18B20_SCRATCHPAD_SIZE - 1U) != scratchpad[8]) {
         LOG_E("ds18b20", "crc error");
         return (int)HAL_CRC_ERROR;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ds18b20_read(ds18b20_handle_t *handle, float *celsius)
@@ -183,17 +183,17 @@ int ds18b20_read(ds18b20_handle_t *handle, float *celsius)
     }
 
     ret = ds18b20_start(handle);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
-    driver_delay_ms(DS18B20_CONVERT_DELAY_MS);
+    hal_delay_ms(DS18B20_CONVERT_DELAY_MS);
 
     ret = ds18b20_read_scratchpad(handle, scratchpad);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
     raw = (int16_t)((uint16_t)scratchpad[0] | ((uint16_t)scratchpad[1] << 8));
     *celsius = (float)raw * DS18B20_RESOLUTION_LSB;
-    return DRIVER_OK;
+    return HAL_OK;
 }

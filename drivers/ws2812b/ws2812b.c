@@ -46,14 +46,14 @@ int ws2812b_init(ws2812b_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
 
     handle->spi.handle = spi;
     handle->spi.cs = cs;
-    handle->spi.timeout_ms = DRIVER_SPI_TIMEOUT_DEFAULT;
+    handle->spi.timeout_ms = HAL_SPI_TIMEOUT_DEFAULT;
     handle->led_count = led_count;
     handle->pixels = pixels;
     handle->encoded = encoded;
     handle->initialized = false;
 
     if (cs != 0U) {
-        if (driver_gpio_output(cs, HAL_GPIO_HIGH) != DRIVER_OK) {
+        if (hal_gpio_config_output(cs, HAL_GPIO_HIGH) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
     }
@@ -64,7 +64,7 @@ int ws2812b_init(ws2812b_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
     (void)ws2812b_clear(handle);
     handle->initialized = true;
     LOG_I("ws2812b", "init ok, leds=%u", (unsigned)led_count);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ws2812b_deinit(ws2812b_handle_t *handle)
@@ -75,7 +75,7 @@ int ws2812b_deinit(ws2812b_handle_t *handle)
     handle->initialized = false;
     handle->pixels = NULL;
     handle->encoded = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ws2812b_set_pixel(ws2812b_handle_t *handle, uint16_t index,
@@ -91,7 +91,7 @@ int ws2812b_set_pixel(ws2812b_handle_t *handle, uint16_t index,
     handle->pixels[offset + 0U] = green;   /* WS2812B 数据顺序为 GRB */
     handle->pixels[offset + 1U] = red;
     handle->pixels[offset + 2U] = blue;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ws2812b_set_all(ws2812b_handle_t *handle, uint8_t red, uint8_t green, uint8_t blue)
@@ -104,11 +104,11 @@ int ws2812b_set_all(ws2812b_handle_t *handle, uint8_t red, uint8_t green, uint8_
     }
     for (i = 0U; i < handle->led_count; i++) {
         ret = ws2812b_set_pixel(handle, i, red, green, blue);
-        if (ret != DRIVER_OK) {
+        if (ret != HAL_OK) {
             return ret;
         }
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ws2812b_clear(ws2812b_handle_t *handle)
@@ -119,7 +119,7 @@ int ws2812b_clear(ws2812b_handle_t *handle)
     for (uint32_t i = 0U; i < ws2812b_pixel_buffer_size(handle->led_count); i++) {
         handle->pixels[i] = 0U;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int ws2812b_show(ws2812b_handle_t *handle)
@@ -141,13 +141,13 @@ int ws2812b_show(ws2812b_handle_t *handle)
         ws2812b_encode_byte(handle->pixels[src + 2U], &handle->encoded[dst + 6U]);
     }
 
-    ret = driver_spi_write_cs(&handle->spi, handle->encoded,
+    ret = hal_spi_dev_write_cs(&handle->spi, handle->encoded,
                               ws2812b_encoded_buffer_size(handle->led_count));
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
     /* 锁存复位：拉低 >50us */
-    driver_delay_us(WS2812B_RESET_DELAY_US);
-    return DRIVER_OK;
+    hal_delay_us(WS2812B_RESET_DELAY_US);
+    return HAL_OK;
 }

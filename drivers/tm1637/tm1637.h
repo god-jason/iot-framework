@@ -9,7 +9,7 @@
  * 段码写入显存后需调用 tm1637_show 才会显示。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

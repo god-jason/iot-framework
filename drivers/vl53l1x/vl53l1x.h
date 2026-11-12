@@ -10,14 +10,14 @@
  * 详见 vl53l1x.c 注释——需按 datasheet / ST API 补充。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    driver_i2c_t i2c;
+    hal_i2c_dev_t i2c;
     bool initialized;
 } vl53l1x_handle_t;
 

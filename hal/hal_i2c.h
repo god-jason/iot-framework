@@ -145,6 +145,93 @@ int hal_i2c_abort(hal_i2c_t *handle);
 /* 查询当前状态；handle 为 NULL 时返回 HAL_STATE_RESET */
 hal_state_e hal_i2c_get_state(hal_i2c_t *handle);
 
+/* ---------------- 设备便捷封装（驱动层统一使用） ---------------- */
+
+/* 单次传输默认超时（毫秒） */
+#define HAL_I2C_TIMEOUT_DEFAULT     100U
+
+/* I2C 从机描述：句柄 + 7 位地址 + 超时 */
+typedef struct {
+    hal_i2c_t *handle;
+    uint16_t address;
+    uint32_t timeout_ms;
+} hal_i2c_dev_t;
+
+static inline int hal_i2c_dev_write(hal_i2c_dev_t *dev, const uint8_t *data,
+                                    size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_master_transmit(dev->handle, dev->address, data, len,
+                                   dev->timeout_ms);
+}
+
+static inline int hal_i2c_dev_read(hal_i2c_dev_t *dev, uint8_t *data,
+                                   size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_master_receive(dev->handle, dev->address, data, len,
+                                  dev->timeout_ms);
+}
+
+static inline int hal_i2c_dev_write_reg(hal_i2c_dev_t *dev, uint8_t reg,
+                                        const uint8_t *data, size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_mem_write(dev->handle, dev->address, reg, 1U, data, len,
+                             dev->timeout_ms);
+}
+
+static inline int hal_i2c_dev_read_reg(hal_i2c_dev_t *dev, uint8_t reg,
+                                       uint8_t *data, size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_mem_read(dev->handle, dev->address, reg, 1U, data, len,
+                            dev->timeout_ms);
+}
+
+static inline int hal_i2c_dev_write_reg16(hal_i2c_dev_t *dev, uint16_t reg,
+                                          const uint8_t *data, size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_mem_write(dev->handle, dev->address, reg, 2U, data, len,
+                             dev->timeout_ms);
+}
+
+static inline int hal_i2c_dev_read_reg16(hal_i2c_dev_t *dev, uint16_t reg,
+                                         uint8_t *data, size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_mem_read(dev->handle, dev->address, reg, 2U, data, len,
+                            dev->timeout_ms);
+}
+
+static inline int hal_i2c_dev_probe(hal_i2c_dev_t *dev)
+{
+    if (dev == NULL || dev->handle == NULL) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_i2c_is_device_ready(dev->handle, dev->address, 3U,
+                                   dev->timeout_ms);
+}
+
 #ifdef __cplusplus
 }
 #endif

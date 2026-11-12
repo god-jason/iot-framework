@@ -7,16 +7,16 @@
  * 参考 libdriver 设计：
  *   dht22_init / dht22_deinit / dht22_read / dht22_read_raw
  *
- * 硬件访问只经由 common/driver_io.h 暴露的 iot_gpio_* 与 driver_delay_us：
+ * 硬件访问只经由 hal.h 暴露的 hal_gpio_* 与 hal_delay_us：
  * 空闲态为输入 + 上拉；起始信号期间临时切为推挽输出拉低，
  * 释放后立即切回输入读取从机电平（不依赖开漏输出能力）。
  * 引脚必须外接 4.7k~10k 上拉电阻。
  *
  * 位时序对中断敏感，整帧收发在 hal_irq_disable/enable 临界区内完成
- * （driver_io.h 未提供中断接口，沿用 ds18b20/dht11 的既有做法）。
+ * （hal.h 未提供中断接口，沿用 ds18b20/dht11 的既有做法）。
  */
 
-#include "common/driver_io.h"
+#include "hal.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -6,7 +6,7 @@ static int bmp280_read_calib(bmp280_handle_t *handle)
 {
     uint8_t d[BMP280_CALIB_DATA_SIZE];
 
-    if (driver_i2c_read_reg(&handle->i2c, BMP280_REG_CALIB_00, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BMP280_REG_CALIB_00, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -24,7 +24,7 @@ static int bmp280_read_calib(bmp280_handle_t *handle)
     handle->calib.p8 = (int16_t)((uint16_t)d[20] | ((uint16_t)d[21] << 8));
     handle->calib.p9 = (int16_t)((uint16_t)d[22] | ((uint16_t)d[23] << 8));
 
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 /* Bosch 官方补偿算法：返回 0.01 ℃ */
@@ -83,11 +83,11 @@ int bmp280_init(bmp280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : BMP280_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->t_fine = 0;
     handle->initialized = false;
 
-    if (bmp280_get_chip_id(handle, &chip_id) != DRIVER_OK) {
+    if (bmp280_get_chip_id(handle, &chip_id) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (chip_id != BMP280_CHIP_ID) {
@@ -96,10 +96,10 @@ int bmp280_init(bmp280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     }
 
     value = BMP280_RESET_VALUE;
-    (void)driver_i2c_write_reg(&handle->i2c, BMP280_REG_RESET, &value, 1U);
-    driver_delay_ms(5U);
+    (void)hal_i2c_dev_write_reg(&handle->i2c, BMP280_REG_RESET, &value, 1U);
+    hal_delay_ms(5U);
 
-    if (bmp280_read_calib(handle) != DRIVER_OK) {
+    if (bmp280_read_calib(handle) != HAL_OK) {
         LOG_E("bmp280", "read calibration failed");
         return (int)HAL_IO_ERROR;
     }
@@ -109,17 +109,17 @@ int bmp280_init(bmp280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     }
 
     value = BMP280_CONFIG_DEFAULT;
-    if (driver_i2c_write_reg(&handle->i2c, BMP280_REG_CONFIG, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, BMP280_REG_CONFIG, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     value = BMP280_CTRL_MEAS_DEFAULT;
-    if (driver_i2c_write_reg(&handle->i2c, BMP280_REG_CTRL_MEAS, &value, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write_reg(&handle->i2c, BMP280_REG_CTRL_MEAS, &value, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     handle->initialized = true;
     LOG_I("bmp280", "init ok at 0x%02X", handle->i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp280_deinit(bmp280_handle_t *handle)
@@ -130,11 +130,11 @@ int bmp280_deinit(bmp280_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     if (handle->i2c.handle != NULL) {
-        (void)driver_i2c_write_reg(&handle->i2c, BMP280_REG_CTRL_MEAS, &value, 1U);
+        (void)hal_i2c_dev_write_reg(&handle->i2c, BMP280_REG_CTRL_MEAS, &value, 1U);
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp280_get_chip_id(bmp280_handle_t *handle, uint8_t *chip_id)
@@ -142,7 +142,7 @@ int bmp280_get_chip_id(bmp280_handle_t *handle, uint8_t *chip_id)
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_read_reg(&handle->i2c, BMP280_REG_CHIP_ID, chip_id, 1U);
+    return hal_i2c_dev_read_reg(&handle->i2c, BMP280_REG_CHIP_ID, chip_id, 1U);
 }
 
 int bmp280_read_raw(bmp280_handle_t *handle, int32_t *raw_temperature,
@@ -156,7 +156,7 @@ int bmp280_read_raw(bmp280_handle_t *handle, int32_t *raw_temperature,
         return (int)HAL_INVALID_PARAM;
     }
 
-    if (driver_i2c_read_reg(&handle->i2c, BMP280_REG_PRESS_MSB, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BMP280_REG_PRESS_MSB, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
@@ -169,7 +169,7 @@ int bmp280_read_raw(bmp280_handle_t *handle, int32_t *raw_temperature,
     if (raw_temperature != NULL) {
         *raw_temperature = adc_t;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp280_read(bmp280_handle_t *handle, bmp280_data_t *data)
@@ -185,7 +185,7 @@ int bmp280_read(bmp280_handle_t *handle, bmp280_data_t *data)
     }
 
     ret = bmp280_read_raw(handle, &adc_t, &adc_p);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -197,5 +197,5 @@ int bmp280_read(bmp280_handle_t *handle, bmp280_data_t *data)
 
     data->temperature = (float)temperature / 100.0f;
     data->pressure = (float)pressure;
-    return DRIVER_OK;
+    return HAL_OK;
 }

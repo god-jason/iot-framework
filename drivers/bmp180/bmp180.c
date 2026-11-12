@@ -9,24 +9,24 @@ static int bmp180_read_calib(bmp180_handle_t *handle)
 {
     uint8_t d[BMP180_CALIB_DATA_SIZE];
 
-    if (driver_i2c_read_reg(&handle->i2c, BMP180_REG_CALIB_00, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BMP180_REG_CALIB_00, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
 
     /* 11 个系数均为 16 位大端 */
-    handle->calib.ac1 = driver_be16(&d[0]);
-    handle->calib.ac2 = driver_be16(&d[2]);
-    handle->calib.ac3 = driver_be16(&d[4]);
-    handle->calib.ac4 = (uint16_t)driver_be16(&d[6]);
-    handle->calib.ac5 = (uint16_t)driver_be16(&d[8]);
-    handle->calib.ac6 = (uint16_t)driver_be16(&d[10]);
-    handle->calib.b1 = driver_be16(&d[12]);
-    handle->calib.b2 = driver_be16(&d[14]);
-    handle->calib.mb = driver_be16(&d[16]);
-    handle->calib.mc = driver_be16(&d[18]);
-    handle->calib.md = driver_be16(&d[20]);
+    handle->calib.ac1 = hal_be16(&d[0]);
+    handle->calib.ac2 = hal_be16(&d[2]);
+    handle->calib.ac3 = hal_be16(&d[4]);
+    handle->calib.ac4 = (uint16_t)hal_be16(&d[6]);
+    handle->calib.ac5 = (uint16_t)hal_be16(&d[8]);
+    handle->calib.ac6 = (uint16_t)hal_be16(&d[10]);
+    handle->calib.b1 = hal_be16(&d[12]);
+    handle->calib.b2 = hal_be16(&d[14]);
+    handle->calib.mb = hal_be16(&d[16]);
+    handle->calib.mc = hal_be16(&d[18]);
+    handle->calib.md = hal_be16(&d[20]);
 
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static int bmp180_read_ut(bmp180_handle_t *handle, int32_t *ut)
@@ -34,16 +34,16 @@ static int bmp180_read_ut(bmp180_handle_t *handle, int32_t *ut)
     uint8_t cmd = BMP180_CMD_TEMP;
     uint8_t d[BMP180_ADC_TEMP_SIZE];
 
-    if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(BMP180_CONV_DELAY_TEMP_MS);
+    hal_delay_ms(BMP180_CONV_DELAY_TEMP_MS);
 
-    if (driver_i2c_read_reg(&handle->i2c, BMP180_REG_ADC_OUT, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BMP180_REG_ADC_OUT, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     *ut = (int32_t)(((uint32_t)d[0] << 8) | (uint32_t)d[1]);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 static int bmp180_read_up(bmp180_handle_t *handle, int32_t *up)
@@ -52,18 +52,18 @@ static int bmp180_read_up(bmp180_handle_t *handle, int32_t *up)
     uint8_t d[BMP180_ADC_PRESS_SIZE];
     int32_t raw;
 
-    if (driver_i2c_write(&handle->i2c, &cmd, 1U) != DRIVER_OK) {
+    if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    driver_delay_ms(bmp180_press_delay_ms[handle->oversampling & 0x03U]);
+    hal_delay_ms(bmp180_press_delay_ms[handle->oversampling & 0x03U]);
 
-    if (driver_i2c_read_reg(&handle->i2c, BMP180_REG_ADC_OUT, d, sizeof(d)) != DRIVER_OK) {
+    if (hal_i2c_dev_read_reg(&handle->i2c, BMP180_REG_ADC_OUT, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     /* 结果 19 位左对齐，右移 (8 - oss) 得到 UP */
     raw = (int32_t)(((uint32_t)d[0] << 16) | ((uint32_t)d[1] << 8) | (uint32_t)d[2]);
     *up = raw >> (8 - (int32_t)(handle->oversampling & 0x03U));
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 /* datasheet 温度补偿：返回 0.1 ℃，并保存 B5 供压力补偿使用 */
@@ -146,12 +146,12 @@ int bmp180_init(bmp180_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->i2c.handle = i2c;
     handle->i2c.address = (address != 0U) ? address : BMP180_DEFAULT_ADDRESS;
-    handle->i2c.timeout_ms = DRIVER_I2C_TIMEOUT_DEFAULT;
+    handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->oversampling = BMP180_OSS_DEFAULT;
     handle->b5 = 0;
     handle->initialized = false;
 
-    if (bmp180_get_chip_id(handle, &chip_id) != DRIVER_OK) {
+    if (bmp180_get_chip_id(handle, &chip_id) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
     if (chip_id != BMP180_CHIP_ID) {
@@ -159,10 +159,10 @@ int bmp180_init(bmp180_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         return (int)HAL_NOT_FOUND;
     }
 
-    (void)driver_i2c_write_reg(&handle->i2c, BMP180_REG_SOFT_RESET, &value, 1U);
-    driver_delay_ms(5U);
+    (void)hal_i2c_dev_write_reg(&handle->i2c, BMP180_REG_SOFT_RESET, &value, 1U);
+    hal_delay_ms(5U);
 
-    if (bmp180_read_calib(handle) != DRIVER_OK) {
+    if (bmp180_read_calib(handle) != HAL_OK) {
         LOG_E("bmp180", "read calibration failed");
         return (int)HAL_IO_ERROR;
     }
@@ -173,7 +173,7 @@ int bmp180_init(bmp180_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->initialized = true;
     LOG_I("bmp180", "init ok at 0x%02X", handle->i2c.address);
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp180_deinit(bmp180_handle_t *handle)
@@ -183,7 +183,7 @@ int bmp180_deinit(bmp180_handle_t *handle)
     }
     handle->initialized = false;
     handle->i2c.handle = NULL;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp180_set_oversampling(bmp180_handle_t *handle, uint8_t oss)
@@ -192,7 +192,7 @@ int bmp180_set_oversampling(bmp180_handle_t *handle, uint8_t oss)
         return (int)HAL_INVALID_PARAM;
     }
     handle->oversampling = oss;
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp180_get_chip_id(bmp180_handle_t *handle, uint8_t *chip_id)
@@ -200,7 +200,7 @@ int bmp180_get_chip_id(bmp180_handle_t *handle, uint8_t *chip_id)
     if (handle == NULL || chip_id == NULL || handle->i2c.handle == NULL) {
         return (int)HAL_INVALID_PARAM;
     }
-    return driver_i2c_read_reg(&handle->i2c, BMP180_REG_CHIP_ID, chip_id, 1U);
+    return hal_i2c_dev_read_reg(&handle->i2c, BMP180_REG_CHIP_ID, chip_id, 1U);
 }
 
 int bmp180_read_raw(bmp180_handle_t *handle, int32_t *ut, int32_t *up)
@@ -217,11 +217,11 @@ int bmp180_read_raw(bmp180_handle_t *handle, int32_t *ut, int32_t *up)
     }
 
     ret = bmp180_read_ut(handle, &raw_t);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
     ret = bmp180_read_up(handle, &raw_p);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -231,7 +231,7 @@ int bmp180_read_raw(bmp180_handle_t *handle, int32_t *ut, int32_t *up)
     if (up != NULL) {
         *up = raw_p;
     }
-    return DRIVER_OK;
+    return HAL_OK;
 }
 
 int bmp180_read(bmp180_handle_t *handle, bmp180_data_t *data)
@@ -247,7 +247,7 @@ int bmp180_read(bmp180_handle_t *handle, bmp180_data_t *data)
     }
 
     ret = bmp180_read_raw(handle, &ut, &up);
-    if (ret != DRIVER_OK) {
+    if (ret != HAL_OK) {
         return ret;
     }
 
@@ -261,5 +261,5 @@ int bmp180_read(bmp180_handle_t *handle, bmp180_data_t *data)
 
     data->temperature = (float)temp01 / 10.0f;
     data->pressure = (float)pressure;
-    return DRIVER_OK;
+    return HAL_OK;
 }

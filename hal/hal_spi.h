@@ -11,6 +11,7 @@
 
 #include "hal_def.h"
 #include "hal_dma.h"
+#include "hal_gpio.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -127,6 +128,91 @@ int hal_spi_set_speed(hal_spi_t *handle, uint32_t baudrate);
 
 /* 中止当前传输；无传输时返回 HAL_OK */
 int hal_spi_abort(hal_spi_t *handle);
+
+/* ---------------- 设备便捷封装（驱动层统一使用） ---------------- */
+
+/* 单次传输默认超时（毫秒） */
+#define HAL_SPI_TIMEOUT_DEFAULT     100U
+
+/* SPI 设备描述：句柄 + 片选 + 超时 */
+typedef struct {
+    hal_spi_t *handle;
+    hal_pin_t cs;               /* HAL_PIN(0,0) 表示不控制片选 */
+    uint32_t timeout_ms;
+} hal_spi_dev_t;
+
+static inline void hal_spi_dev_select(hal_spi_dev_t *dev)
+{
+    if (dev != NULL && dev->cs != 0U) {
+        (void)hal_gpio_reset(dev->cs);
+    }
+}
+
+static inline void hal_spi_dev_deselect(hal_spi_dev_t *dev)
+{
+    if (dev != NULL && dev->cs != 0U) {
+        (void)hal_gpio_set(dev->cs);
+    }
+}
+
+static inline int hal_spi_dev_transfer(hal_spi_dev_t *dev, const uint8_t *tx,
+                                       uint8_t *rx, size_t len)
+{
+    if (dev == NULL || dev->handle == NULL || len == 0U ||
+        (tx == NULL && rx == NULL)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    return hal_spi_transfer(dev->handle, tx, rx, len, dev->timeout_ms);
+}
+
+static inline int hal_spi_dev_write(hal_spi_dev_t *dev, const uint8_t *data,
+                                    size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    if (len == 0U) {
+        return (int)HAL_OK;
+    }
+    return hal_spi_transmit(dev->handle, data, len, dev->timeout_ms);
+}
+
+static inline int hal_spi_dev_read(hal_spi_dev_t *dev, uint8_t *data,
+                                   size_t len)
+{
+    if (dev == NULL || dev->handle == NULL ||
+        (data == NULL && len > 0U)) {
+        return (int)HAL_INVALID_PARAM;
+    }
+    if (len == 0U) {
+        return (int)HAL_OK;
+    }
+    return hal_spi_receive(dev->handle, data, len, dev->timeout_ms);
+}
+
+/* 片选保持期间的一次完整写/读（自动拉低/拉高 CS） */
+static inline int hal_spi_dev_write_cs(hal_spi_dev_t *dev,
+                                       const uint8_t *data, size_t len)
+{
+    int ret;
+
+    hal_spi_dev_select(dev);
+    ret = hal_spi_dev_write(dev, data, len);
+    hal_spi_dev_deselect(dev);
+    return ret;
+}
+
+static inline int hal_spi_dev_read_cs(hal_spi_dev_t *dev, uint8_t *data,
+                                      size_t len)
+{
+    int ret;
+
+    hal_spi_dev_select(dev);
+    ret = hal_spi_dev_read(dev, data, len);
+    hal_spi_dev_deselect(dev);
+    return ret;
+}
 
 /* 查询当前状态；handle 为 NULL 时返回 HAL_STATE_RESET */
 hal_state_e hal_spi_get_state(hal_spi_t *handle);
