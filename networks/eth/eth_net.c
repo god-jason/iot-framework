@@ -2,7 +2,7 @@
  * ETH 网络实现：基于 Mongoose 事件循环提供 TCP/UDP 客户端与服务端。
  *
  * 说明：
- *   - 所有连接都挂在共享的 mg_mgr 上，iot_net_recv/accept 内部驱动轮询；
+ *   - 所有连接都挂在共享的 mg_mgr 上，ros_net_recv/accept 内部驱动轮询；
  *   - 未连接的 UDP sendto 使用临时 Mongoose UDP 连接完成；
  *   - 本机 IP/MAC/时间通过系统接口获取。
  */
@@ -29,9 +29,9 @@
 #include <time.h>
 
 #include "eth_net.h"
-#include "iot_net.h"
+#include "ros_net.h"
 
-#if defined(IOT_NETWORK_ETH)
+#if defined(ROS_NETWORK_ETH)
 
 #define ETH_NET_MAX_CONN      8
 #define ETH_NET_RX_MAX        2048
@@ -225,9 +225,9 @@ static void eth_net_fn(struct mg_connection *c, int ev, void *ev_data)
     }
 }
 
-/* ---------------- iot_net 接口实现 ---------------- */
+/* ---------------- ros_net 接口实现 ---------------- */
 
-int iot_net_init(void)
+int ros_net_init(void)
 {
     (void)eth_net_mgr();
     memset(s_socks, 0, sizeof(s_socks));
@@ -235,7 +235,7 @@ int iot_net_init(void)
     return HAL_OK;
 }
 
-int iot_net_deinit(void)
+int ros_net_deinit(void)
 {
     int i;
 
@@ -252,7 +252,7 @@ int iot_net_deinit(void)
     return HAL_OK;
 }
 
-iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
+ros_net_id_t ros_net_connect(ros_net_type_t type, const char *host,
                              uint16_t port, uint32_t timeout)
 {
     char url[ETH_NET_URL_MAX];
@@ -261,23 +261,23 @@ iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
     int index;
 
     if (host == NULL || host[0] == '\0') {
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
 
     snprintf(url, sizeof(url), "%s://%s:%u",
-             (type == IOT_NET_UDP) ? "udp" : "tcp", host, (unsigned)port);
+             (type == ROS_NET_UDP) ? "udp" : "tcp", host, (unsigned)port);
 
     index = eth_slot_alloc();
     if (index < 0) {
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
     s_socks[index].listener = false;
-    s_socks[index].udp = (type == IOT_NET_UDP);
+    s_socks[index].udp = (type == ROS_NET_UDP);
     s_socks[index].conn = mg_connect(eth_net_mgr(), url, eth_net_fn,
                                      &s_socks[index]);
     if (s_socks[index].conn == NULL) {
         eth_slot_free(index);
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
 
     start = mg_millis();
@@ -294,12 +294,12 @@ iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
             eth_net_poll(0);
         }
         eth_slot_free(index);
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
     return index;
 }
 
-int32_t iot_net_send(iot_net_id_t id, const uint8_t *data, uint32_t len)
+int32_t ros_net_send(ros_net_id_t id, const uint8_t *data, uint32_t len)
 {
     if (id < 0 || id >= ETH_NET_MAX_CONN || !s_socks[id].used ||
         s_socks[id].listener || s_socks[id].conn == NULL ||
@@ -343,7 +343,7 @@ static int32_t eth_recv_common(int id, uint8_t *data, uint32_t len,
     }
 }
 
-int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
+int32_t ros_net_recv(ros_net_id_t id, uint8_t *data, uint32_t len,
                      uint32_t timeout)
 {
     if (id < 0 || id >= ETH_NET_MAX_CONN || !s_socks[id].used ||
@@ -353,7 +353,7 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
     return eth_recv_common(id, data, len, timeout);
 }
 
-int iot_net_close(iot_net_id_t id)
+int ros_net_close(ros_net_id_t id)
 {
     if (id < 0 || id >= ETH_NET_MAX_CONN || !s_socks[id].used) {
         return HAL_NOT_FOUND;
@@ -368,28 +368,28 @@ int iot_net_close(iot_net_id_t id)
     return HAL_OK;
 }
 
-int iot_net_listen(iot_net_type_t type, const char *host,
-                            uint16_t port, iot_net_id_t *id)
+int ros_net_listen(ros_net_type_t type, const char *host,
+                            uint16_t port, ros_net_id_t *id)
 {
     char url[ETH_NET_URL_MAX];
     const char *node;
     int index;
 
-    if (id == NULL || (type != IOT_NET_TCP && type != IOT_NET_UDP)) {
+    if (id == NULL || (type != ROS_NET_TCP && type != ROS_NET_UDP)) {
         return HAL_INVALID_PARAM;
     }
-    *id = IOT_NET_INVALID_ID;
+    *id = ROS_NET_INVALID_ID;
 
     node = (host != NULL && host[0] != '\0') ? host : "0.0.0.0";
     snprintf(url, sizeof(url), "%s://%s:%u",
-             (type == IOT_NET_UDP) ? "udp" : "tcp", node, (unsigned)port);
+             (type == ROS_NET_UDP) ? "udp" : "tcp", node, (unsigned)port);
 
     index = eth_slot_alloc();
     if (index < 0) {
         return HAL_NO_MEMORY;
     }
     s_socks[index].listener = true;
-    s_socks[index].udp = (type == IOT_NET_UDP);
+    s_socks[index].udp = (type == ROS_NET_UDP);
     s_socks[index].conn = mg_listen(eth_net_mgr(), url, eth_net_fn,
                                     &s_socks[index]);
     if (s_socks[index].conn == NULL) {
@@ -401,7 +401,7 @@ int iot_net_listen(iot_net_type_t type, const char *host,
     return HAL_OK;
 }
 
-int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
+int ros_net_accept(ros_net_id_t listen_id, ros_net_id_t *conn_id,
                             char *peer_ip, uint32_t ip_size,
                             uint16_t *peer_port, uint32_t timeout)
 {
@@ -413,7 +413,7 @@ int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
         s_socks[listen_id].udp || (peer_ip != NULL && ip_size == 0U)) {
         return HAL_INVALID_PARAM;
     }
-    *conn_id = IOT_NET_INVALID_ID;
+    *conn_id = ROS_NET_INVALID_ID;
 
     start = mg_millis();
     while (s_accept_n == 0U) {
@@ -455,7 +455,7 @@ static void eth_sendto_fn(struct mg_connection *c, int ev, void *ev_data)
     }
 }
 
-int32_t iot_net_sendto(iot_net_id_t id, const char *host, uint16_t port,
+int32_t ros_net_sendto(ros_net_id_t id, const char *host, uint16_t port,
                        const uint8_t *data, uint32_t len)
 {
     char url[ETH_NET_URL_MAX];
@@ -504,7 +504,7 @@ int32_t iot_net_sendto(iot_net_id_t id, const char *host, uint16_t port,
     return (int32_t)len;
 }
 
-int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
+int32_t ros_net_recvfrom(ros_net_id_t id, uint8_t *data, uint32_t len,
                          uint32_t timeout, char *peer_ip, uint32_t ip_size,
                          uint16_t *peer_port)
 {
@@ -525,7 +525,7 @@ int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
 
 /* ---------------- 系统信息 ---------------- */
 
-int iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
+int ros_net_gethostbyname(const char *name, char *ip, uint32_t size)
 {
     struct addrinfo hints;
     struct addrinfo *res = NULL;
@@ -560,7 +560,7 @@ int iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
     return status;
 }
 
-int iot_net_getip(char *ip, uint32_t size)
+int ros_net_getip(char *ip, uint32_t size)
 {
     char host[256];
     struct addrinfo hints;
@@ -602,7 +602,7 @@ int iot_net_getip(char *ip, uint32_t size)
 
 static int eth_mac_text(const uint8_t *addr, char *mac, uint32_t size)
 {
-    if (size < IOT_NET_MAC_MAX) {
+    if (size < ROS_NET_MAC_MAX) {
         return HAL_OVERFLOW;
     }
     snprintf(mac, size, "%02x:%02x:%02x:%02x:%02x:%02x",
@@ -610,12 +610,12 @@ static int eth_mac_text(const uint8_t *addr, char *mac, uint32_t size)
     return HAL_OK;
 }
 
-int iot_net_getmac(char *mac, uint32_t size)
+int ros_net_getmac(char *mac, uint32_t size)
 {
     if (mac == NULL) {
         return HAL_INVALID_PARAM;
     }
-    if (size < IOT_NET_MAC_MAX) {
+    if (size < ROS_NET_MAC_MAX) {
         return HAL_OVERFLOW;
     }
 
@@ -704,7 +704,7 @@ int iot_net_getmac(char *mac, uint32_t size)
 #endif
 }
 
-int iot_net_gettime(iot_net_time_t *time_out)
+int ros_net_gettime(ros_net_time_t *time_out)
 {
     time_t now;
     struct tm *tm;
@@ -732,4 +732,4 @@ int iot_net_gettime(iot_net_time_t *time_out)
     return HAL_OK;
 }
 
-#endif /* IOT_NETWORK_ETH */
+#endif /* ROS_NETWORK_ETH */

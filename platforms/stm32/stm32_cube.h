@@ -1,5 +1,5 @@
-#ifndef IOT_STM32_CUBE_H
-#define IOT_STM32_CUBE_H
+#ifndef ROS_STM32_CUBE_H
+#define ROS_STM32_CUBE_H
 
 /*
  * stm32_cube.h - STM32Cube HAL 统一包含入口（F1 / F4 / H7）
@@ -12,7 +12,7 @@
  *
  *   因此这里在包含 Cube 头文件前把四个名字临时映射为 CUBE_HAL_*，包含完成
  *   后恢复，框架代码继续使用自己的 HAL_* 常量。需要判断 Cube 返回值的代码
- *   请使用 CUBE_HAL_OK 等，或调用 iot_cube_status()。
+ *   请使用 CUBE_HAL_OK 等，或调用 ros_cube_status()。
  *
  * 使用方式：
  *   #include "hal.h"
@@ -28,11 +28,11 @@
 #define HAL_I2C_MODE_MASTER CUBE_HAL_I2C_MODE_MASTER
 #define HAL_I2C_MODE_SLAVE  CUBE_HAL_I2C_MODE_SLAVE
 
-#if defined(IOT_STM32_H7)
+#if defined(ROS_STM32_H7)
 #include "stm32h7xx_hal.h"
-#elif defined(IOT_STM32_F1)
+#elif defined(ROS_STM32_F1)
 #include "stm32f1xx_hal.h"
-#elif defined(IOT_STM32_F4)
+#elif defined(ROS_STM32_F4)
 #include "stm32f4xx_hal.h"
 #else
 #include "stm32f4xx_hal.h"
@@ -45,7 +45,7 @@
 #undef HAL_I2C_MODE_MASTER
 #undef HAL_I2C_MODE_SLAVE
 
-#if defined(IOT_STM32_F4)
+#if defined(ROS_STM32_F4)
 /* Cube F4 HAL 1.28 起把 DMA_MDATAALIGN_* 改名为 DMA_MEMORY_DATA_SIZE_*，
  * 早期版本（如 Keil DFP 2.17 携带的 1.27）用旧名：这里统一到新名。 */
 #ifndef DMA_MEMORY_DATA_SIZE_BYTE
@@ -57,12 +57,12 @@
 #ifndef DMA_MEMORY_DATA_SIZE_WORD
 #define DMA_MEMORY_DATA_SIZE_WORD       DMA_MDATAALIGN_WORD
 #endif
-#endif /* IOT_STM32_F4 */
+#endif /* ROS_STM32_F4 */
 
 #include "hal.h"
 
 /* Cube HAL 状态码 -> 框架状态码 */
-static inline int iot_cube_status(int status)
+static inline int ros_cube_status(int status)
 {
     switch (status) {
     case CUBE_HAL_OK:
@@ -77,4 +77,4 @@ static inline int iot_cube_status(int status)
     }
 }
 
-#endif /* IOT_STM32_CUBE_H */
+#endif /* ROS_STM32_CUBE_H */

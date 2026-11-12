@@ -1,11 +1,11 @@
 --[[
-    iot-os 统一构建脚本（xmake >= 2.8）
+    robotos 统一构建脚本（xmake >= 2.8）
 
     主机（Windows / Linux）使用系统 gcc：
         xmake f -c                          # 重新配置（自动识别主机平台）
         xmake b -r                          # 全量构建三个主机目标
-        xmake r iot-test                    # 运行单元测试
-        xmake r iot-demo                    # 运行综合示例
+        xmake r ros-test                    # 运行单元测试
+        xmake r ros-demo                    # 运行综合示例
         xmake f -p linux -c && xmake b -r   # 在 Linux 主机上构建
 
     STM32 使用 arm-none-eabi-gcc：
@@ -16,17 +16,17 @@
         xmake f -p cross --stm32_family=f4 ^
                 --sdk=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1 ^
                 --bin=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin -c
-        xmake b iot-stm32
+        xmake b ros-stm32
 
         # 可烧录固件：STM32F407VET6（需要 Cube HAL，产物含 .elf/.hex/.bin）
         xmake f -p cross --stm32_family=f4 --stm32_chip=STM32F407xx ^
                 --cube_hal_dir=C:\path\to\STM32F4xx_HAL_Driver ^
                 --sdk=... --bin=... -c
-        xmake b iot-fw-f407
+        xmake b ros-fw-f407
 
         # 可烧录固件：STM32F103C8T6（纯寄存器实现，不需要 Cube HAL）
         xmake f -p cross --stm32_family=f1 --cube_hal_dir="" ... -c
-        xmake b iot-fw-f103c8
+        xmake b ros-fw-f103c8
 
         # Linux 下换成 --sdk=/opt/xpack-arm-none-eabi-gcc-15.2.1-1.1 等安装路径
         # --cube_hal_dir 可传 .../STM32F4xx_HAL_Driver 或其 Inc 子目录
@@ -35,18 +35,18 @@
     会自动跳过，只产出内核 + 组件 + 驱动层。
 
     目标一览：
-        iot-pc        主机框架静态库（无 main，供外部集成）
-        iot-test      单元测试可执行文件
-        iot-demo      综合示例可执行文件
-        iot-shell     Shell 交互示例（stdin/stdout）
-        iot-stm32     STM32 交叉编译静态库（仅 -p cross 时可见）
-        iot-fw-f407   STM32F407VET6 可烧录固件（PA6/PA7 LED，USART1）
-        iot-fw-f103c8 STM32F103C8T6 可烧录固件（PC13 LED，USART1）
+        ros-pc        主机框架静态库（无 main，供外部集成）
+        ros-test      单元测试可执行文件
+        ros-demo      综合示例可执行文件
+        ros-shell     Shell 交互示例（stdin/stdout）
+        ros-stm32     STM32 交叉编译静态库（仅 -p cross 时可见）
+        ros-fw-f407   STM32F407VET6 可烧录固件（PA6/PA7 LED，USART1）
+        ros-fw-f103c8 STM32F103C8T6 可烧录固件（PC13 LED，USART1）
 ]]
 
 add_rules("mode.debug", "mode.release")
 
-set_project("iot-os")
+set_project("robotos")
 set_version("1.0.0")
 
 -- ============================================================================
@@ -56,7 +56,7 @@ set_version("1.0.0")
 option("stm32_family")
     set_default("f4")
     set_values("f1", "f4", "h7")
-    set_description("STM32 系列：决定 CPU/FPU 选项与 IOT_STM32_Fx 宏（仅 cross 平台）")
+    set_description("STM32 系列：决定 CPU/FPU 选项与 ROS_STM32_Fx 宏（仅 cross 平台）")
 option_end()
 
 option("cube_hal_dir")
@@ -87,7 +87,7 @@ option_end()
 option("trace")
     set_default("on")
     set_values("on", "off")
-    set_description("编译期启用 trace；off 时所有 IOT_TRACE_* 宏为空、零 RAM/ROM 开销")
+    set_description("编译期启用 trace；off 时所有 ROS_TRACE_* 宏为空、零 RAM/ROM 开销")
 option_end()
 
 -- ============================================================================
@@ -114,7 +114,7 @@ toolchain_end()
 -- ============================================================================
 
 -- 头文件搜索路径：components 下每个模块目录自动加入，新增模块无需改脚本
-local function iot_includedirs()
+local function ros_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena", "vendor/mongoose",
@@ -127,7 +127,7 @@ local function iot_includedirs()
 end
 
 -- 框架全量源码（平台层由各目标单独 add_files）
-local function iot_framework_sources()
+local function ros_framework_sources()
     add_files("src/**.c")
     add_files("bootloader/**.c")
     add_files("components/**.c")
@@ -136,8 +136,8 @@ local function iot_framework_sources()
     add_files("drivers/**.c")
 end
 
--- 排除框架内嵌的自测文件（iot-test 不调用，它需要这些 ut_xxx 入口）
-local function iot_exclude_tests()
+-- 排除框架内嵌的自测文件（ros-test 不调用，它需要这些 ut_xxx 入口）
+local function ros_exclude_tests()
     remove_files(
         "src/*_test.c", "src/**/*_test.c",
         "src/test_*.c", "src/**/test_*.c",
@@ -157,9 +157,9 @@ local function iot_exclude_tests()
 end
 
 -- 主机平台宏：Windows 用 Winsock，Linux/macOS 用 POSIX
-local function iot_host_defines()
-    add_defines("IOT_PLATFORM_PC")
-    add_defines("IOT_NETWORK_ETH")
+local function ros_host_defines()
+    add_defines("ROS_PLATFORM_PC")
+    add_defines("ROS_NETWORK_ETH")
     if is_plat("windows", "mingw") then
         add_defines("_WIN32_WINNT=0x0600")
     else
@@ -169,13 +169,13 @@ local function iot_host_defines()
 end
 
 -- 编译期裁剪开关：xmake f --trace=off -c
-local function iot_trace_defines()
+local function ros_trace_defines()
     if get_config("trace") == "off" then
-        add_defines("IOT_USE_TRACE=0")
+        add_defines("ROS_USE_TRACE=0")
     end
 end
 
-local function iot_host_links()
+local function ros_host_links()
     if is_plat("windows", "mingw") then
         add_links("m", "ws2_32", "advapi32", "iphlpapi")
     else
@@ -184,24 +184,24 @@ local function iot_host_links()
 end
 
 -- 每个主机二进制/库目标共用的描述
-local function iot_host_common(with_tests)
+local function ros_host_common(with_tests)
     set_toolchains("gcc")            -- Windows / Linux 统一使用系统 gcc
     set_languages("c99")
     set_warnings("all")
 
-    iot_host_defines()
-    iot_trace_defines()
+    ros_host_defines()
+    ros_trace_defines()
     add_files("platforms/pc/**.c")
-    iot_framework_sources()
-    iot_includedirs()
+    ros_framework_sources()
+    ros_includedirs()
 
     if not with_tests then
-        iot_exclude_tests()
+        ros_exclude_tests()
     end
 end
 
 -- STM32 系列 -> CPU/FPU 编译选项
-local function iot_stm32_cpuflags(family)
+local function ros_stm32_cpuflags(family)
     if family == "f1" then
         return {"-mcpu=cortex-m3", "-mthumb"}
     elseif family == "h7" then
@@ -213,7 +213,7 @@ local function iot_stm32_cpuflags(family)
 end
 
 -- 在 Keil / CMSIS pack 的常见安装位置查找已安装的版本目录
-local function iot_find_pack_version(rel)
+local function ros_find_pack_version(rel)
     local roots = {
         path.join(os.getenv("LOCALAPPDATA") or "", "Arm", "Packs", rel),
         path.join("C:/Keil_v5/ARM/PACK", rel)
@@ -233,36 +233,36 @@ end
 if not is_plat("cross") then
 
     -- 框架静态库：没有 main，供外部工程集成；改为 static 后全量构建不再链接失败
-    target("iot-pc")
+    target("ros-pc")
         set_kind("static")
-        iot_host_common(false)
+        ros_host_common(false)
     target_end()
 
     -- 单元测试：保留框架内嵌的 *_test.c（src/test_main.c 会调用其 ut_xxx）
-    target("iot-test")
+    target("ros-test")
         set_kind("binary")
-        iot_host_common(true)
-        iot_host_links()
+        ros_host_common(true)
+        ros_host_links()
     target_end()
 
     -- 综合示例：串口控制台 + shell + LED 闪烁（真实延时）
-    target("iot-demo")
+    target("ros-demo")
         set_kind("binary")
-        iot_host_common(false)
-        add_defines("IOT_PC_REAL_DELAY")
+        ros_host_common(false)
+        add_defines("ROS_PC_REAL_DELAY")
         add_files("examples/demo.c")
-        iot_host_links()
+        ros_host_links()
     target_end()
 
     -- Shell 交互示例：标准输入输出 + 内核任务（默认绑定见 platforms/pc/pc_shell.c）
-    target("iot-shell")
+    target("ros-shell")
         set_kind("binary")
-        iot_host_common(false)
+        ros_host_common(false)
         add_defines("SHELL_SHELL_STACK=8192", "SHELL_JOB_STACK=4096")
         -- 交互演示：模拟时间跟随墙钟（1 tick = 1ms），便于观察 ps/state 变化
-        add_defines("IOT_PC_REAL_TIME")
+        add_defines("ROS_PC_REAL_TIME")
         add_files("examples/shell_demo.c")
-        iot_host_links()
+        ros_host_links()
     target_end()
 
 end
@@ -276,7 +276,7 @@ if is_plat("cross") then
     local family  = get_config("stm32_family") or "f4"
     local hal_dir = get_config("cube_hal_dir") or ""
     local chip    = get_config("stm32_chip") or "STM32F407xx"
-    local cpuflags = iot_stm32_cpuflags(family)
+    local cpuflags = ros_stm32_cpuflags(family)
 
     -- 归一化到 <...>/STM32F4xx_HAL_Driver 目录：允许传该目录或其中的 Inc
     local hal_root = ""
@@ -291,27 +291,27 @@ if is_plat("cross") then
     local hal_src     = (hal_root ~= "") and path.join(hal_root, "Src") or ""
     local cmsis_dev_inc = (hal_drivers ~= "")
         and path.join(hal_drivers, "CMSIS", "Device", "ST", "STM32F4xx", "Include") or ""
-    local cmsis_pack = iot_find_pack_version("ARM/CMSIS")
+    local cmsis_pack = ros_find_pack_version("ARM/CMSIS")
     local cmsis_core = get_config("cmsis_inc") or ""
     if cmsis_core == "" and cmsis_pack then
         cmsis_core = path.join(cmsis_pack, "CMSIS", "Core", "Include")
     end
 
-    target("iot-stm32")
+    target("ros-stm32")
         set_kind("static")
         set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
         set_languages("c99")
         set_warnings("all")
 
-        add_defines("IOT_PLATFORM_STM32")
-        add_defines("IOT_STM32_" .. family:upper())
-        -- 内存后端由平台提供（TLSF 静态堆），否则 iot_mem.c 默认走 libc
-        add_defines("IOT_MEM_PORT")
+        add_defines("ROS_PLATFORM_STM32")
+        add_defines("ROS_STM32_" .. family:upper())
+        -- 内存后端由平台提供（TLSF 静态堆），否则 ros_mem.c 默认走 libc
+        add_defines("ROS_MEM_PORT")
         -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
         if family == "f1" then
-            add_defines("IOT_USE_TRACE=0", "IOT_CRASH_ENABLE=0")
+            add_defines("ROS_USE_TRACE=0", "ROS_CRASH_ENABLE=0")
         end
-        iot_trace_defines()
+        ros_trace_defines()
 
         -- force=true：CPU/FPU 选项必须原样传给 arm-none-eabi-gcc，
         -- 否则 xmake 会用宿主编译器探测并可能静默丢弃这些 flag
@@ -333,7 +333,7 @@ if is_plat("cross") then
         add_files("vendor/cjson/**.c")
         add_files("networks/ml307/**.c")
 
-        iot_exclude_tests()
+        ros_exclude_tests()
 
         -- 主机网络栈依赖 socket/winsock，MCU 上不编译
         remove_files("vendor/mongoose/**.c", "networks/eth/**.c")
@@ -343,7 +343,7 @@ if is_plat("cross") then
             if family == "f4" then
                 -- stm32_f4.c / stm32_os.c 需要 Cube + CMSIS 头文件与器件宏
                 add_defines("USE_HAL_DRIVER", chip)
-                add_defines("IOT_TRACE_CLOCK_HZ=168000000")
+                add_defines("ROS_TRACE_CLOCK_HZ=168000000")
                 if cmsis_dev_inc ~= "" then
                     add_includedirs(cmsis_dev_inc)
                 end
@@ -359,35 +359,35 @@ if is_plat("cross") then
                          "platforms/stm32/stm32_h7.c")
         end
 
-        iot_includedirs()
+        ros_includedirs()
 
-        set_basename("iot-stm32-" .. family)
+        set_basename("ros-stm32-" .. family)
 
         on_load(function (target)
             if (get_config("cube_hal_dir") or "") == "" then
-                cprint("${yellow}[iot-stm32] 未指定 --cube_hal_dir：" ..
+                cprint("${yellow}[ros-stm32] 未指定 --cube_hal_dir：" ..
                        "已跳过依赖 STM32Cube HAL 的外设平台层" ..
                        "（stm32_os.c / stm32_<family>.c）${clear}")
             end
-            cprint("${dim}[iot-stm32] family=%s, toolchain=%s, kind=static${clear}",
+            cprint("${dim}[ros-stm32] family=%s, toolchain=%s, kind=static${clear}",
                    get_config("stm32_family") or "f4",
                    get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             if (get_config("sdk") or "") == "" then
-                cprint("${yellow}[iot-stm32] 未指定 --sdk/--bin，xmake 无法定位交叉工具链。${clear}")
+                cprint("${yellow}[ros-stm32] 未指定 --sdk/--bin，xmake 无法定位交叉工具链。${clear}")
                 cprint("${yellow}  请用 xmake f -p cross --sdk=<工具链根目录> --bin=<根目录/bin> -c 重新配置${clear}")
             end
-            cprint("${dim}[iot-stm32] 另需确保 arm-none-eabi-gcc 位于 PATH 中${clear}")
+            cprint("${dim}[ros-stm32] 另需确保 arm-none-eabi-gcc 位于 PATH 中${clear}")
         end)
     target_end()
 
     -- ========================================================================
     -- 可烧录固件（STM32F103C8T6 / Medium Density / PC13 LED）
-    -- 链接 libiot-stm32-f1.a + 板级启动代码，产出 .elf/.hex/.bin
+    -- 链接 libros-stm32-f1.a + 板级启动代码，产出 .elf/.hex/.bin
     -- ========================================================================
     if family == "f1" then
         local board_dir = "boards/stm32f103c8"
-        local dfp       = iot_find_pack_version("Keil/STM32F1xx_DFP")
-        local cmsis     = iot_find_pack_version("ARM/CMSIS")
+        local dfp       = ros_find_pack_version("Keil/STM32F1xx_DFP")
+        local cmsis     = ros_find_pack_version("ARM/CMSIS")
         local dfp_inc   = get_config("dfp_inc") or ""
         local cmsis_inc = get_config("cmsis_inc") or ""
         if dfp_inc == "" then
@@ -397,19 +397,19 @@ if is_plat("cross") then
             cmsis_inc = cmsis and path.join(cmsis, "CMSIS", "Core", "Include") or nil
         end
 
-        target("iot-fw-f103c8")
+        target("ros-fw-f103c8")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
-            add_deps("iot-stm32")
+            add_deps("ros-stm32")
 
-            add_defines("IOT_PLATFORM_STM32", "IOT_STM32_F1")
+            add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F1")
             add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
-            -- 与 iot-stm32 库保持一致：F1 裁剪 trace 与崩溃记录
-            add_defines("IOT_USE_TRACE=0", "IOT_CRASH_ENABLE=0")
-            iot_trace_defines()
+            -- 与 ros-stm32 库保持一致：F1 裁剪 trace 与崩溃记录
+            add_defines("ROS_USE_TRACE=0", "ROS_CRASH_ENABLE=0")
+            ros_trace_defines()
             add_defines("LOG_LEVEL=LOG_LEVEL_NONE")
 
             for _, flag in ipairs(cpuflags) do
@@ -422,7 +422,7 @@ if is_plat("cross") then
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
             add_includedirs(board_dir)
-            iot_includedirs()
+            ros_includedirs()
             if dfp_inc then
                 add_includedirs(dfp_inc)
             end
@@ -466,7 +466,7 @@ if is_plat("cross") then
 
     -- ========================================================================
     -- 可烧录固件（STM32F407VET6 / Cortex-M4 / PA6+PA7 LED / USART1）
-    -- 链接 iot-stm32 + Cube HAL 子集 + 板级启动代码，产出 .elf/.hex/.bin
+    -- 链接 ros-stm32 + Cube HAL 子集 + 板级启动代码，产出 .elf/.hex/.bin
     -- 需要 --cube_hal_dir 指向 STM32F4xx_HAL_Driver
     -- ========================================================================
     if family == "f4" then
@@ -483,17 +483,17 @@ if is_plat("cross") then
             "stm32f4xx_hal_flash.c", "stm32f4xx_hal_flash_ex.c"
         }
 
-        target("iot-fw-f407")
+        target("ros-fw-f407")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
-            add_deps("iot-stm32")
+            add_deps("ros-stm32")
 
-            add_defines("IOT_PLATFORM_STM32", "IOT_STM32_F4",
+            add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F4",
                         "USE_HAL_DRIVER", chip, "HSE_VALUE=8000000")
-            iot_trace_defines()
+            ros_trace_defines()
             add_defines("LOG_LEVEL=LOG_LEVEL_INFO")
 
             for _, flag in ipairs(cpuflags) do
@@ -506,7 +506,7 @@ if is_plat("cross") then
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
             add_includedirs(board_dir)
-            iot_includedirs()
+            ros_includedirs()
 
             if hal_src ~= "" then
                 for _, name in ipairs(hal_modules) do

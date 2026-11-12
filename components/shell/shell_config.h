@@ -81,7 +81,7 @@
 
 /* ------------------------------ 能力开关 ------------------------------ */
 #ifndef SHELL_HAS_CPU_STATS
-#define SHELL_HAS_CPU_STATS     1       /* ps 的 CPU% 列（来自 iot_task_cpu_permille） */
+#define SHELL_HAS_CPU_STATS     1       /* ps 的 CPU% 列（来自 ros_task_cpu_permille） */
 #endif
 #ifndef SHELL_HAS_FS
 #define SHELL_HAS_FS            0       /* 是否存在文件系统；0 时 run <file> 报 1002 */

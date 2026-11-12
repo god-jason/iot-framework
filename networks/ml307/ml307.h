@@ -4,7 +4,7 @@
 /*
  * ML307 4G 模组驱动（基于 at 引擎）。
  * 只封装基础信息 / 网络注册 / 信号 / IP 等核心能力；
- * 对外 HTTP / MQTT 接口见 iot_http.h / iot_mqtt.h。
+ * 对外 HTTP / MQTT 接口见 ros_http.h / ros_mqtt.h。
  */
 
 #include <stdint.h>

@@ -2714,9 +2714,9 @@ int hal_eth_receive(hal_eth_t *handle, void *buffer,
 
 /* ============================== 测试辅助 ============================== */
 
-void iot_pc_reset_state(void)
+void ros_pc_reset_state(void)
 {
-    iot_pc_os_reset_state();
+    ros_pc_os_reset_state();
 
     memset(s_clock_freq, 0, sizeof(s_clock_freq));
     memset(s_gpio, 0, sizeof(s_gpio));
@@ -2768,21 +2768,21 @@ void iot_pc_reset_state(void)
 }
 
 
-void iot_pc_adc_set(uint8_t channel, uint32_t value)
+void ros_pc_adc_set(uint8_t channel, uint32_t value)
 {
     if (channel < PC_ADC_CHANNELS) {
         s_adc_value[channel] = value;
     }
 }
 
-void iot_pc_adc_set_max(uint8_t channel, uint32_t max)
+void ros_pc_adc_set_max(uint8_t channel, uint32_t max)
 {
     if (channel < PC_ADC_CHANNELS) {
         s_adc_max[channel] = max;
     }
 }
 
-void iot_pc_exti_trigger(hal_pin_t pin)
+void ros_pc_exti_trigger(hal_pin_t pin)
 {
     pc_exti_t *exti;
 
@@ -2795,7 +2795,7 @@ void iot_pc_exti_trigger(hal_pin_t pin)
     }
 }
 
-void iot_pc_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
+void ros_pc_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
 {
     pc_can_ctx_t *ctx;
     uint32_t tail;
@@ -2819,7 +2819,7 @@ void iot_pc_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
     }
 }
 
-void iot_pc_capture_set(hal_capture_t *h, uint32_t value)
+void ros_pc_capture_set(hal_capture_t *h, uint32_t value)
 {
     pc_capture_ctx_t *ctx;
 
@@ -2832,7 +2832,7 @@ void iot_pc_capture_set(hal_capture_t *h, uint32_t value)
     }
 }
 
-void iot_pc_encoder_set(hal_encoder_t *h, int32_t count)
+void ros_pc_encoder_set(hal_encoder_t *h, int32_t count)
 {
     pc_encoder_ctx_t *ctx;
 
@@ -2845,98 +2845,98 @@ void iot_pc_encoder_set(hal_encoder_t *h, int32_t count)
     }
 }
 
-void iot_pc_i2c_set_mem(uint16_t addr, uint8_t reg, uint8_t value)
+void ros_pc_i2c_set_mem(uint16_t addr, uint8_t reg, uint8_t value)
 {
     if (addr <= 0xFFU) {
         s_i2c_mem[addr][reg] = value;
     }
 }
 
-void iot_pc_time_set(const hal_rtc_time_t *t)
+void ros_pc_time_set(const hal_rtc_time_t *t)
 {
     if (t != NULL) {
         s_rtc_time = *t;
     }
 }
 
-uint32_t iot_pc_wdg_refresh_count(void)
+uint32_t ros_pc_wdg_refresh_count(void)
 {
     return s_wdg_refresh_count;
 }
 
 /* ============================== 测试钩子转发 ============================== */
 /*
- * 测试统一包含 pc.h 中的 iot_test_* 声明，
- * 由本文件把调用转发到 iot_pc_* 内部接口。
+ * 测试统一包含 pc.h 中的 ros_test_* 声明，
+ * 由本文件把调用转发到 ros_pc_* 内部接口。
  */
 
-void iot_test_reset_state(void)
+void ros_test_reset_state(void)
 {
-    iot_pc_reset_state();
+    ros_pc_reset_state();
 }
 
-void iot_test_tick_advance(uint32_t ms)
+void ros_test_tick_advance(uint32_t ms)
 {
-    iot_pc_tick_advance(ms);
+    ros_pc_tick_advance(ms);
 }
 
-uint32_t iot_test_uart_get_tx(hal_uart_t *h, uint8_t *buf, uint32_t cap)
+uint32_t ros_test_uart_get_tx(hal_uart_t *h, uint8_t *buf, uint32_t cap)
 {
-    return iot_pc_uart_get_tx(h, buf, cap);
+    return ros_pc_uart_get_tx(h, buf, cap);
 }
 
-uint32_t iot_test_uart_inject(hal_uart_t *h,
+uint32_t ros_test_uart_inject(hal_uart_t *h,
                                const uint8_t *data, uint32_t len)
 {
-    return iot_pc_uart_inject(h, data, len);
+    return ros_pc_uart_inject(h, data, len);
 }
 
-void iot_test_adc_set(uint8_t channel, uint32_t value)
+void ros_test_adc_set(uint8_t channel, uint32_t value)
 {
-    iot_pc_adc_set(channel, value);
+    ros_pc_adc_set(channel, value);
 }
 
-void iot_test_adc_set_max(uint8_t channel, uint32_t max)
+void ros_test_adc_set_max(uint8_t channel, uint32_t max)
 {
-    iot_pc_adc_set_max(channel, max);
+    ros_pc_adc_set_max(channel, max);
 }
 
-void iot_test_exti_trigger(hal_pin_t pin)
+void ros_test_exti_trigger(hal_pin_t pin)
 {
-    iot_pc_exti_trigger(pin);
+    ros_pc_exti_trigger(pin);
 }
 
-void iot_test_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
+void ros_test_can_inject(hal_can_t *h, const hal_can_frame_t *frame)
 {
-    iot_pc_can_inject(h, frame);
+    ros_pc_can_inject(h, frame);
 }
 
-void iot_test_capture_set(hal_capture_t *h, uint32_t value)
+void ros_test_capture_set(hal_capture_t *h, uint32_t value)
 {
-    iot_pc_capture_set(h, value);
+    ros_pc_capture_set(h, value);
 }
 
-void iot_test_encoder_set(hal_encoder_t *h, int32_t count)
+void ros_test_encoder_set(hal_encoder_t *h, int32_t count)
 {
-    iot_pc_encoder_set(h, count);
+    ros_pc_encoder_set(h, count);
 }
 
-void iot_test_i2c_set_mem(uint16_t addr, uint8_t reg, uint8_t value)
+void ros_test_i2c_set_mem(uint16_t addr, uint8_t reg, uint8_t value)
 {
-    iot_pc_i2c_set_mem(addr, reg, value);
+    ros_pc_i2c_set_mem(addr, reg, value);
 }
 
-void iot_test_time_set(const hal_rtc_time_t *t)
+void ros_test_time_set(const hal_rtc_time_t *t)
 {
-    iot_pc_time_set(t);
+    ros_pc_time_set(t);
 }
 
-uint32_t iot_test_wdg_refresh_count(void)
+uint32_t ros_test_wdg_refresh_count(void)
 {
-    return iot_pc_wdg_refresh_count();
+    return ros_pc_wdg_refresh_count();
 }
 
-bool iot_test_reset_called(void)
+bool ros_test_reset_called(void)
 {
-    return iot_pc_reset_called();
+    return ros_pc_reset_called();
 }

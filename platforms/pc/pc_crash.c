@@ -7,19 +7,19 @@
  *          记录信号号与 PC/SP 后 _exit。
  *
  * 说明：进程退出后记录随内存消失，这里主要用于本地打印定位；
- *       与 MCU 共用 iot_crash_record()/iot_crash_print() 的格式。
+ *       与 MCU 共用 ros_crash_record()/ros_crash_print() 的格式。
  */
 
-#include "iot_crash.h"
+#include "ros_crash.h"
 
-#if defined(IOT_PLATFORM_PC) && IOT_CRASH_ENABLE
+#if defined(ROS_PLATFORM_PC) && ROS_CRASH_ENABLE
 
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 /* PC 进程退出后内存不保留，崩溃记录使用内核自带普通静态区 */
-void *iot_port_crash_buffer(uint32_t size)
+void *ros_port_crash_buffer(uint32_t size)
 {
     (void)size;
     return NULL;
@@ -30,9 +30,9 @@ void *iot_port_crash_buffer(uint32_t size)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-static LONG WINAPI iot_pc_exception_filter(EXCEPTION_POINTERS *info)
+static LONG WINAPI ros_pc_exception_filter(EXCEPTION_POINTERS *info)
 {
-    iot_crash_context_t ctx;
+    ros_crash_context_t ctx;
     DWORD code = 0U;
 
     memset(&ctx, 0, sizeof(ctx));
@@ -54,17 +54,17 @@ static LONG WINAPI iot_pc_exception_filter(EXCEPTION_POINTERS *info)
     ctx.code = (uint32_t)code;
     ctx.expr = "unhandled exception";
 
-    (void)iot_crash_record(
-        (code == EXCEPTION_STACK_OVERFLOW) ? IOT_CRASH_STACK_OVERFLOW
-                                           : IOT_CRASH_SIGNAL,
+    (void)ros_crash_record(
+        (code == EXCEPTION_STACK_OVERFLOW) ? ROS_CRASH_STACK_OVERFLOW
+                                           : ROS_CRASH_SIGNAL,
         &ctx);
-    iot_crash_print(iot_crash_get());
+    ros_crash_print(ros_crash_get());
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-void iot_crash_port_install(void)
+void ros_crash_port_install(void)
 {
-    SetUnhandledExceptionFilter(iot_pc_exception_filter);
+    SetUnhandledExceptionFilter(ros_pc_exception_filter);
 }
 
 #else /* POSIX */
@@ -73,9 +73,9 @@ void iot_crash_port_install(void)
 #include <ucontext.h>
 #include <unistd.h>
 
-static void iot_pc_signal_handler(int sig, siginfo_t *info, void *context)
+static void ros_pc_signal_handler(int sig, siginfo_t *info, void *context)
 {
-    iot_crash_context_t ctx;
+    ros_crash_context_t ctx;
 
     (void)info;
     memset(&ctx, 0, sizeof(ctx));
@@ -101,12 +101,12 @@ static void iot_pc_signal_handler(int sig, siginfo_t *info, void *context)
     (void)context;
 #endif
 
-    (void)iot_crash_record(IOT_CRASH_SIGNAL, &ctx);
-    iot_crash_print(iot_crash_get());
+    (void)ros_crash_record(ROS_CRASH_SIGNAL, &ctx);
+    ros_crash_print(ros_crash_get());
     _exit(128 + sig);
 }
 
-void iot_crash_port_install(void)
+void ros_crash_port_install(void)
 {
     static const int signals[] = {
         SIGSEGV, SIGABRT, SIGFPE, SIGILL
@@ -118,7 +118,7 @@ void iot_crash_port_install(void)
     size_t i;
 
     memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = iot_pc_signal_handler;
+    sa.sa_sigaction = ros_pc_signal_handler;
     sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
 
@@ -129,4 +129,4 @@ void iot_crash_port_install(void)
 
 #endif /* _WIN32 */
 
-#endif /* IOT_PLATFORM_PC && IOT_CRASH_ENABLE */
+#endif /* ROS_PLATFORM_PC && ROS_CRASH_ENABLE */

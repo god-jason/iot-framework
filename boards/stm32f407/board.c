@@ -10,7 +10,7 @@
 
 #include "board.h"
 
-#include "iot.h"
+#include "ros.h"
 #include "stm32_cube.h"
 
 #include <string.h>
@@ -153,8 +153,8 @@ void board_trace_start(uint32_t baudrate)
 {
     board_uart_init(baudrate);
 
-    iot_trace_set_output(&s_uart1, 0U);
+    ros_trace_set_output(&s_uart1, 0U);
 
     /* 只输出核心事件，避免串口轮询影响实时性；需要全量时改 DEBUG */
-    iot_trace_set_level(IOT_TRACE_LEVEL_CORE);
+    ros_trace_set_level(ROS_TRACE_LEVEL_CORE);
 }

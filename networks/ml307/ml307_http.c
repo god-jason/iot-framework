@@ -2,10 +2,10 @@
  * ML307 HTTP 实现：使用 at 引擎驱动模组内置 HTTP。
  * 仅实现 GET / POST，响应体写入调用者提供的缓冲区。
  */
-#include "iot_http.h"
+#include "ros_http.h"
 #include "at.h"
 
-#if defined(IOT_NETWORK_ML307)
+#if defined(ROS_NETWORK_ML307)
 
 #include <stdio.h>
 #include <string.h>
@@ -14,7 +14,7 @@
 
 static char s_http_resp[ML307_HTTP_RESP_MAX];
 
-static int ml307_http_copy(iot_http_response_t *response,
+static int ml307_http_copy(ros_http_response_t *response,
                                     const char *data, uint32_t len)
 {
     uint32_t n;
@@ -33,7 +33,7 @@ static int ml307_http_copy(iot_http_response_t *response,
     return (n < len) ? HAL_OVERFLOW : HAL_OK;
 }
 
-static int ml307_http_read(iot_http_response_t *response)
+static int ml307_http_read(ros_http_response_t *response)
 {
     const char *r;
 
@@ -51,8 +51,8 @@ static int ml307_http_read(iot_http_response_t *response)
                            (uint32_t)strlen(s_http_resp));
 }
 
-static int ml307_http_do_get(const iot_http_request_t *request,
-                                      iot_http_response_t *response)
+static int ml307_http_do_get(const ros_http_request_t *request,
+                                      ros_http_response_t *response)
 {
     char cmd[320];
 
@@ -65,8 +65,8 @@ static int ml307_http_do_get(const iot_http_request_t *request,
     return ml307_http_read(response);
 }
 
-static int ml307_http_do_post(const iot_http_request_t *request,
-                                       iot_http_response_t *response)
+static int ml307_http_do_post(const ros_http_request_t *request,
+                                       ros_http_response_t *response)
 {
     char cmd[320];
     at_request_t phase;
@@ -105,20 +105,20 @@ static int ml307_http_do_post(const iot_http_request_t *request,
     return ml307_http_read(response);
 }
 
-/* ---------------- iot_http 接口实现 ---------------- */
+/* ---------------- ros_http 接口实现 ---------------- */
 
-int iot_http_init(void)
+int ros_http_init(void)
 {
     return HAL_OK;
 }
 
-int iot_http_deinit(void)
+int ros_http_deinit(void)
 {
     return HAL_OK;
 }
 
-int iot_http_request(const iot_http_request_t *request,
-                              iot_http_response_t *response)
+int ros_http_request(const ros_http_request_t *request,
+                              ros_http_response_t *response)
 {
     if (request == NULL || response == NULL || request->url == NULL ||
         request->url[0] == '\0') {
@@ -133,13 +133,13 @@ int iot_http_request(const iot_http_request_t *request,
     response->body_len = 0;
 
     switch (request->method) {
-    case IOT_HTTP_GET:
+    case ROS_HTTP_GET:
         return ml307_http_do_get(request, response);
-    case IOT_HTTP_POST:
+    case ROS_HTTP_POST:
         return ml307_http_do_post(request, response);
     default:
         return HAL_NOT_SUPPORTED;
     }
 }
 
-#endif /* IOT_NETWORK_ML307 */
+#endif /* ROS_NETWORK_ML307 */

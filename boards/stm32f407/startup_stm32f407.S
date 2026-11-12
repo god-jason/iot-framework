@@ -2,7 +2,7 @@
  * startup_stm32f407.S - STM32F407 (Cortex-M4) GCC 启动文件
  *
  * 与 Cube 提供的 gcc 启动文件等价，但有意不为 SVC/PendSV/SysTick 建立
- * 弱别名：让向量表的未定义引用把 libiot-stm32-f4.a 中的 RTOS 移植层
+ * 弱别名：让向量表的未定义引用把 libros-stm32-f4.a 中的 RTOS 移植层
  * 对象拉入链接（Cube 版本会给它们绑 Default_Handler，导致 tick 与任务
  * 切换失效）。
  *
@@ -101,6 +101,6 @@ Default_Handler:
     .weak      DebugMon_Handler
     .thumb_set DebugMon_Handler, Default_Handler
     /* SVC / PendSV / SysTick 刻意不在此定义：让向量表的未定义引用
-     * 把 libiot-stm32-f4.a 中的 RTOS 移植层对象拉入链接。 */
+     * 把 libros-stm32-f4.a 中的 RTOS 移植层对象拉入链接。 */
 
 .end

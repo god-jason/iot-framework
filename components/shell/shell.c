@@ -26,7 +26,7 @@ static shell_t *s_default;              /* 默认实例（平台绑定） */
 /* 惰性实例化：只保存配置，首次 shell_lazy_start() 才创建输入任务 */
 static shell_config_t s_lazy_cfg;
 static bool s_lazy_ready;
-static iot_task_t *s_lazy_task;         /* 按需实例的输入任务（实例由它自建） */
+static ros_task_t *s_lazy_task;         /* 按需实例的输入任务（实例由它自建） */
 
 /* ------------------------------ 输出 ------------------------------ */
 
@@ -159,26 +159,26 @@ shell_t *shell_instance_create(const shell_config_t *cfg)
         return NULL;
     }
 
-    sh = (shell_t *)iot_mem_calloc(1U, sizeof(*sh));
+    sh = (shell_t *)ros_mem_calloc(1U, sizeof(*sh));
     if (sh == NULL) {
         return NULL;
     }
     sh->cfg = *cfg;
 
     /* JOB 槽位只分配指针表，实际 shell_job_t 在加载时按需分配 */
-    sh->jobs = (shell_job_t **)iot_mem_calloc(SHELL_JOB_MAX,
+    sh->jobs = (shell_job_t **)ros_mem_calloc(SHELL_JOB_MAX,
                                               sizeof(shell_job_t *));
-    sh->rx = (char *)iot_mem_malloc(SHELL_RX_MAX);
-    sh->line = (char *)iot_mem_malloc(SHELL_LINE_MAX);
-    sh->paste = (char *)iot_mem_malloc(SHELL_PASTE_MAX);
+    sh->rx = (char *)ros_mem_malloc(SHELL_RX_MAX);
+    sh->line = (char *)ros_mem_malloc(SHELL_LINE_MAX);
+    sh->paste = (char *)ros_mem_malloc(SHELL_PASTE_MAX);
 
     if (sh->jobs == NULL || sh->rx == NULL || sh->line == NULL ||
         sh->paste == NULL) {
-        iot_mem_free(sh->jobs);
-        iot_mem_free(sh->rx);
-        iot_mem_free(sh->line);
-        iot_mem_free(sh->paste);
-        iot_mem_free(sh);
+        ros_mem_free(sh->jobs);
+        ros_mem_free(sh->rx);
+        ros_mem_free(sh->line);
+        ros_mem_free(sh->paste);
+        ros_mem_free(sh);
         return NULL;
     }
 
@@ -193,14 +193,14 @@ void shell_instance_destroy(shell_t *sh)
     }
     shell_jobs_clear(sh);
     shell_vars_release(&sh->vars);
-    iot_mem_free(sh->jobs);
-    iot_mem_free(sh->rx);
-    iot_mem_free(sh->line);
-    iot_mem_free(sh->paste);
+    ros_mem_free(sh->jobs);
+    ros_mem_free(sh->rx);
+    ros_mem_free(sh->line);
+    ros_mem_free(sh->paste);
     if (s_default == sh) {
         s_default = NULL;
     }
-    iot_mem_free(sh);
+    ros_mem_free(sh);
 }
 
 int shell_setup(const shell_config_t *cfg)
@@ -738,18 +738,18 @@ static void shell_task_entry(void *arg)
     if (sh == NULL) {
         /* 按需实例：实例缓冲由任务自己申请，内存记账落在本任务名下 */
         if (!s_lazy_ready) {
-            iot_task_exit();
+            ros_task_exit();
             return;
         }
         sh = shell_instance_create(&s_lazy_cfg);
         if (sh == NULL) {
-            iot_task_exit();
+            ros_task_exit();
             return;
         }
         s_default = sh;
         (void)shell_register_cmd(&s_exit_cmd);
     }
-    sh->task = iot_current_task;
+    sh->task = ros_current_task;
 
     shell_prompt(sh);
     for (;;) {
@@ -759,11 +759,11 @@ static void shell_task_entry(void *arg)
             shell_feed_char(sh, c);
             if (sh->exit_req) {
                 /* 平台已请求关闭（exit 命令）：任务自行退出，由监听任务回收 */
-                iot_task_exit();
+                ros_task_exit();
             }
             continue;
         }
-        iot_sleep_ms(10U);
+        ros_sleep_ms(10U);
     }
 }
 
@@ -775,7 +775,7 @@ int shell_instance_start(shell_t *sh)
     if (sh->task != NULL) {
         return 0;
     }
-    sh->task = iot_task_create_dynamic("shell", (uint8_t)SHELL_SHELL_PRIO,
+    sh->task = ros_task_create_dynamic("shell", (uint8_t)SHELL_SHELL_PRIO,
                                        shell_task_entry, sh,
                                        (uint32_t)SHELL_SHELL_STACK);
     return (sh->task != NULL) ? 0 : -1;
@@ -814,7 +814,7 @@ int shell_lazy_start(void)
      * 只创建输入任务；实例缓冲（约 1.4KB）由任务入口自己申请，
      * 这样 ps 的内存归属统计会落在 shell 任务名下，而不是创建者。
      */
-    s_lazy_task = iot_task_create_dynamic("shell", (uint8_t)SHELL_SHELL_PRIO,
+    s_lazy_task = ros_task_create_dynamic("shell", (uint8_t)SHELL_SHELL_PRIO,
                                           shell_task_entry, NULL,
                                           (uint32_t)SHELL_SHELL_STACK);
     return (s_lazy_task != NULL) ? 0 : -1;
@@ -840,33 +840,33 @@ void shell_request_exit(void)
 bool shell_task_finished(void)
 {
     if (s_default != NULL && s_default->task != NULL) {
-        return (s_default->task->state == IOT_TASK_TERMINATED);
+        return (s_default->task->state == ROS_TASK_TERMINATED);
     }
     return (s_lazy_task != NULL &&
-            s_lazy_task->state == IOT_TASK_TERMINATED);
+            s_lazy_task->state == ROS_TASK_TERMINATED);
 }
 
 int shell_shutdown(void)
 {
-    iot_task_t *task = NULL;
+    ros_task_t *task = NULL;
 
     if (s_default != NULL) {
         task = s_default->task;
-        if (task != NULL && task->state != IOT_TASK_TERMINATED) {
+        if (task != NULL && task->state != ROS_TASK_TERMINATED) {
             return -1;              /* 任务仍在运行，不能释放其栈 */
         }
         s_default->task = NULL;
         shell_instance_destroy(s_default);   /* 内部会把 s_default 置 NULL */
     }
     if (task != NULL) {
-        (void)iot_task_destroy(task);
+        (void)ros_task_destroy(task);
     }
     if (s_lazy_task != NULL) {
         if (s_lazy_task != task) {
-            if (s_lazy_task->state != IOT_TASK_TERMINATED) {
+            if (s_lazy_task->state != ROS_TASK_TERMINATED) {
                 return -1;
             }
-            (void)iot_task_destroy(s_lazy_task);
+            (void)ros_task_destroy(s_lazy_task);
         }
         s_lazy_task = NULL;
     }

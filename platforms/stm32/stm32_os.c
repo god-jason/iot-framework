@@ -5,13 +5,13 @@
  * DWT 在首次调用 hal_delay_us() 时惰性初始化。
  *
  * 系列选择宏（编译目标中定义其一）：
- *   IOT_STM32_F1 / IOT_STM32_F4 / IOT_STM32_H7
+ *   ROS_STM32_F1 / ROS_STM32_F4 / ROS_STM32_H7
  */
 
 #include "hal.h"
 
-#if !defined(IOT_STM32_F1) && !defined(IOT_STM32_F4) && !defined(IOT_STM32_H7)
-#error "请定义 IOT_STM32_F1 / IOT_STM32_F4 / IOT_STM32_H7 之一"
+#if !defined(ROS_STM32_F1) && !defined(ROS_STM32_F4) && !defined(ROS_STM32_H7)
+#error "请定义 ROS_STM32_F1 / ROS_STM32_F4 / ROS_STM32_H7 之一"
 #endif
 
 /* Cube 头文件与框架的 HAL_OK 等常量同名，统一由该包装头处理 */
@@ -77,7 +77,7 @@ void hal_system_sleep(void)
 
 void hal_system_deepsleep(void)
 {
-#if defined(IOT_STM32_H7)
+#if defined(ROS_STM32_H7)
     HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 #else
     HAL_PWR_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFI);

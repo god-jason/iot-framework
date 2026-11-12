@@ -591,7 +591,7 @@ int shell_script_parse(shell_script_t *script, const char *text,
     }
 
     len = (uint32_t)strlen(text);
-    script->text = (char *)iot_mem_malloc(len + 1U);
+    script->text = (char *)ros_mem_malloc(len + 1U);
     if (script->text == NULL) {
         if (err != NULL) {
             err->code = SHELL_ERR_RESOURCE;
@@ -601,10 +601,10 @@ int shell_script_parse(shell_script_t *script, const char *text,
     }
     memcpy(script->text, text, len + 1U);
     script->text_len = len;
-    script->code = (shell_instr_t *)iot_mem_calloc(SHELL_INSTR_MAX,
+    script->code = (shell_instr_t *)ros_mem_calloc(SHELL_INSTR_MAX,
                                                    sizeof(shell_instr_t));
     if (script->code == NULL) {
-        iot_mem_free(script->text);
+        ros_mem_free(script->text);
         script->text = NULL;
         if (err != NULL) {
             err->code = SHELL_ERR_RESOURCE;
@@ -657,10 +657,10 @@ void shell_script_free(shell_script_t *script)
         return;
     }
     if (script->code != NULL) {
-        iot_mem_free(script->code);
+        ros_mem_free(script->code);
     }
     if (script->text != NULL) {
-        iot_mem_free(script->text);
+        ros_mem_free(script->text);
     }
     memset(script, 0, sizeof(*script));
 }

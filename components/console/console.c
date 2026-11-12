@@ -9,7 +9,7 @@
  *   2) Shell：维护命令表，按空格/制表符切分 argv 并分发执行，
  *      同时支持按行喂入字节流（'\n' 触发一条命令）。
  *
- * 缓冲与边界约束（容量为编译期固定值，内存由 iot_mem 运行期分配）：
+ * 缓冲与边界约束（容量为编译期固定值，内存由 ros_mem 运行期分配）：
  *   - s_cmds：命令表，最多 SHELL_MAX_CMD（16）条，满则注册失败。
  *   - s_line：单行命令缓冲，最多 SHELL_LINE_MAX（128）字节（含 '\0'）。
  *   - shell_execute() 内部另有同尺寸栈缓冲与 16 个 argv 槽位。
@@ -19,7 +19,7 @@
 
 #include "console.h"
 #include "log.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 
 #include <string.h>
 
@@ -63,7 +63,7 @@ int console_init(const console_config_t *config)
  */
 int console_start(void)
 {
-    console_puts("iot-os console ready");   /* 启动提示：控制台就绪 */
+    console_puts("robotos console ready");   /* 启动提示：控制台就绪 */
     return HAL_OK;
 }
 
@@ -127,7 +127,7 @@ typedef struct {
     shell_command_fn callback;
 } shell_cmd_t;
 
-/* 命令表与行输入缓冲：callback == NULL 表示该槽位空闲；由 iot_mem 分配 */
+/* 命令表与行输入缓冲：callback == NULL 表示该槽位空闲；由 ros_mem 分配 */
 static shell_cmd_t *s_cmds = NULL;
 static char *s_line = NULL;
 static uint32_t s_line_len;
@@ -136,11 +136,11 @@ static uint32_t s_line_len;
 static bool shell_ensure(void)
 {
     if (s_cmds == NULL) {
-        s_cmds = (shell_cmd_t *)iot_mem_calloc(SHELL_MAX_CMD,
+        s_cmds = (shell_cmd_t *)ros_mem_calloc(SHELL_MAX_CMD,
                                             sizeof(shell_cmd_t));
     }
     if (s_line == NULL) {
-        s_line = (char *)iot_mem_calloc(SHELL_LINE_MAX, sizeof(char));
+        s_line = (char *)ros_mem_calloc(SHELL_LINE_MAX, sizeof(char));
     }
     return (s_cmds != NULL && s_line != NULL);
 }
@@ -153,14 +153,14 @@ static bool shell_ensure(void)
  */
 int shell_init(void)
 {
-    iot_mem_free(s_cmds);
-    iot_mem_free(s_line);
-    s_cmds = (shell_cmd_t *)iot_mem_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
-    s_line = (char *)iot_mem_calloc(SHELL_LINE_MAX, sizeof(char));
+    ros_mem_free(s_cmds);
+    ros_mem_free(s_line);
+    s_cmds = (shell_cmd_t *)ros_mem_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
+    s_line = (char *)ros_mem_calloc(SHELL_LINE_MAX, sizeof(char));
     s_line_len = 0;
     if (s_cmds == NULL || s_line == NULL) {
-        iot_mem_free(s_cmds);
-        iot_mem_free(s_line);
+        ros_mem_free(s_cmds);
+        ros_mem_free(s_line);
         s_cmds = NULL;
         s_line = NULL;
         return -1;

@@ -1,6 +1,6 @@
 #include "motion_device.h"
 #include "motion_error.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 
 /*
  * motion_device.c —— 设备操作抽象层实现。
@@ -17,7 +17,7 @@
  *   - s_step_active / s_pwm_active 长度为 MOTION_MAX_DEVICES，
  *     note_start/note_stop 对越界 id 直接忽略；
  *   - 回调缺失一律返回 MOTION_ERR_DEVICE，不会解引用空指针；
- *   - 占用位图在首次注册时通过 iot_mem 分配，重复注册复用；
+ *   - 占用位图在首次注册时通过 ros_mem 分配，重复注册复用；
  *   - 全局状态非线程安全。
  */
 
@@ -32,14 +32,14 @@ static bool *s_pwm_active;                /* PWM 设备占用位图（惰性分�
 static int ensure_tables(void)
 {
     if (s_step_active == NULL) {
-        s_step_active = (bool *)iot_mem_calloc(MOTION_MAX_DEVICES,
+        s_step_active = (bool *)ros_mem_calloc(MOTION_MAX_DEVICES,
                                             sizeof(*s_step_active));
         if (s_step_active == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_pwm_active == NULL) {
-        s_pwm_active = (bool *)iot_mem_calloc(MOTION_MAX_DEVICES,
+        s_pwm_active = (bool *)ros_mem_calloc(MOTION_MAX_DEVICES,
                                            sizeof(*s_pwm_active));
         if (s_pwm_active == NULL) {
             return MOTION_ERR_MEMORY;

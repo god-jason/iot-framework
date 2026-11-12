@@ -103,7 +103,7 @@ void ut_bootloader(void);
 void ut_version(void);
 void ut_crash(void);
 void ut_trace(void);
-void ut_iot(void);
+void ut_ros(void);
 void ut_dynamic(void);
 void ut_sbuf(void);
 void ut_msgq(void);
@@ -112,7 +112,7 @@ void ut_msgq(void);
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
-    printf("=== iot-os 单元测试 ===\n\n");
+    printf("=== robotos 单元测试 ===\n\n");
 
     printf("--- 基础组件 ---\n");
     ut_list();
@@ -184,7 +184,7 @@ int main(void)
     printf("\n--- 内核 ---\n");
     ut_version();
     ut_crash();
-    ut_iot();
+    ut_ros();
     ut_trace();
     ut_dynamic();
     ut_sbuf();

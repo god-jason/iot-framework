@@ -1,4 +1,4 @@
-/* iot-os 综合示例：控制台日志 + shell 命令 + LED 闪烁 + 输入处理。
+/* robotos 综合示例：控制台日志 + shell 命令 + LED 闪烁 + 输入处理。
  * 模拟器下控制台使用标准输入/输出；STM32 下同一套 console API 走 UART1。 */
 #include "log.h"
 #include "console.h"
@@ -16,7 +16,7 @@ static int cmd_hello(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    console_puts("hello from iot-os");
+    console_puts("hello from robotos");
     return 0;
 }
 

@@ -8,7 +8,7 @@
  *   acs712_init / acs712_deinit / acs712_read / acs712_read_raw
  *
  * 硬件访问：hal.h 未封装 ADC，本驱动与 ntc 一致，
- * 直接调用 iot_adc_*（不包含 bus 目录头文件，不依赖任何 HAL）。
+ * 直接调用 ros_adc_*（不包含 bus 目录头文件，不依赖任何 HAL）。
  *
  * 句柄保存灵敏度与零流点两项标定参数：
  *   - 5A 版换灵敏度 185mV/A、20A 版 100mV/A、30A 版 66mV/A

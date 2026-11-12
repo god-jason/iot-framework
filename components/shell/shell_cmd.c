@@ -6,7 +6,7 @@
  */
 
 #include "shell_internal.h"
-#include "iot_version.h"
+#include "ros_version.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -99,23 +99,23 @@ static bool shell_parse_tid(const char *s, uint16_t *tid)
     return true;
 }
 
-static iot_task_t *shell_find_task(const char *arg)
+static ros_task_t *shell_find_task(const char *arg)
 {
-    iot_task_t *task;
+    ros_task_t *task;
     uint16_t tid = 0U;
 
     if (arg == NULL) {
         return NULL;
     }
     if (shell_parse_tid(arg, &tid)) {
-        for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
+        for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
             if (task->tid == tid) {
                 return task;
             }
         }
         return NULL;
     }
-    for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
+    for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
         if (task->name != NULL &&
             shell_ieq(task->name, (uint16_t)strlen(task->name), arg) &&
             strlen(task->name) == strlen(arg)) {
@@ -125,15 +125,15 @@ static iot_task_t *shell_find_task(const char *arg)
     return NULL;
 }
 
-static const char *shell_task_state_name(iot_task_state_e state)
+static const char *shell_task_state_name(ros_task_state_e state)
 {
     switch (state) {
-    case IOT_TASK_READY:      return "READY";
-    case IOT_TASK_RUNNING:    return "RUNNING";
-    case IOT_TASK_BLOCKED:    return "BLOCKED";
-    case IOT_TASK_DELAYED:    return "BLOCKED";
-    case IOT_TASK_SUSPENDED:  return "SUSPENDED";
-    case IOT_TASK_TERMINATED: return "DELETED";
+    case ROS_TASK_READY:      return "READY";
+    case ROS_TASK_RUNNING:    return "RUNNING";
+    case ROS_TASK_BLOCKED:    return "BLOCKED";
+    case ROS_TASK_DELAYED:    return "BLOCKED";
+    case ROS_TASK_SUSPENDED:  return "SUSPENDED";
+    case ROS_TASK_TERMINATED: return "DELETED";
     default:                  return "?";
     }
 }
@@ -154,7 +154,7 @@ static int cmd_ver(shell_t *sh, int argc, char **argv)
 
     /* 版本 / 编译时间 / 平台 / 编译器 / 内核参数 / 许可证 / 特性 */
     {
-        int n = iot_version_format(info, sizeof(info));
+        int n = ros_version_format(info, sizeof(info));
 
         if (n > 0) {
             /* 多行摘要可能超过 shell_printf 的单次格式化缓冲，直接写后端 */
@@ -325,7 +325,7 @@ static bool shell_wait_ms(shell_t *sh, uint32_t ms)
             shell_puts(sh, "WARN: wait interrupted");
             return false;
         }
-        iot_sleep_ms(step);
+        ros_sleep_ms(step);
         elapsed += step;
     }
     return true;
@@ -338,7 +338,7 @@ static int cmd_wait(shell_t *sh, int argc, char **argv)
         return -SHELL_ERR_PARAM;
     }
     if (strcmp(argv[1], "task") == 0) {
-        iot_task_t *task;
+        ros_task_t *task;
         uint32_t timeout = SHELL_WAIT_DEFAULT_MS;
         uint32_t waited = 0U;
         int i;
@@ -358,11 +358,11 @@ static int cmd_wait(shell_t *sh, int argc, char **argv)
             return -SHELL_ERR_NOT_FOUND;
         }
         if ((task->name != NULL && strcmp(task->name, "shell") == 0) ||
-            task == iot_idle_task) {
+            task == ros_idle_task) {
             shell_error(sh, SHELL_ERR_PARAM, "cannot wait on shell/idle");
             return -SHELL_ERR_PARAM;
         }
-        while (task->state != IOT_TASK_TERMINATED) {
+        while (task->state != ROS_TASK_TERMINATED) {
             if (timeout != 0U && waited >= timeout) {
                 shell_error(sh, SHELL_ERR_TIMEOUT, "wait task %s timeout", argv[2]);
                 return -SHELL_ERR_TIMEOUT;
@@ -372,7 +372,7 @@ static int cmd_wait(shell_t *sh, int argc, char **argv)
                 shell_puts(sh, "WARN: wait interrupted");
                 return SHELL_OK;
             }
-            iot_sleep_ms(10U);
+            ros_sleep_ms(10U);
             waited += 10U;
         }
         return SHELL_OK;
@@ -411,40 +411,40 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
     uint32_t total = 0U;
     uint32_t stack_total = 0U;
     uint32_t stack_used = 0U;
-#if IOT_USE_MEM_STATS
+#if ROS_USE_MEM_STATS
     uint32_t mem_task_used = 0U;
     uint32_t mem_task_peak = 0U;
 #endif
-    iot_task_t *task;
+    ros_task_t *task;
     uint16_t i;
 
     (void)argc;
     (void)argv;
 
-    for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
-        if (task->state == IOT_TASK_TERMINATED) {
+    for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
+        if (task->state == ROS_TASK_TERMINATED) {
             continue;
         }
         total++;
         switch (task->state) {
-        case IOT_TASK_READY:     ready++; break;
-        case IOT_TASK_RUNNING:   running++; break;
-        case IOT_TASK_BLOCKED:
-        case IOT_TASK_DELAYED:   blocked++; break;
-        case IOT_TASK_SUSPENDED: suspended++; break;
+        case ROS_TASK_READY:     ready++; break;
+        case ROS_TASK_RUNNING:   running++; break;
+        case ROS_TASK_BLOCKED:
+        case ROS_TASK_DELAYED:   blocked++; break;
+        case ROS_TASK_SUSPENDED: suspended++; break;
         default: break;
         }
 
         stack_total += task->stack_size;
-#if IOT_USE_MEM_STATS
+#if ROS_USE_MEM_STATS
         mem_task_used += task->mem_used;
         mem_task_peak += task->mem_peak;
 #endif
-#if IOT_USE_STACK_CHECK
+#if ROS_USE_STACK_CHECK
         {
-            iot_task_stats_t st;
+            ros_task_stats_t st;
 
-            if (iot_task_get_stats(task, &st) == IOT_OK &&
+            if (ros_task_get_stats(task, &st) == ROS_OK &&
                 st.stack_free_bytes <= task->stack_size) {
                 stack_used += task->stack_size - st.stack_free_bytes;
             }
@@ -457,16 +457,16 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
 
     /* CPU / 栈 / 堆概览 */
     {
-        iot_stats_t sys;
-        iot_mem_info_t mem = { 0 };
+        ros_stats_t sys;
+        ros_mem_info_t mem = { 0 };
         uint32_t uptime_s;
 
-        (void)iot_stats_get(&sys);
+        (void)ros_stats_get(&sys);
         uptime_s = sys.tick_count / 1000U;
 #if SHELL_HAS_CPU_STATS
         {
-            uint32_t idle_pm = (iot_idle_task != NULL)
-                ? iot_task_cpu_permille(iot_idle_task) : 0U;
+            uint32_t idle_pm = (ros_idle_task != NULL)
+                ? ros_task_cpu_permille(ros_idle_task) : 0U;
             uint32_t busy_pm = (idle_pm <= 1000U) ? (1000U - idle_pm) : 0U;
 
             shell_printf(sh, "CPU       : %u.%u%% busy, uptime=%us, ctx=%u\n",
@@ -477,7 +477,7 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
         shell_printf(sh, "CPU       : n/a, uptime=%us, ctx=%u\n",
                      (unsigned)uptime_s, (unsigned)sys.ctx_switches);
 #endif
-#if IOT_USE_STACK_CHECK
+#if ROS_USE_STACK_CHECK
         if (stack_total > 0U) {
             uint32_t pm = (uint32_t)(((uint64_t)stack_used * 1000U) /
                                      stack_total);
@@ -487,7 +487,7 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
                          (unsigned)(pm / 10U), (unsigned)(pm % 10U));
         }
 #endif
-        if (iot_mem_get_info(&mem) != 0) {
+        if (ros_mem_get_info(&mem) != 0) {
             shell_printf(sh, "MEM-heap  : n/a\n");
         } else if (mem.total_bytes > 0U) {
             uint32_t pm = (uint32_t)(((uint64_t)mem.used_bytes * 1000U) /
@@ -504,7 +504,7 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
         } else {
             shell_printf(sh, "MEM-heap  : n/a\n");
         }
-#if IOT_USE_MEM_STATS
+#if ROS_USE_MEM_STATS
         shell_printf(sh, "MEM-tasks : %u B (peak %u B)\n",
                      (unsigned)mem_task_used, (unsigned)mem_task_peak);
         if (mem.untracked_bytes > 0U) {
@@ -567,7 +567,7 @@ static int cmd_reboot(shell_t *sh, int argc, char **argv)
 
 /* ------------------------------ ps ------------------------------ */
 
-static void shell_ps_line(shell_t *sh, const iot_task_t *task)
+static void shell_ps_line(shell_t *sh, const ros_task_t *task)
 {
     shell_job_t *job = shell_job_find_by_task(sh, task);
     const char *type = (job != NULL) ? "JOB" : "SYS";
@@ -581,17 +581,17 @@ static void shell_ps_line(shell_t *sh, const iot_task_t *task)
     (void)snprintf(stack, sizeof(stack), "%u", (unsigned)task->stack_size);
 #if SHELL_HAS_CPU_STATS
     {
-        uint32_t pm = iot_task_cpu_permille(task);
+        uint32_t pm = ros_task_cpu_permille(task);
 
         (void)snprintf(cpu, sizeof(cpu), "%u.%u", (unsigned)(pm / 10U),
                        (unsigned)(pm % 10U));
     }
 #endif
-#if IOT_USE_STACK_CHECK
+#if ROS_USE_STACK_CHECK
     if (task->stack_size > 0U) {
-        iot_task_stats_t st;
+        ros_task_stats_t st;
 
-        if (iot_task_get_stats(task, &st) == IOT_OK &&
+        if (ros_task_get_stats(task, &st) == ROS_OK &&
             st.stack_free_bytes <= task->stack_size) {
             uint32_t bytes = task->stack_size - st.stack_free_bytes;
             uint32_t pm = (uint32_t)(((uint64_t)bytes * 1000U) /
@@ -603,7 +603,7 @@ static void shell_ps_line(shell_t *sh, const iot_task_t *task)
         }
     }
 #endif
-#if IOT_USE_MEM_STATS
+#if ROS_USE_MEM_STATS
     (void)snprintf(mem, sizeof(mem), "%u", (unsigned)task->mem_used);
 #endif
     shell_printf(sh, "%3u  %-8s  %-4s  %-9s  %4u  %5s  %4s  %5s  %6s  %5s  %s\n",
@@ -615,7 +615,7 @@ static void shell_ps_line(shell_t *sh, const iot_task_t *task)
 
 static int cmd_ps(shell_t *sh, int argc, char **argv)
 {
-    iot_task_t *task;
+    ros_task_t *task;
     bool show_all = false;
     bool only_job = false;
     bool only_sys = false;
@@ -630,10 +630,10 @@ static int cmd_ps(shell_t *sh, int argc, char **argv)
 
     shell_printf(sh, "TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%%   MEM     CPU%%   JOB\n");
     shell_printf(sh, "---  --------  ----  ---------  ----  -----  ----  -----  ------  -----  ----\n");
-    for (task = iot_task_first(); task != NULL; task = iot_task_next(task)) {
+    for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
         shell_job_t *job = shell_job_find_by_task(sh, task);
 
-        if (!show_all && task->state == IOT_TASK_TERMINATED) {
+        if (!show_all && task->state == ROS_TASK_TERMINATED) {
             continue;
         }
         if (only_job && job == NULL) {
@@ -649,15 +649,15 @@ static int cmd_ps(shell_t *sh, int argc, char **argv)
 
 /* ------------------------------ kill / pause / resume ------------------------------ */
 
-static bool shell_task_is_protected(const iot_task_t *task)
+static bool shell_task_is_protected(const ros_task_t *task)
 {
-    return (task == iot_current_task) || (task == iot_idle_task) ||
+    return (task == ros_current_task) || (task == ros_idle_task) ||
            (task->name != NULL && strcmp(task->name, "shell") == 0);
 }
 
 static int cmd_kill(shell_t *sh, int argc, char **argv)
 {
-    iot_task_t *task;
+    ros_task_t *task;
     shell_job_t *job;
 
     if (argc < 2) {
@@ -680,7 +680,7 @@ static int cmd_kill(shell_t *sh, int argc, char **argv)
         return SHELL_OK;
     }
     /* 系统任务：直接删除（不再要求确认） */
-    if (iot_task_destroy(task) != IOT_OK) {
+    if (ros_task_destroy(task) != ROS_OK) {
         shell_error(sh, SHELL_ERR_STATE, "task busy or not destroyable");
         return -SHELL_ERR_STATE;
     }
@@ -690,7 +690,7 @@ static int cmd_kill(shell_t *sh, int argc, char **argv)
 
 static int cmd_pause(shell_t *sh, int argc, char **argv)
 {
-    iot_task_t *task;
+    ros_task_t *task;
     shell_job_t *job;
 
     if (argc < 2) {
@@ -706,7 +706,7 @@ static int cmd_pause(shell_t *sh, int argc, char **argv)
         shell_error(sh, SHELL_ERR_DANGER, "refusing to pause shell/idle");
         return -SHELL_ERR_DANGER;
     }
-    if (iot_task_suspend(task) != IOT_OK) {
+    if (ros_task_suspend(task) != ROS_OK) {
         shell_error(sh, SHELL_ERR_STATE, "task cannot be paused");
         return -SHELL_ERR_STATE;
     }
@@ -719,7 +719,7 @@ static int cmd_pause(shell_t *sh, int argc, char **argv)
 
 static int cmd_resume(shell_t *sh, int argc, char **argv)
 {
-    iot_task_t *task;
+    ros_task_t *task;
     shell_job_t *job;
 
     if (argc < 2) {
@@ -731,7 +731,7 @@ static int cmd_resume(shell_t *sh, int argc, char **argv)
         shell_error(sh, SHELL_ERR_NOT_FOUND, "task %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
-    if (iot_task_resume(task) != IOT_OK) {
+    if (ros_task_resume(task) != ROS_OK) {
         shell_error(sh, SHELL_ERR_STATE, "task is not suspended");
         return -SHELL_ERR_STATE;
     }
@@ -1114,14 +1114,14 @@ int shell_cmd_add(const shell_cmd_t *cmd)
         return -1;      /* 基础命令优先，重名拒绝 */
     }
     if (s_ext == NULL) {
-        s_ext = (shell_ext_table_t *)iot_mem_calloc(1U, sizeof(*s_ext));
+        s_ext = (shell_ext_table_t *)ros_mem_calloc(1U, sizeof(*s_ext));
         if (s_ext == NULL) {
             return -1;
         }
-        s_ext->items = (shell_cmd_t *)iot_mem_calloc(SHELL_EXT_MAX,
+        s_ext->items = (shell_cmd_t *)ros_mem_calloc(SHELL_EXT_MAX,
                                                      sizeof(shell_cmd_t));
         if (s_ext->items == NULL) {
-            iot_mem_free(s_ext);
+            ros_mem_free(s_ext);
             s_ext = NULL;
             return -1;
         }

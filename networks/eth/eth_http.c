@@ -2,10 +2,10 @@
  * HTTP 客户端实现：基于系统 socket，通过 Mongoose HTTP 客户端完成请求。
  * 响应体写入调用者提供的缓冲区，不申请堆内存。
  */
-#include "iot_http.h"
+#include "ros_http.h"
 #include "eth_net.h"
 
-#if defined(IOT_NETWORK_ETH)
+#if defined(ROS_NETWORK_ETH)
 
 #include <stdio.h>
 #include <string.h>
@@ -27,25 +27,25 @@ typedef struct {
     uint32_t body_len;
 
     struct mg_connection *conn;
-    iot_http_response_t *response;
+    ros_http_response_t *response;
 } eth_http_state_t;
 
 static eth_http_state_t s_http;
 
-static const char *eth_http_method(iot_http_method_t method)
+static const char *eth_http_method(ros_http_method_t method)
 {
     switch (method) {
-    case IOT_HTTP_POST:
+    case ROS_HTTP_POST:
         return "POST";
-    case IOT_HTTP_PUT:
+    case ROS_HTTP_PUT:
         return "PUT";
-    case IOT_HTTP_DELETE:
+    case ROS_HTTP_DELETE:
         return "DELETE";
-    case IOT_HTTP_PATCH:
+    case ROS_HTTP_PATCH:
         return "PATCH";
-    case IOT_HTTP_HEAD:
+    case ROS_HTTP_HEAD:
         return "HEAD";
-    case IOT_HTTP_GET:
+    case ROS_HTTP_GET:
     default:
         return "GET";
     }
@@ -102,7 +102,7 @@ static void eth_http_fn(struct mg_connection *c, int ev, void *ev_data)
 
     case MG_EV_HTTP_MSG: {
         struct mg_http_message *hm = (struct mg_http_message *)ev_data;
-        iot_http_response_t *response = s_http.response;
+        ros_http_response_t *response = s_http.response;
         uint32_t cap;
         uint32_t n;
 
@@ -143,21 +143,21 @@ static void eth_http_fn(struct mg_connection *c, int ev, void *ev_data)
     }
 }
 
-/* ---------------- iot_http 接口实现 ---------------- */
+/* ---------------- ros_http 接口实现 ---------------- */
 
-int iot_http_init(void)
+int ros_http_init(void)
 {
     (void)eth_net_mgr();
     return HAL_OK;
 }
 
-int iot_http_deinit(void)
+int ros_http_deinit(void)
 {
     return HAL_OK;
 }
 
-int iot_http_request(const iot_http_request_t *request,
-                              iot_http_response_t *response)
+int ros_http_request(const ros_http_request_t *request,
+                              ros_http_response_t *response)
 {
     char url_buf[ETH_HTTP_URL_MAX];
     const char *url;
@@ -228,4 +228,4 @@ int iot_http_request(const iot_http_request_t *request,
     return HAL_OK;
 }
 
-#endif /* IOT_NETWORK_ETH */
+#endif /* ROS_NETWORK_ETH */

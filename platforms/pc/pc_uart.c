@@ -8,7 +8,7 @@
  *     使用内存缓冲区模拟串口；
  *   - instance 为 NULL：自动分配一个空闲的 UART2..N。
  *
- * 测试注入接口 iot_pc_uart_inject()/iot_pc_uart_get_tx() 对应虚拟串口。
+ * 测试注入接口 ros_pc_uart_inject()/ros_pc_uart_get_tx() 对应虚拟串口。
  */
 
 #include "pc.h"
@@ -507,7 +507,7 @@ int hal_uart_register_callback(hal_uart_t *handle,
 
 /* ============================== 测试辅助 ============================== */
 
-uint32_t iot_pc_uart_get_tx(hal_uart_t *h, uint8_t *buf, uint32_t cap)
+uint32_t ros_pc_uart_get_tx(hal_uart_t *h, uint8_t *buf, uint32_t cap)
 {
     pc_uart_ctx_t *ctx;
     uint32_t n;
@@ -526,7 +526,7 @@ uint32_t iot_pc_uart_get_tx(hal_uart_t *h, uint8_t *buf, uint32_t cap)
     return n;
 }
 
-uint32_t iot_pc_uart_inject(hal_uart_t *h, const uint8_t *data, uint32_t len)
+uint32_t ros_pc_uart_inject(hal_uart_t *h, const uint8_t *data, uint32_t len)
 {
     pc_uart_ctx_t *ctx;
     size_t space;
@@ -551,7 +551,7 @@ uint32_t iot_pc_uart_inject(hal_uart_t *h, const uint8_t *data, uint32_t len)
     return (uint32_t)n;
 }
 
-/* 由 iot_pc_reset_state() 调用，复位 UART1 与全部虚拟串口 */
+/* 由 ros_pc_reset_state() 调用，复位 UART1 与全部虚拟串口 */
 void pc_uart_reset(void)
 {
     memset(s_uart, 0, sizeof(s_uart));

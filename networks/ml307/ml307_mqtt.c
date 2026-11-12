@@ -1,9 +1,9 @@
 /*
  * ML307 MQTT 实现：使用 AT 指令驱动模组内置 MQTT。
- * 文件前半部分为 AT 原语，后半部分实现 iot_mqtt 接口。
+ * 文件前半部分为 AT 原语，后半部分实现 ros_mqtt 接口。
  */
 #include "ml307_mqtt.h"
-#include "iot_mqtt.h"
+#include "ros_mqtt.h"
 #include "at.h"
 
 #include <stdio.h>
@@ -97,22 +97,22 @@ int ml307_mqtt_publish(const char *topic,
     return 0;
 }
 
-#if defined(IOT_NETWORK_ML307)
+#if defined(ROS_NETWORK_ML307)
 
-/* ---------------- iot_mqtt 接口实现 ---------------- */
+/* ---------------- ros_mqtt 接口实现 ---------------- */
 
-static iot_mqtt_message_cb_t s_callback;
+static ros_mqtt_message_cb_t s_callback;
 static void *s_user_data;
 static bool s_connected;
 
-int iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
+int ros_mqtt_init(ros_mqtt_message_cb_t callback, void *user_data)
 {
     s_callback = callback;
     s_user_data = user_data;
     return HAL_OK;
 }
 
-int iot_mqtt_deinit(void)
+int ros_mqtt_deinit(void)
 {
     if (s_connected) {
         (void)ml307_mqtt_disconnect();
@@ -123,7 +123,7 @@ int iot_mqtt_deinit(void)
     return HAL_OK;
 }
 
-int iot_mqtt_connect(const iot_mqtt_config_t *config)
+int ros_mqtt_connect(const ros_mqtt_config_t *config)
 {
     if (config == NULL || config->host == NULL || config->host[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -137,7 +137,7 @@ int iot_mqtt_connect(const iot_mqtt_config_t *config)
     return HAL_OK;
 }
 
-int iot_mqtt_disconnect(void)
+int ros_mqtt_disconnect(void)
 {
     if (ml307_mqtt_disconnect() != 0) {
         return HAL_IO_ERROR;
@@ -146,7 +146,7 @@ int iot_mqtt_disconnect(void)
     return HAL_OK;
 }
 
-int iot_mqtt_subscribe(const char *topic, uint8_t qos)
+int ros_mqtt_subscribe(const char *topic, uint8_t qos)
 {
     if (topic == NULL || topic[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -154,7 +154,7 @@ int iot_mqtt_subscribe(const char *topic, uint8_t qos)
     return (ml307_mqtt_subscribe(topic, qos) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-int iot_mqtt_unsubscribe(const char *topic)
+int ros_mqtt_unsubscribe(const char *topic)
 {
     if (topic == NULL || topic[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -162,7 +162,7 @@ int iot_mqtt_unsubscribe(const char *topic)
     return (ml307_mqtt_unsubscribe(topic) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-int iot_mqtt_publish(const iot_mqtt_message_t *message)
+int ros_mqtt_publish(const ros_mqtt_message_t *message)
 {
     if (message == NULL || message->topic[0] == '\0') {
         return HAL_INVALID_PARAM;
@@ -175,14 +175,14 @@ int iot_mqtt_publish(const iot_mqtt_message_t *message)
                                message->retain) == 0) ? HAL_OK : HAL_IO_ERROR;
 }
 
-int iot_mqtt_process(void)
+int ros_mqtt_process(void)
 {
     return HAL_OK;
 }
 
-bool iot_mqtt_is_connected(void)
+bool ros_mqtt_is_connected(void)
 {
     return s_connected;
 }
 
-#endif /* IOT_NETWORK_ML307 */
+#endif /* ROS_NETWORK_ML307 */

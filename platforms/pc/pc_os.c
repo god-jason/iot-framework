@@ -3,14 +3,14 @@
  *
  * tick 由软件推进，中断/复位/睡眠仅记录状态，便于在 PC 上做单元测试：
  *   - 默认 hal_delay_ms/us 只累加 tick，不真正等待，保证测试快速；
- *   - 定义 IOT_PC_REAL_DELAY 时，hal_delay_ms 会真实等待（用于 demo/交互程序）；
- *   - hal_system_reset 只置标记，可由 iot_test_reset_called() 查询；
+ *   - 定义 ROS_PC_REAL_DELAY 时，hal_delay_ms 会真实等待（用于 demo/交互程序）；
+ *   - hal_system_reset 只置标记，可由 ros_test_reset_called() 查询；
  *   - sleep/deepsleep 只置标记，立即返回。
  */
 
 #include "pc.h"
 
-#if defined(IOT_PC_REAL_DELAY)
+#if defined(ROS_PC_REAL_DELAY)
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -35,7 +35,7 @@ uint32_t hal_tick_get(void)
 
 void hal_delay_ms(uint32_t ms)
 {
-#if defined(IOT_PC_REAL_DELAY)
+#if defined(ROS_PC_REAL_DELAY)
 #if defined(_WIN32)
     Sleep(ms);
 #else
@@ -85,17 +85,17 @@ void hal_system_deepsleep(void)
 
 /* ============================== 测试辅助 ============================== */
 
-void iot_pc_tick_advance(uint32_t ms)
+void ros_pc_tick_advance(uint32_t ms)
 {
     s_tick += ms;
 }
 
-bool iot_pc_reset_called(void)
+bool ros_pc_reset_called(void)
 {
     return s_reset_called;
 }
 
-void iot_pc_os_reset_state(void)
+void ros_pc_os_reset_state(void)
 {
     s_tick = 0U;
     s_irq_enabled = true;

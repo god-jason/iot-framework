@@ -10,7 +10,7 @@
 
 #include "test.h"
 #include "shell_internal.h"
-#include "iot_version.h"
+#include "ros_version.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -140,14 +140,14 @@ static void test_init_and_lex(void)
 
     shell_reset_all();
 
-    /* ver：Shell 版本 + iot_version 构建信息 */
+    /* ver：Shell 版本 + ros_version 构建信息 */
     out_reset();
     TF_CHECK_INT(shell_exec_line("ver"), 0);
     TF_CHECK(out_has("IoT Shell v1.1"));
     TF_CHECK(out_has("test-build"));
-    TF_CHECK(out_has(IOT_PROJECT_NAME));
-    TF_CHECK(out_has(IOT_VERSION_SEMVER));
-    TF_CHECK(out_has(IOT_LICENSE_SPDX));
+    TF_CHECK(out_has(ROS_PROJECT_NAME));
+    TF_CHECK(out_has(ROS_VERSION_SEMVER));
+    TF_CHECK(out_has(ROS_LICENSE_SPDX));
     TF_CHECK(out_has("compiled"));
 
     /* 注释：; 与 // 在 token 边界截断 */

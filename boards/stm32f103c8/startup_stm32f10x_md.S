@@ -5,7 +5,7 @@
  * GNU as 版本，供 arm-none-eabi-gcc 使用：
  *   - 向量表位于 .isr_vector（链接脚本把它放在 0x08000000）；
  *   - Reset_Handler 完成 .data 复制、.bss 清零后调用 SystemInit() / main()；
- *   - PendSV_Handler / SysTick_Handler 由 libiot-stm32-f1.a 提供弱定义，
+ *   - PendSV_Handler / SysTick_Handler 由 libros-stm32-f1.a 提供弱定义，
  *     向量表引用它们会把 RTOS 移植层对象从静态库中拉入链接。
  */
 
@@ -99,6 +99,6 @@ Default_Handler:
     .weak      DebugMon_Handler
     .thumb_set DebugMon_Handler, Default_Handler
     /* SVC / PendSV / SysTick 刻意不在此定义：让向量表的未定义引用
-     * 把 libiot-stm32-f1.a 中的 RTOS 移植层对象拉入链接。 */
+     * 把 libros-stm32-f1.a 中的 RTOS 移植层对象拉入链接。 */
 
 .end

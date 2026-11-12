@@ -6,11 +6,11 @@
  * 不依赖 STM32Cube HAL，纯寄存器操作，刷机即可在串口看到 trace 文本行。
  *
  * 若工程改用 Cube HAL 实现 hal_uart_transmit()，请删除本文件或去掉该函数，
- * 并在应用里自行调用 iot_trace_set_output() 注册句柄。
+ * 并在应用里自行调用 ros_trace_set_output() 注册句柄。
  */
 
 #include "board.h"
-#include "iot.h"
+#include "ros.h"
 
 #include "stm32f10x.h"
 
@@ -106,8 +106,8 @@ void board_trace_start(uint32_t baud)
     board_usart1_init(baud);
 
     /* 句柄仅作非空标记，板级实现不依赖具体 hal_uart_t */
-    iot_trace_set_output((void *)1, 0U);
+    ros_trace_set_output((void *)1, 0U);
 
     /* 只输出核心事件，避免串口轮询影响实时性；需要全量时改 DEBUG */
-    iot_trace_set_level(IOT_TRACE_LEVEL_CORE);
+    ros_trace_set_level(ROS_TRACE_LEVEL_CORE);
 }

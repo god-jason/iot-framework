@@ -18,7 +18,7 @@
  *   - 全局静态状态，不可重入。
  */
 #include "navigation.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 
 #include <string.h>
 
@@ -40,7 +40,7 @@ static int rrt_ensure(void)
     if (s_tree != NULL) {
         return 0;
     }
-    s_tree = (rrt_node_t *)iot_mem_calloc(NAVIGATION_MAX_NODES, sizeof(*s_tree));
+    s_tree = (rrt_node_t *)ros_mem_calloc(NAVIGATION_MAX_NODES, sizeof(*s_tree));
     return (s_tree != NULL) ? 0 : -1;
 }
 

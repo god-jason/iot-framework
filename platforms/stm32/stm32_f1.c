@@ -1,4 +1,4 @@
-#if defined(IOT_STM32_F1)
+#if defined(ROS_STM32_F1)
 
 /* STM32F1 平台实现：新 PORT 公共 API -> STM32CubeF1 HAL。
  *
@@ -977,10 +977,10 @@ int hal_uart_register_callback(hal_uart_t *handle,
 
 /*
  * 供 USARTx_IRQHandler() 调用。用户工程的中断服务函数应替换为：
- *   void USART1_IRQHandler(void) { iot_stm32_uart_irq_handler(&huart1_port); }
+ *   void USART1_IRQHandler(void) { ros_stm32_uart_irq_handler(&huart1_port); }
  * 本函数内部调用 HAL_UART_IRQHandler()，然后按状态派发 PORT 回调。
  */
-void iot_stm32_uart_irq_handler(hal_uart_t *handle)
+void ros_stm32_uart_irq_handler(hal_uart_t *handle)
 {
     UART_HandleTypeDef *huart;
     hal_state_e previous;
@@ -2355,7 +2355,7 @@ int hal_can_clear_filters(hal_can_t *handle)
     return HAL_OK;
 }
 
-void iot_stm32_can_irq_handler(hal_can_t *handle)
+void ros_stm32_can_irq_handler(hal_can_t *handle)
 {
     CAN_HandleTypeDef *hcan;
 
@@ -3981,7 +3981,7 @@ int hal_rtc_get_timestamp(uint32_t *timestamp)
     return HAL_OK;
 }
 
-void iot_stm32_rtc_alarm_irq_handler(void)
+void ros_stm32_rtc_alarm_irq_handler(void)
 {
     bool alarm_a;
 
@@ -4001,12 +4001,12 @@ void iot_stm32_rtc_alarm_irq_handler(void)
 /* FLASH                                                                      */
 /* ========================================================================== */
 
-#ifndef IOT_F1_FLASH_SIZE
-#define IOT_F1_FLASH_SIZE (64U * 1024U)
+#ifndef ROS_F1_FLASH_SIZE
+#define ROS_F1_FLASH_SIZE (64U * 1024U)
 #endif
 
-#ifndef IOT_F1_FLASH_PAGE_SIZE
-#define IOT_F1_FLASH_PAGE_SIZE 1024U
+#ifndef ROS_F1_FLASH_PAGE_SIZE
+#define ROS_F1_FLASH_PAGE_SIZE 1024U
 #endif
 
 int hal_flash_init(hal_flash_t *handle)
@@ -4020,8 +4020,8 @@ int hal_flash_init(hal_flash_t *handle)
 
     memset(&handle->info, 0, sizeof(handle->info));
     handle->info.start = (uintptr_t)FLASH_BASE;
-    handle->info.size = IOT_F1_FLASH_SIZE;
-    handle->info.erase_size = IOT_F1_FLASH_PAGE_SIZE;
+    handle->info.size = ROS_F1_FLASH_SIZE;
+    handle->info.erase_size = ROS_F1_FLASH_PAGE_SIZE;
     handle->info.program_size = 2U;
     handle->info.flags = HAL_FLASH_FLAG_READ | HAL_FLASH_FLAG_WRITE |
                          HAL_FLASH_FLAG_ERASE;
@@ -4940,9 +4940,9 @@ int hal_get_info(hal_mcu_info_t *info)
     info->ahb_clock = 72000000U;
     info->apb1_clock = 36000000U;
     info->apb2_clock = 72000000U;
-    info->flash_size = IOT_F1_FLASH_SIZE;
+    info->flash_size = ROS_F1_FLASH_SIZE;
     info->sram_size = 20U * 1024U;
     return HAL_OK;
 }
 
-#endif /* IOT_STM32_F1 */
+#endif /* ROS_STM32_F1 */

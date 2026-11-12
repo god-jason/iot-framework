@@ -20,7 +20,7 @@
  *   - 代价采用 10/14 整数近似，避免浮点运算。
  */
 #include "navigation.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 
 #include <string.h>
 
@@ -122,27 +122,27 @@ static int nav_ensure(void)
         return 0;
     }
     if (s_g == NULL) {
-        s_g = (uint32_t *)iot_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_g));
+        s_g = (uint32_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_g));
     }
     if (s_parent == NULL) {
-        s_parent = (int32_t *)iot_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_parent));
+        s_parent = (int32_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_parent));
     }
     if (s_closed == NULL) {
-        s_closed = (uint8_t *)iot_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_closed));
+        s_closed = (uint8_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_closed));
     }
     if (s_open == NULL) {
-        s_open = (uint32_t *)iot_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_open));
+        s_open = (uint32_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_open));
     }
     if (s_in_open == NULL) {
-        s_in_open = (uint8_t *)iot_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_in_open));
+        s_in_open = (uint8_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_in_open));
     }
     if (s_g == NULL || s_parent == NULL || s_closed == NULL ||
         s_open == NULL || s_in_open == NULL) {
-        iot_mem_free(s_g);
-        iot_mem_free(s_parent);
-        iot_mem_free(s_closed);
-        iot_mem_free(s_open);
-        iot_mem_free(s_in_open);
+        ros_mem_free(s_g);
+        ros_mem_free(s_parent);
+        ros_mem_free(s_closed);
+        ros_mem_free(s_open);
+        ros_mem_free(s_in_open);
         s_g = NULL;
         s_parent = NULL;
         s_closed = NULL;

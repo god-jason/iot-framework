@@ -15,7 +15,7 @@
  *       回调在调用 process 的上下文中同步执行。
  */
 #include "scheduler.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 
 #include <string.h>
 
@@ -54,7 +54,7 @@ static int scheduler_ensure(void)
     if (s_entries != NULL) {
         return 0;
     }
-    s_entries = (scheduler_entry_t *)iot_mem_calloc(SCHEDULER_MAX_ENTRIES,
+    s_entries = (scheduler_entry_t *)ros_mem_calloc(SCHEDULER_MAX_ENTRIES,
                                                 sizeof(*s_entries));
     return (s_entries != NULL) ? 0 : -1;
 }
@@ -369,7 +369,7 @@ int scheduler_init(void)
 {
     int i;
 
-    iot_mem_free(s_entries);
+    ros_mem_free(s_entries);
     s_entries = NULL;
     if (scheduler_ensure() != 0) {
         return -1;

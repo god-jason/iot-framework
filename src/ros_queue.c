@@ -1,0 +1,239 @@
+/*
+ * ros_queue.c - 定长消息队列
+ *
+ * 环形缓冲：
+ *   head 为下一个写入位置，tail 为下一个读取位置，count 单独维护，
+ *   因此“空”和“满”都表现为 head == tail，需用 count 区分。
+ *
+ * 阻塞语义：
+ *   - 发送时若队列满：挂入 send_wait，等待接收方腾出空间；
+ *   - 接收时若队列空：挂入 recv_wait，等待发送方写入；
+ *   - 发送/接收会优先与对方等待者直接握手，避免多余入队出队。
+ */
+
+#include "ros.h"
+#include "ros_port.h"
+#include "ros_mem.h"
+
+#include <string.h>
+
+/* depth 是否为 2 的幂（用于把取模换成掩码） */
+static bool ros_queue_is_pow2(uint32_t v)
+{
+    return (v != 0U) && ((v & (v - 1U)) == 0U);
+}
+
+/* 环形下标前进一格：2 的幂用掩码，否则回退到取模 */
+static uint32_t ros_queue_next(const ros_queue_t *queue, uint32_t index)
+{
+    if (queue->depth_mask != 0U) {
+        return (index + 1U) & queue->depth_mask;
+    }
+    return (index + 1U) % queue->depth;
+}
+
+/* 初始化定长消息队列：绑定缓冲、计算掩码并初始化收发等待队列。 */
+int ros_queue_init(ros_queue_t *queue, void *buffer,
+                              uint32_t item_size, uint32_t depth)
+{
+    if (queue == NULL || buffer == NULL || item_size == 0U || depth == 0U) {
+        LOG_E(ROS_TAG, "queue_init: invalid param");
+        return ROS_INVALID_PARAM;
+    }
+
+#if ROS_QUEUE_REQUIRE_POW2
+    if (!ros_queue_is_pow2(depth)) {
+        LOG_E(ROS_TAG, "queue_init: depth %u must be power of two", (unsigned)depth);
+        return ROS_INVALID_PARAM;
+    }
+#endif
+
+    queue->buffer = (uint8_t *)buffer;
+    queue->buffer_owned = false;
+    queue->item_size = item_size;
+    queue->depth = depth;
+    queue->depth_mask = ros_queue_is_pow2(depth) ? (depth - 1U) : 0U;
+    queue->head = 0U;
+    queue->tail = 0U;
+    queue->count = 0U;
+    ros_wait_queue_init(&queue->send_wait);
+    ros_wait_queue_init(&queue->recv_wait);
+    queue->initialized = true;
+
+    LOG_D(ROS_TAG, "queue init: item=%u depth=%u",
+              (unsigned)item_size, (unsigned)depth);
+    return ROS_OK;
+}
+
+/*
+ * 发送一条消息：队列未满直接入队；已满时与等待的接收者直接握手，
+ * 否则按 timeout 阻塞（ROS_TIMEOUT_NONE 立即返回 ROS_TIMEOUT）。
+ */
+int ros_queue_send(ros_queue_t *queue, const void *item,
+                              uint32_t timeout)
+{
+    ros_task_t *receiver;
+
+    if (!ROS_OBJ_VALID(queue) || item == NULL) {
+        LOG_E(ROS_TAG, "queue_send: invalid param");
+        return ROS_INVALID_PARAM;
+    }
+
+    ros_port_critical_enter();
+
+    /* 1) 有接收者在等待：直接交付到其缓冲，避免入队再出队 */
+    receiver = ros_wait_queue_pop_highest(&queue->recv_wait);
+    if (receiver != NULL) {
+        if (receiver->wait_ptr != NULL) {
+            memcpy(receiver->wait_ptr, item, queue->item_size);
+        }
+        ros_task_wake(receiver, ROS_OK);
+        ros_port_critical_exit();
+        ROS_TRACE_OBJ(ROS_EVT_QUEUE_SEND, (uint32_t)(uintptr_t)queue, queue->count);
+        LOG_D(ROS_TAG, "queue send: handoff to %s",
+                  receiver->name != NULL ? receiver->name : "?");
+        return ROS_OK;
+    }
+
+    /* 2) 有剩余空间：入队 */
+    if (queue->count < queue->depth) {
+        memcpy(queue->buffer + queue->head * queue->item_size,
+               item, queue->item_size);
+        queue->head = ros_queue_next(queue, queue->head);
+        queue->count++;
+        ros_port_critical_exit();
+        ROS_TRACE_OBJ(ROS_EVT_QUEUE_SEND, (uint32_t)(uintptr_t)queue, queue->count);
+        LOG_D(ROS_TAG, "queue send: queued, count=%u", (unsigned)queue->count);
+        return ROS_OK;
+    }
+
+    ros_port_critical_exit();
+
+    if (timeout == ROS_TIMEOUT_NONE) {
+        LOG_D(ROS_TAG, "queue send: full, non-blocking");
+        return ROS_TIMEOUT;
+    }
+
+    /* 3) 队列满：阻塞等待接收方腾出空间（item 缓冲需保持有效） */
+    ros_current_task->wait_ptr = (void *)item;
+    LOG_D(ROS_TAG, "queue send: full, blocking timeout=%u", (unsigned)timeout);
+    return ros_block_current(&queue->send_wait, timeout);
+}
+
+/*
+ * 接收一条消息：队列非空直接出队；为空时与等待的发送者直接握手，
+ * 否则按 timeout 阻塞（ROS_TIMEOUT_NONE 立即返回 ROS_TIMEOUT）。
+ */
+int ros_queue_recv(ros_queue_t *queue, void *item, uint32_t timeout)
+{
+    ros_task_t *sender;
+
+    if (!ROS_OBJ_VALID(queue) || item == NULL) {
+        LOG_E(ROS_TAG, "queue_recv: invalid param");
+        return ROS_INVALID_PARAM;
+    }
+
+    ros_port_critical_enter();
+
+    if (queue->count > 0U) {
+        /* 1) 有数据：取出队首 */
+        memcpy(item, queue->buffer + queue->tail * queue->item_size,
+               queue->item_size);
+        queue->tail = ros_queue_next(queue, queue->tail);
+        queue->count--;
+
+        /* 腾出一个空位：若有发送者等待，立即把其数据转入队列 */
+        sender = ros_wait_queue_pop_highest(&queue->send_wait);
+        if (sender != NULL) {
+            if (sender->wait_ptr != NULL) {
+                memcpy(queue->buffer + queue->head * queue->item_size,
+                       sender->wait_ptr, queue->item_size);
+            }
+            queue->head = ros_queue_next(queue, queue->head);
+            queue->count++;
+            ros_task_wake(sender, ROS_OK);
+        }
+
+        ros_port_critical_exit();
+        ROS_TRACE_OBJ(ROS_EVT_QUEUE_RECV, (uint32_t)(uintptr_t)queue, queue->count);
+        LOG_D(ROS_TAG, "queue recv: ok, count=%u", (unsigned)queue->count);
+        return ROS_OK;
+    }
+
+    ros_port_critical_exit();
+
+    if (timeout == ROS_TIMEOUT_NONE) {
+        LOG_D(ROS_TAG, "queue recv: empty, non-blocking");
+        return ROS_TIMEOUT;
+    }
+
+    /* 2) 队列空：阻塞等待发送方 */
+    ros_current_task->wait_ptr = item;
+    LOG_D(ROS_TAG, "queue recv: empty, blocking timeout=%u", (unsigned)timeout);
+    return ros_block_current(&queue->recv_wait, timeout);
+}
+
+/*
+ * 动态创建消息队列：队列结构与 item_size * depth 的消息缓冲
+ * 均由 ros_mem_* 分配，失败返回 NULL。
+ */
+ros_queue_t *ros_queue_create(uint32_t item_size, uint32_t depth)
+{
+    ros_queue_t *queue;
+    uint32_t total;
+
+    if (item_size == 0U || depth == 0U ||
+        depth > ((uint32_t)-1) / item_size) {
+        return NULL;
+    }
+    total = item_size * depth;
+
+    queue = (ros_queue_t *)ros_mem_calloc(1U, sizeof(*queue));
+    if (queue == NULL) {
+        LOG_E(ROS_TAG, "queue_create: no memory for queue");
+        return NULL;
+    }
+    queue->buffer = (uint8_t *)ros_mem_malloc(total);
+    if (queue->buffer == NULL) {
+        LOG_E(ROS_TAG, "queue_create: no memory for buffer");
+        ros_mem_free(queue);
+        return NULL;
+    }
+
+    if (ros_queue_init(queue, queue->buffer, item_size, depth) != ROS_OK) {
+        ros_mem_free(queue->buffer);
+        ros_mem_free(queue);
+        return NULL;
+    }
+    queue->buffer_owned = true;
+    return queue;
+}
+
+/*
+ * 销毁动态队列：仍有消息或收发等待者时返回 ROS_BUSY；
+ * 成功时释放消息缓冲（若是动态分配）与队列对象。
+ */
+int ros_queue_destroy(ros_queue_t *queue)
+{
+    if (!ROS_OBJ_VALID(queue)) {
+        return ROS_INVALID_PARAM;
+    }
+
+    /* 队列内仍有消息时同样视为忙；与失效标记放在同一临界区 */
+    ros_port_critical_enter();
+    if (queue->count != 0U ||
+        !ros_wait_queue_empty(&queue->send_wait) ||
+        !ros_wait_queue_empty(&queue->recv_wait)) {
+        ros_port_critical_exit();
+        LOG_W(ROS_TAG, "queue_destroy: not empty");
+        return ROS_BUSY;
+    }
+    queue->initialized = false;
+    ros_port_critical_exit();
+
+    if (queue->buffer_owned) {
+        ros_mem_free(queue->buffer);
+    }
+    ros_mem_free(queue);
+    return ROS_OK;
+}

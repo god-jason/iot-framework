@@ -4,7 +4,7 @@
 /*
  * ML307 MQTT 原语（基于 at 引擎，模组内置 MQTT）。
  * 仅供 ml307_mqtt.c 内部与单元测试使用；
- * 对外接口见 iot_mqtt.h。
+ * 对外接口见 ros_mqtt.h。
  */
 
 #include <stdint.h>

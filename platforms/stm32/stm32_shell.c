@@ -19,10 +19,10 @@
  * 此时 shell_platform_start() 返回 -1，不影响内核其余部分。
  */
 
-#if defined(IOT_PLATFORM_STM32)
+#if defined(ROS_PLATFORM_STM32)
 
 #include "shell.h"
-#include "iot.h"
+#include "ros.h"
 #include "hal_uart.h"
 
 #include <stddef.h>
@@ -122,7 +122,7 @@ static void stm32_shell_watch_task(void *arg)
 
         if (!shell_active()) {
             /* 任务已创建，等它自己申请好实例缓冲再喂字节 */
-            iot_sleep_ms(5U);
+            ros_sleep_ms(5U);
             continue;
         }
 
@@ -154,7 +154,7 @@ int shell_platform_start(const char *version)
         return -1;
     }
     if (s_watch_task == NULL) {
-        s_watch_task = iot_task_create_dynamic("sh_watch",
+        s_watch_task = ros_task_create_dynamic("sh_watch",
                                                (uint8_t)SHELL_WATCH_PRIO,
                                                stm32_shell_watch_task, uart,
                                                (uint32_t)SHELL_WATCH_STACK);
@@ -162,4 +162,4 @@ int shell_platform_start(const char *version)
     return (s_watch_task != NULL) ? 0 : -1;
 }
 
-#endif /* IOT_PLATFORM_STM32 */
+#endif /* ROS_PLATFORM_STM32 */

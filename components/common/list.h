@@ -1,7 +1,7 @@
 /*
  * list.h - 侵入式双向循环链表接口
  *
- * 节点内嵌于业务结构体，通过 IOT_CONTAINER_OF 由节点指针反推对象指针；
+ * 节点内嵌于业务结构体，通过 ROS_CONTAINER_OF 由节点指针反推对象指针；
  * 不使用动态内存。空链表以哨兵头节点自指表示。
  */
 
@@ -35,7 +35,7 @@ typedef struct {
 } list_t;
 
 /* 由成员指针反推容器对象指针 */
-#define IOT_CONTAINER_OF(ptr, type, member) \
+#define ROS_CONTAINER_OF(ptr, type, member) \
     ((type *)((uint8_t *)(ptr) - offsetof(type, member)))
 
 /* 初始化为空链表（哨兵自指） */

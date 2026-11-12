@@ -14,10 +14,10 @@
  * 本文件不参与 STM32 构建。
  */
 
-#if defined(IOT_PLATFORM_PC)
+#if defined(ROS_PLATFORM_PC)
 
 #include "shell.h"
-#include "iot.h"
+#include "ros.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -99,14 +99,14 @@ static void pc_shell_rx_task(void *arg)
         }
         if (shell_started() && !shell_active()) {
             /* 任务已创建，等它自己申请好实例缓冲再读下一行 */
-            iot_sleep_ms(1U);
+            ros_sleep_ms(1U);
             continue;
         }
 
         /* 没有输入时用 RTOS 睡眠让出 CPU：模拟时间随 idle 继续推进，
          * 否则阻塞在 fgets 里会让整个协作式调度器与时钟一起冻结。 */
         if (!pc_stdin_ready()) {
-            iot_sleep_ms(5U);
+            ros_sleep_ms(5U);
             continue;
         }
         if (fgets(line, sizeof(line), stdin) == NULL) {
@@ -115,10 +115,10 @@ static void pc_shell_rx_task(void *arg)
             if (shell_active()) {
                 (void)shell_feed("\n", 1U);
                 while (shell_pending() > 0U) {
-                    iot_sleep_ms(1U);
+                    ros_sleep_ms(1U);
                 }
             }
-            iot_stop();
+            ros_stop();
             return;
         }
 
@@ -134,11 +134,11 @@ static void pc_shell_rx_task(void *arg)
         (void)shell_feed(line, (uint32_t)strlen(line));
         /* 流控：一行处理完再读下一行，避免 Shell 10ms 轮询被输入泵甩开 */
         while (shell_pending() > 0U) {
-            iot_sleep_ms(1U);
+            ros_sleep_ms(1U);
         }
         if (shell_active()) {
             /* 再让出一次，确保该行命令（可能是 exit）已执行完 */
-            iot_sleep_ms(1U);
+            ros_sleep_ms(1U);
         }
     }
 }
@@ -161,7 +161,7 @@ int shell_platform_start(const char *version)
         return -1;
     }
     if (s_rx_task == NULL) {
-        s_rx_task = iot_task_create_dynamic("sh_watch",
+        s_rx_task = ros_task_create_dynamic("sh_watch",
                                             (uint8_t)SHELL_WATCH_PRIO,
                                             pc_shell_rx_task, NULL,
                                             PC_WATCH_STACK);
@@ -169,4 +169,4 @@ int shell_platform_start(const char *version)
     return (s_rx_task != NULL) ? 0 : -1;
 }
 
-#endif /* IOT_PLATFORM_PC */
+#endif /* ROS_PLATFORM_PC */

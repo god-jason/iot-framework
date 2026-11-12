@@ -6,7 +6,7 @@
  */
 
 #include "shell.h"
-#include "iot.h"
+#include "ros.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -149,9 +149,9 @@ typedef struct shell_job {
     uint8_t prio;
     uint32_t stack;
 
-    iot_task_t *task;
-    iot_sem_t *wake;            /* 按需分配：stop 唤醒可中断 WAIT */
-    iot_sem_t *done;            /* 按需分配：JOB 结束通知 */
+    ros_task_t *task;
+    ros_sem_t *wake;            /* 按需分配：stop 唤醒可中断 WAIT */
+    ros_sem_t *done;            /* 按需分配：JOB 结束通知 */
 
     shell_vars_t vars;
     uint16_t pc;
@@ -186,7 +186,7 @@ struct shell {
 
     bool           exit_req;         /* 平台请求关闭（exit 命令）：任务据此退出 */
 
-    iot_task_t    *task;             /* 输入任务（通常仅默认实例） */
+    ros_task_t    *task;             /* 输入任务（通常仅默认实例） */
 };
 
 /* ============================== shell_expr.c ============================== */
@@ -228,7 +228,7 @@ int  shell_job_run_sync(shell_t *sh, const char *text, const char *name,
 int  shell_job_run_sync_script(shell_job_t *job, bool verbose);
 
 shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len);
-shell_job_t *shell_job_find_by_task(shell_t *sh, const iot_task_t *task);
+shell_job_t *shell_job_find_by_task(shell_t *sh, const ros_task_t *task);
 shell_job_t *shell_job_slot(shell_t *sh, uint16_t index);
 void shell_job_unload(shell_job_t *job);
 shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,

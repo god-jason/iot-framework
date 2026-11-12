@@ -2,7 +2,7 @@
 #include "motion_error.h"
 #include "motion_parser.h"
 #include "motion_source.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 
 #include <string.h>
 
@@ -26,7 +26,7 @@
  * 静态缓冲与边界：
  *   - 索引表容量由 MOTION_MAX_FLOW_BLOCKS / MOTION_MAX_LABELS /
  *     MOTION_MAX_JOBS / MOTION_MAX_LINES 限定，越界返回 MOTION_ERR_MEMORY。
- *   - 各索引表在首次 reset/build 时通过 iot_mem 分配，之后复用。
+ *   - 各索引表在首次 reset/build 时通过 ros_mem 分配，之后复用。
  *   - 嵌套配对栈深度受 MOTION_MAX_FLOW_DEPTH 限制。
  *   - 异常处理表大小为 MOTION_MAX_JOBS + 1：下标 0 为主程序段，
  *     1..MOTION_MAX_JOBS 对应各 JOB 段。
@@ -55,42 +55,42 @@ static uint16_t s_line_count;           /* 已记录行数 */
 static int ensure_tables(void)
 {
     if (s_ifs == NULL) {
-        s_ifs = (motion_if_entry_t *)iot_mem_calloc(MOTION_MAX_FLOW_BLOCKS,
+        s_ifs = (motion_if_entry_t *)ros_mem_calloc(MOTION_MAX_FLOW_BLOCKS,
                                                  sizeof(*s_ifs));
         if (s_ifs == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_loops == NULL) {
-        s_loops = (motion_loop_entry_t *)iot_mem_calloc(MOTION_MAX_FLOW_BLOCKS,
+        s_loops = (motion_loop_entry_t *)ros_mem_calloc(MOTION_MAX_FLOW_BLOCKS,
                                                      sizeof(*s_loops));
         if (s_loops == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_labels == NULL) {
-        s_labels = (motion_label_t *)iot_mem_calloc(MOTION_MAX_LABELS,
+        s_labels = (motion_label_t *)ros_mem_calloc(MOTION_MAX_LABELS,
                                                  sizeof(*s_labels));
         if (s_labels == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_jobs == NULL) {
-        s_jobs = (motion_job_entry_t *)iot_mem_calloc(MOTION_MAX_JOBS,
+        s_jobs = (motion_job_entry_t *)ros_mem_calloc(MOTION_MAX_JOBS,
                                                    sizeof(*s_jobs));
         if (s_jobs == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_errors == NULL) {
-        s_errors = (motion_error_entry_t *)iot_mem_calloc(
+        s_errors = (motion_error_entry_t *)ros_mem_calloc(
             MOTION_MAX_JOBS + 1U, sizeof(*s_errors));
         if (s_errors == NULL) {
             return MOTION_ERR_MEMORY;
         }
     }
     if (s_line_offsets == NULL) {
-        s_line_offsets = (uint32_t *)iot_mem_calloc(MOTION_MAX_LINES,
+        s_line_offsets = (uint32_t *)ros_mem_calloc(MOTION_MAX_LINES,
                                                  sizeof(*s_line_offsets));
         if (s_line_offsets == NULL) {
             return MOTION_ERR_MEMORY;

@@ -8,7 +8,7 @@
  * 分区/镜像/升级/协议等公共逻辑全部在 bootloader/bootloader.c。
  */
 
-#if defined(IOT_PLATFORM_STM32)
+#if defined(ROS_PLATFORM_STM32)
 
 #include "stm32_bootloader.h"
 #include "hal_flash.h"
@@ -156,4 +156,4 @@ void boot_set_uart_handle(void *uart, uint32_t timeout_ms)
     boot_set_uart(boot_hal_read, boot_hal_write, uart);
 }
 
-#endif /* IOT_PLATFORM_STM32 */
+#endif /* ROS_PLATFORM_STM32 */

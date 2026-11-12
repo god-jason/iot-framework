@@ -5,7 +5,7 @@
  * 注意：接收数据通过 +MIPURC URC 上报，AT 引擎按行解析，
  *       二进制载荷中若含换行符可能被截断。
  */
-#include "iot_net.h"
+#include "ros_net.h"
 #include "ml307.h"
 #include "at.h"
 #include "at_urc.h"
@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(IOT_NETWORK_ML307)
+#if defined(ROS_NETWORK_ML307)
 
 #define ML307_NET_MAX_SOCKETS   6
 #define ML307_NET_RX_MAX        512
@@ -164,9 +164,9 @@ static bool ml307_net_ipv4(const char *s, size_t len)
     return dots == 3 && digit;
 }
 
-/* ---------------- iot_net 接口实现 ---------------- */
+/* ---------------- ros_net 接口实现 ---------------- */
 
-int iot_net_init(void)
+int ros_net_init(void)
 {
     if (!s_urc_registered) {
         if (at_urc_register("+MIPURC:", ml307_net_urc, NULL) != 0) {
@@ -178,7 +178,7 @@ int iot_net_init(void)
     return HAL_OK;
 }
 
-int iot_net_deinit(void)
+int ros_net_deinit(void)
 {
     int i;
 
@@ -199,7 +199,7 @@ int iot_net_deinit(void)
     return HAL_OK;
 }
 
-iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
+ros_net_id_t ros_net_connect(ros_net_type_t type, const char *host,
                              uint16_t port, uint32_t timeout)
 {
     char cmd[320];
@@ -208,19 +208,19 @@ iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
     int id;
 
     if (!ml307_net_host_valid(host)) {
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
-    proto = (type == IOT_NET_UDP) ? "UDP" : "TCP";
+    proto = (type == ROS_NET_UDP) ? "UDP" : "TCP";
 
     id = ml307_net_alloc();
     if (id < 0) {
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
 
     snprintf(cmd, sizeof(cmd), "AT+MIPOPEN=%d,\"%s\",\"%s\",%u",
              id, proto, host, (unsigned)port);
     if (at_exec(cmd, wait) != AT_RESULT_OK) {
-        return IOT_NET_INVALID_ID;
+        return ROS_NET_INVALID_ID;
     }
 
     s_sockets[id].used = true;
@@ -229,7 +229,7 @@ iot_net_id_t iot_net_connect(iot_net_type_t type, const char *host,
     return id;
 }
 
-int32_t iot_net_send(iot_net_id_t id, const uint8_t *data, uint32_t len)
+int32_t ros_net_send(ros_net_id_t id, const uint8_t *data, uint32_t len)
 {
     char cmd[48];
     at_request_t phase;
@@ -264,7 +264,7 @@ int32_t iot_net_send(iot_net_id_t id, const uint8_t *data, uint32_t len)
     return (int32_t)len;
 }
 
-int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
+int32_t ros_net_recv(ros_net_id_t id, uint8_t *data, uint32_t len,
                      uint32_t timeout)
 {
     uint32_t start;
@@ -301,7 +301,7 @@ int32_t iot_net_recv(iot_net_id_t id, uint8_t *data, uint32_t len,
     }
 }
 
-int iot_net_close(iot_net_id_t id)
+int ros_net_close(ros_net_id_t id)
 {
     char cmd[32];
 
@@ -318,7 +318,7 @@ int iot_net_close(iot_net_id_t id)
     return HAL_OK;
 }
 
-int iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
+int ros_net_gethostbyname(const char *name, char *ip, uint32_t size)
 {
     char cmd[192];
     const char *resp;
@@ -370,7 +370,7 @@ int iot_net_gethostbyname(const char *name, char *ip, uint32_t size)
     return HAL_NOT_FOUND;
 }
 
-int iot_net_getip(char *ip, uint32_t size)
+int ros_net_getip(char *ip, uint32_t size)
 {
     if (ip == NULL || size == 0) {
         return HAL_INVALID_PARAM;
@@ -379,14 +379,14 @@ int iot_net_getip(char *ip, uint32_t size)
 }
 
 /* 模组不提供 MAC 地址 */
-int iot_net_getmac(char *mac, uint32_t size)
+int ros_net_getmac(char *mac, uint32_t size)
 {
     (void)mac;
     (void)size;
     return HAL_NOT_SUPPORTED;
 }
 
-int iot_net_gettime(iot_net_time_t *time)
+int ros_net_gettime(ros_net_time_t *time)
 {
     const char *resp;
     const char *p;
@@ -419,20 +419,20 @@ int iot_net_gettime(iot_net_time_t *time)
 }
 
 /* ML307 的 MIP 指令只支持客户端连接，不提供本地监听与服务端 accept */
-int iot_net_listen(iot_net_type_t type, const char *host,
-                            uint16_t port, iot_net_id_t *id)
+int ros_net_listen(ros_net_type_t type, const char *host,
+                            uint16_t port, ros_net_id_t *id)
 {
     (void)type;
     (void)host;
     (void)port;
 
     if (id != NULL) {
-        *id = IOT_NET_INVALID_ID;
+        *id = ROS_NET_INVALID_ID;
     }
     return HAL_NOT_SUPPORTED;
 }
 
-int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
+int ros_net_accept(ros_net_id_t listen_id, ros_net_id_t *conn_id,
                             char *peer_ip, uint32_t ip_size,
                             uint16_t *peer_port, uint32_t timeout)
 {
@@ -443,13 +443,13 @@ int iot_net_accept(iot_net_id_t listen_id, iot_net_id_t *conn_id,
     (void)timeout;
 
     if (conn_id != NULL) {
-        *conn_id = IOT_NET_INVALID_ID;
+        *conn_id = ROS_NET_INVALID_ID;
     }
     return HAL_NOT_SUPPORTED;
 }
 
 /* 模组 UDP 为连接式（MIPOPEN + MIPSEND），不支持无连接 sendto/recvfrom */
-int32_t iot_net_sendto(iot_net_id_t id, const char *host, uint16_t port,
+int32_t ros_net_sendto(ros_net_id_t id, const char *host, uint16_t port,
                        const uint8_t *data, uint32_t len)
 {
     (void)id;
@@ -460,7 +460,7 @@ int32_t iot_net_sendto(iot_net_id_t id, const char *host, uint16_t port,
     return HAL_NOT_SUPPORTED;
 }
 
-int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
+int32_t ros_net_recvfrom(ros_net_id_t id, uint8_t *data, uint32_t len,
                          uint32_t timeout, char *peer_ip, uint32_t ip_size,
                          uint16_t *peer_port)
 {
@@ -474,4 +474,4 @@ int32_t iot_net_recvfrom(iot_net_id_t id, uint8_t *data, uint32_t len,
     return HAL_NOT_SUPPORTED;
 }
 
-#endif /* IOT_NETWORK_ML307 */
+#endif /* ROS_NETWORK_ML307 */

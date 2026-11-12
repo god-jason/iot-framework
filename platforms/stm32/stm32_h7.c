@@ -1,4 +1,4 @@
-#if defined(IOT_STM32_H7)
+#if defined(ROS_STM32_H7)
 
 /*
  * STM32H7 平台实现（新 PORT 硬件抽象层）。
@@ -1750,7 +1750,7 @@ int hal_i2c_master_transfer(hal_i2c_t *handle, uint16_t address,
         return HAL_INVALID_PARAM;
     }
     /* 阻塞模式 HAL 不提供原子 Repeated Start，按“写后读”顺序执行；
-     * 寄存器访问请使用 iot_i2c_mem_* 以获得真正的 Repeated Start。 */
+     * 寄存器访问请使用 ros_i2c_mem_* 以获得真正的 Repeated Start。 */
     if (tx_length > 0U) {
         status = hal_i2c_master_transmit(handle, address, tx_data, tx_length, timeout);
         if (status != HAL_OK) {
@@ -5079,4 +5079,4 @@ uint32_t hal_get_capabilities(hal_device_type_e type, uint8_t instance)
     }
 }
 
-#endif /* IOT_STM32_H7 */
+#endif /* ROS_STM32_H7 */

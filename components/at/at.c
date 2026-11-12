@@ -25,7 +25,7 @@
 #include "at.h"
 #include "at_parser.h"
 #include "at_urc.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 #include <string.h>
 
 /* 单条响应的累积缓冲大小（字节），超出后截断 */
@@ -45,7 +45,7 @@ static at_request_t s_req;
 /* 是否有事务正在等待响应 */
 static bool s_req_pending = false;
 
-/* 响应累积缓冲：多行以 '\n' 连接，始终以 '\0' 结尾；由 iot_mem 分配 */
+/* 响应累积缓冲：多行以 '\n' 连接，始终以 '\0' 结尾；由 ros_mem 分配 */
 static char *s_response = NULL;
 /* 已写入响应缓冲的字节数（不含结尾 '\0'） */
 static uint32_t s_response_len;
@@ -105,7 +105,7 @@ static void at_tx_command(const char *cmd)
 static bool at_response_ensure(void)
 {
     if (s_response == NULL) {
-        s_response = (char *)iot_mem_calloc(AT_RESPONSE_SIZE, sizeof(char));
+        s_response = (char *)ros_mem_calloc(AT_RESPONSE_SIZE, sizeof(char));
     }
     return (s_response != NULL);
 }
@@ -265,7 +265,7 @@ int at_init(const at_config_t *config)
         return -1;
     }
     /* 重复初始化时先释放旧响应缓冲，再重新分配 */
-    iot_mem_free(s_response);
+    ros_mem_free(s_response);
     s_response = NULL;
     if (!at_response_ensure()) {
         s_inited = false;

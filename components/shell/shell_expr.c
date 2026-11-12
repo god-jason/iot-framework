@@ -285,7 +285,7 @@ void shell_vars_clear(shell_vars_t *vars)
 void shell_vars_release(shell_vars_t *vars)
 {
     if (vars != NULL && vars->items != NULL) {
-        iot_mem_free(vars->items);
+        ros_mem_free(vars->items);
         vars->items = NULL;
     }
 }
@@ -325,7 +325,7 @@ static int shell_var_alloc(shell_vars_t *vars, const char *name, uint16_t len)
     uint16_t i;
 
     if (vars->items == NULL) {
-        vars->items = (shell_var_t *)iot_mem_calloc(SHELL_VAR_MAX,
+        vars->items = (shell_var_t *)ros_mem_calloc(SHELL_VAR_MAX,
                                                     sizeof(shell_var_t));
         if (vars->items == NULL) {
             return -1;

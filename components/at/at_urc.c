@@ -11,13 +11,13 @@
  *
  * 静态状态与边界：
  *   - 表容量固定 AT_URC_MAX（8），满时注册失败；
- *   - 表内存由 iot_mem 在首次使用时惰性分配；
+ *   - 表内存由 ros_mem 在首次使用时惰性分配；
  *   - 仅保存 prefix 指针、不拷贝字符串，调用者需保证其生命周期；
  *   - 匹配只要求行首前缀相同，不要求整行相等；
  *   - 先注册者优先，前缀存在包含关系时应把更长的前缀先注册。
  */
 #include "at_urc.h"
-#include "iot_mem.h"
+#include "ros_mem.h"
 #include <string.h>
 
 /* URC 注册表容量 */
@@ -37,7 +37,7 @@ static at_urc_node_t *s_nodes = NULL;
 static bool at_urc_ensure(void)
 {
     if (s_nodes == NULL) {
-        s_nodes = (at_urc_node_t *)iot_mem_calloc(AT_URC_MAX,
+        s_nodes = (at_urc_node_t *)ros_mem_calloc(AT_URC_MAX,
                                                sizeof(at_urc_node_t));
     }
     return (s_nodes != NULL);

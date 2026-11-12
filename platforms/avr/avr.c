@@ -470,10 +470,10 @@ int hal_exti_deinit(hal_pin_t pin)
 /*
  * vector: 0=INT0, 1=INT1, 2=PCINT0, 3=PCINT1, 4=PCINT2。
  * 由应用 ISR 调用，例如：
- *   ISR(INT0_vect) { iot_avr_exti_irq(0); }
- *   ISR(PCINT0_vect) { iot_avr_exti_irq(2); }
+ *   ISR(INT0_vect) { ros_avr_exti_irq(0); }
+ *   ISR(PCINT0_vect) { ros_avr_exti_irq(2); }
  */
-void iot_avr_exti_irq(uint8_t vector)
+void ros_avr_exti_irq(uint8_t vector)
 {
     uint8_t port;
     uint8_t bit;

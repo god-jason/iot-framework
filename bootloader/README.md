@@ -246,8 +246,8 @@ boot_set_uart(my_read, my_write, my_ctx);
 `bootloader/bootloader_test.c` 在 host 端通过 `platforms/pc` 的 RAM 模拟 Flash 运行：
 
 ```bash
-xmake build iot-test
-xmake run iot-test
+xmake build ros-test
+xmake run ros-test
 ```
 
 覆盖：分区注册/越界拒绝/读写擦除、CRC-32 标准向量、篡改检测、升级全流程、

@@ -1,12 +1,12 @@
 /*
  * pc_bootloader.c - 主机模拟端的 Bootloader 移植层
  *
- * 复用 platforms/pc 的 RAM 模拟 Flash，让 iot-test 能完整跑通
+ * 复用 platforms/pc 的 RAM 模拟 Flash，让 ros-test 能完整跑通
  * 分区、升级、校验与安装流程；跳转在主机上没有意义，返回 -1，
  * 测试可通过 boot_set_jump() 注入假跳转。
  */
 
-#if defined(IOT_PLATFORM_PC)
+#if defined(ROS_PLATFORM_PC)
 
 #include "bootloader.h"
 #include "hal_flash.h"
@@ -106,4 +106,4 @@ int boot_port_jump(uint32_t entry)
     return -1;          /* host 不支持跳转，测试请用 boot_set_jump() */
 }
 
-#endif /* IOT_PLATFORM_PC */
+#endif /* ROS_PLATFORM_PC */

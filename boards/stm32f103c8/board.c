@@ -5,8 +5,8 @@
  * 与 CMSIS 5.8.0 的 core_cm3.h（SysTick_Config），不依赖 STM32Cube HAL。
  *
  * 时钟：HSE 8MHz -> PLL x9 -> SYSCLK 72MHz，AHB /1，APB1 /2，APB2 /1。
- * tick：SysTick 1ms 中断，其中断服务函数由 libiot-stm32-f1.a 的
- *       SysTick_Handler 弱定义提供，内部调用 iot_tick()。
+ * tick：SysTick 1ms 中断，其中断服务函数由 libros-stm32-f1.a 的
+ *       SysTick_Handler 弱定义提供，内部调用 ros_tick()。
  */
 
 #include "board.h"

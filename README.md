@@ -1,9 +1,9 @@
-# iot-os
+# robotos
 
 面向 MCU 的轻量实时内核 + 硬件抽象 + 机器人/物联网组件库。
 
 以 STM32 为主要目标，同时支持 PC 模拟与 AVR。对象默认可完全静态分配，内核零动态内存；
-也提供可选的 `iot_*_create()` / `iot_*_destroy()` 动态对象接口，按需选择。
+也提供可选的 `ros_*_create()` / `ros_*_destroy()` 动态对象接口，按需选择。
 同一份业务代码可在 Windows 上确定性回归，再平移到单片机运行。
 
 ---
@@ -17,7 +17,7 @@
 | 硬件抽象 | 35 个外设接口头（GPIO/UART/SPI/I2C/CAN/ADC/DAC/PWM/编码器/DMA/Flash/RTC/USB/ETH…） |
 | 多平台 | PC 模拟（Fiber/ucontext）、STM32F1/F4/H7、AVR |
 | 器件驱动 | 50 个传感器/显示/存储/无线/识别类驱动 |
-| 网络 | 统一 `iot_net` / `iot_http` / `iot_mqtt` 门面，后端可换以太网（Mongoose）或 4G（ML307 AT） |
+| 网络 | 统一 `ros_net` / `ros_http` / `ros_mqtt` 门面，后端可换以太网（Mongoose）或 4G（ML307 AT） |
 | 机器人控制 | 运动学、里程计、轨迹规划（梯形/S 曲线）、串级闭环、姿态融合、EKF 定位、栅格建图、A*/D* 导航、安全状态机 |
 | 运维 | 参数表、异步日志、Modbus、上位机/CAN 协议、Bootloader 与 FOTA |
 | 测试 | 与实现同目录的单元测试，单次回归 1 万+ 断言 |
@@ -27,8 +27,8 @@
 ## 目录结构
 
 ```
-iot-os/
-├── src/            实时内核（iot_*），实现与测试同目录
+robotos/
+├── src/            实时内核（ros_*），实现与测试同目录
 ├── hal/            硬件抽象接口（hal_*）
 ├── components/     业务/算法组件（40 个模块）
 ├── drivers/        器件驱动（50 个）
@@ -56,35 +56,35 @@ iot-os/
 
 ```bash
 # 单元测试
-xmake build iot-test
-xmake run iot-test
+xmake build ros-test
+xmake run ros-test
 
 # 综合示例：控制台 + shell + LED
-xmake build iot-demo
-xmake run iot-demo
+xmake build ros-demo
+xmake run ros-demo
 
 # 主机静态库（供外部工程集成）
-xmake build iot-pc
+xmake build ros-pc
 ```
 
 ### 目标一览
 
 | 目标 | 类型 | 说明 |
 | --- | --- | --- |
-| `iot-pc` | static | 主机静态库 |
-| `iot-test` | binary | 单元测试入口 `src/test_main.c` |
-| `iot-demo` | binary | 示例程序 |
-| `iot-stm32` | static | STM32 交叉编译库 |
-| `iot-fw-f103c8` | binary | 可烧录固件（elf/hex/bin） |
+| `ros-pc` | static | 主机静态库 |
+| `ros-test` | binary | 单元测试入口 `src/test_main.c` |
+| `ros-demo` | binary | 示例程序 |
+| `ros-stm32` | static | STM32 交叉编译库 |
+| `ros-fw-f103c8` | binary | 可烧录固件（elf/hex/bin） |
 
 ---
 
 ## 最小示例
 
 ```c
-#include "iot.h"
+#include "ros.h"
 
-static iot_task_t s_task;
+static ros_task_t s_task;
 static uint8_t    s_stack[2048];
 
 static void blink(void *arg)
@@ -92,16 +92,16 @@ static void blink(void *arg)
     (void)arg;
     for (;;) {
         /* 业务逻辑 */
-        iot_sleep_ms(500);
+        ros_sleep_ms(500);
     }
 }
 
 int main(void)
 {
-    iot_init();
-    iot_task_create(&s_task, "blink", 3, blink, NULL,
+    ros_init();
+    ros_task_create(&s_task, "blink", 3, blink, NULL,
                     s_stack, sizeof(s_stack));
-    iot_sched_start();      /* 通常不返回 */
+    ros_sched_start();      /* 通常不返回 */
     return 0;
 }
 ```
@@ -109,20 +109,20 @@ int main(void)
 ### 同步原语
 
 ```c
-static iot_sem_t   s_sem;
-static iot_mutex_t s_mutex;
-static iot_queue_t s_queue;
+static ros_sem_t   s_sem;
+static ros_mutex_t s_mutex;
+static ros_queue_t s_queue;
 static uint8_t     s_qbuf[8 * sizeof(int)];
 
-iot_sem_init(&s_sem, 0);
-iot_sem_take(&s_sem, IOT_TIMEOUT_FOREVER);
+ros_sem_init(&s_sem, 0);
+ros_sem_take(&s_sem, ROS_TIMEOUT_FOREVER);
 
-iot_mutex_lock(&s_mutex, 100);
-iot_mutex_unlock(&s_mutex);
+ros_mutex_lock(&s_mutex, 100);
+ros_mutex_unlock(&s_mutex);
 
-iot_queue_init(&s_queue, s_qbuf, sizeof(int), 8);
-iot_queue_send(&s_queue, &value, 0);
-iot_queue_recv(&s_queue, &value, IOT_TIMEOUT_FOREVER);
+ros_queue_init(&s_queue, s_qbuf, sizeof(int), 8);
+ros_queue_send(&s_queue, &value, 0);
+ros_queue_recv(&s_queue, &value, ROS_TIMEOUT_FOREVER);
 ```
 
 ### 中断中唤醒任务
@@ -131,7 +131,7 @@ iot_queue_recv(&s_queue, &value, IOT_TIMEOUT_FOREVER);
 void USART1_IRQHandler(void)
 {
     bool need_yield = false;
-    iot_sem_give_from_isr(&s_sem, &need_yield);
+    ros_sem_give_from_isr(&s_sem, &need_yield);
     /* 内核已自动请求 PendSV，无需手动切换 */
 }
 ```
@@ -184,17 +184,17 @@ hal_gpio_write(HAL_PIN(0, 13), HAL_GPIO_HIGH);
 ```bash
 # 仅构建内核+组件静态库
 xmake f -p cross --stm32_family=f1 --sdk=<工具链根目录> --bin=<根目录>/bin -c
-xmake build iot-stm32
+xmake build ros-stm32
 
 # 带 Cube HAL 与外设平台层
 xmake f -p cross --stm32_family=f1 --cube_hal_dir=<STM32CubeF1 路径> -c
-xmake build iot-stm32
+xmake build ros-stm32
 
 # 可烧录固件（F103C8T6）
 xmake f -p cross --stm32_family=f1 \
         --dfp_inc=<STM32F1xx_DFP>/Device/Include \
         --cmsis_inc=<CMSIS>/Core/Include -c
-xmake build iot-fw-f103c8
+xmake build ros-fw-f103c8
 ```
 
 `stm32_family` 支持 `f1` / `f4` / `h7`。
@@ -205,7 +205,7 @@ xmake build iot-fw-f103c8
 ## 测试
 
 ```bash
-xmake build iot-test && xmake run iot-test
+xmake build ros-test && xmake run ros-test
 ```
 
 - 测试文件与实现同目录，命名 `*_test.c`，入口统一为 `void ut_xxx(void)`；
@@ -219,11 +219,11 @@ xmake build iot-test && xmake run iot-test
 | 约定 | 说明 |
 | --- | --- |
 | 返回码 | 内核与 HAL 统一返回 `int`：0 成功，负值为错误码 |
-| 默认静态分配 | 对象可由调用者提供；需要运行期增减时使用 `iot_*_create()` / `iot_*_destroy()` |
-| 命名前缀 | 内核 `iot_`、HAL `hal_`、组件用模块名前缀 |
-| tick 回绕 | 时间比较统一使用 `IOT_TICK_AFTER/BEFORE` |
+| 默认静态分配 | 对象可由调用者提供；需要运行期增减时使用 `ros_*_create()` / `ros_*_destroy()` |
+| 命名前缀 | 内核 `ros_`、HAL `hal_`、组件用模块名前缀 |
+| tick 回绕 | 时间比较统一使用 `ROS_TICK_AFTER/BEFORE` |
 | ISR 限制 | 中断内禁止阻塞 API，只能使用 `*_from_isr` |
-| 裁剪 | 内核开关 `src/iot_config.h`，外设开关 `hal/hal_config.h` |
+| 裁剪 | 内核开关 `src/ros_config.h`，外设开关 `hal/hal_config.h` |
 
 ---
 
@@ -239,7 +239,7 @@ xmake build iot-test && xmake run iot-test
 1. `navigation`、`motion`、`mapping` 为单实例静态工作区，非线程安全；
 2. `stepper_move` 为阻塞式发脉冲，高频场景建议改用定时器驱动；
 3. `planner` 同一时刻只执行一个计划，优先级字段尚未参与调度；
-4. 软件定时器回调默认在专用 `timer` 任务执行（`IOT_USE_TIMER_TASK=0` 可退回 tick 上下文）；
+4. 软件定时器回调默认在专用 `timer` 任务执行（`ROS_USE_TIMER_TASK=0` 可退回 tick 上下文）；
 5. STM32 端 tickless 仍为 WFI 占位，未按低功耗定时器补偿 tick；
 6. 电机驱动 IC（TB6612/A4988/TMC 系列）需按 `drive_ops_t` 自行适配。
 

@@ -1,11 +1,11 @@
 /*
  * MQTT 客户端实现：基于系统 socket，通过 Mongoose MQTT 客户端完成。
- * 使用共享的 mg_mgr 事件循环，iot_mqtt_process() 负责驱动收包。
+ * 使用共享的 mg_mgr 事件循环，ros_mqtt_process() 负责驱动收包。
  */
-#include "iot_mqtt.h"
+#include "ros_mqtt.h"
 #include "eth_net.h"
 
-#if defined(IOT_NETWORK_ETH)
+#if defined(ROS_NETWORK_ETH)
 
 #include <stdio.h>
 #include <string.h>
@@ -19,7 +19,7 @@ typedef struct {
     bool opened;
     bool failed;
     bool connected;
-    iot_mqtt_message_cb_t callback;
+    ros_mqtt_message_cb_t callback;
     void *user_data;
 } eth_mqtt_state_t;
 
@@ -27,7 +27,7 @@ static eth_mqtt_state_t s_mqtt;
 
 static void eth_mqtt_deliver(struct mg_mqtt_message *message)
 {
-    iot_mqtt_message_t msg;
+    ros_mqtt_message_t msg;
     size_t len;
 
     if (s_mqtt.callback == NULL) {
@@ -90,9 +90,9 @@ static void eth_mqtt_fn(struct mg_connection *c, int ev, void *ev_data)
     }
 }
 
-/* ---------------- iot_mqtt 接口实现 ---------------- */
+/* ---------------- ros_mqtt 接口实现 ---------------- */
 
-int iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
+int ros_mqtt_init(ros_mqtt_message_cb_t callback, void *user_data)
 {
     (void)eth_net_mgr();
 
@@ -101,7 +101,7 @@ int iot_mqtt_init(iot_mqtt_message_cb_t callback, void *user_data)
     return HAL_OK;
 }
 
-int iot_mqtt_deinit(void)
+int ros_mqtt_deinit(void)
 {
     if (s_mqtt.conn != NULL) {
         mg_mqtt_disconnect(s_mqtt.conn, NULL);
@@ -115,7 +115,7 @@ int iot_mqtt_deinit(void)
     return HAL_OK;
 }
 
-int iot_mqtt_connect(const iot_mqtt_config_t *config)
+int ros_mqtt_connect(const ros_mqtt_config_t *config)
 {
     struct mg_mqtt_opts opts;
     char url[ETH_MQTT_URL_MAX];
@@ -167,7 +167,7 @@ int iot_mqtt_connect(const iot_mqtt_config_t *config)
     return HAL_OK;
 }
 
-int iot_mqtt_disconnect(void)
+int ros_mqtt_disconnect(void)
 {
     if (s_mqtt.conn == NULL) {
         return HAL_NOT_READY;
@@ -180,7 +180,7 @@ int iot_mqtt_disconnect(void)
     return HAL_OK;
 }
 
-int iot_mqtt_subscribe(const char *topic, uint8_t qos)
+int ros_mqtt_subscribe(const char *topic, uint8_t qos)
 {
     struct mg_mqtt_opts opts;
 
@@ -198,7 +198,7 @@ int iot_mqtt_subscribe(const char *topic, uint8_t qos)
     return HAL_OK;
 }
 
-int iot_mqtt_unsubscribe(const char *topic)
+int ros_mqtt_unsubscribe(const char *topic)
 {
     struct mg_mqtt_opts opts;
 
@@ -215,7 +215,7 @@ int iot_mqtt_unsubscribe(const char *topic)
     return HAL_OK;
 }
 
-int iot_mqtt_publish(const iot_mqtt_message_t *message)
+int ros_mqtt_publish(const ros_mqtt_message_t *message)
 {
     struct mg_mqtt_opts opts;
 
@@ -235,15 +235,15 @@ int iot_mqtt_publish(const iot_mqtt_message_t *message)
     return HAL_OK;
 }
 
-int iot_mqtt_process(void)
+int ros_mqtt_process(void)
 {
     eth_net_poll(0);
     return HAL_OK;
 }
 
-bool iot_mqtt_is_connected(void)
+bool ros_mqtt_is_connected(void)
 {
     return s_mqtt.connected && s_mqtt.conn != NULL;
 }
 
-#endif /* IOT_NETWORK_ETH */
+#endif /* ROS_NETWORK_ETH */

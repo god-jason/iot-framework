@@ -9,7 +9,7 @@
 #define BYTES_H
 
 /*
- * 字节数组操作。复用 iot_memory 原语。
+ * 字节数组操作。复用 ros_memory 原语。
  */
 
 #include <stdint.h>
