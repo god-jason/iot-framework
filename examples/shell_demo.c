@@ -4,6 +4,8 @@
  * shell_platform_start() 完成默认绑定：
  *   - 输出：stdout（与 log 的 printf 同一路）
  *   - 输入：stdin，逐行投递到 shell_feed()
+ * 与 STM32 一致：上电只跑监听任务，输入 hello 回车才创建 Shell 实例；
+ * 输入 exit 回收实例回到监听；管道 EOF 或 quit 命令后停止内核。
  * 输入结束（管道 EOF）或 quit 命令后停止内核，进程正常返回。
  *
  * 额外创建两个测试任务，用于验证 ps / state 的统计：
@@ -15,10 +17,12 @@
  *
  * 交互测试：
  *   xmake r iot-shell
+ *   > hello          （开启口令，回复 hello!）
  *   > ps
  *   > state
+ *   > exit           （回收 Shell，回到口令监听）
  * 管道测试：
- *   "ps`nstate`nquit`n" | iot-shell.exe
+ *   "hello`nps`nstate`nquit`n" | iot-shell.exe
  */
 
 #include "shell.h"

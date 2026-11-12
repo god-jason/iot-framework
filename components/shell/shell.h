@@ -150,14 +150,18 @@ shell_t *shell_default(void);
 
 /*
  * 按需（惰性）实例化：只保存配置，不分配任何内存。
- * 首次 shell_lazy_start() 才创建实例缓冲与输入任务，适合 RAM 紧张的 MCU。
+ * 首次 shell_lazy_start() 只创建输入任务；实例缓冲由该任务自己申请，
+ * 因此内存归属统计（ps 的 MEM 列）落在 shell 任务名下。适合 RAM 紧张的 MCU。
  */
 int shell_lazy_setup(const shell_config_t *cfg);
 
-/* 已配置但未实例化时创建实例与输入任务；已激活直接返回 0 */
+/* 创建按需实例的输入任务（实例由任务入口自建）；已启动直接返回 0 */
 int shell_lazy_start(void);
 
-/* 默认实例是否已创建 */
+/* 是否已启动（任务已创建，实例可能仍在初始化中） */
+bool shell_started(void);
+
+/* 默认实例是否已创建（可接收输入） */
 bool shell_active(void);
 
 /*

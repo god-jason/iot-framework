@@ -103,7 +103,7 @@ static void stm32_shell_watch_task(void *arg)
     uint8_t ch;
 
     for (;;) {
-        if (!shell_active()) {
+        if (!shell_started()) {
             if (hal_uart_receive != NULL &&
                 hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK &&
                 stm32_open_word_match(ch)) {
@@ -117,6 +117,12 @@ static void stm32_shell_watch_task(void *arg)
             /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
             (void)shell_shutdown();
             s_open_pos = 0U;
+            continue;
+        }
+
+        if (!shell_active()) {
+            /* 任务已创建，等它自己申请好实例缓冲再喂字节 */
+            iot_sleep_ms(5U);
             continue;
         }
 

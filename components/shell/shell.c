@@ -22,11 +22,11 @@
 /* ------------------------------ 全局状态 ------------------------------ */
 
 static shell_t *s_default;              /* 默认实例（平台绑定） */
-static iot_mutex_t *s_out_mutex;        /* 全局输出互斥，所有实例共享 */
 
-/* 惰性实例化：只保存配置，首次 shell_lazy_start() 才真正分配 */
+/* 惰性实例化：只保存配置，首次 shell_lazy_start() 才创建输入任务 */
 static shell_config_t s_lazy_cfg;
 static bool s_lazy_ready;
+static iot_task_t *s_lazy_task;         /* 按需实例的输入任务（实例由它自建） */
 
 /* ------------------------------ 输出 ------------------------------ */
 
@@ -602,7 +602,10 @@ static void shell_submit_line(shell_t *sh)
 
     (void)shell_instance_exec_line(sh, sh->line);
     sh->line_len = 0U;
-    shell_prompt(sh);
+    if (!sh->exit_req) {
+        /* exit 已请求关闭：不再打印提示符，任务随后退出 */
+        shell_prompt(sh);
+    }
 }
 
 /* Tab 补全：只补命令名，多个候选时列出 */
@@ -712,9 +715,41 @@ static void shell_feed_char(shell_t *sh, int c)
 
 /* ------------------------------ Shell 任务 ------------------------------ */
 
+/* 按需实例内置 exit：请求任务退出，平台随后回收实例内存 */
+static int shell_cmd_exit_builtin(shell_t *sh, int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+
+    shell_printf(sh, "bye\n");
+    shell_request_exit();
+    return SHELL_OK;
+}
+
+static const shell_cmd_t s_exit_cmd = {
+    "exit", shell_cmd_exit_builtin, "exit", "close shell, back to listening",
+    "basic", CMD_NONE
+};
+
 static void shell_task_entry(void *arg)
 {
     shell_t *sh = (shell_t *)arg;
+
+    if (sh == NULL) {
+        /* 按需实例：实例缓冲由任务自己申请，内存记账落在本任务名下 */
+        if (!s_lazy_ready) {
+            iot_task_exit();
+            return;
+        }
+        sh = shell_instance_create(&s_lazy_cfg);
+        if (sh == NULL) {
+            iot_task_exit();
+            return;
+        }
+        s_default = sh;
+        (void)shell_register_cmd(&s_exit_cmd);
+    }
+    sh->task = iot_current_task;
 
     shell_prompt(sh);
     for (;;) {
@@ -756,22 +791,6 @@ int shell_start(void)
 
 /* ---------------------- 按需实例化 / 退出回收 ---------------------- */
 
-/* 按需实例内置 exit：请求任务退出，平台随后回收实例内存 */
-static int shell_cmd_exit_builtin(shell_t *sh, int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-
-    shell_printf(sh, "bye\n");
-    shell_request_exit();
-    return SHELL_OK;
-}
-
-static const shell_cmd_t s_exit_cmd = {
-    "exit", shell_cmd_exit_builtin, "exit", "close shell, back to listening",
-    "basic", CMD_NONE
-};
-
 int shell_lazy_setup(const shell_config_t *cfg)
 {
     if (cfg == NULL || cfg->write == NULL) {
@@ -784,25 +803,26 @@ int shell_lazy_setup(const shell_config_t *cfg)
 
 int shell_lazy_start(void)
 {
-    if (s_default != NULL) {
+    if (s_lazy_task != NULL) {
         return 0;
     }
     if (!s_lazy_ready) {
         return -1;
     }
 
-    s_default = shell_instance_create(&s_lazy_cfg);
-    if (s_default == NULL) {
-        return -1;
-    }
+    /*
+     * 只创建输入任务；实例缓冲（约 1.4KB）由任务入口自己申请，
+     * 这样 ps 的内存归属统计会落在 shell 任务名下，而不是创建者。
+     */
+    s_lazy_task = iot_task_create_dynamic("shell", (uint8_t)SHELL_SHELL_PRIO,
+                                          shell_task_entry, NULL,
+                                          (uint32_t)SHELL_SHELL_STACK);
+    return (s_lazy_task != NULL) ? 0 : -1;
+}
 
-    /* 扩展命令表跨多次开关保留（不清空）；exit 在每次激活时确保存在 */
-    (void)shell_register_cmd(&s_exit_cmd);
-    if (shell_instance_start(s_default) != 0) {
-        shell_instance_destroy(s_default);
-        return -1;
-    }
-    return 0;
+bool shell_started(void)
+{
+    return (s_lazy_task != NULL || s_default != NULL);
 }
 
 bool shell_active(void)
@@ -819,22 +839,36 @@ void shell_request_exit(void)
 
 bool shell_task_finished(void)
 {
-    return (s_default != NULL && s_default->task != NULL &&
-            s_default->task->state == IOT_TASK_TERMINATED);
+    if (s_default != NULL && s_default->task != NULL) {
+        return (s_default->task->state == IOT_TASK_TERMINATED);
+    }
+    return (s_lazy_task != NULL &&
+            s_lazy_task->state == IOT_TASK_TERMINATED);
 }
 
 int shell_shutdown(void)
 {
-    if (s_default == NULL) {
-        return 0;
-    }
-    if (s_default->task != NULL) {
-        if (s_default->task->state != IOT_TASK_TERMINATED) {
+    iot_task_t *task = NULL;
+
+    if (s_default != NULL) {
+        task = s_default->task;
+        if (task != NULL && task->state != IOT_TASK_TERMINATED) {
             return -1;              /* 任务仍在运行，不能释放其栈 */
         }
-        (void)iot_task_destroy(s_default->task);
         s_default->task = NULL;
+        shell_instance_destroy(s_default);   /* 内部会把 s_default 置 NULL */
     }
-    shell_instance_destroy(s_default);   /* 内部会把 s_default 置 NULL */
+    if (task != NULL) {
+        (void)iot_task_destroy(task);
+    }
+    if (s_lazy_task != NULL) {
+        if (s_lazy_task != task) {
+            if (s_lazy_task->state != IOT_TASK_TERMINATED) {
+                return -1;
+            }
+            (void)iot_task_destroy(s_lazy_task);
+        }
+        s_lazy_task = NULL;
+    }
     return 0;
 }

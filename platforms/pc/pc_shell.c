@@ -92,9 +92,14 @@ static void pc_shell_rx_task(void *arg)
 
     (void)arg;
     for (;;) {
-        if (shell_active() && shell_task_finished()) {
+        if (shell_task_finished()) {
             /* exit 之后输入任务已退出：释放实例，回到监听 */
             (void)shell_shutdown();
+            continue;
+        }
+        if (shell_started() && !shell_active()) {
+            /* 任务已创建，等它自己申请好实例缓冲再读下一行 */
+            iot_sleep_ms(1U);
             continue;
         }
 
@@ -117,7 +122,7 @@ static void pc_shell_rx_task(void *arg)
             return;
         }
 
-        if (!shell_active()) {
+        if (!shell_started()) {
             if (pc_line_is_open(line)) {
                 (void)fputs("hello!\n", stdout);
                 (void)fflush(stdout);
@@ -129,6 +134,10 @@ static void pc_shell_rx_task(void *arg)
         (void)shell_feed(line, (uint32_t)strlen(line));
         /* 流控：一行处理完再读下一行，避免 Shell 10ms 轮询被输入泵甩开 */
         while (shell_pending() > 0U) {
+            iot_sleep_ms(1U);
+        }
+        if (shell_active()) {
+            /* 再让出一次，确保该行命令（可能是 exit）已执行完 */
             iot_sleep_ms(1U);
         }
     }
