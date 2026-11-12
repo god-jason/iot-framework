@@ -16,7 +16,7 @@
 | 默认零动态内存 | TCB、栈、队列缓冲、定时器可由调用者提供，启动后内存占用可静态核算；另有可选的动态创建接口 |
 | 硬件抽象 | 35 个外设接口头（GPIO/UART/SPI/I2C/CAN/ADC/DAC/PWM/编码器/DMA/Flash/RTC/USB/ETH…） |
 | 多平台 | PC 模拟（Fiber/ucontext）、STM32F1/F4/H7、AVR |
-| 器件驱动 | 174 个传感器/显示/存储/无线/识别类驱动 |
+| 器件驱动 | 50 个传感器/显示/存储/无线/识别类驱动 |
 | 网络 | 统一 `iot_net` / `iot_http` / `iot_mqtt` 门面，后端可换以太网（Mongoose）或 4G（ML307 AT） |
 | 机器人控制 | 运动学、里程计、轨迹规划（梯形/S 曲线）、串级闭环、姿态融合、EKF 定位、栅格建图、A*/D* 导航、安全状态机 |
 | 运维 | 参数表、异步日志、Modbus、上位机/CAN 协议、Bootloader 与 FOTA |
@@ -31,7 +31,7 @@ iot-os/
 ├── src/            实时内核（iot_*），实现与测试同目录
 ├── hal/            硬件抽象接口（hal_*）
 ├── components/     业务/算法组件（40 个模块）
-├── drivers/        器件驱动（174 个）
+├── drivers/        器件驱动（50 个）
 ├── networks/       网络门面 + eth / ml307 后端
 ├── bootloader/     分区、镜像校验、升级、串口升级协议（平台无关）
 ├── platforms/      pc / stm32 / avr 平台实现（含 *_bootloader 移植层）
