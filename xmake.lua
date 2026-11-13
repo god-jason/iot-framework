@@ -117,7 +117,7 @@ toolchain_end()
 local function ros_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
-        "vendor/tlsf", "vendor/arena", "vendor/mongoose",
+        "vendor/tlsf", "vendor/arena",
         "bootloader", "modules",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
@@ -338,9 +338,6 @@ if is_plat("cross") then
                      "components/mqtt/mqtt.c")
 
         ros_exclude_tests()
-
-        -- 主机网络栈依赖 socket/winsock，MCU 上不编译
-        remove_files("vendor/mongoose/**.c")
 
         if hal_root ~= "" then
             add_includedirs(hal_inc)

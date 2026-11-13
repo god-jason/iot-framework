@@ -20,7 +20,7 @@
 #define PING_DEFAULT_TIMEOUT   1000U
 
 typedef struct {
-    const char *host;
+    const char *addr;           /* 解析后的 IP */
 } ping_ctx_t;
 
 static void ping_reply(uint32_t seq, uint32_t rtt, bool ok, void *user)
@@ -29,7 +29,7 @@ static void ping_reply(uint32_t seq, uint32_t rtt, bool ok, void *user)
 
     if (ok) {
         ros_printf("64 bytes from %s: seq=%u time=%u ms\n",
-                   (ctx != NULL) ? ctx->host : "?", (unsigned)seq,
+                   (ctx != NULL) ? ctx->addr : "?", (unsigned)seq,
                    (unsigned)rtt);
     } else {
         ros_printf("request timeout: seq=%u\n", (unsigned)seq);
@@ -70,18 +70,26 @@ static int cmd_ping(shell_t *sh, int argc, char **argv)
     {
         ping_ctx_t ctx;
         net_ping_stat_t stat;
+        char ip[32];
         int rc;
 
-        ctx.host = host;
+        rc = net_dns_resolve(host, ip, sizeof(ip));
+        if (rc != NET_OK) {
+            ros_puts("ping: cannot resolve host");
+            return -SHELL_ERR_NOT_FOUND;
+        }
+        ros_printf("PING %s (%s)\n", host, ip);
+
+        ctx.addr = ip;
         memset(&stat, 0, sizeof(stat));
-        rc = net_ping(host, count, interval, timeout,
+        rc = net_ping(ip, count, interval, timeout,
                       ping_reply, &ctx, &stat);
         if (rc == NET_ERR_NOT_SUPPORTED) {
             ros_puts("ping: not supported by network backend");
             return -SHELL_ERR_NOT_FOUND;
         }
         if (rc != NET_OK) {
-            ros_puts("ping: cannot resolve host / network unavailable");
+            ros_puts("ping: network unavailable");
             return -SHELL_ERR_DEVICE;
         }
 
