@@ -132,7 +132,8 @@ static void ros_stack_fill(void *stack_mem, uint32_t stack_size)
 static int ros_task_create_impl(ros_task_t *task, const char *name,
                                 uint8_t priority, ros_entry_t entry,
                                 void *arg, void *stack_mem,
-                                uint32_t stack_size, bool stack_owned)
+                                uint32_t stack_size, bool stack_owned,
+                                ros_io_t *stdio)
 {
     int rc;
 
@@ -154,6 +155,8 @@ static int ros_task_create_impl(ros_task_t *task, const char *name,
     task->arg = arg;
     task->stack_mem = stack_mem;
     task->stack_size = stack_size;
+    /* stdio 未指定时继承创建者（脚本 JOB 因此共享父任务的 stdio） */
+    task->stdio = (stdio != NULL) ? stdio : ros_stdio();
     task->state = ROS_TASK_READY;
     task->created = true;
     task->stack_owned = stack_owned;
@@ -204,13 +207,24 @@ int ros_task_create(ros_task_t *task, const char *name,
                     void *stack_mem, uint32_t stack_size)
 {
     return ros_task_create_impl(task, name, priority, entry, arg,
-                                stack_mem, stack_size, false);
+                                stack_mem, stack_size, false, NULL);
 }
 
-/* 动态创建任务：TCB 与任务栈均由 ros_mem_* 分配，失败返回 NULL。 */
-ros_task_t *ros_task_create_dynamic(const char *name, uint8_t priority,
-                                    ros_entry_t entry, void *arg,
-                                    uint32_t stack_size)
+/* 静态创建任务：并显式指定 stdio。 */
+int ros_task_create_io(ros_task_t *task, const char *name,
+                       uint8_t priority, ros_entry_t entry, void *arg,
+                       void *stack_mem, uint32_t stack_size, ros_io_t *stdio)
+{
+    return ros_task_create_impl(task, name, priority, entry, arg,
+                                stack_mem, stack_size, false, stdio);
+}
+
+/* 动态创建的公共实现：stdio 为 NULL 时继承创建者。 */
+static ros_task_t *ros_task_create_dynamic_impl(const char *name,
+                                                uint8_t priority,
+                                                ros_entry_t entry, void *arg,
+                                                uint32_t stack_size,
+                                                ros_io_t *stdio)
 {
     ros_task_t *task;
     void *stack;
@@ -233,13 +247,54 @@ ros_task_t *ros_task_create_dynamic(const char *name, uint8_t priority,
     }
 
     if (ros_task_create_impl(task, name, priority, entry, arg,
-                             stack, stack_size, true) != ROS_OK) {
+                             stack, stack_size, true, stdio) != ROS_OK) {
         ros_mem_free(stack);
         ros_mem_free(task);
         return NULL;
     }
 
     return task;
+}
+
+/* 动态创建任务：TCB 与任务栈均由 ros_mem_* 分配，失败返回 NULL。 */
+ros_task_t *ros_task_create_dynamic(const char *name, uint8_t priority,
+                                    ros_entry_t entry, void *arg,
+                                    uint32_t stack_size)
+{
+    return ros_task_create_dynamic_impl(name, priority, entry, arg,
+                                        stack_size, NULL);
+}
+
+/* 动态创建任务：并显式指定 stdio。 */
+ros_task_t *ros_task_create_dynamic_io(const char *name, uint8_t priority,
+                                       ros_entry_t entry, void *arg,
+                                       uint32_t stack_size, ros_io_t *stdio)
+{
+    return ros_task_create_dynamic_impl(name, priority, entry, arg,
+                                        stack_size, stdio);
+}
+
+ros_io_t *ros_task_get_stdio(const ros_task_t *task)
+{
+    if (task == NULL) {
+        task = ros_current_task;
+    }
+    if (task != NULL && task->stdio != NULL) {
+        return task->stdio;
+    }
+    return ros_io_default();
+}
+
+int ros_task_set_stdio(ros_task_t *task, ros_io_t *stdio)
+{
+    if (task == NULL) {
+        task = ros_current_task;
+    }
+    if (task == NULL) {
+        return ROS_INVALID_PARAM;
+    }
+    task->stdio = (stdio != NULL) ? stdio : ros_io_default();
+    return ROS_OK;
 }
 
 /*

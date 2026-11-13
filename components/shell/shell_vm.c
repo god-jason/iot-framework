@@ -13,38 +13,6 @@
 #include <string.h>
 #include <stdio.h>
 
-/* 全局输出互斥：所有实例共享，保证同一后端上的输出不交错 */
-static ros_mutex_t *s_out_mutex;
-
-/* ------------------------------ 输出互斥 ------------------------------ */
-
-int shell_out_init(void)
-{
-    if (s_out_mutex == NULL) {
-        s_out_mutex = (ros_mutex_t *)ros_mem_calloc(1U, sizeof(ros_mutex_t));
-        if (s_out_mutex == NULL) {
-            return -1;
-        }
-        return ros_mutex_init(s_out_mutex);
-    }
-    return 0;
-}
-
-void shell_out_lock(void)
-{
-    /* 调度器未启动（初始化 / 同步测试）时不存在并发，跳过互斥 */
-    if (ros_current_task != NULL && s_out_mutex != NULL) {
-        (void)ros_mutex_lock(s_out_mutex, ROS_TIMEOUT_FOREVER);
-    }
-}
-
-void shell_out_unlock(void)
-{
-    if (ros_current_task != NULL && s_out_mutex != NULL) {
-        (void)ros_mutex_unlock(s_out_mutex);
-    }
-}
-
 /* ------------------------------ 循环帧 ------------------------------ */
 
 typedef struct {
@@ -155,16 +123,13 @@ static bool shell_name_eq(const char *a, const char *b, uint16_t len)
 
 shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len)
 {
-    uint16_t i;
+    shell_job_t *job;
 
-    if (sh == NULL || sh->jobs == NULL || name == NULL || len == 0U) {
+    if (sh == NULL || name == NULL || len == 0U) {
         return NULL;
     }
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_t *job = sh->jobs[i];
-
-        if (job != NULL && job->used &&
-            shell_name_eq(job->name, name, len)) {
+    for (job = sh->jobs; job != NULL; job = job->next) {
+        if (job->used && shell_name_eq(job->name, name, len)) {
             return job;
         }
     }
@@ -173,15 +138,13 @@ shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len)
 
 shell_job_t *shell_job_find_by_task(shell_t *sh, const ros_task_t *task)
 {
-    uint16_t i;
+    shell_job_t *job;
 
-    if (sh == NULL || sh->jobs == NULL) {
+    if (sh == NULL) {
         return NULL;
     }
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_t *job = sh->jobs[i];
-
-        if (job != NULL && job->used && job->task == task) {
+    for (job = sh->jobs; job != NULL; job = job->next) {
+        if (job->used && job->task == task) {
             return job;
         }
     }
@@ -239,34 +202,30 @@ static void shell_job_free(shell_job_t *job)
 
 void shell_jobs_clear(shell_t *sh)
 {
-    uint16_t i;
+    shell_job_t *job;
+    shell_job_t *next;
 
     if (sh == NULL) {
         return;
     }
-    if (sh->jobs != NULL) {
-        for (i = 0U; i < SHELL_JOB_MAX; i++) {
-            if (sh->jobs[i] != NULL) {
-                shell_job_free(sh->jobs[i]);
-                sh->jobs[i] = NULL;
-            }
-        }
+    for (job = sh->jobs; job != NULL; job = next) {
+        next = job->next;
+        shell_job_free(job);
     }
+    sh->jobs = NULL;
     sh->job_seq = 0U;
     shell_vars_clear(&sh->vars);
 }
 
 bool shell_jobs_running(const shell_t *sh)
 {
-    uint16_t i;
+    const shell_job_t *job;
 
-    if (sh == NULL || sh->jobs == NULL) {
+    if (sh == NULL) {
         return false;
     }
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        const shell_job_t *job = sh->jobs[i];
-
-        if (job != NULL && job->used &&
+    for (job = sh->jobs; job != NULL; job = job->next) {
+        if (job->used &&
             (job->state == JOB_RUNNING || job->state == JOB_STOPPING)) {
             return true;
         }
@@ -274,30 +233,99 @@ bool shell_jobs_running(const shell_t *sh)
     return false;
 }
 
-/* 按槽位取 JOB（空槽返回 NULL），供 jobs/loads 遍历 */
-shell_job_t *shell_job_slot(shell_t *sh, uint16_t index)
+/* JOB 链表遍历入口，供 jobs/loads 等命令按加载顺序列出 */
+shell_job_t *shell_job_first(shell_t *sh)
 {
-    if (sh == NULL || sh->jobs == NULL || index >= SHELL_JOB_MAX) {
-        return NULL;
+    return (sh != NULL) ? sh->jobs : NULL;
+}
+
+shell_job_t *shell_job_next(const shell_job_t *job)
+{
+    return (job != NULL) ? job->next : NULL;
+}
+
+/* child 是否为 ancestor 的后代（沿 parent 链向上；守卫防止异常环） */
+static bool shell_job_is_under(const shell_job_t *job,
+                               const shell_job_t *ancestor)
+{
+    uint32_t guard = 0U;
+
+    while (job != NULL && guard++ < 0xFFFFU) {
+        if (job == ancestor) {
+            return true;
+        }
+        job = job->parent;
     }
-    return sh->jobs[index];
+    return false;
+}
+
+/* 对 job 的所有后代执行任务级暂停 / 恢复（不含 job 自身） */
+static void shell_job_tree_op(shell_job_t *job, bool pause)
+{
+    shell_t *sh;
+    shell_job_t *it;
+
+    if (job == NULL || job->owner == NULL) {
+        return;
+    }
+    sh = job->owner;
+    for (it = sh->jobs; it != NULL; it = it->next) {
+        if (it == job || !it->used || !shell_job_is_under(it, job)) {
+            continue;
+        }
+        if (pause) {
+            if (it->state != JOB_RUNNING) {
+                continue;
+            }
+            if (it->task != NULL && ros_task_suspend(it->task) != ROS_OK) {
+                continue;
+            }
+            it->state = JOB_PAUSED;
+        } else {
+            if (it->state != JOB_PAUSED) {
+                continue;
+            }
+            if (it->task != NULL && ros_task_resume(it->task) != ROS_OK) {
+                continue;
+            }
+            it->state = JOB_RUNNING;
+        }
+    }
+}
+
+void shell_job_pause_descendants(shell_job_t *job)
+{
+    shell_job_tree_op(job, true);
+}
+
+void shell_job_resume_descendants(shell_job_t *job)
+{
+    shell_job_tree_op(job, false);
 }
 
 /* 卸载单个 JOB（调用方已校验状态） */
 void shell_job_unload(shell_job_t *job)
 {
     shell_t *sh;
-    uint16_t i;
+    shell_job_t **link;
 
     if (job == NULL) {
         return;
     }
     sh = job->owner;
-    if (sh != NULL && sh->jobs != NULL) {
-        for (i = 0U; i < SHELL_JOB_MAX; i++) {
-            if (sh->jobs[i] == job) {
-                sh->jobs[i] = NULL;
+    if (sh != NULL) {
+        shell_job_t *it;
+
+        for (link = &sh->jobs; *link != NULL; link = &(*link)->next) {
+            if (*link == job) {
+                *link = job->next;
                 break;
+            }
+        }
+        /* 解除子 JOB 的父指针，避免卸载后悬空引用 */
+        for (it = sh->jobs; it != NULL; it = it->next) {
+            if (it->parent == job) {
+                it->parent = NULL;
             }
         }
     }
@@ -341,36 +369,18 @@ shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
                  (int)nlen, name);
         return NULL;
     }
-    if (sh->jobs == NULL) {
-        err->code = SHELL_ERR_RESOURCE;
-        snprintf(err->msg, sizeof(err->msg), "shell not initialized");
-        return NULL;
-    }
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        if (sh->jobs[i] == NULL) {
-            break;
-        }
-    }
-    if (i >= SHELL_JOB_MAX) {
-        err->code = SHELL_ERR_RESOURCE;
-        snprintf(err->msg, sizeof(err->msg), "too many jobs");
-        return NULL;
-    }
-
     job = (shell_job_t *)ros_mem_calloc(1U, sizeof(*job));
     if (job == NULL) {
         err->code = SHELL_ERR_RESOURCE;
         snprintf(err->msg, sizeof(err->msg), "out of memory");
         return NULL;
     }
-    sh->jobs[i] = job;
 
     job->text = (char *)ros_mem_malloc(len + 1U);
     if (job->text == NULL) {
         err->code = SHELL_ERR_RESOURCE;
         snprintf(err->msg, sizeof(err->msg), "out of memory");
         ros_mem_free(job);
-        sh->jobs[i] = NULL;
         return NULL;
     }
     memcpy(job->text, text, len);
@@ -380,7 +390,6 @@ shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
     if (shell_script_parse(&job->script, job->text, err) != 0) {
         ros_mem_free(job->text);
         ros_mem_free(job);
-        sh->jobs[i] = NULL;
         return NULL;
     }
 
@@ -396,6 +405,18 @@ shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
     job->stack = (stack != 0U) ? stack : (uint32_t)SHELL_JOB_STACK;
     job->state = JOB_LOADED;
     shell_vars_init(&job->vars);
+
+    /* 追加到链表尾部，保持 jobs / loads 的加载顺序 */
+    if (sh->jobs == NULL) {
+        sh->jobs = job;
+    } else {
+        shell_job_t *tail = sh->jobs;
+
+        while (tail->next != NULL) {
+            tail = tail->next;
+        }
+        tail->next = job;
+    }
     return job;
 }
 
@@ -731,8 +752,7 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
             }
             shell_value_format(&val, buf, sizeof(buf), &out_len);
             if (verbose) {
-                shell_printf_job(job->owner, job->name, "%.*s\n",
-                                 (int)out_len, buf);
+                ros_printf("[JOB %s] %.*s\n", job->name, (int)out_len, buf);
             }
             break;
         }
@@ -767,8 +787,8 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
         }
 
         case SHELL_OP_SHELL_CMD: {
-            char text[96];
-            char *argv[6];
+            char text[SHELL_LINE_MAX];
+            char *argv[8];
             int argc = 0;
             uint16_t len = ins->arg_len;
             uint16_t i;
@@ -779,7 +799,7 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
             }
             memcpy(text, &job->script.text[ins->arg_off], len);
             text[len] = '\0';
-            for (i = 0U; i <= len && argc < 6; i++) {
+            for (i = 0U; i <= len && argc < 8; i++) {
                 if (i == len || text[i] == ' ') {
                     if (i > start) {
                         text[i] = '\0';
@@ -913,6 +933,9 @@ static int shell_vm_exec(shell_job_t *job, uint16_t limit, bool verbose)
                     err.line = ins->line;
                     snprintf(err.msg, sizeof(err.msg), "job start failed");
                     rc = -1;
+                } else {
+                    /* 记录启动者：父 JOB 暂停 / 停止时级联到子 JOB */
+                    target->parent = job;
                 }
             } else {
                 (void)shell_job_stop(target, false);
@@ -1131,6 +1154,17 @@ int shell_job_stop(shell_job_t *job, bool force)
         /* 强制：置位后由任务在指令边界退出；不执行钩子由 VM 内部的
          * stop_flag 分支决定，这里保持同一路径以保证设备收尾执行 */
         (void)ros_sem_give(job->wake);
+    }
+
+    /* 级联停止直接子 JOB（由子 JOB 继续向下递归），避免留下孤儿任务 */
+    if (job->owner != NULL) {
+        shell_job_t *it;
+
+        for (it = job->owner->jobs; it != NULL; it = it->next) {
+            if (it != job && it->used && it->parent == job) {
+                (void)shell_job_stop(it, force);
+            }
+        }
     }
     return 0;
 }

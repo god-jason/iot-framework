@@ -13,7 +13,7 @@
  * trace 也由 board_trace_start() 独立绑定，与 Shell 实例是否存在无关。
  *
  * 输出：hal_uart_transmit()（板级通常映射 USART1）
- * 输入：hal_uart_receive() 轮询，收到字节即 shell_feed()
+ * 输入：Shell 任务通过默认 stdio（stm32_io.c）读取；监听任务只匹配口令
  *
  * hal_uart_* 以 weak 方式引用：未链接 HAL/板级实现时仍可编译，
  * 此时 shell_platform_start() 返回 -1，不影响内核其余部分。
@@ -94,7 +94,8 @@ static bool stm32_open_word_match(uint8_t ch)
 /*
  * 口令监听 + 输入泵：
  *   未激活时只匹配 "hello"，命中后回复并创建实例；
- *   激活后把字节投递给实例，实例退出（exit）后回收内存并回到监听。
+ *   激活后输入由 Shell 任务通过默认 stdio（stm32_io.c，UART1）读取，
+ *   这里只负责在实例退出（exit）后回收内存并回到监听。
  */
 static void stm32_shell_watch_task(void *arg)
 {
@@ -103,32 +104,22 @@ static void stm32_shell_watch_task(void *arg)
     uint8_t ch;
 
     for (;;) {
-        if (!shell_started()) {
-            if (hal_uart_receive != NULL &&
-                hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK &&
-                stm32_open_word_match(ch)) {
-                (void)stm32_shell_write(reply, sizeof(reply) - 1U, NULL);
-                (void)shell_lazy_start();
+        if (shell_started()) {
+            if (shell_task_finished()) {
+                /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
+                (void)shell_shutdown();
+                s_open_pos = 0U;
+            } else {
+                ros_sleep_ms(5U);   /* 输入由 Shell 任务读取 */
             }
             continue;
         }
 
-        if (shell_task_finished()) {
-            /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
-            (void)shell_shutdown();
-            s_open_pos = 0U;
-            continue;
-        }
-
-        if (!shell_active()) {
-            /* 任务已创建，等它自己申请好实例缓冲再喂字节 */
-            ros_sleep_ms(5U);
-            continue;
-        }
-
         if (hal_uart_receive != NULL &&
-            hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK) {
-            (void)shell_feed((const char *)&ch, 1U);
+            hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK &&
+            stm32_open_word_match(ch)) {
+            (void)stm32_shell_write(reply, sizeof(reply) - 1U, NULL);
+            (void)shell_lazy_start();
         }
     }
 }
@@ -145,9 +136,8 @@ int shell_platform_start(const char *version)
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = version;
-    cfg.write = stm32_shell_write;
-    cfg.user = NULL;
     cfg.reset = (hal_system_reset != NULL) ? hal_system_reset : NULL;
+    /* 输入输出直接使用任务 stdio（默认 stm32_io.c 的 UART1） */
 
     /* 只保存配置；实例与输入任务等收到 "hello" 才创建 */
     if (shell_lazy_setup(&cfg) != 0) {

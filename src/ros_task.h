@@ -10,6 +10,7 @@
 
 #include "ros_types.h"
 #include "ros_wait.h"
+#include "ros_io.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,6 +43,7 @@ struct ros_task {
     const char *name;               /* 任务名（只读引用，不拷贝） */
     ros_entry_t entry;             /* 入口函数 */
     void *arg;                      /* 入口参数 */
+    ros_io_t *stdio;               /* 任务标准输入输出（创建时继承创建者） */
 
     uint8_t priority;               /* 当前优先级：0 最高（含继承提升） */
     uint8_t base_priority;          /* 创建时的原始优先级，继承解除后恢复 */
@@ -122,6 +124,25 @@ int ros_task_create(ros_task_t *task, const char *name,
 ros_task_t *ros_task_create_dynamic(const char *name, uint8_t priority,
                                     ros_entry_t entry, void *arg,
                                     uint32_t stack_size);
+
+/*
+ * 带 stdio 的创建接口：stdio 为 NULL 时继承创建者的 stdio。
+ * 用于把任务的标准输入输出绑定到指定 UART / 虚拟串口 / 网络连接。
+ */
+int ros_task_create_io(ros_task_t *task, const char *name, uint8_t priority,
+                       ros_entry_t entry, void *arg, void *stack_mem,
+                       uint32_t stack_size, ros_io_t *stdio);
+
+ros_task_t *ros_task_create_dynamic_io(const char *name, uint8_t priority,
+                                       ros_entry_t entry, void *arg,
+                                       uint32_t stack_size, ros_io_t *stdio);
+
+/*
+ * 查询 / 修改任务的 stdio（task 为 NULL 表示当前任务）。
+ * stdio 传 NULL 表示恢复为默认 stdio；get 在任务未绑定时返回默认。
+ */
+ros_io_t *ros_task_get_stdio(const ros_task_t *task);
+int ros_task_set_stdio(ros_task_t *task, ros_io_t *stdio);
 
 /*
  * 销毁由 ros_task_create_dynamic() 创建的任务，释放栈、端口上下文与 TCB。

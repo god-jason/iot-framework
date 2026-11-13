@@ -20,9 +20,9 @@
 static char s_out[OUT_MAX];
 static uint32_t s_out_len;
 
-static int capture_write(const char *data, uint32_t len, void *user)
+static int capture_write(ros_io_t *io, const void *data, uint32_t len)
 {
-    (void)user;
+    (void)io;
     if (s_out_len + len >= OUT_MAX) {
         len = OUT_MAX - s_out_len - 1U;
     }
@@ -31,6 +31,9 @@ static int capture_write(const char *data, uint32_t len, void *user)
     s_out[s_out_len] = '\0';
     return (int)len;
 }
+
+/* 测试用输出 io：Shell 输出经 ros_stdio() 落到 s_out */
+static ros_io_t s_capture_io = { NULL, capture_write, NULL, NULL };
 
 static void out_reset(void)
 {
@@ -47,45 +50,20 @@ static void shell_reset_all(void)
 {
     shell_config_t cfg;
 
+    ros_io_set_default(&s_capture_io);
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = "test-build";
-    cfg.write = capture_write;
     (void)shell_setup(&cfg);
     out_reset();
-}
-
-/* ------------------------------ 多实例输出捕获 ------------------------------ */
-
-typedef struct {
-    char     buf[1024];
-    uint32_t len;
-} inst_sink_t;
-
-static int sink_write(const char *data, uint32_t len, void *user)
-{
-    inst_sink_t *s = (inst_sink_t *)user;
-
-    if (s->len + len >= sizeof(s->buf)) {
-        len = (uint32_t)(sizeof(s->buf) - s->len - 1U);
-    }
-    memcpy(&s->buf[s->len], data, len);
-    s->len += len;
-    s->buf[s->len] = '\0';
-    return (int)len;
-}
-
-static void sink_reset(inst_sink_t *s)
-{
-    s->len = 0U;
-    s->buf[0] = '\0';
 }
 
 /* ------------------------------ 扩展命令 ------------------------------ */
 
 static int ext_ok_handler(shell_t *sh, int argc, char **argv)
 {
+    (void)sh;
     (void)argv;
-    shell_printf(sh, "ext argc=%d\n", argc);
+    ros_printf("ext argc=%d\n", argc);
     return SHELL_OK;
 }
 
@@ -136,7 +114,7 @@ static void test_init_and_lex(void)
     TF_CHECK_INT(shell_setup(NULL), -1);
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = "bad";
-    TF_CHECK_INT(shell_setup(&cfg), -1);        /* 缺 write 后端 */
+    TF_CHECK_INT(shell_setup(&cfg), 0);         /* 无 write：输出改走任务 stdio */
 
     shell_reset_all();
 
@@ -739,6 +717,8 @@ static void test_jobs(void)
 {
     shell_t *def = shell_default();
     shell_job_t *job;
+    shell_job_t *parent;
+    shell_job_t *child;
     shell_err_t err;
     char *text = "PRINT 1\n";
     uint32_t len = (uint32_t)strlen(text);
@@ -799,18 +779,16 @@ static void test_jobs(void)
     TF_CHECK(shell_job_find(def, "T1", 2U) == NULL);
     TF_CHECK_INT(shell_exec_line("unload T1"), -SHELL_ERR_NOT_FOUND);
 
-    /* 表满：第 SHELL_JOB_MAX + 1 个失败 */
+    /* 无固定上限：链表 + 动态分配，连续加载多个 JOB 全部成功 */
     shell_reset_all();
-    for (i = 0; i < (int)SHELL_JOB_MAX; i++) {
+    for (i = 0; i < 8; i++) {
         (void)snprintf(name, sizeof(name), "J%d", i);
         TF_CHECK(shell_job_load(def, text, len, name, 0U, 0U, &err) != NULL);
     }
-    TF_CHECK(shell_job_load(def, text, len, "OVER", 0U, 0U, &err) == NULL);
-    TF_CHECK_INT(err.code, SHELL_ERR_RESOURCE);
+    TF_CHECK(shell_job_find(def, "J7", 2U) != NULL);
     out_reset();
     TF_CHECK_INT(shell_exec_line("loads"), 0);
-    (void)snprintf(name, sizeof(name), "J%d", (int)SHELL_JOB_MAX - 1);
-    TF_CHECK(out_has(name));
+    TF_CHECK(out_has("J7"));
     shell_jobs_clear(def);
     TF_CHECK(shell_job_find(def, "J0", 2U) == NULL);
 
@@ -820,6 +798,33 @@ static void test_jobs(void)
     shell_reset();
     TF_CHECK(shell_job_find(def, "R1", 2U) == NULL);
     TF_CHECK_INT(shell_exec_line("print $A"), -SHELL_ERR_UNDEF_VAR);
+
+    /* 父子 JOB：暂停 / 恢复 / 停止级联到 START JOB 启动的子 JOB */
+    shell_reset_all();
+    parent = shell_job_load(def, text, len, "P1", 0U, 0U, &err);
+    child = shell_job_load(def, text, len, "C1", 0U, 0U, &err);
+    TF_CHECK(parent != NULL);
+    TF_CHECK(child != NULL);
+    child->parent = parent;         /* 等价于父 JOB 执行 START JOB C1 */
+    parent->state = JOB_RUNNING;
+    child->state = JOB_RUNNING;
+
+    shell_job_pause_descendants(parent);
+    TF_CHECK_INT(parent->state, JOB_RUNNING);   /* 自身由调用方处理 */
+    TF_CHECK_INT(child->state, JOB_PAUSED);
+    shell_job_resume_descendants(parent);
+    TF_CHECK_INT(child->state, JOB_RUNNING);
+
+    TF_CHECK_INT(shell_job_stop(parent, false), 0);
+    TF_CHECK_INT(parent->state, JOB_STOPPING);
+    TF_CHECK_INT(child->state, JOB_STOPPING);
+
+    /* 卸载父 JOB 时解除子 JOB 的父指针，避免悬空 */
+    parent->state = JOB_COMPLETED;
+    child->state = JOB_COMPLETED;
+    shell_job_unload(parent);
+    TF_CHECK(child->parent == NULL);
+    shell_jobs_clear(def);
 
     tf_end();
 }
@@ -887,7 +892,6 @@ static void test_cmd_errors(void)
 
         memset(&rcfg, 0, sizeof(rcfg));
         rcfg.version = "test-build";
-        rcfg.write = capture_write;
         rcfg.reset = test_reset_hook;
         TF_CHECK_INT(shell_setup(&rcfg), 0);
 
@@ -1003,24 +1007,17 @@ static void test_instances(void)
     shell_config_t cfg;
     shell_t *a;
     shell_t *b;
-    static inst_sink_t sa;
-    static inst_sink_t sb;
 
     tf_begin("shell/多实例与嵌套执行");
 
     shell_reset_all();
-    sink_reset(&sa);
-    sink_reset(&sb);
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = "inst-a";
-    cfg.write = sink_write;
-    cfg.user = &sa;
     a = shell_instance_create(&cfg);
     TF_CHECK(a != NULL);
 
     cfg.version = "inst-b";
-    cfg.user = &sb;
     b = shell_instance_create(&cfg);
     TF_CHECK(b != NULL);
 
@@ -1038,16 +1035,15 @@ static void test_instances(void)
     TF_CHECK_INT(shell_instance_exec_line(b, "print $X"),
                  -SHELL_ERR_UNDEF_VAR);
     TF_CHECK_INT(shell_instance_exec_line(a, "print $X"), 0);
-    TF_CHECK(strstr(sa.buf, "11") != NULL);
+    TF_CHECK(out_has("11"));
 
-    /* 输出路由：各实例只写自己的后端 */
-    sink_reset(&sa);
-    sink_reset(&sb);
+    /* 输出统一走当前任务 stdio：两个实例写同一个后端 */
+    out_reset();
     TF_CHECK_INT(shell_instance_exec_line(a, "ver"), 0);
-    TF_CHECK(strstr(sa.buf, "inst-a") != NULL);
-    TF_CHECK_INT((int)sb.len, 0);
+    TF_CHECK(out_has("inst-a"));
+    out_reset();
     TF_CHECK_INT(shell_instance_exec_line(b, "ver"), 0);
-    TF_CHECK(strstr(sb.buf, "inst-b") != NULL);
+    TF_CHECK(out_has("inst-b"));
 
     /* JOB 表隔离 */
     {
@@ -1063,15 +1059,15 @@ static void test_instances(void)
         TF_CHECK_INT(job->state, JOB_COMPLETED);
     }
 
-    /* 脚本在实例内执行，结果只出现在该实例 */
-    sink_reset(&sa);
+    /* 脚本在实例内执行，输出到当前任务 stdio */
+    out_reset();
     TF_CHECK_INT(shell_instance_exec_script(a,
         "SET $N = 0\n"
         "FOR $I = 1 TO 3\n"
         "SET $N = $N + $I\n"
         "ENDFOR\n"
         "PRINT $N\n"), 0);
-    TF_CHECK(strstr(sa.buf, "6") != NULL);
+    TF_CHECK(out_has("6"));
 
     /* 默认实例不受虚拟实例影响 */
     TF_CHECK_INT(shell_exec_line("print $X"), -SHELL_ERR_UNDEF_VAR);
@@ -1091,11 +1087,11 @@ static void test_instances(void)
         const char *script = "SET $RUNV = 7\nPRINT $RUNV\n";
         uint16_t n = (uint16_t)strlen(script);
 
-        sink_reset(&sa);
+        out_reset();
         memcpy(a->paste, script, n);
         a->paste_len = n;
         TF_CHECK_INT(shell_instance_exec_line(a, "run"), 0);
-        TF_CHECK(strstr(sa.buf, "7") != NULL);
+        TF_CHECK(out_has("7"));
         TF_CHECK_INT((int)a->paste_len, 0);
         /* 子实例的变量不回流到父实例 */
         TF_CHECK_INT(shell_instance_exec_line(a, "print $RUNV"),
@@ -1103,9 +1099,9 @@ static void test_instances(void)
     }
 
     /* run：空粘贴缓冲 */
-    sink_reset(&sa);
+    out_reset();
     TF_CHECK_INT(shell_instance_exec_line(a, "run"), 0);
-    TF_CHECK(strstr(sa.buf, "(empty)") != NULL);
+    TF_CHECK(out_has("(empty)"));
 
     /* 销毁后默认实例仍然可用 */
     shell_instance_destroy(a);
@@ -1129,7 +1125,6 @@ void ut_shell(void)
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = "test-build";
-    cfg.write = capture_write;
     TF_CHECK_INT(shell_setup(&cfg), 0);
 
     test_init_and_lex();
@@ -1148,4 +1143,5 @@ void ut_shell(void)
     /* 末尾恢复干净状态，避免影响后续用例 */
     shell_reset_all();
     shell_reset();
+    ros_io_set_default(NULL);       /* 恢复平台默认 stdio */
 }

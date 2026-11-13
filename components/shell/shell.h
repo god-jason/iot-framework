@@ -17,10 +17,16 @@
  *     WAIT TIME/START JOB/STOP JOB/ON ERROR/ON STOP/ENDJOB/LABEL/GOTO/CALL/RETURN/
  *     SHELL PRINT|LOG|STATE|PS）
  *   - 每个 JOB 由独立 RTOS 任务承载；shell_exec_script() 提供不建任务的同步执行。
+ *   - START JOB 建立父子关系：父 JOB 暂停 / 恢复 / 停止会级联到子 JOB。
+ *   - 行首 "-" 表示不阻塞执行（后台 JOB），适用于阻塞命令，如
+ *     `-stepper 1 move 100`：提交后立即回到提示符，用 jobs/stop/fg 管理。
+ *   - 标准输入输出直接使用任务 stdio（ros_stdio()）：输入任务轮询
+ *     io->read，输出直接用 ros_printf / ros_puts / ros_putchar。
+ *     JOB 任务继承 Shell 任务的 stdio，因此子 JOB 共享同一个 io。
  *   - `run` 命令与 shell_exec_isolated() 会在新实例中解释执行脚本。
  *
- * 未实现（按 V1.1 §8 范围边界）：设备层（STEP/PWM/GPIO…）、文件系统、
- * 扩展命令段自动注册（用 shell_register_cmd() 显式注册）、调试模式。
+ * 未实现（按 V1.1 §8 范围边界）：文件系统、调试模式。
+ * 设备命令（gpio/pwm/stepper/fan）由 shell_dev.c 提供，打开 Shell 后自动注册。
  */
 
 #include <stdint.h>
@@ -95,8 +101,6 @@ int shell_register_cmd(const shell_cmd_t *cmd);
 
 typedef struct {
     const char *version;                              /* 版本字符串 */
-    int (*write)(const char *data, uint32_t len, void *user);  /* 可空：丢弃输出 */
-    void *user;
     void (*reset)(void);                              /* reboot 钩子，可空 */
 } shell_config_t;
 
@@ -104,7 +108,7 @@ typedef struct {
 
 /*
  * 创建虚拟实例：从 ros_mem 堆分配行缓冲 / 粘贴缓冲 / JOB 表 /
- * 变量表（大小由 shell_config.h 决定）。write 为 NULL 时丢弃输出。
+ * 变量表（大小由 shell_config.h 决定）。输出走当前任务的 stdio。
  * 返回实例指针；参数非法或内存不足返回 NULL。
  */
 shell_t *shell_instance_create(const shell_config_t *cfg);
@@ -197,12 +201,9 @@ int shell_start(void);
  */
 int shell_platform_start(const char *version);
 
-/* ============================== 输出（实例级） ============================== */
-
-void shell_printf(shell_t *sh, const char *fmt, ...);
-void shell_puts(shell_t *sh, const char *s);
-void shell_putchar(shell_t *sh, char c);
-void shell_printf_job(shell_t *sh, const char *job, const char *fmt, ...);
+/* ============================== 输出 ============================== */
+/* 输出统一使用 ros_io.h 的 stdio 接口（ros_printf / ros_puts /
+ * ros_putchar / ros_io_write），路由由当前任务 stdio 决定。 */
 
 #ifdef __cplusplus
 }

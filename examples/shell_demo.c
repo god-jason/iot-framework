@@ -3,7 +3,7 @@
  *
  * shell_platform_start() 完成默认绑定：
  *   - 输出：stdout（与 log 的 printf 同一路）
- *   - 输入：stdin，逐行投递到 shell_feed()
+ *   - 输入：默认 stdio（pc_io.c）逐字节读入；监听任务只匹配 hello 口令
  * 与 STM32 一致：上电只跑监听任务，输入 hello 回车才创建 Shell 实例；
  * 输入 exit 回收实例回到监听；管道 EOF 或 quit 命令后停止内核。
  * 输入结束（管道 EOF）或 quit 命令后停止内核，进程正常返回。
@@ -20,21 +20,41 @@
  *   > hello          （开启口令，回复 hello!）
  *   > ps
  *   > state
+ *   > gpio mode PA5 out
+ *   > gpio set PA5 1
+ *   > pwm list                （[0] pwm1 / [1] pwm2）
+ *   > pwm 0 duty 25%          （按槽位序号）
+ *   > pwm pwm2 duty 75%       （按绑定名）
+ *   > stepper 0 init PA6 PA7  （实例 0：step / dir 引脚）
+ *   > stepper 0 speed 200
+ *   > stepper 0 dir 1
+ *   > stepper 0 move 100
+ *   > -stepper 0 move 100     （行首 -：后台执行，立即回到提示符）
+ *   > jobs                    （查看后台 JOB，stop / waitjob 管理）
+ *   > stepper list
+ *   > fan list                （[0] fan0 / [1] fan1）
+ *   > fan 0 speed 60%         （等价 fan 0 speed 600）
+ *   > fan 1 on
+ *   > fan 0 rpm
+ *   > fan 0 off
  *   > exit           （回收 Shell，回到口令监听）
  * 管道测试：
  *   "hello`nps`nstate`nquit`n" | ros-shell.exe
  */
 
 #include "shell.h"
+#include "shell_dev.h"
+#include "fan.h"
 #include "ros.h"
 
 #include <stdio.h>
 
 static int cmd_quit(shell_t *sh, int argc, char **argv)
 {
+    (void)sh;
     (void)argc;
     (void)argv;
-    shell_printf(sh, "bye\n");
+    ros_puts("bye");
     ros_stop();
     return SHELL_OK;
 }
@@ -46,6 +66,20 @@ static uint8_t    s_cpu_stack[1024];
 
 static ros_task_t s_mem_task;
 static uint8_t    s_mem_stack[1024];
+
+/* 演示用 PWM 通道：由应用准备句柄并绑定名字，Shell 里用 pwm1/pwm2 或 0/1 操作 */
+static hal_pwm_t s_demo_pwm[2];
+
+/* 演示用风扇：把 PWM 通道包装成 fan 实例，Shell 里用 fan 0 / fan 1 操作 */
+static fan_t     s_demo_fan[2];
+static fan_ops_t s_demo_fan_ops[2];
+
+static int demo_fan_duty(void *ctx, uint16_t duty)
+{
+    hal_pwm_t *pwm = (hal_pwm_t *)ctx;
+
+    return (hal_pwm_set_duty(pwm, (uint32_t)duty * 10U) == HAL_OK) ? 0 : -1;
+}
 
 /*
  * CPU 负载：模拟端的时间只在 idle 里推进，所以这里用 ros_tick_increment()
@@ -97,6 +131,32 @@ int main(void)
     }
     if (shell_register_cmd(&quit_cmd) != 0) {
         printf("register quit failed\n");
+    }
+
+    /* 准备两路 PWM 并绑定给 Shell（PC 平台为模拟实现） */
+    {
+        static const hal_pwm_config_t pcfg = {
+            1000U, 5000U, HAL_PWM_POLARITY_HIGH
+        };
+        uint32_t i;
+
+        for (i = 0U; i < 2U; i++) {
+            char name[SHELL_PWM_NAME_MAX];
+
+            s_demo_pwm[i].channel = (uint8_t)(i + 1U);
+            if (hal_pwm_init(&s_demo_pwm[i], &pcfg) != HAL_OK) {
+                continue;
+            }
+            (void)snprintf(name, sizeof(name), "pwm%u", (unsigned)(i + 1U));
+            (void)shell_pwm_bind(name, &s_demo_pwm[i]);
+
+            /* 同一个 PWM 通道再包装成风扇实例 */
+            s_demo_fan_ops[i].set_duty = demo_fan_duty;
+            s_demo_fan_ops[i].ctx = &s_demo_pwm[i];
+            if (fan_init(&s_demo_fan[i], &s_demo_fan_ops[i]) == 0) {
+                (void)shell_fan_bind((uint8_t)i, &s_demo_fan[i]);
+            }
+        }
     }
 
     (void)ros_task_create(&s_cpu_task, "cpu_load", 3U, cpu_load_entry, NULL,

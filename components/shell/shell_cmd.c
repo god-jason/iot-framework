@@ -2,7 +2,7 @@
  * shell_cmd.c - Shell 命令（SHELL_CTX）
  *
  * 覆盖 V1.1 §2~§4：基础命令、RTOS 任务管理、JOB 生命周期。
- * 设备层命令（STEP/PWM/GPIO…）不在本次实现范围内。
+ * 设备命令（GPIO/PWM/步进电机）由 shell_dev.c 提供，打开 Shell 后自动注册。
  */
 
 #include "shell_internal.h"
@@ -31,13 +31,14 @@ void shell_error(shell_t *sh, int code, const char *fmt, ...)
     va_list ap;
     int n;
 
+    (void)sh;
     va_start(ap, fmt);
     n = vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
     if (n < 0) {
         msg[0] = '\0';
     }
-    shell_printf(sh, "ERR %d: %s\n", code, msg);
+    ros_printf("ERR %d: %s\n", code, msg);
 }
 
 static void shell_warn(shell_t *sh, const char *fmt, ...)
@@ -45,10 +46,11 @@ static void shell_warn(shell_t *sh, const char *fmt, ...)
     char msg[64];
     va_list ap;
 
+    (void)sh;
     va_start(ap, fmt);
     (void)vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
-    shell_printf(sh, "WARN: %s\n", msg);
+    ros_printf("WARN: %s\n", msg);
 }
 
 /* 把 argv[from..] 用空格拼成一行（用于表达式 / echo 文本） */
@@ -148,8 +150,8 @@ static int cmd_ver(shell_t *sh, int argc, char **argv)
 
     (void)argc;
     (void)argv;
-    shell_printf(sh, "IoT Shell v1.1\n");
-    shell_printf(sh, "Build: %s\n",
+    ros_printf("IoT Shell v1.1\n");
+    ros_printf("Build: %s\n",
                  sh->cfg.version != NULL ? sh->cfg.version : "-");
 
     /* 版本 / 编译时间 / 平台 / 编译器 / 内核参数 / 许可证 / 特性 */
@@ -157,12 +159,12 @@ static int cmd_ver(shell_t *sh, int argc, char **argv)
         int n = ros_version_format(info, sizeof(info));
 
         if (n > 0) {
-            /* 多行摘要可能超过 shell_printf 的单次格式化缓冲，直接写后端 */
-            shell_out(sh, info, (uint32_t)n);
+            /* 多行摘要可能超过 ros_printf 的单次格式化缓冲，直接写 io */
+            ros_io_write(NULL, info, (uint32_t)n);
         }
     }
 
-    shell_printf(sh, "FS: %s | CPU stats: %s\n",
+    ros_printf("FS: %s | CPU stats: %s\n",
                  SHELL_HAS_FS ? "enabled" : "disabled",
                  SHELL_HAS_CPU_STATS ? "enabled" : "disabled");
     return SHELL_OK;
@@ -185,7 +187,7 @@ static int cmd_echo(shell_t *sh, int argc, char **argv)
             len = (uint16_t)(len - 2U);
         }
         if (!first) {
-            shell_putchar(sh, ' ');
+            ros_putchar(' ');
         }
         first = false;
 
@@ -205,28 +207,28 @@ static int cmd_echo(shell_t *sh, int argc, char **argv)
                     end++;
                 }
                 if (end == start) {
-                    shell_putchar(sh, '$');
+                    ros_putchar('$');
                     i++;
                     continue;
                 }
                 if (shell_vars_get(&sh->vars, &tok[start],
                                    (uint16_t)(end - start), &val, &err) == 0) {
                     shell_value_format(&val, buf, sizeof(buf), &out_len);
-                    shell_out(sh, buf, out_len);
+                    ros_io_write(NULL, buf, out_len);
                 } else {
                     shell_warn(sh, "undefined variable $%.*s", (int)(end - start),
                                &tok[start]);
-                    shell_putchar(sh, '$');
-                    shell_out(sh, &tok[start], (uint32_t)(end - start));
+                    ros_putchar('$');
+                    ros_io_write(NULL, &tok[start], (uint32_t)(end - start));
                 }
                 i = end;
                 continue;
             }
-            shell_putchar(sh, tok[i]);
+            ros_putchar(tok[i]);
             i++;
         }
     }
-    shell_putchar(sh, '\n');
+    ros_putchar('\n');
     return SHELL_OK;
 }
 
@@ -249,7 +251,7 @@ static int cmd_print(shell_t *sh, int argc, char **argv)
         return -err.code;
     }
     shell_value_format(&val, buf, sizeof(buf), &out_len);
-    shell_printf(sh, "%.*s\n", (int)out_len, buf);
+    ros_printf("%.*s\n", (int)out_len, buf);
     return SHELL_OK;
 }
 
@@ -322,7 +324,7 @@ static bool shell_wait_ms(shell_t *sh, uint32_t ms)
 
         if (shell_ctrl_c_pending(sh)) {
             shell_clear_ctrl_c(sh);
-            shell_puts(sh, "WARN: wait interrupted");
+            ros_puts("WARN: wait interrupted");
             return false;
         }
         ros_sleep_ms(step);
@@ -369,7 +371,7 @@ static int cmd_wait(shell_t *sh, int argc, char **argv)
             }
             if (shell_ctrl_c_pending(sh)) {
                 shell_clear_ctrl_c(sh);
-                shell_puts(sh, "WARN: wait interrupted");
+                ros_puts("WARN: wait interrupted");
                 return SHELL_OK;
             }
             ros_sleep_ms(10U);
@@ -451,7 +453,7 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
         }
 #endif
     }
-    shell_printf(sh, "RTOS Tasks: %u (RUNNING=%u READY=%u BLOCKED=%u SUSPENDED=%u)\n",
+    ros_printf("RTOS Tasks: %u (RUNNING=%u READY=%u BLOCKED=%u SUSPENDED=%u)\n",
                  (unsigned)total, (unsigned)running, (unsigned)ready,
                  (unsigned)blocked, (unsigned)suspended);
 
@@ -469,12 +471,12 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
                 ? ros_task_cpu_permille(ros_idle_task) : 0U;
             uint32_t busy_pm = (idle_pm <= 1000U) ? (1000U - idle_pm) : 0U;
 
-            shell_printf(sh, "CPU       : %u.%u%% busy, uptime=%us, ctx=%u\n",
+            ros_printf("CPU       : %u.%u%% busy, uptime=%us, ctx=%u\n",
                          (unsigned)(busy_pm / 10U), (unsigned)(busy_pm % 10U),
                          (unsigned)uptime_s, (unsigned)sys.ctx_switches);
         }
 #else
-        shell_printf(sh, "CPU       : n/a, uptime=%us, ctx=%u\n",
+        ros_printf("CPU       : n/a, uptime=%us, ctx=%u\n",
                      (unsigned)uptime_s, (unsigned)sys.ctx_switches);
 #endif
 #if ROS_USE_STACK_CHECK
@@ -482,73 +484,71 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
             uint32_t pm = (uint32_t)(((uint64_t)stack_used * 1000U) /
                                      stack_total);
 
-            shell_printf(sh, "STACK     : %u/%u B (%u.%u%%)\n",
+            ros_printf("STACK     : %u/%u B (%u.%u%%)\n",
                          (unsigned)stack_used, (unsigned)stack_total,
                          (unsigned)(pm / 10U), (unsigned)(pm % 10U));
         }
 #endif
         if (ros_mem_get_info(&mem) != 0) {
-            shell_printf(sh, "MEM-heap  : n/a\n");
+            ros_printf("MEM-heap  : n/a\n");
         } else if (mem.total_bytes > 0U) {
             uint32_t pm = (uint32_t)(((uint64_t)mem.used_bytes * 1000U) /
                                      mem.total_bytes);
 
-            shell_printf(sh, "MEM-heap  : %u/%u B (%u.%u%%), free %u B\n",
+            ros_printf("MEM-heap  : %u/%u B (%u.%u%%), free %u B\n",
                          (unsigned)mem.used_bytes,
                          (unsigned)mem.total_bytes,
                          (unsigned)(pm / 10U), (unsigned)(pm % 10U),
                          (unsigned)mem.free_bytes);
         } else if (mem.used_bytes > 0U) {
-            shell_printf(sh, "MEM-heap  : %u B used (capacity n/a)\n",
+            ros_printf("MEM-heap  : %u B used (capacity n/a)\n",
                          (unsigned)mem.used_bytes);
         } else {
-            shell_printf(sh, "MEM-heap  : n/a\n");
+            ros_printf("MEM-heap  : n/a\n");
         }
 #if ROS_USE_MEM_STATS
-        shell_printf(sh, "MEM-tasks : %u B (peak %u B)\n",
+        ros_printf("MEM-tasks : %u B (peak %u B)\n",
                      (unsigned)mem_task_used, (unsigned)mem_task_peak);
         if (mem.untracked_bytes > 0U) {
-            shell_printf(sh, "MEM-sys   : %u B (no task context)\n",
+            ros_printf("MEM-sys   : %u B (no task context)\n",
                          (unsigned)mem.untracked_bytes);
         }
 #endif
     }
-    shell_printf(sh, "JOBs      :");
+    ros_printf("JOBs      :");
     {
         bool any = false;
+        shell_job_t *job;
 
-        for (i = 0U; i < SHELL_JOB_MAX; i++) {
-            shell_job_t *job = shell_job_slot(sh, i);
-
-            if (job != NULL) {
-                any = true;
-                shell_printf(sh, " %s=%s", job->name,
-                             shell_job_state_name(job->state));
-            }
+        for (job = shell_job_first(sh); job != NULL;
+             job = shell_job_next(job)) {
+            any = true;
+            ros_printf(" %s=%s", job->name,
+                         shell_job_state_name(job->state));
         }
         if (!any) {
-            shell_printf(sh, " (none)");
+            ros_printf(" (none)");
         }
     }
-    shell_printf(sh, "\n");
-    shell_printf(sh, "Shell Vars:");
+    ros_printf("\n");
+    ros_printf("Shell Vars:");
     for (i = 0U; sh->vars.items != NULL && i < SHELL_VAR_MAX; i++) {
         const shell_var_t *v = &sh->vars.items[i];
 
         if (v->used) {
-            shell_printf(sh, " %s=", v->name);
+            ros_printf(" %s=", v->name);
             if (v->type == SHELL_VAL_STRING) {
-                shell_printf(sh, "%s", v->str);
+                ros_printf("%s", v->str);
             } else if (v->type == SHELL_VAL_INT) {
-                shell_printf(sh, "%ld", (long)v->i);
+                ros_printf("%ld", (long)v->i);
             } else if (v->type == SHELL_VAL_FLOAT) {
-                shell_printf(sh, "%g", (double)v->f);
+                ros_printf("%g", (double)v->f);
             } else {
-                shell_printf(sh, "%s", v->b ? "TRUE" : "FALSE");
+                ros_printf("%s", v->b ? "TRUE" : "FALSE");
             }
         }
     }
-    shell_printf(sh, "\n");
+    ros_printf("\n");
     return SHELL_OK;
 }
 
@@ -560,7 +560,7 @@ static int cmd_reboot(shell_t *sh, int argc, char **argv)
         shell_error(sh, SHELL_ERR_PARAM, "reset not supported");
         return -SHELL_ERR_PARAM;
     }
-    shell_puts(sh, "rebooting...");
+    ros_puts("rebooting...");
     sh->cfg.reset();
     return SHELL_OK;
 }
@@ -606,7 +606,7 @@ static void shell_ps_line(shell_t *sh, const ros_task_t *task)
 #if ROS_USE_MEM_STATS
     (void)snprintf(mem, sizeof(mem), "%u", (unsigned)task->mem_used);
 #endif
-    shell_printf(sh, "%3u  %-8s  %-4s  %-9s  %4u  %5s  %4s  %5s  %6s  %5s  %s\n",
+    ros_printf("%3u  %-8s  %-4s  %-9s  %4u  %5s  %4s  %5s  %6s  %5s  %s\n",
                  (unsigned)task->tid,
                  task->name != NULL ? task->name : "?",
                  type, state, (unsigned)task->priority, stack, used, use, mem,
@@ -628,8 +628,8 @@ static int cmd_ps(shell_t *sh, int argc, char **argv)
         only_sys = true;
     }
 
-    shell_printf(sh, "TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%%   MEM     CPU%%   JOB\n");
-    shell_printf(sh, "---  --------  ----  ---------  ----  -----  ----  -----  ------  -----  ----\n");
+    ros_printf("TID  NAME      TYPE   STATE      PRIO  STACK  USED  USE%%   MEM     CPU%%   JOB\n");
+    ros_printf("---  --------  ----  ---------  ----  -----  ----  -----  ------  -----  ----\n");
     for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
         shell_job_t *job = shell_job_find_by_task(sh, task);
 
@@ -713,6 +713,8 @@ static int cmd_pause(shell_t *sh, int argc, char **argv)
     job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
         job->state = JOB_PAUSED;
+        /* 父 JOB 暂停：同步挂起它启动的子 JOB */
+        shell_job_pause_descendants(job);
     }
     return SHELL_OK;
 }
@@ -738,6 +740,8 @@ static int cmd_resume(shell_t *sh, int argc, char **argv)
     job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
         job->state = JOB_RUNNING;
+        /* 父 JOB 恢复：同步恢复它启动的子 JOB */
+        shell_job_resume_descendants(job);
     }
     return SHELL_OK;
 }
@@ -781,52 +785,43 @@ static int cmd_unload(shell_t *sh, int argc, char **argv)
 
 static int cmd_loads(shell_t *sh, int argc, char **argv)
 {
-    uint16_t i;
+    shell_job_t *job;
     bool any = false;
 
     (void)argc;
     (void)argv;
-    shell_printf(sh, "NAME   STATE      SCRIPT\n");
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_t *job = shell_job_slot(sh, i);
-
-        if (job != NULL) {
-            any = true;
-            shell_printf(sh, "%-6s %-10s %s\n", job->name,
-                         shell_job_state_name(job->state),
-                         job->text_len > 0U ? "(inline)" : "-");
-        }
+    ros_printf("NAME   STATE      SCRIPT\n");
+    for (job = shell_job_first(sh); job != NULL; job = shell_job_next(job)) {
+        any = true;
+        ros_printf("%-6s %-10s %s\n", job->name,
+                     shell_job_state_name(job->state),
+                     job->text_len > 0U ? "(inline)" : "-");
     }
     if (!any) {
-        shell_puts(sh, "(no jobs)");
+        ros_puts("(no jobs)");
     }
     return SHELL_OK;
 }
 
 static int cmd_jobs(shell_t *sh, int argc, char **argv)
 {
-    uint16_t i;
+    shell_job_t *job;
     bool any = false;
 
     (void)argc;
     (void)argv;
-    shell_printf(sh, "NAME   TASK   TID  STATE      PC\n");
-    for (i = 0U; i < SHELL_JOB_MAX; i++) {
-        shell_job_t *job = shell_job_slot(sh, i);
-
-        if (job == NULL) {
-            continue;
-        }
+    ros_printf("NAME   TASK   TID  STATE      PC\n");
+    for (job = shell_job_first(sh); job != NULL; job = shell_job_next(job)) {
         if (job->state == JOB_RUNNING || job->state == JOB_PAUSED ||
             job->state == JOB_STOPPING) {
             any = true;
-            shell_printf(sh, "%-6s %-6s %3u  %-10s L%u\n", job->name, job->name,
+            ros_printf("%-6s %-6s %3u  %-10s L%u\n", job->name, job->name,
                          (unsigned)(job->task != NULL ? job->task->tid : 0U),
                          shell_job_state_name(job->state), (unsigned)job->pc);
         }
     }
     if (!any) {
-        shell_puts(sh, "(no jobs)");
+        ros_puts("(no jobs)");
     }
     return SHELL_OK;
 }
@@ -845,21 +840,21 @@ static int cmd_job(shell_t *sh, int argc, char **argv)
         shell_error(sh, SHELL_ERR_NOT_FOUND, "job %s not found", argv[1]);
         return -SHELL_ERR_NOT_FOUND;
     }
-    shell_printf(sh, "Name    : %s\n", job->name);
-    shell_printf(sh, "JobID   : %u\n", (unsigned)job->job_id);
-    shell_printf(sh, "TID     : %u\n",
+    ros_printf("Name    : %s\n", job->name);
+    ros_printf("JobID   : %u\n", (unsigned)job->job_id);
+    ros_printf("TID     : %u\n",
                  (unsigned)(job->task != NULL ? job->task->tid : 0U));
-    shell_printf(sh, "State   : %s\n", shell_job_state_name(job->state));
-    shell_printf(sh, "Prio    : %u\n", (unsigned)job->prio);
-    shell_printf(sh, "Stack   : %u\n", (unsigned)job->stack);
-    shell_printf(sh, "PC      : L%u\n", (unsigned)job->pc);
-    shell_printf(sh, "Vars    :");
+    ros_printf("State   : %s\n", shell_job_state_name(job->state));
+    ros_printf("Prio    : %u\n", (unsigned)job->prio);
+    ros_printf("Stack   : %u\n", (unsigned)job->stack);
+    ros_printf("PC      : L%u\n", (unsigned)job->pc);
+    ros_printf("Vars    :");
     for (i = 0U; job->vars.items != NULL && i < SHELL_VAR_MAX; i++) {
         if (job->vars.items[i].used) {
-            shell_printf(sh, " $%s", job->vars.items[i].name);
+            ros_printf(" $%s", job->vars.items[i].name);
         }
     }
-    shell_printf(sh, "\n");
+    ros_printf("\n");
     return SHELL_OK;
 }
 
@@ -997,7 +992,7 @@ static int cmd_run(shell_t *sh, int argc, char **argv)
         int rc;
 
         if (len == 0U) {
-            shell_puts(sh, "(empty)");
+            ros_puts("(empty)");
             return SHELL_OK;
         }
         rc = shell_exec_isolated(sh, text);
@@ -1049,28 +1044,42 @@ static const shell_cmd_t s_builtin[] = {
 static int cmd_help(shell_t *sh, int argc, char **argv)
 {
     uint32_t i;
+    uint8_t k;
 
+    (void)sh;
     if (argc >= 2) {
         const shell_cmd_t *cmd = shell_cmd_find(argv[1]);
 
         if (cmd != NULL) {
-            shell_printf(sh, "%s\n", cmd->usage != NULL ? cmd->usage : cmd->name);
+            ros_printf("%s\n", cmd->usage != NULL ? cmd->usage : cmd->name);
             if (cmd->help != NULL && cmd->help[0] != '\0') {
-                shell_printf(sh, "  %s\n", cmd->help);
+                ros_printf("  %s\n", cmd->help);
             }
             return SHELL_OK;
         }
-        shell_puts(sh, "help topics: ps script expr units errors");
+        ros_puts("help topics: ps script expr units errors device");
         return SHELL_OK;
     }
 
-    shell_printf(sh, "Commands:\n");
+    ros_printf("Commands:\n");
     for (i = 0U; i < sizeof(s_builtin) / sizeof(s_builtin[0]); i++) {
         if ((s_builtin[i].flags & CMD_HIDDEN) == 0U) {
-            shell_printf(sh, "  %-28s %s\n",
+            ros_printf("  %-28s %s\n",
                          s_builtin[i].usage != NULL ? s_builtin[i].usage
                                                     : s_builtin[i].name,
                          s_builtin[i].group != NULL ? s_builtin[i].group : "");
+        }
+    }
+    /* 扩展命令（设备命令等）跟随其后列出 */
+    if (s_ext != NULL) {
+        for (k = 0U; k < s_ext->count; k++) {
+            const shell_cmd_t *cmd = &s_ext->items[k];
+
+            if ((cmd->flags & CMD_HIDDEN) == 0U) {
+                ros_printf("  %-28s %s\n",
+                             cmd->usage != NULL ? cmd->usage : cmd->name,
+                             cmd->group != NULL ? cmd->group : "");
+            }
         }
     }
     return SHELL_OK;

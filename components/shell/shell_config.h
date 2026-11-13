@@ -22,9 +22,8 @@
 #endif
 
 /* ------------------------------ JOB ------------------------------ */
-#ifndef SHELL_JOB_MAX
-#define SHELL_JOB_MAX           4U      /* 并发 JOB 上限（槽位按需分配） */
-#endif
+/* JOB 数量不设上限：每个 JOB 由链表节点动态分配（ros_mem），
+ * 加载 / 卸载即申请 / 释放，内存不足时 shell_job_load() 返回错误。 */
 #ifndef SHELL_JOB_PRIO
 #define SHELL_JOB_PRIO          5U      /* 默认优先级（0 最高，idle=7） */
 #endif
@@ -77,6 +76,26 @@
 #endif
 #ifndef SHELL_INSTR_MAX
 #define SHELL_INSTR_MAX         64U     /* 单个脚本最多指令数 */
+#endif
+
+/* ------------------------------ 设备命令 ------------------------------ */
+#ifndef SHELL_PWM_MAX
+#define SHELL_PWM_MAX           8U      /* 可绑定 PWM 通道数 */
+#endif
+#ifndef SHELL_PWM_NAME_MAX
+#define SHELL_PWM_NAME_MAX      12U     /* PWM 通道名最大长度（含结尾 0） */
+#endif
+#ifndef SHELL_STEPPER_MAX
+#define SHELL_STEPPER_MAX       4U      /* 步进电机实例数（stepper <id> ...） */
+#endif
+#ifndef SHELL_FAN_MAX
+#define SHELL_FAN_MAX           4U      /* 风扇实例数（fan <id> ...） */
+#endif
+#ifndef SHELL_STEPPER_DELAY_US
+#define SHELL_STEPPER_DELAY_US  500U    /* 默认脉冲半周期（us） */
+#endif
+#ifndef SHELL_STEPPER_DELAY_MAX_US
+#define SHELL_STEPPER_DELAY_MAX_US 100000U
 #endif
 
 /* ------------------------------ 能力开关 ------------------------------ */

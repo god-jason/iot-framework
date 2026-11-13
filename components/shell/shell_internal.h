@@ -136,6 +136,9 @@ typedef struct shell_job {
 
     shell_t *owner;             /* 所属 Shell 实例 */
 
+    struct shell_job *next;     /* JOB 链表后继（见 shell->jobs） */
+    struct shell_job *parent;   /* 启动者：由 START JOB 建立，可为 NULL */
+
     char *text;                 /* 脚本源（堆） */
     uint32_t text_len;
     shell_script_t script;
@@ -166,7 +169,7 @@ struct shell {
     shell_config_t cfg;              /* version / write / user / reset */
 
     shell_vars_t   vars;             /* Shell 上下文变量表 */
-    shell_job_t  **jobs;             /* [SHELL_JOB_MAX]，槽位按需分配 */
+    shell_job_t   *jobs;             /* JOB 链表头（按加载顺序，堆分配） */
     uint16_t       job_seq;
 
     char          *rx;               /* [SHELL_RX_MAX] */
@@ -218,10 +221,6 @@ void shell_script_free(shell_script_t *script);
 
 /* ============================== shell_vm.c ============================== */
 
-int  shell_out_init(void);        /* 全局输出互斥（一次分配，多实例共享） */
-void shell_out_lock(void);
-void shell_out_unlock(void);
-
 int  shell_vm_run(shell_job_t *job, bool verbose);
 int  shell_job_run_sync(shell_t *sh, const char *text, const char *name,
                         bool verbose);
@@ -229,7 +228,14 @@ int  shell_job_run_sync_script(shell_job_t *job, bool verbose);
 
 shell_job_t *shell_job_find(shell_t *sh, const char *name, uint16_t len);
 shell_job_t *shell_job_find_by_task(shell_t *sh, const ros_task_t *task);
-shell_job_t *shell_job_slot(shell_t *sh, uint16_t index);
+/* 链表遍历：从第一个 JOB 开始，按加载顺序逐个返回，末尾为 NULL */
+shell_job_t *shell_job_first(shell_t *sh);
+shell_job_t *shell_job_next(const shell_job_t *job);
+
+/* 级联到子 JOB（START JOB 启动的后代），目标 JOB 自身不处理。
+ * 子 JOB 任务已存在时同步挂起 / 恢复任务，并更新 JOB 状态。 */
+void shell_job_pause_descendants(shell_job_t *job);
+void shell_job_resume_descendants(shell_job_t *job);
 void shell_job_unload(shell_job_t *job);
 shell_job_t *shell_job_load(shell_t *sh, const char *text, uint32_t len,
                             const char *name, uint8_t prio, uint32_t stack,
@@ -252,7 +258,6 @@ void shell_error(shell_t *sh, int code, const char *fmt, ...);
 
 /* ============================== shell.c ============================== */
 
-void shell_out(shell_t *sh, const char *data, uint32_t len);
 void shell_report_error(shell_t *sh, const shell_err_t *err, const char *job);
 bool shell_is_script_keyword(const char *tok);
 bool shell_is_block_start(const char *tok);

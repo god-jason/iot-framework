@@ -7,9 +7,10 @@
  *   - 日志走 stdout，与 Shell 实例是否存在无关。
  *
  * 输出：stdout（与 log 的 printf 同一路，保证顺序一致）
- * 输入：stdin 按行读取后投递给 shell_feed()
- *     - 管道/重定向输入：读到 EOF 后停止内核（便于脚本化测试）
- *     - 交互输入：终端行缓冲，回车后整行送入 Shell
+ * 输入：Shell 任务通过默认 stdio（pc_io.c）读取 stdin；
+ *       本文件的监听任务只负责口令与实例回收
+ *     - 管道/重定向输入：读到 EOF 后 Shell 退出，监听任务随之停止内核
+ *     - 交互输入：终端按键直接送入 Shell 行编辑器
  *
  * 本文件不参与 STM32 构建。
  */
@@ -22,73 +23,40 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(_WIN32)
-#include <conio.h>
-#include <io.h>
-#else
-#include <unistd.h>
-#include <sys/select.h>
-#endif
-
 #define PC_OPEN_WORD    "hello"
 #define PC_OPEN_LEN     5U
 #define PC_WATCH_STACK  2048U
 
 static void *s_rx_task;
+static size_t s_open_pos;               /* 口令匹配进度 */
 
-/* stdin 是否已有数据可读（不阻塞） */
-static bool pc_stdin_ready(void)
+/* 逐字节匹配开启口令；匹配过程中其它字符被丢弃 */
+static bool pc_open_word_match(uint8_t ch)
 {
-#if defined(_WIN32)
-    /* 交互控制台：有按键才算就绪；管道/重定向：fgets 会立即返回数据或 EOF */
-    if (_isatty(_fileno(stdin))) {
-        return (_kbhit() != 0);
-    }
-    return true;
-#else
-    {
-        fd_set rfds;
-        struct timeval tv;
+    const char *word = PC_OPEN_WORD;
 
-        FD_ZERO(&rfds);
-        FD_SET(STDIN_FILENO, &rfds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 0;
-        return (select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv) > 0);
+    if (ch == (uint8_t)word[s_open_pos]) {
+        s_open_pos++;
+    } else {
+        s_open_pos = (ch == (uint8_t)word[0]) ? 1U : 0U;
     }
-#endif
-}
-
-/* Shell 输出后端：stdout */
-static int pc_shell_write(const char *data, uint32_t len, void *user)
-{
-    (void)user;
-    if (data == NULL || len == 0U) {
-        return 0;
+    if (s_open_pos >= PC_OPEN_LEN) {
+        s_open_pos = 0U;
+        return true;
     }
-    (void)fwrite(data, 1U, (size_t)len, stdout);
-    (void)fflush(stdout);
-    return (int)len;
-}
-
-/* 是否为开启口令（去掉行尾 CR/LF 后与 hello 比较） */
-static bool pc_line_is_open(const char *line)
-{
-    size_t n = strlen(line);
-
-    while (n > 0U && (line[n - 1U] == '\r' || line[n - 1U] == '\n')) {
-        n--;
-    }
-    return (n == PC_OPEN_LEN && memcmp(line, PC_OPEN_WORD, PC_OPEN_LEN) == 0);
+    return false;
 }
 
 /*
- * 口令监听 + 输入泵：
- *   未激活时只认整行 hello；激活后逐行投递，exit 后回收实例并回到监听。
+ * 口令监听 + 回收：
+ *   未激活时从默认 stdio 逐字节匹配 hello；激活后输入由 Shell 任务
+ *   通过同一个 stdio 读取，这里只负责在任务退出（exit / 输入 EOF）后
+ *   回收实例并回到监听；口令阶段遇到 EOF 则停止内核。
  */
 static void pc_shell_rx_task(void *arg)
 {
-    char line[256];
+    ros_io_t *io = ros_io_platform_default();
+    uint8_t ch;
 
     (void)arg;
     for (;;) {
@@ -97,49 +65,28 @@ static void pc_shell_rx_task(void *arg)
             (void)shell_shutdown();
             continue;
         }
-        if (shell_started() && !shell_active()) {
-            /* 任务已创建，等它自己申请好实例缓冲再读下一行 */
-            ros_sleep_ms(1U);
-            continue;
-        }
-
-        /* 没有输入时用 RTOS 睡眠让出 CPU：模拟时间随 idle 继续推进，
-         * 否则阻塞在 fgets 里会让整个协作式调度器与时钟一起冻结。 */
-        if (!pc_stdin_ready()) {
+        if (shell_started()) {
             ros_sleep_ms(5U);
             continue;
         }
-        if (fgets(line, sizeof(line), stdin) == NULL) {
-            /* 输入结束（管道 EOF）：先提交未带换行的最后一行，
-             * 等 Shell 取完缓冲再停止内核 */
-            if (shell_active()) {
-                (void)shell_feed("\n", 1U);
-                while (shell_pending() > 0U) {
-                    ros_sleep_ms(1U);
-                }
-            }
-            ros_stop();
-            return;
-        }
 
-        if (!shell_started()) {
-            if (pc_line_is_open(line)) {
+        {
+            int n = ros_io_read(io, &ch, 1U);
+
+            if (n < 0) {
+                ros_stop();         /* 口令阶段管道 EOF：停止内核 */
+                return;
+            }
+            if (n > 0 && pc_open_word_match(ch)) {
                 (void)fputs("hello!\n", stdout);
                 (void)fflush(stdout);
                 (void)shell_lazy_start();
+                continue;
             }
-            continue;               /* 未命中口令：静默丢弃 */
         }
-
-        (void)shell_feed(line, (uint32_t)strlen(line));
-        /* 流控：一行处理完再读下一行，避免 Shell 10ms 轮询被输入泵甩开 */
-        while (shell_pending() > 0U) {
-            ros_sleep_ms(1U);
-        }
-        if (shell_active()) {
-            /* 再让出一次，确保该行命令（可能是 exit）已执行完 */
-            ros_sleep_ms(1U);
-        }
+        /* 没有输入时用 RTOS 睡眠让出 CPU：模拟时间随 idle 继续推进，
+         * 否则阻塞在内核里会让整个协作式调度器与时钟一起冻结。 */
+        ros_sleep_ms(5U);
     }
 }
 
@@ -152,9 +99,8 @@ int shell_platform_start(const char *version)
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = version;
-    cfg.write = pc_shell_write;
-    cfg.user = NULL;
     cfg.reset = NULL;           /* PC 上 reboot 报未支持 */
+    /* 输入输出直接使用任务 stdio（默认 pc_io.c 的 stdin / stdout） */
 
     /* 只保存配置；实例与输入任务等收到 hello 才创建 */
     if (shell_lazy_setup(&cfg) != 0) {

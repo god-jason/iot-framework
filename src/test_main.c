@@ -105,6 +105,7 @@ void ut_crash(void);
 void ut_trace(void);
 void ut_ros(void);
 void ut_dynamic(void);
+void ut_io(void);
 void ut_sbuf(void);
 void ut_msgq(void);
 
@@ -187,6 +188,7 @@ int main(void)
     ut_ros();
     ut_trace();
     ut_dynamic();
+    ut_io();
     ut_sbuf();
     ut_msgq();
 

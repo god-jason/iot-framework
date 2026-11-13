@@ -15,7 +15,7 @@
  * （`src/` 下所有文件名统一带 `ros_` 前缀；每个内核对象的结构体
  *   定义在自身头文件中，ros_types.h 只放公共常量与前向声明）：
  *   ros_task.h    任务/TCB      ros_sem.h     信号量     ros_mutex.h   互斥量
- *   ros_queue.h   消息队列      ros_event.h   事件组     ros_timers.h  软件定时器
+ *   ros_io.h      标准输入输出  ros_queue.h   消息队列   ros_event.h   事件组
  *   ros_sbuf.h    流式缓冲      ros_msgq.h    变长消息队列
  *   ros_tick.h    tick/延时     ros_sched.h   调度器     ros_wait.h    等待队列
  *   ros_idle.h    空闲任务      ros_stats.h   运行时统计 ros_assert.h  断言
@@ -35,6 +35,7 @@
 #include "ros_mem.h"
 #include "ros_assert.h"
 #include "ros_crash.h"
+#include "ros_io.h"
 #include "ros_task.h"
 #include "ros_sem.h"
 #include "ros_mutex.h"
