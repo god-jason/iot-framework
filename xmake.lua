@@ -118,7 +118,7 @@ local function ros_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena", "vendor/mongoose",
-        "bootloader", "networks", "networks/ml307", "networks/eth",
+        "bootloader", "modules",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
     for _, dir in ipairs(os.dirs("components/*")) do
@@ -132,7 +132,6 @@ local function ros_framework_sources()
     add_files("bootloader/**.c")
     add_files("components/**.c")
     add_files("vendor/**.c")
-    add_files("networks/**.c")
     add_files("drivers/**.c")
 end
 
@@ -147,8 +146,8 @@ local function ros_exclude_tests()
         "components/test_*.c", "components/**/test_*.c",
         "vendor/*_test.c", "vendor/**/*_test.c",
         "vendor/test_*.c", "vendor/**/test_*.c",
-        "networks/*_test.c", "networks/**/*_test.c",
-        "networks/test_*.c", "networks/**/test_*.c",
+        "modules/*_test.c", "modules/**/*_test.c",
+        "modules/test_*.c", "modules/**/test_*.c",
         "drivers/*_test.c", "drivers/**/*_test.c",
         "drivers/test_*.c", "drivers/**/test_*.c",
         "platforms/*_test.c", "platforms/**/*_test.c",
@@ -159,7 +158,6 @@ end
 -- 主机平台宏：Windows 用 Winsock，Linux/macOS 用 POSIX
 local function ros_host_defines()
     add_defines("ROS_PLATFORM_PC")
-    add_defines("ROS_NETWORK_ETH")
     if is_plat("windows", "mingw") then
         add_defines("_WIN32_WINNT=0x0600")
     else
@@ -328,15 +326,21 @@ if is_plat("cross") then
         add_files("components/**.c")
         add_files("drivers/**.c")
         add_files("platforms/stm32/**.c")
+        add_files("modules/**.c")
         add_files("vendor/tlsf/**.c")
         add_files("vendor/arena/**.c")
         add_files("vendor/cjson/**.c")
-        add_files("networks/ml307/**.c")
+
+        -- 网络实现按目标选择：ML307 用 modules/ml307 的原生实现，
+        -- 排除 components 下的 BSD socket / 通用 HTTP、MQTT 实现
+        remove_files("components/net/net_bsd.c",
+                     "components/http/http_client.c",
+                     "components/mqtt/mqtt.c")
 
         ros_exclude_tests()
 
         -- 主机网络栈依赖 socket/winsock，MCU 上不编译
-        remove_files("vendor/mongoose/**.c", "networks/eth/**.c")
+        remove_files("vendor/mongoose/**.c")
 
         if hal_root ~= "" then
             add_includedirs(hal_inc)

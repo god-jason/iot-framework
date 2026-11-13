@@ -95,6 +95,9 @@ void ut_motion_error(void);
 void ut_breath_led(void);
 void ut_fan(void);
 void ut_shell(void);
+void ut_net(void);
+void ut_http(void);
+void ut_mqtt(void);
 
 /* ---------------- 启动升级（实现在 platforms/stm32/stm32_bootloader.c） ---------------- */
 void ut_bootloader(void);
@@ -178,6 +181,9 @@ int main(void)
     ut_breath_led();
     ut_fan();
     ut_shell();
+    ut_net();
+    ut_http();
+    ut_mqtt();
 
     printf("\n--- 启动升级 ---\n");
     ut_bootloader();

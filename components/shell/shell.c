@@ -16,6 +16,7 @@
 
 #include "shell_internal.h"
 #include "shell_dev.h"
+#include "shell_net.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -606,7 +607,7 @@ static void shell_complete(shell_t *sh)
         "help", "ver", "echo", "print", "set", "unset", "wait", "reboot",
         "state", "ps", "kill", "pause", "resume", "load", "unload",
         "loads", "run", "start", "stop", "fg", "jobs", "job", "waitjob",
-        "gpio", "pwm", "stepper", "fan"
+        "gpio", "pwm", "stepper", "fan", "ping"
     };
     char prefix[32];
     uint16_t n = sh->line_len;
@@ -774,8 +775,10 @@ static void shell_task_entry(void *arg)
         }
         s_default = sh;
         (void)shell_register_cmd(&s_exit_cmd);
-        /* 设备命令（gpio / pwm / stepper）随实例一起注册 */
+        /* 设备命令（gpio / pwm / stepper / fan）随实例一起注册 */
         (void)shell_dev_register();
+        /* 网络命令（ping） */
+        (void)shell_net_register();
     }
     sh->task = ros_current_task;
 

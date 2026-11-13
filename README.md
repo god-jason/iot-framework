@@ -30,9 +30,9 @@
 robotos/
 ├── src/            实时内核（ros_*），实现与测试同目录
 ├── hal/            硬件抽象接口（hal_*）
-├── components/     业务/算法组件（40 个模块）
+├── components/     业务/算法组件（含 net / http / mqtt 网络组件）
 ├── drivers/        器件驱动（50 个）
-├── networks/       网络门面 + eth / ml307 后端
+├── modules/        模组后端（ml307：net 原始接口 + 原生 HTTP/MQTT）
 ├── bootloader/     分区、镜像校验、升级、串口升级协议（平台无关）
 ├── platforms/      pc / stm32 / avr 平台实现（含 *_bootloader 移植层）
 ├── boards/         板级工程（启动文件、链接脚本、main）

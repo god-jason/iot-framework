@@ -37,6 +37,8 @@
  *   > fan 1 on
  *   > fan 0 rpm
  *   > fan 0 off
+ *   > ping 127.0.0.1 count 4     （走 components/net 的 net_ping）
+ *   > -ping 8.8.8.8 count 10     （后台 ping，jobs 可查看）
  *   > exit           （回收 Shell，回到口令监听）
  * 管道测试：
  *   "hello`nps`nstate`nquit`n" | ros-shell.exe
