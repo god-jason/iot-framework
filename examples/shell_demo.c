@@ -45,21 +45,26 @@
  */
 
 #include "shell.h"
-#include "shell_dev.h"
+#include "device.h"
+#include "cmd.h"
 #include "fan.h"
 #include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
 
-static int cmd_quit(shell_t *sh, int argc, char **argv)
+static int cmd_quit(const args_parsed_t *parsed, void *user)
 {
-    (void)sh;
-    (void)argc;
-    (void)argv;
+    (void)parsed;
+    (void)user;
     ros_puts("bye");
     ros_stop();
-    return SHELL_OK;
+    return 0;
 }
+
+static const cmd_def_t s_quit_def = {
+    "quit", "stop the shell demo", NULL, 0U
+};
 
 /* ------------------------------ 测试任务 ------------------------------ */
 
@@ -122,16 +127,13 @@ static void mem_load_entry(void *arg)
 
 int main(void)
 {
-    static const shell_cmd_t quit_cmd = {
-        "quit", cmd_quit, "quit", "stop the shell demo", "demo", CMD_NONE
-    };
-
     ros_init();
     if (shell_platform_start("pc-demo") != 0) {
         printf("shell start failed\n");
         return 1;
     }
-    if (shell_register_cmd(&quit_cmd) != 0) {
+    (void)device_init();
+    if (cmd_register(&s_quit_def, cmd_quit, NULL) != 0) {
         printf("register quit failed\n");
     }
 
@@ -150,14 +152,12 @@ int main(void)
                 continue;
             }
             (void)snprintf(name, sizeof(name), "pwm%u", (unsigned)(i + 1U));
-            (void)shell_pwm_bind(name, &s_demo_pwm[i]);
+            (void)device_pwm_bind(name, &s_demo_pwm[i]);
 
-            /* 同一个 PWM 通道再包装成风扇实例 */
+            /* 同一个 PWM 通道再包装成风扇实例（fan_init 会注册 fan 命令） */
             s_demo_fan_ops[i].set_duty = demo_fan_duty;
             s_demo_fan_ops[i].ctx = &s_demo_pwm[i];
-            if (fan_init(&s_demo_fan[i], &s_demo_fan_ops[i]) == 0) {
-                (void)shell_fan_bind((uint8_t)i, &s_demo_fan[i]);
-            }
+            (void)fan_init(&s_demo_fan[i], &s_demo_fan_ops[i]);
         }
     }
 

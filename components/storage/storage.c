@@ -16,7 +16,8 @@
  *   - 注册成功会立即调用一次 ops->init（若存在）。
  */
 #include "storage.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 #include <string.h>
 
 /* 注册表容量：同时存在的存储后端上限 */

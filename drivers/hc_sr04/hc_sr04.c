@@ -1,5 +1,6 @@
 #include "hc_sr04.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #define HC_SR04_TAG "hc_sr04"
 

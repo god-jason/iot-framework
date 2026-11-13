@@ -1,6 +1,7 @@
 #include "w25qxx.h"
 #include "w25qxx_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int w25qxx_send_cmd_addr(w25qxx_handle_t *handle, uint8_t cmd, uint32_t address)
 {

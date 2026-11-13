@@ -3,9 +3,8 @@
 #include "motion_error.h"
 #include "motion_parser.h"
 #include "motion_source.h"
-#include "ros_mem.h"
-
-#include <string.h>
+#include "ros.h"
+#include "common.h"
 
 /*
  * JOB 任务层实现。
@@ -85,22 +84,11 @@ static int ensure_tables(void)
 /* 将名称规范化为大写并截断到 size-1 字符，保证以 '\0' 结尾 */
 static void normalize_name(const char *name, char *out, size_t size)
 {
-    size_t i = 0U;
-
     if (size == 0U) {
         return;
     }
-
-    while (name != NULL && name[i] != '\0' && (i + 1U) < size) {
-        char c = name[i];
-
-        if (c >= 'a' && c <= 'z') {
-            c = (char)(c - 'a' + 'A');
-        }
-        out[i] = c;
-        i++;
-    }
-    out[i] = '\0';
+    str_copy(out, (uint32_t)size, name);
+    (void)str_to_upper(out);
 }
 
 /*
@@ -317,7 +305,7 @@ int motion_task_add(const char *name, int segment, uint32_t start_offset,
     job = &s_jobs[s_job_count];
     memset(job, 0, sizeof(*job));
     job->used = true;
-    strncpy(job->name, normalized, sizeof(job->name) - 1U);
+    (void)str_copy(job->name, sizeof(job->name), normalized);
     job->segment = segment;
     job->start_offset = start_offset;
     job->end_offset = end_offset;

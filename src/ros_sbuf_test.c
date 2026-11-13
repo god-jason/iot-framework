@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "ros.h"
+#include "common.h"
 
 #include <string.h>
 

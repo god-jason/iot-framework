@@ -1,6 +1,7 @@
 #include "ldr.h"
 #include "ldr_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int ldr_check(const ldr_handle_t *handle)
 {

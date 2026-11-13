@@ -6,6 +6,7 @@
 
 #include "test.h"
 #include "ros.h"
+#include "common.h"
 
 static ros_event_t s_event;
 static ros_task_t s_setter;

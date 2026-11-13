@@ -10,38 +10,15 @@
  */
 
 #include "http.h"
-
+#include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define HTTP_HDR_MAX     1024U
 #define HTTP_IO_CHUNK    512U
 #define HTTP_LINE_MAX    256U
-
-/* 大小写不敏感比较前 n 个字符 */
-static bool http_ci_eq(const char *a, const char *b, uint32_t n)
-{
-    uint32_t i;
-
-    for (i = 0U; i < n; i++) {
-        char ca = a[i];
-        char cb = b[i];
-
-        if (ca >= 'A' && ca <= 'Z') {
-            ca = (char)(ca - 'A' + 'a');
-        }
-        if (cb >= 'A' && cb <= 'Z') {
-            cb = (char)(cb - 'A' + 'a');
-        }
-        if (ca != cb || ca == '\0') {
-            return false;
-        }
-    }
-    return true;
-}
-
 
 /* 请求头合法性：名称非空且不含 ':'，名称/值不含 CR/LF */
 
@@ -74,7 +51,7 @@ static void http_parse_headers(const char *hdr, http_response_t *rsp)
     if (rsp == NULL) {
         return;
     }
-    if (strncmp(p, "HTTP/", 5U) == 0) {
+    if (str_starts_with(p, "HTTP/")) {
         const char *sp = strchr(p, ' ');
 
         if (sp != NULL) {
@@ -83,16 +60,13 @@ static void http_parse_headers(const char *hdr, http_response_t *rsp)
     }
     while ((p = strstr(p, "\r\n")) != NULL) {
         p += 2;
-        if (http_ci_eq(p, "Content-Length:", 15U)) {
+        if (str_nicmp(p, "Content-Length:", 15U)) {
             rsp->content_length = (uint32_t)strtoul(p + 15, NULL, 10);
-        } else if (http_ci_eq(p, "Content-Type:", 13U)) {
-            const char *v = p + 13;
+        } else if (str_nicmp(p, "Content-Type:", 13U)) {
+            const char *v = str_skip_ws(p + 13);
             const char *eol;
             size_t n;
 
-            while (*v == ' ' || *v == '\t') {
-                v++;
-            }
             eol = strstr(v, "\r\n");
             n = (eol != NULL) ? (size_t)(eol - v) : strlen(v);
             if (n >= sizeof(rsp->content_type)) {

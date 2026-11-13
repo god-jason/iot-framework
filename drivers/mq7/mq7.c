@@ -1,6 +1,7 @@
 #include "mq7.h"
 #include "mq7_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /* Rs = RL * (Vc - Vout) / Vout */
 static float mq7_rs_from_mv(uint16_t adc_mv, uint16_t vc_mv, uint16_t rl_ohm)

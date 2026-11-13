@@ -1,6 +1,7 @@
 #include "voltage.h"
 #include "hal.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #define VOLTAGE_ADC_CHANNEL_MAX 16
 

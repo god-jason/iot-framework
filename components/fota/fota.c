@@ -23,7 +23,9 @@
  */
 #include "fota.h"
 #include "bootloader.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
+#include "cmd.h"
 #include <string.h>
 
 /* 固件读取回调，由 fota_set_read() 注册 */
@@ -32,6 +34,34 @@ static fota_read_fn s_read = NULL;
 static void *s_read_user = NULL;
 /* 升级完成后的应用钩子（可选），为空时使用默认 boot_request_upgrade() */
 static fota_apply_fn s_apply = NULL;
+static bool s_fota_cmd_ready;
+
+static int fota_cmd_handler(const args_parsed_t *parsed, void *user)
+{
+    uint32_t version = 0U;
+    uint32_t size = 0U;
+
+    (void)user;
+    if (!args_get_uint(parsed, 0U, &version) ||
+        !args_get_uint(parsed, 1U, &size)) {
+        ros_puts("usage: fota <version> <size>");
+        return -1;
+    }
+    if (fota_run(version, size) != 0) {
+        ros_puts("fota: upgrade failed");
+        return -1;
+    }
+    return 0;
+}
+
+static const args_def_t s_fota_args[] = {
+    { "version", 0, ARGS_TYPE_UINT, true, true, NULL, "firmware version" },
+    { "size", 0, ARGS_TYPE_UINT, true, true, NULL, "firmware bytes" }
+};
+
+static const cmd_def_t s_fota_def = {
+    "fota", "remote firmware upgrade", s_fota_args, 2U
+};
 
 /*
  * 初始化 FOTA 模块。
@@ -43,6 +73,10 @@ int fota_init(void)
     s_read = NULL;
     s_read_user = NULL;
     s_apply = NULL;
+    if (!s_fota_cmd_ready) {
+        s_fota_cmd_ready = true;
+        (void)cmd_register(&s_fota_def, fota_cmd_handler, NULL);
+    }
     return upgrade_init();
 }
 

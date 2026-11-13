@@ -1,5 +1,6 @@
 #include "ws2812b.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #define WS2812B_BYTES_PER_LED       3U
 #define WS2812B_SPI_BYTES_PER_LED   9U

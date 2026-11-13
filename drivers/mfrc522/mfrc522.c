@@ -1,7 +1,8 @@
 #include <string.h>
 #include "mfrc522.h"
 #include "mfrc522_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #define MFRC522_CHECK(h) \
     do { if ((h) == NULL || !(h)->initialized) { return (int)HAL_INVALID_PARAM; } } while (0)

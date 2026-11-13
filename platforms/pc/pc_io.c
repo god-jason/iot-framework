@@ -9,7 +9,8 @@
 
 #if defined(ROS_PLATFORM_PC)
 
-#include "ros_io.h"
+#include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
 

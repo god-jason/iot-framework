@@ -3,10 +3,10 @@
 #include "motion_error.h"
 #include "motion_flow.h"
 #include "motion_task.h"
+#include "ros.h"
+#include "common.h"
 
 #include "hal.h"
-
-#include <string.h>
 
 /*
  * 指令执行器实现。
@@ -180,8 +180,7 @@ static int copy_to_variable(const motion_instruction_t *ins,
         return -1;
     }
 
-    strncpy(name, p->value.data.variable, size - 1U);
-    name[size - 1U] = '\0';
+    (void)str_copy(name, (uint32_t)size, p->value.data.variable);
     return 1;
 }
 
@@ -917,8 +916,8 @@ static motion_exec_result_e execute_wait(motion_vm_t *vm,
         }
 
         begin_wait(vm, MOTION_WAIT_JOB);
-        strncpy(vm->wait.job_name, ins->name,
-                sizeof(vm->wait.job_name) - 1U);
+        (void)str_copy(vm->wait.job_name, sizeof(vm->wait.job_name),
+                       ins->name);
         if (param_timeout(vm, ins, &vm->wait.timeout_ms,
                           &vm->wait.has_timeout) < 0) {
             return exec_fail(vm, MOTION_ERR_VARIABLE, NULL);

@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "ros.h"
+#include "common.h"
 
 void ros_test_sched(void)
 {

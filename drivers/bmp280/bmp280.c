@@ -1,6 +1,7 @@
 #include "bmp280.h"
 #include "bmp280_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int bmp280_read_calib(bmp280_handle_t *handle)
 {

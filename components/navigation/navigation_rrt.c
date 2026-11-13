@@ -18,7 +18,8 @@
  *   - 全局静态状态，不可重入。
  */
 #include "navigation.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 #include <string.h>
 

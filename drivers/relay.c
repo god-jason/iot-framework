@@ -1,6 +1,7 @@
 #include "relay.h"
 #include "hal.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 int relay_init(relay_t *relay, uint8_t pin, uint8_t active_level)
 {

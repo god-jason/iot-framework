@@ -1,6 +1,7 @@
 #include "qmc5883l.h"
 #include "qmc5883l_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 #include <math.h>
 
 /* 灵敏度表：索引与 qmc5883l_range_t（即 CTRL1.RNG 编码）一致 */

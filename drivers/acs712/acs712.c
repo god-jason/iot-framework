@@ -1,6 +1,7 @@
 #include "acs712.h"
 #include "acs712_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int acs712_check(const acs712_handle_t *handle)
 {

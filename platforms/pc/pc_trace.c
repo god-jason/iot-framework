@@ -10,7 +10,7 @@
 #if defined(ROS_PLATFORM_PC)
 
 #include "ros.h"
-#include "ros_trace.h"
+#include "common.h"
 
 #include <stdio.h>
 

@@ -9,7 +9,8 @@
 
 #if defined(ROS_PLATFORM_STM32)
 
-#include "ros_io.h"
+#include "ros.h"
+#include "common.h"
 #include "hal_uart.h"
 
 extern int hal_uart_transmit(hal_uart_t *handle, const uint8_t *data,

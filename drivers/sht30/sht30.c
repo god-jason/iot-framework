@@ -1,6 +1,7 @@
 #include "sht30.h"
 #include "sht30_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int sht30_write_cmd(sht30_handle_t *handle, uint16_t command)
 {

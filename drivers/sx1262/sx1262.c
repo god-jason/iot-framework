@@ -1,7 +1,8 @@
 #include <string.h>
 #include "sx1262.h"
 #include "sx1262_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 #define SX126X_CHECK(h) \
     do { if ((h) == NULL || !(h)->initialized) { return (int)HAL_INVALID_PARAM; } } while (0)
 static int sx1262_wait_busy(sx1262_handle_t *h)

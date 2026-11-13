@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "ros.h"
+#include "common.h"
 
 static ros_queue_t s_q;
 static uint8_t s_qbuf[4 * sizeof(uint32_t)];

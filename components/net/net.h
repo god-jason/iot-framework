@@ -26,7 +26,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "ros_io.h"
+#include "ros.h"
+#include "common.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,6 +78,9 @@ typedef struct {
 /* 全局初始化 / 反初始化（Windows 下为 WSAStartup/WSACleanup） */
 int net_init(void);
 int net_deinit(void);
+
+/* 注册 net 相关命令（ping）到 cmd 全局命令表；由 net_init 调用 */
+void net_register_commands(void);
 
 /*
  * 建立连接。

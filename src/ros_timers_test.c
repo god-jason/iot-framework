@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "ros.h"
+#include "common.h"
 
 static ros_timer_t s_fast;
 static ros_timer_t s_slow;

@@ -1,6 +1,7 @@
 #include "dht11.h"
 #include "dht11_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /* 释放总线：切换为输入 + 上拉，由上拉电阻拉高 */
 static void dht11_release(dht11_handle_t *handle)

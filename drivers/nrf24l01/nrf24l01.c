@@ -1,6 +1,7 @@
 #include "nrf24l01.h"
 #include "nrf24l01_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 #define NRF_REG_MASK   0x1FU
 #define NRF_IRQ_CLEAR  0x70U
 #define NRF_CHECK(h) \

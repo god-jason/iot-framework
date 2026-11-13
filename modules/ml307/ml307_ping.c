@@ -14,10 +14,11 @@
 #include "at.h"
 #include "at_urc.h"
 #include "hal_def.h"
+#include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define ML307_PING_URC          "+MPING:"
 #define ML307_PING_DEFAULT_MS   1000U
@@ -107,9 +108,7 @@ static void ml307_ping_on_urc(const char *line, uint32_t len, void *user)
         return;
     }
     p++;
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
+    p = (char *)str_skip_ws(p);
     if (*p == '"') {
         char *q = strchr(p + 1, '"');
 

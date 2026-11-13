@@ -1,7 +1,8 @@
 #include <string.h>
 #include "ir_remote.h"
 #include "ir_remote_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #define IR_CHECK(h) \
     do { if ((h) == NULL || !(h)->initialized) { return (int)HAL_INVALID_PARAM; } } while (0)

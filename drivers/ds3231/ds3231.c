@@ -1,6 +1,7 @@
 #include "ds3231.h"
 #include "ds3231_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static uint8_t ds3231_bin_to_bcd(uint8_t value)
 {

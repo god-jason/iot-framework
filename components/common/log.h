@@ -9,8 +9,8 @@
  *   - tag 必须是字符串字面量（或字符串宏），在编译期拼接到格式串；
  *   - 运行期等级保存在 g_log_level，默认 LOG_LEVEL_INFO，
  *     可用 log_set_level()/log_get_level() 宏读写；
- *   - 输出统一走 printf：桌面端为 stdout，MCU 上由平台层把 printf
- *     重定向到 UART；
+ *   - 输出统一走 ros_printf（任务 stdio），未绑定/未初始化时由 ros_io
+ *     的默认实现决定（通常为平台默认：PC stdout / MCU UART）；
  *   - 十六进制转储的逐行格式化放在 log.c 中，避免宏体过于臃肿。
  *
  * 默认等级为 INFO；可在编译选项中定义 LOG_LEVEL 覆盖，例如
@@ -18,7 +18,8 @@
  */
 
 #include <stdint.h>
-#include <stdio.h>
+
+#include "ros_io.h"
 
 /* 日志等级：数值越大越严重；LOG_LEVEL_NONE 用于关闭全部日志 */
 #define LOG_LEVEL_DEBUG 0
@@ -39,10 +40,10 @@ extern int g_log_level;
  * 核心输出宏：tag 必须是字符串字面量（或字符串宏），
  * 在编译期与格式串拼接，减少运行时开销。
  */
-#define LOG_OUTPUT(level, tag, ...)                    \
-    do {                                               \
-        printf("[" level "][" tag "] " __VA_ARGS__);   \
-        printf("\r\n");                                \
+#define LOG_OUTPUT(level, tag, ...)                        \
+    do {                                                   \
+        ros_printf("[" level "][" tag "] " __VA_ARGS__);   \
+        ros_printf("\r\n");                                \
     } while (0)
 
 #define LOG_D(tag, ...)                                \

@@ -1,6 +1,7 @@
 #include "ds1302.h"
 #include "ds1302_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /* ---------------- BCD 辅助 ---------------- */
 

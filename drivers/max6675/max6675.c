@@ -1,6 +1,7 @@
 #include "max6675.h"
 #include "max6675_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 int max6675_init(max6675_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
 {

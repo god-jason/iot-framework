@@ -23,6 +23,7 @@
 
 #include "shell.h"
 #include "ros.h"
+#include "common.h"
 #include "hal_uart.h"
 
 #include <stddef.h>

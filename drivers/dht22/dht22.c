@@ -1,6 +1,7 @@
 #include "dht22.h"
 #include "dht22_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /*
  * 引脚方向切换：输出（推挽）主动拉低产生起始信号；

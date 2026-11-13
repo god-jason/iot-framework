@@ -20,7 +20,8 @@
  *   - 全局状态可被下一次 navigation_dstar_lite 覆盖，非线程安全。
  */
 #include "navigation.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 #include <string.h>
 

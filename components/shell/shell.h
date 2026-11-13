@@ -74,29 +74,6 @@ enum {
 /* 不透明实例类型（定义在 shell_internal.h） */
 typedef struct shell shell_t;
 
-/* ============================== 扩展命令 ============================== */
-
-typedef enum {
-    CMD_NONE      = 0,
-    CMD_HIDDEN    = (1U << 1),   /* help 不列出 */
-    CMD_REENTRANT = (1U << 2)    /* 允许被 SHELL <cmd> 透传 */
-} shell_cmd_flags_t;
-
-/* 命令处理函数：sh 为调用该命令的实例（输出 / 变量都绑定到它） */
-typedef int (*shell_cmd_fn)(shell_t *sh, int argc, char **argv);
-
-typedef struct shell_cmd {
-    const char *name;
-    shell_cmd_fn handler;
-    const char *usage;
-    const char *help;
-    const char *group;
-    uint32_t    flags;
-} shell_cmd_t;
-
-/* 注册扩展命令（全局命令表，所有实例共享；重复名/与基础命令同名会被拒绝） */
-int shell_register_cmd(const shell_cmd_t *cmd);
-
 /* ============================== 配置 ============================== */
 
 typedef struct {

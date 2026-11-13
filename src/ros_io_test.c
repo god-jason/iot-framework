@@ -3,6 +3,7 @@
  */
 
 #include "ros.h"
+#include "common.h"
 #include "test.h"
 
 #include <string.h>

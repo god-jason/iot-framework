@@ -19,7 +19,8 @@
  *   - 非线程安全。
  */
 #include "planner.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 /* 注册表容量：可同时登记的计划数上限 */
 #define PLANNER_PLAN_MAX 8

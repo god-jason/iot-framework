@@ -1,4 +1,6 @@
 #include "motion_error.h"
+#include "ros.h"
+#include "common.h"
 
 /*
  * motion_error.c —— 错误码与错误信息记录实现。
@@ -14,7 +16,6 @@
 
 #include <stdio.h>
 #include <stdarg.h>
-#include <string.h>
 
 /* 清零错误记录：整体 memset，再显式把 code 置为 NONE。
  * 参数：error 目标结构，可为 NULL（此时静默返回）。 */
@@ -42,13 +43,11 @@ void motion_error_set(motion_error_t *error, int code, uint32_t line,
     error->message[0] = '\0';
 
     if (message != NULL && message[0] != '\0') {
-        strncpy(error->message, message, sizeof(error->message) - 1U);
-        error->message[sizeof(error->message) - 1U] = '\0';
+        (void)str_copy(error->message, sizeof(error->message), message);
     } else {
         /* 未提供描述时使用错误码对应的默认文本 */
-        strncpy(error->message, motion_error_message(code),
-                sizeof(error->message) - 1U);
-        error->message[sizeof(error->message) - 1U] = '\0';
+        (void)str_copy(error->message, sizeof(error->message),
+                       motion_error_message(code));
     }
 }
 
@@ -74,9 +73,8 @@ void motion_error_setf(motion_error_t *error, int code, uint32_t line,
         va_end(args);
         error->message[sizeof(error->message) - 1U] = '\0';
     } else {
-        strncpy(error->message, motion_error_message(code),
-                sizeof(error->message) - 1U);
-        error->message[sizeof(error->message) - 1U] = '\0';
+        (void)str_copy(error->message, sizeof(error->message),
+                       motion_error_message(code));
     }
 }
 

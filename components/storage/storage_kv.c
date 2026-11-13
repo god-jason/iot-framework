@@ -18,8 +18,8 @@
  *   - 全局表在首次使用时分配，非线程安全，需由单一上下文串行访问。
  */
 #include "storage_kv.h"
-#include "ros_mem.h"
-#include <string.h>
+#include "ros.h"
+#include "common.h"
 
 /* 条目数量上限 */
 #define STORAGE_KV_MAX      32
@@ -132,8 +132,7 @@ int storage_kv_set(const char *key, storage_kv_type_e type,
     }
 
     /* 拷贝键名并强制以 '\0' 结尾（超长部分被截断） */
-    strncpy(e->key, key, STORAGE_KV_KEY_MAX - 1u);
-    e->key[STORAGE_KV_KEY_MAX - 1u] = '\0';
+    (void)str_copy(e->key, STORAGE_KV_KEY_MAX, key);
     e->type = type;
     memcpy(e->value, value, len);
     e->len = len;

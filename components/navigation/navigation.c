@@ -20,7 +20,8 @@
  *   - 代价采用 10/14 整数近似，避免浮点运算。
  */
 #include "navigation.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 #include <string.h>
 

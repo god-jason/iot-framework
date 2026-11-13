@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "ros.h"
+#include "common.h"
 
 static ros_task_t s_worker;
 static uint8_t    s_stack[2048];

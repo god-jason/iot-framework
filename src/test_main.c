@@ -30,6 +30,8 @@ void tf_end(void)
 
 /* ---------------- 基础组件 ---------------- */
 void ut_list(void);
+void ut_strings(void);
+void ut_map(void);
 void ut_queue(void);
 void ut_ringbuf(void);
 void ut_fsm(void);
@@ -54,6 +56,7 @@ void ut_interp(void);
 void ut_pid(void);
 void ut_params(void);
 void ut_alog(void);
+void ut_cmd(void);
 void ut_scheduler(void);
 
 /* ---------------- 通信与运维 ---------------- */
@@ -120,6 +123,8 @@ int main(void)
 
     printf("--- 基础组件 ---\n");
     ut_list();
+    ut_strings();
+    ut_map();
     ut_queue();
     ut_ringbuf();
     ut_fsm();
@@ -141,6 +146,7 @@ int main(void)
     ut_pid();
     ut_params();
     ut_alog();
+    ut_cmd();
     ut_scheduler();
 
     printf("\n--- 通信与运维 ---\n");

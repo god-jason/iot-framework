@@ -1,6 +1,7 @@
 #include "ads1115.h"
 #include "ads1115_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /* 各数据速率对应的单次转换时间（ms），用于轮询超时 */
 static const uint16_t ads1115_conv_ms[8] = { 125U, 63U, 32U, 16U, 8U, 4U, 3U, 2U };

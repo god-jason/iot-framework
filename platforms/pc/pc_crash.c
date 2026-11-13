@@ -10,7 +10,8 @@
  *       与 MCU 共用 ros_crash_record()/ros_crash_print() 的格式。
  */
 
-#include "ros_crash.h"
+#include "ros.h"
+#include "common.h"
 
 #if defined(ROS_PLATFORM_PC) && ROS_CRASH_ENABLE
 

@@ -12,9 +12,10 @@
 #include "at.h"
 #include "at_urc.h"
 #include "hal_def.h"
+#include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
-#include <string.h>
 
 #define ML307_NET_MAX_SOCKETS   6
 #define ML307_NET_RX_MAX        512
@@ -56,7 +57,7 @@ static void ml307_net_urc(const char *line, uint32_t len, void *user)
     int id;
 
     (void)user;
-    if (len < 9U || strncmp(line, "+MIPURC:", 8U) != 0) {
+    if (len < 9U || !str_starts_with(line, "+MIPURC:")) {
         return;
     }
     p = line + 8;
@@ -173,6 +174,7 @@ int net_init(void)
         s_urc_registered = true;
     }
     memset(s_sockets, 0, sizeof(s_sockets));
+    net_register_commands();
     return NET_OK;
 }
 

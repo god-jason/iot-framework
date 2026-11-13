@@ -25,7 +25,8 @@
 #include "at.h"
 #include "at_parser.h"
 #include "at_urc.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 #include <string.h>
 
 /* 单条响应的累积缓冲大小（字节），超出后截断 */

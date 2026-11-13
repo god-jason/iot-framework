@@ -13,6 +13,7 @@
  */
 
 #include "ros.h"
+#include "common.h"
 
 #ifdef __cplusplus
 extern "C" {

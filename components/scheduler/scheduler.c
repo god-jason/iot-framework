@@ -15,9 +15,8 @@
  *       回调在调用 process 的上下文中同步执行。
  */
 #include "scheduler.h"
-#include "ros_mem.h"
-
-#include <string.h>
+#include "ros.h"
+#include "common.h"
 
 /* 任务表容量（固定，不支持动态扩容） */
 #define SCHEDULER_MAX_ENTRIES 8
@@ -57,28 +56,6 @@ static int scheduler_ensure(void)
     s_entries = (scheduler_entry_t *)ros_mem_calloc(SCHEDULER_MAX_ENTRIES,
                                                 sizeof(*s_entries));
     return (s_entries != NULL) ? 0 : -1;
-}
-
-/* 大小写不敏感的字符串比较，用于匹配 @yearly 等宏（要求长度完全相同） */
-static bool sched_ieq(const char *a, const char *b)
-{
-    while (*a != '\0' && *b != '\0') {
-        char ca = *a;
-        char cb = *b;
-
-        if (ca >= 'A' && ca <= 'Z') {
-            ca = (char)(ca - 'A' + 'a');
-        }
-        if (cb >= 'A' && cb <= 'Z') {
-            cb = (char)(cb - 'A' + 'a');
-        }
-        if (ca != cb) {
-            return false;
-        }
-        a++;
-        b++;
-    }
-    return *a == '\0' && *b == '\0';
 }
 
 /*
@@ -308,17 +285,17 @@ static int parse_crontab(const char *expression, scheduler_entry_t *entry)
 
     /* @ 开头为宏；@reboot 直接标记，其余展开为等价 5 字段表达式 */
     if (buf[0] == '@') {
-        if (sched_ieq(buf, "@yearly") || sched_ieq(buf, "@annually")) {
+        if (str_icmp(buf, "@yearly") || str_icmp(buf, "@annually")) {
             expanded = "0 0 1 1 *";
-        } else if (sched_ieq(buf, "@monthly")) {
+        } else if (str_icmp(buf, "@monthly")) {
             expanded = "0 0 1 * *";
-        } else if (sched_ieq(buf, "@weekly")) {
+        } else if (str_icmp(buf, "@weekly")) {
             expanded = "0 0 * * 0";
-        } else if (sched_ieq(buf, "@daily") || sched_ieq(buf, "@midnight")) {
+        } else if (str_icmp(buf, "@daily") || str_icmp(buf, "@midnight")) {
             expanded = "0 0 * * *";
-        } else if (sched_ieq(buf, "@hourly")) {
+        } else if (str_icmp(buf, "@hourly")) {
             expanded = "0 * * * *";
-        } else if (sched_ieq(buf, "@reboot")) {
+        } else if (str_icmp(buf, "@reboot")) {
             entry->reboot = true;
             return 0;
         } else {

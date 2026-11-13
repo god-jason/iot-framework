@@ -18,7 +18,8 @@
  *   - 未激活（active 为 false）时 update 直接返回 -1，不输出。
  */
 #include "breath_led.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #include <math.h>
 

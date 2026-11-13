@@ -16,7 +16,111 @@
  *   - 本模块不做滤波，噪声较大时应在上层做滑动平均。
  */
 #include "encoder.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
+#include "cmd.h"
+
+#define ENCODER_CMD_MAX 8U
+
+static encoder_t *s_encoders[ENCODER_CMD_MAX];
+static uint8_t s_encoder_count;
+static bool s_encoder_cmd_ready;
+
+static int encoder_cmd_index(const encoder_t *enc)
+{
+    uint8_t i;
+
+    for (i = 0U; i < s_encoder_count; i++) {
+        if (s_encoders[i] == enc) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static int encoder_cmd_handler(const args_parsed_t *parsed, void *user)
+{
+    uint32_t id;
+    const char *action = NULL;
+    const char *value = NULL;
+    encoder_t *enc;
+
+    (void)user;
+    if (!args_get_uint(parsed, 0U, &id) || !args_get_str(parsed, 1U, &action)) {
+        ros_puts("usage: encoder <id> read | reset | speed <dt_ms> | info");
+        return -1;
+    }
+    if (id >= s_encoder_count || s_encoders[id] == NULL) {
+        ros_printf("encoder %u not found\n", (unsigned)id);
+        return -1;
+    }
+    enc = s_encoders[id];
+    (void)args_get_str(parsed, 2U, &value);
+
+    if (str_icmp(action, "read")) {
+        int32_t count = 0;
+
+        if (encoder_read(enc, &count) != 0) {
+            ros_printf("encoder[%u] read failed\n", (unsigned)id);
+            return -1;
+        }
+        ros_printf("encoder[%u] count=%ld\n", (unsigned)id, (long)count);
+        return 0;
+    }
+    if (str_icmp(action, "reset")) {
+        if (encoder_reset(enc) != 0) {
+            ros_printf("encoder[%u] reset failed\n", (unsigned)id);
+            return -1;
+        }
+        return 0;
+    }
+    if (str_icmp(action, "speed")) {
+        uint32_t dt_ms = 0U;
+        float speed = 0.0f;
+
+        if (value == NULL || !str_parse_uint(value, &dt_ms) || dt_ms == 0U) {
+            ros_puts("usage: encoder <id> speed <dt_ms>");
+            return -1;
+        }
+        if (encoder_get_speed(enc, (float)dt_ms / 1000.0f, &speed) != 0) {
+            ros_printf("encoder[%u] speed failed\n", (unsigned)id);
+            return -1;
+        }
+        ros_printf("encoder[%u] speed=%ld pulse/s\n", (unsigned)id,
+                   (long)speed);
+        return 0;
+    }
+    if (str_icmp(action, "info")) {
+        ros_printf("encoder[%u] count=%ld speed=%ld pulse/s\n", (unsigned)id,
+                   (long)enc->count, (long)enc->speed);
+        return 0;
+    }
+
+    ros_printf("encoder: unknown action '%s'\n", action);
+    return -1;
+}
+
+static const args_def_t s_encoder_args[] = {
+    { "id", 0, ARGS_TYPE_UINT, true, true, NULL, "encoder instance id" },
+    { "action", 0, ARGS_TYPE_STR, true, true, NULL, "read|reset|speed|info" },
+    { "value", 0, ARGS_TYPE_STR, true, false, NULL, "speed: dt_ms" }
+};
+
+static const cmd_def_t s_encoder_def = {
+    "encoder", "encoder read/reset/speed", s_encoder_args, 3U
+};
+
+static void encoder_cmd_add(encoder_t *enc)
+{
+    if (encoder_cmd_index(enc) >= 0 || s_encoder_count >= ENCODER_CMD_MAX) {
+        return;
+    }
+    s_encoders[s_encoder_count++] = enc;
+    if (!s_encoder_cmd_ready) {
+        s_encoder_cmd_ready = true;
+        (void)cmd_register(&s_encoder_def, encoder_cmd_handler, NULL);
+    }
+}
 
 /*
  * 初始化编码器对象。
@@ -33,6 +137,7 @@ int encoder_init(encoder_t *enc, const encoder_ops_t *ops)
     enc->count = 0;
     enc->last_count = 0;
     enc->speed = 0.0f;
+    encoder_cmd_add(enc);
     return 0;
 }
 

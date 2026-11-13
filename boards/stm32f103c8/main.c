@@ -11,6 +11,7 @@
 
 #include "board.h"
 #include "ros.h"
+#include "common.h"
 #include "shell.h"
 
 static ros_task_t s_blink_task;

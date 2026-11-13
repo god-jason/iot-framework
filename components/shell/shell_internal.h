@@ -7,6 +7,7 @@
 
 #include "shell.h"
 #include "ros.h"
+#include "common.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -251,9 +252,26 @@ bool shell_jobs_running(const shell_t *sh);
 
 /* ============================== shell_cmd.c ============================== */
 
+/* 内建命令标志 */
+typedef enum {
+    CMD_NONE      = 0,
+    CMD_HIDDEN    = (1U << 1),   /* help 不列出 */
+    CMD_REENTRANT = (1U << 2)    /* 允许被 SHELL <cmd> 透传 */
+} shell_cmd_flags_t;
+
+/* 内建命令处理函数：sh 为调用该命令的实例 */
+typedef int (*shell_cmd_fn)(shell_t *sh, int argc, char **argv);
+
+typedef struct shell_cmd {
+    const char *name;
+    shell_cmd_fn handler;
+    const char *usage;
+    const char *help;
+    const char *group;
+    uint32_t    flags;
+} shell_cmd_t;
+
 int  shell_cmd_dispatch(shell_t *sh, int argc, char **argv);
-int  shell_cmd_add(const shell_cmd_t *cmd);
-void shell_cmd_clear(void);
 const shell_cmd_t *shell_cmd_find(const char *name);
 void shell_error(shell_t *sh, int code, const char *fmt, ...);
 

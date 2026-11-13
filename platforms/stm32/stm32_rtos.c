@@ -23,7 +23,7 @@
 #if defined(ROS_PLATFORM_STM32)
 
 #include "ros.h"
-#include "ros_port.h"
+#include "common.h"
 
 #include <stdint.h>
 

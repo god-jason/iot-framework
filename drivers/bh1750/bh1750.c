@@ -1,6 +1,7 @@
 #include "bh1750.h"
 #include "bh1750_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static uint8_t bh1750_mode_command(bh1750_mode_e mode)
 {

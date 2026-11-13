@@ -10,7 +10,7 @@
 
 #include "test.h"
 #include "shell_internal.h"
-#include "ros_version.h"
+#include "cmd.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -57,21 +57,20 @@ static void shell_reset_all(void)
     out_reset();
 }
 
-/* ------------------------------ 扩展命令 ------------------------------ */
+/* ------------------------------ 全局命令（cmd） ------------------------------ */
 
-static int ext_ok_handler(shell_t *sh, int argc, char **argv)
+static int ext_ok_handler(const args_parsed_t *parsed, void *user)
 {
-    (void)sh;
-    (void)argv;
-    ros_printf("ext argc=%d\n", argc);
-    return SHELL_OK;
+    (void)parsed;
+    (void)user;
+    ros_puts("ext ok");
+    return 0;
 }
 
-static int ext_fail_handler(shell_t *sh, int argc, char **argv)
+static int ext_fail_handler(const args_parsed_t *parsed, void *user)
 {
-    (void)sh;
-    (void)argc;
-    (void)argv;
+    (void)parsed;
+    (void)user;
     return -SHELL_ERR_DEVICE;
 }
 
@@ -82,25 +81,22 @@ static void test_reset_hook(void)
     s_reset_called++;
 }
 
-static const shell_cmd_t s_ext_ok = {
-    "ext", ext_ok_handler, "ext [a]", "ext help", "test", CMD_NONE
+static const args_def_t s_ext_ok_args[] = {
+    { "a", 0, ARGS_TYPE_STR, true, false, NULL, "optional a" },
+    { "b", 0, ARGS_TYPE_STR, true, false, NULL, "optional b" }
 };
-static const shell_cmd_t s_ext_fail = {
-    "boom", ext_fail_handler, "boom", "", "test", CMD_NONE
+static const args_def_t s_ext_fail_args[] = {
+    { "arg", 0, ARGS_TYPE_STR, true, false, NULL, "ignored" }
 };
-static const shell_cmd_t s_ext_dup = {
-    "ver", ext_ok_handler, "ver x", "", "test", CMD_NONE
+
+static const cmd_def_t s_ext_ok_def = {
+    "ext", "ext help", s_ext_ok_args, 2U
 };
-static const shell_cmd_t s_ext_pool[9] = {
-    { "e0", ext_ok_handler, "e0", "", "t", CMD_NONE },
-    { "e1", ext_ok_handler, "e1", "", "t", CMD_NONE },
-    { "e2", ext_ok_handler, "e2", "", "t", CMD_NONE },
-    { "e3", ext_ok_handler, "e3", "", "t", CMD_NONE },
-    { "e4", ext_ok_handler, "e4", "", "t", CMD_NONE },
-    { "e5", ext_ok_handler, "e5", "", "t", CMD_NONE },
-    { "e6", ext_ok_handler, "e6", "", "t", CMD_NONE },
-    { "e7", ext_ok_handler, "e7", "", "t", CMD_NONE },
-    { "e8", ext_ok_handler, "e8", "", "t", CMD_NONE }
+static const cmd_def_t s_ext_fail_def = {
+    "boom", "", s_ext_fail_args, 1U
+};
+static const cmd_def_t s_ext_ver_def = {
+    "ver", "shadow builtin", NULL, 0U
 };
 
 static void test_init_and_lex(void)
@@ -937,38 +933,36 @@ static void test_cmd_errors(void)
 
 static void test_ext_commands(void)
 {
-    int i;
-
     tf_begin("shell/扩展命令");
 
+    cmd_unregister_all();
     shell_reset_all();
 
-    TF_CHECK_INT(shell_register_cmd(NULL), -1);
-    TF_CHECK_INT(shell_register_cmd(&s_ext_ok), 0);
-    TF_CHECK_INT(shell_register_cmd(&s_ext_ok), -1);     /* 重名 */
-    TF_CHECK_INT(shell_register_cmd(&s_ext_dup), -1);    /* 与内建冲突 */
-    TF_CHECK_INT(shell_register_cmd(&s_ext_fail), 0);
+    TF_CHECK_INT(cmd_register(NULL, ext_ok_handler, NULL), -1);
+    TF_CHECK_INT(cmd_register(&s_ext_ok_def, ext_ok_handler, NULL), 0);
+    TF_CHECK_INT(cmd_register(&s_ext_ok_def, ext_ok_handler, NULL), -1);
+    TF_CHECK_INT(cmd_register(&s_ext_fail_def, ext_fail_handler, NULL), 0);
+    TF_CHECK_INT(cmd_register(&s_ext_ver_def, ext_ok_handler, NULL), 0);
 
     out_reset();
     TF_CHECK_INT(shell_exec_line("ext a b"), 0);
-    TF_CHECK(out_has("ext argc=3"));
+    TF_CHECK(out_has("ext ok"));
 
     out_reset();
     TF_CHECK_INT(shell_exec_line("help ext"), 0);
     TF_CHECK(out_has("ext [a]"));
     TF_CHECK(out_has("ext help"));
 
-    /* 扩展命令直接执行：handler 的返回值原样上报 */
+    /* 全局命令直接执行：handler 的返回值原样上报 */
     TF_CHECK_INT(shell_exec_line("boom"), -SHELL_ERR_DEVICE);
     TF_CHECK_INT(shell_exec_line("boom confirm"), -SHELL_ERR_DEVICE);
 
-    /* 表满：最多 8 个扩展命令 */
-    shell_reset_all();
-    for (i = 0; i < 8; i++) {
-        TF_CHECK_INT(shell_register_cmd(&s_ext_pool[i]), 0);
-    }
-    TF_CHECK_INT(shell_register_cmd(&s_ext_pool[8]), -1);
+    /* 内建命令优先于同名全局命令 */
+    out_reset();
+    TF_CHECK_INT(shell_exec_line("ver"), 0);
+    TF_CHECK(out_has("test-build"));
 
+    cmd_unregister_all();
     tf_end();
 }
 

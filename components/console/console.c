@@ -18,10 +18,8 @@
  */
 
 #include "console.h"
-#include "log.h"
-#include "ros_mem.h"
-
-#include <string.h>
+#include "ros.h"
+#include "common.h"
 
 /* 控制台状态：绑定一个 UART 句柄（PC 平台为 UART1，STM32 通常为 UART1） */
 static bool s_ready = false;            /* console_init 是否已成功 */
@@ -243,14 +241,11 @@ int shell_execute(const char *command)
     }
 
     /* 拷贝到可变缓冲并切分（保留 1 字节给 '\0'） */
-    strncpy(buf, command, sizeof(buf) - 1u);
-    buf[sizeof(buf) - 1u] = '\0';
+    (void)str_copy(buf, sizeof(buf), command);
     p = buf;
     while (*p != '\0' && argc < SHELL_ARGC_MAX) {
         /* 跳过前导空白 */
-        while (*p == ' ' || *p == '\t') {
-            p++;
-        }
+        p = (char *)str_skip_ws(p);
         if (*p == '\0') {
             break;
         }

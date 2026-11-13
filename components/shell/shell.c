@@ -15,10 +15,10 @@
  */
 
 #include "shell_internal.h"
-#include "shell_dev.h"
-#include "shell_net.h"
+#include "cmd.h"
+#include "ros.h"
+#include "common.h"
 
-#include <string.h>
 #include <stdio.h>
 
 /* ------------------------------ 全局状态 ------------------------------ */
@@ -138,11 +138,9 @@ int shell_setup(const shell_config_t *cfg)
         if (s_default == NULL) {
             return -1;
         }
-        shell_cmd_clear();
         return 0;
     }
     s_default->cfg = *cfg;
-    shell_cmd_clear();
     shell_instance_reset(s_default);
     return 0;
 }
@@ -155,11 +153,6 @@ shell_t *shell_default(void)
 void shell_reset(void)
 {
     shell_instance_reset(s_default);
-}
-
-int shell_register_cmd(const shell_cmd_t *cmd)
-{
-    return shell_cmd_add(cmd);
 }
 
 /* ------------------------------ 输入缓冲 ------------------------------ */
@@ -295,9 +288,7 @@ static int shell_split(char *line, char **argv, int max)
     while (*p != '\0' && argc < max) {
         bool quoted = false;
 
-        while (*p == ' ' || *p == '\t') {
-            p++;
-        }
+        p = (char *)str_skip_ws(p);
         if (*p == '\0') {
             break;
         }
@@ -320,11 +311,8 @@ static int shell_split(char *line, char **argv, int max)
 /* 去掉行首空白并返回首个 token（原地修改） */
 static char *shell_first_token(char *line, char **rest)
 {
-    char *p = line;
+    char *p = (char *)str_skip_ws(line);
 
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
     *rest = p;
     while (**rest != '\0' && **rest != ' ' && **rest != '\t') {
         (*rest)++;
@@ -429,9 +417,9 @@ int shell_instance_exec_line(shell_t *sh, const char *line)
         return shell_instance_exec_async(sh, tok + 1, rest);
     }
 
-    /* SHELL_CTX：命令 → 脚本语句 */
+    /* SHELL_CTX：内建命令或 cmd 全局命令 → 脚本语句 */
     cmd = shell_cmd_find(tok);
-    if (cmd != NULL) {
+    if (cmd != NULL || cmd_find_command(tok) != NULL) {
         char argbuf[SHELL_LINE_MAX];
 
         (void)snprintf(argbuf, sizeof(argbuf), "%s", line);
@@ -600,20 +588,20 @@ static void shell_submit_line(shell_t *sh)
     }
 }
 
-/* Tab 补全：只补命令名，多个候选时列出 */
+/* Tab 补全：内建命令 + cmd 全局命令，只补命令名，多个候选时列出 */
 static void shell_complete(shell_t *sh)
 {
     static const char *const names[] = {
         "help", "ver", "echo", "print", "set", "unset", "wait", "reboot",
         "state", "ps", "kill", "pause", "resume", "load", "unload",
-        "loads", "run", "start", "stop", "fg", "jobs", "job", "waitjob",
-        "gpio", "pwm", "stepper", "fan", "ping"
+        "loads", "run", "start", "stop", "fg", "jobs", "job", "waitjob"
     };
     char prefix[32];
     uint16_t n = sh->line_len;
     uint32_t i;
     uint32_t matches = 0U;
     const char *last = NULL;
+    const cmd_node_t *node;
 
     if (n == 0U || n >= sizeof(prefix)) {
         return;
@@ -627,6 +615,15 @@ static void shell_complete(shell_t *sh)
             last = names[i];
         }
     }
+    for (node = cmd_first(); node != NULL; node = cmd_next(node)) {
+        const char *name = (node->def != NULL) ? node->def->name : NULL;
+
+        if (name != NULL && strncmp(name, prefix, n) == 0) {
+            matches++;
+            last = name;
+        }
+    }
+
     if (matches == 1U && last != NULL) {
         const char *suffix = &last[n];
 
@@ -640,6 +637,14 @@ static void shell_complete(shell_t *sh)
         for (i = 0U; i < sizeof(names) / sizeof(names[0]); i++) {
             if (strncmp(names[i], prefix, n) == 0) {
                 ros_io_write(NULL, names[i], (uint32_t)strlen(names[i]));
+                ros_io_write(NULL, " ", 1U);
+            }
+        }
+        for (node = cmd_first(); node != NULL; node = cmd_next(node)) {
+            const char *name = (node->def != NULL) ? node->def->name : NULL;
+
+            if (name != NULL && strncmp(name, prefix, n) == 0) {
+                ros_io_write(NULL, name, (uint32_t)strlen(name));
                 ros_io_write(NULL, " ", 1U);
             }
         }
@@ -713,20 +718,18 @@ static void shell_feed_char(shell_t *sh, int c)
 /* ------------------------------ Shell 任务 ------------------------------ */
 
 /* 按需实例内置 exit：请求任务退出，平台随后回收实例内存 */
-static int shell_cmd_exit_builtin(shell_t *sh, int argc, char **argv)
+static int shell_exit_cmd_handler(const args_parsed_t *parsed, void *user)
 {
-    (void)sh;
-    (void)argc;
-    (void)argv;
+    (void)parsed;
+    (void)user;
 
     ros_printf("bye\n");
     shell_request_exit();
-    return SHELL_OK;
+    return 0;
 }
 
-static const shell_cmd_t s_exit_cmd = {
-    "exit", shell_cmd_exit_builtin, "exit", "close shell, back to listening",
-    "basic", CMD_NONE
+static const cmd_def_t s_exit_def = {
+    "exit", "close shell, back to listening", NULL, 0U
 };
 
 /*
@@ -774,11 +777,7 @@ static void shell_task_entry(void *arg)
             return;
         }
         s_default = sh;
-        (void)shell_register_cmd(&s_exit_cmd);
-        /* 设备命令（gpio / pwm / stepper / fan）随实例一起注册 */
-        (void)shell_dev_register();
-        /* 网络命令（ping） */
-        (void)shell_net_register();
+        (void)cmd_register(&s_exit_def, shell_exit_cmd_handler, NULL);
     }
     sh->task = ros_current_task;
 

@@ -1,6 +1,7 @@
 #include "pcf8563.h"
 #include "pcf8563_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static uint8_t pcf8563_bin_to_bcd(uint8_t value)
 {

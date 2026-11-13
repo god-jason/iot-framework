@@ -3,32 +3,11 @@
  */
 
 #include "http.h"
+#include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-
-/* 大小写不敏感比较前 n 个字符 */
-static bool http_ci_eq(const char *a, const char *b, uint32_t n)
-{
-    uint32_t i;
-
-    for (i = 0U; i < n; i++) {
-        char ca = a[i];
-        char cb = b[i];
-
-        if (ca >= 'A' && ca <= 'Z') {
-            ca = (char)(ca - 'A' + 'a');
-        }
-        if (cb >= 'A' && cb <= 'Z') {
-            cb = (char)(cb - 'A' + 'a');
-        }
-        if (ca != cb || ca == '\0') {
-            return false;
-        }
-    }
-    return true;
-}
 
 int http_url_parse(const char *url, http_url_t *out)
 {
@@ -44,10 +23,10 @@ int http_url_parse(const char *url, http_url_t *out)
     memset(out, 0, sizeof(*out));
     out->port = 80U;
 
-    if (http_ci_eq(url, "https://", 8U)) {
+    if (str_nicmp(url, "https://", 8U)) {
         p = url + 8;
         out->https = true;
-    } else if (http_ci_eq(url, "http://", 7U)) {
+    } else if (str_nicmp(url, "http://", 7U)) {
         p = url + 7;
     } else {
         return NET_ERR_PARAM;

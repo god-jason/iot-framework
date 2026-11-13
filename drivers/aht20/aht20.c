@@ -1,6 +1,7 @@
 #include "aht20.h"
 #include "aht20_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int aht20_wait_ready(aht20_handle_t *handle)
 {

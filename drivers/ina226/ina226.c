@@ -1,6 +1,7 @@
 #include "ina226.h"
 #include "ina226_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #define INA226_TAG "ina226"
 

@@ -119,6 +119,7 @@ int net_init(void)
 #endif
     }
     s_net_ref++;
+    net_register_commands();
     return NET_OK;
 }
 

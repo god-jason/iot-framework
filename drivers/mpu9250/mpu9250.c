@@ -1,6 +1,7 @@
 #include "mpu9250.h"
 #include "mpu9250_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 #include <math.h>
 
 static const float s_gyro_lsb_per_dps[MPU9250_GYRO_RANGE_COUNT] = { 131.0f, 65.5f, 32.8f, 16.4f };

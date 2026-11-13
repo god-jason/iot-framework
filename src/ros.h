@@ -13,7 +13,10 @@
  *
  * 使用方只需包含本文件，其余声明按实现文件拆分在同名头文件中
  * （`src/` 下所有文件名统一带 `ros_` 前缀；每个内核对象的结构体
- *   定义在自身头文件中，ros_types.h 只放公共常量与前向声明）：
+ *   定义在自身头文件中，ros_types.h 只放公共常量与前向声明）。
+ * `src/` 之外的代码（components / modules / drivers / platforms 等）
+ * 包含本文件即可获得内核声明；标准库与基础组件由
+ * components/common/common.h 提供，使用到的地方需自行包含。
  *   ros_task.h    任务/TCB      ros_sem.h     信号量     ros_mutex.h   互斥量
  *   ros_io.h      标准输入输出  ros_queue.h   消息队列   ros_event.h   事件组
  *   ros_sbuf.h    流式缓冲      ros_msgq.h    变长消息队列
@@ -52,8 +55,7 @@
 #include "ros_isr.h"
 #include "ros_trace.h"
 #include "ros_version.h"
-
-#include "log.h"    /* 内核日志宏 LOG_D/I/W/E */
+#include "ros_port.h"
 
 #ifdef __cplusplus
 extern "C" {

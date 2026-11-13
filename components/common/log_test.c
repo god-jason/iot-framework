@@ -6,7 +6,8 @@
  */
 
 #include "test.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 void ut_log(void)
 {

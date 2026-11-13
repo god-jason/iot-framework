@@ -1,8 +1,9 @@
 #include "ml307.h"
+#include "ros.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 static ml307_state_t s_state = ML307_STATE_OFF;
 static bool s_connected = false;
@@ -228,9 +229,7 @@ static const char *wifi_next_field(const char *p, char *out, size_t cap)
     size_t n = 0U;
     bool quoted = false;
 
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
+    p = str_skip_ws(p);
     if (*p == '"') {
         quoted = true;
         p++;

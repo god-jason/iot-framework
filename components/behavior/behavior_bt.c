@@ -19,7 +19,8 @@
  *   - 未实现“运行中的子节点记忆”，sequence/selector 每帧都从第 0 个重新评估。
  */
 #include "behavior_bt.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 #include <string.h>
 
 /* 节点池容量：创建节点总数上限，超出后 bt_alloc 返回 NULL */

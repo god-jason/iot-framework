@@ -1,6 +1,7 @@
 #include "ssd1306.h"
 #include "ssd1306_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int ssd1306_send_cmd(ssd1306_handle_t *handle, const uint8_t *cmd, size_t len)
 {

@@ -1,6 +1,7 @@
 #include "adxl345.h"
 #include "adxl345_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 int adxl345_init(adxl345_handle_t *handle, hal_i2c_t *i2c,
                  uint16_t address, adxl345_range_e range)

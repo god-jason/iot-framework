@@ -1,6 +1,7 @@
 #include "sht3x.h"
 #include "sht3x_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /*
  * SHT3x 与 SHT30 命令集完全一致（单次测量 0x2C06、软复位 0x30A2、加热器

@@ -1,6 +1,7 @@
 #include "as5600.h"
 #include "as5600_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int as5600_read_reg(as5600_handle_t *handle, uint8_t reg, uint8_t *buf, size_t len)
 {

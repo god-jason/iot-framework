@@ -2,9 +2,8 @@
 #include "motion_error.h"
 #include "motion_parser.h"
 #include "motion_source.h"
-#include "ros_mem.h"
-
-#include <string.h>
+#include "ros.h"
+#include "common.h"
 
 /*
  * 流程索引与表达式求值模块实现。
@@ -154,8 +153,8 @@ static int add_label(const motion_instruction_t *ins, uint32_t offset,
     }
 
     memset(&s_labels[s_label_count], 0, sizeof(s_labels[s_label_count]));
-    strncpy(s_labels[s_label_count].name, ins->name,
-            sizeof(s_labels[s_label_count].name) - 1U);
+    (void)str_copy(s_labels[s_label_count].name,
+                   sizeof(s_labels[s_label_count].name), ins->name);
     s_labels[s_label_count].offset = offset;
     s_labels[s_label_count].next_offset = next_offset;
     s_labels[s_label_count].line = line;
@@ -301,8 +300,8 @@ int motion_flow_build(const char *text)
                 }
                 memset(&s_jobs[s_job_count], 0,
                        sizeof(s_jobs[s_job_count]));
-                strncpy(s_jobs[s_job_count].name, ins.name,
-                        sizeof(s_jobs[s_job_count].name) - 1U);
+                (void)str_copy(s_jobs[s_job_count].name,
+                               sizeof(s_jobs[s_job_count].name), ins.name);
                 s_jobs[s_job_count].job_offset = offset;
                 s_jobs[s_job_count].start_offset = next_offset;
                 s_jobs[s_job_count].segment = (int)s_job_count + 1;
@@ -573,18 +572,7 @@ typedef struct {
 /* 跳过空白字符（仅空格与制表符，不含换行） */
 static void e_skip(eval_t *e)
 {
-    while (*e->p == ' ' || *e->p == '\t') {
-        e->p++;
-    }
-}
-
-/* 字符转大写，用于关键字不区分大小写匹配 */
-static char e_upper(char c)
-{
-    if (c >= 'a' && c <= 'z') {
-        return (char)(c - 'a' + 'A');
-    }
-    return c;
+    e->p = str_skip_ws(e->p);
 }
 
 /* 判断字符是否可作为标识符/关键字的一部分 */
@@ -608,7 +596,7 @@ static bool e_match_word(eval_t *e, const char *word)
     p = e->p;
 
     for (i = 0U; word[i] != '\0'; i++) {
-        if (e_upper(p[i]) != e_upper(word[i])) {
+        if (str_upper_char(p[i]) != str_upper_char(word[i])) {
             return false;
         }
     }

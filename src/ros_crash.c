@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "ros.h"
+#include "common.h"
 #include "ros_port.h"
 
 /*

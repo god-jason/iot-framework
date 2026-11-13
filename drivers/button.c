@@ -1,6 +1,7 @@
 #include "button.h"
 #include "hal.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
                     uint32_t debounce_ms, uint32_t long_press_ms,

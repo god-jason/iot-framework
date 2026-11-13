@@ -1,6 +1,7 @@
 #include "max7219.h"
 #include "max7219_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int max7219_send_frame(max7219_handle_t *handle, const uint8_t *frame, size_t len)
 {

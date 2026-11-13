@@ -9,11 +9,11 @@
 #include "ros_io.h"
 #include "ros_task.h"
 #include "ros_sched.h"
+#include "strings.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 static ros_io_t *s_default_io;
 
@@ -238,9 +238,7 @@ int ros_scanf(const char *fmt, ...)
     va_start(ap, fmt);
     while (*f != '\0') {
         if (*f == ' ' || *f == '\t') {
-            while (*p == ' ' || *p == '\t') {
-                p++;
-            }
+            p = (char *)str_skip_ws(p);
             f++;
             continue;
         }
@@ -264,9 +262,7 @@ int ros_scanf(const char *fmt, ...)
                 break;              /* 不支持的类型：停止解析 */
             }
             if (!is_c) {
-                while (*p == ' ' || *p == '\t') {
-                    p++;
-                }
+                p = (char *)str_skip_ws(p);
             }
             if (is_c) {
                 if (*p == '\0') {

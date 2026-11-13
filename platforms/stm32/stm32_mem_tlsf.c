@@ -11,7 +11,8 @@
  * port_mem_info() 的“已用”是各块 tlsf_block_size() 之和（含 ros_mem 的
  * 统计头），因此百分比略低于真实占用；用于状态显示足够。
  */
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 #include <stdint.h>
 #include <string.h>

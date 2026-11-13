@@ -1,6 +1,7 @@
 #include "st7789.h"
 #include "st7789_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static int st7789_send(st7789_handle_t *handle, bool is_data,
                        const uint8_t *data, size_t len)

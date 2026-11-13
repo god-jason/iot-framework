@@ -6,7 +6,7 @@
  */
 
 #include "shell_internal.h"
-#include "ros_version.h"
+#include "cmd.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -14,14 +14,6 @@
 #include <stdlib.h>
 
 #define SHELL_TAG "shell"
-#define SHELL_EXT_MAX 8U
-
-typedef struct {
-    shell_cmd_t *items;     /* [SHELL_EXT_MAX]，注册时动态分配 */
-    uint8_t      count;
-} shell_ext_table_t;
-
-static shell_ext_table_t *s_ext;    /* 首个扩展命令注册时从堆分配 */
 
 /* ============================== 输出辅助 ============================== */
 
@@ -142,7 +134,7 @@ static const char *shell_task_state_name(ros_task_state_e state)
 
 /* ============================== 基础命令 ============================== */
 
-static int cmd_help(shell_t *sh, int argc, char **argv);
+static int builtin_help(shell_t *sh, int argc, char **argv);
 
 static int cmd_ver(shell_t *sh, int argc, char **argv)
 {
@@ -974,7 +966,7 @@ static int cmd_waitjob(shell_t *sh, int argc, char **argv)
 }
 
 /* run：在独立的虚拟 Shell 实例中解释执行（默认执行粘贴缓冲） */
-static int cmd_run(shell_t *sh, int argc, char **argv)
+static int builtin_run(shell_t *sh, int argc, char **argv)
 {
     bool background = false;
     int i;
@@ -1012,7 +1004,7 @@ static int cmd_run(shell_t *sh, int argc, char **argv)
 /* ------------------------------ help ------------------------------ */
 
 static const shell_cmd_t s_builtin[] = {
-    { "help",   cmd_help,   "help [topic]", "", "basic", CMD_NONE },
+    { "help",   builtin_help,   "help [topic]", "", "basic", CMD_NONE },
     { "ver",    cmd_ver,    "ver", "", "basic", CMD_REENTRANT },
     { "echo",   cmd_echo,   "echo <text>", "", "basic", CMD_NONE },
     { "print",  cmd_print,  "print <expr>", "", "basic", CMD_NONE },
@@ -1031,7 +1023,7 @@ static const shell_cmd_t s_builtin[] = {
       "job", CMD_NONE },
     { "unload", cmd_unload, "unload <name>", "", "job", CMD_NONE },
     { "loads",  cmd_loads,  "loads", "", "job", CMD_NONE },
-    { "run",    cmd_run,    "run [<file>] [&]", "", "job", CMD_NONE },
+    { "run",    builtin_run,    "run [<file>] [&]", "", "job", CMD_NONE },
     { "start",  cmd_start,  "start <name>", "", "job", CMD_NONE },
     { "stop",   cmd_stop,   "stop <name> [force]", "", "job", CMD_NONE },
     { "fg",     cmd_fg,     "fg <name>", "", "job", CMD_NONE },
@@ -1041,10 +1033,9 @@ static const shell_cmd_t s_builtin[] = {
       "job", CMD_NONE }
 };
 
-static int cmd_help(shell_t *sh, int argc, char **argv)
+static int builtin_help(shell_t *sh, int argc, char **argv)
 {
     uint32_t i;
-    uint8_t k;
 
     (void)sh;
     if (argc >= 2) {
@@ -1056,6 +1047,18 @@ static int cmd_help(shell_t *sh, int argc, char **argv)
                 ros_printf("  %s\n", cmd->help);
             }
             return SHELL_OK;
+        }
+        {
+            const cmd_node_t *node = cmd_find_command(argv[1]);
+
+            if (node != NULL) {
+                char buf[160];
+
+                if (cmd_help(node->def, buf, sizeof(buf)) > 0) {
+                    ros_printf("%s", buf);
+                }
+                return SHELL_OK;
+            }
         }
         ros_puts("help topics: ps script expr units errors device");
         return SHELL_OK;
@@ -1070,27 +1073,29 @@ static int cmd_help(shell_t *sh, int argc, char **argv)
                          s_builtin[i].group != NULL ? s_builtin[i].group : "");
         }
     }
-    /* 扩展命令（设备命令等）跟随其后列出 */
-    if (s_ext != NULL) {
-        for (k = 0U; k < s_ext->count; k++) {
-            const shell_cmd_t *cmd = &s_ext->items[k];
+    /* 全局命令（组件 init 注册）跟随其后列出 */
+    {
+        const cmd_node_t *node;
 
-            if ((cmd->flags & CMD_HIDDEN) == 0U) {
-                ros_printf("  %-28s %s\n",
-                             cmd->usage != NULL ? cmd->usage : cmd->name,
-                             cmd->group != NULL ? cmd->group : "");
+        for (node = cmd_first(); node != NULL; node = cmd_next(node)) {
+            char buf[128];
+
+            if (node->def != NULL &&
+                cmd_usage(node->def, buf, sizeof(buf)) > 0) {
+                ros_printf("  %-28s %s\n", buf,
+                             (node->def->desc != NULL) ? node->def->desc : "");
             }
         }
     }
     return SHELL_OK;
 }
 
-/* ============================== 注册与分派 ============================== */
+/* ============================== 查找与分派 ============================== */
 
+/* 仅查找内建命令；扩展命令由 cmd 全局命令表提供 */
 const shell_cmd_t *shell_cmd_find(const char *name)
 {
     uint32_t i;
-    uint8_t k;
 
     if (name == NULL) {
         return NULL;
@@ -1102,54 +1107,10 @@ const shell_cmd_t *shell_cmd_find(const char *name)
             return &s_builtin[i];
         }
     }
-    if (s_ext != NULL) {
-        for (k = 0U; k < s_ext->count; k++) {
-            if (shell_ieq(s_ext->items[k].name,
-                          (uint16_t)strlen(s_ext->items[k].name), name) &&
-                strlen(s_ext->items[k].name) == strlen(name)) {
-                return &s_ext->items[k];
-            }
-        }
-    }
     return NULL;
 }
 
-int shell_cmd_add(const shell_cmd_t *cmd)
-{
-    if (cmd == NULL || cmd->name == NULL || cmd->handler == NULL) {
-        return -1;
-    }
-    if (shell_cmd_find(cmd->name) != NULL) {
-        return -1;      /* 基础命令优先，重名拒绝 */
-    }
-    if (s_ext == NULL) {
-        s_ext = (shell_ext_table_t *)ros_mem_calloc(1U, sizeof(*s_ext));
-        if (s_ext == NULL) {
-            return -1;
-        }
-        s_ext->items = (shell_cmd_t *)ros_mem_calloc(SHELL_EXT_MAX,
-                                                     sizeof(shell_cmd_t));
-        if (s_ext->items == NULL) {
-            ros_mem_free(s_ext);
-            s_ext = NULL;
-            return -1;
-        }
-    }
-    if (s_ext->count >= SHELL_EXT_MAX) {
-        return -1;
-    }
-    s_ext->items[s_ext->count++] = *cmd;
-    return 0;
-}
-
-void shell_cmd_clear(void)
-{
-    if (s_ext != NULL) {
-        s_ext->count = 0U;
-    }
-}
-
-/* 命令分派：所有命令直接执行，不需要 confirm 之类的二次确认 */
+/* 命令分派：优先内建命令，其次 cmd 全局命令表 */
 int shell_cmd_dispatch(shell_t *sh, int argc, char **argv)
 {
     const shell_cmd_t *cmd;
@@ -1160,13 +1121,17 @@ int shell_cmd_dispatch(shell_t *sh, int argc, char **argv)
     }
 
     cmd = shell_cmd_find(argv[0]);
-    if (cmd == NULL) {
-        return -SHELL_ERR_NOT_FOUND;
+    if (cmd != NULL) {
+        if (sh == NULL) {
+            return -SHELL_ERR_PARAM;
+        }
+        rc = cmd->handler(sh, argc, argv);
+        return (rc < 0) ? rc : SHELL_OK;
     }
 
-    if (sh == NULL) {
-        return -SHELL_ERR_PARAM;
+    rc = cmd_dispatch(argc, argv);
+    if (rc == ARGS_ERR_UNKNOWN) {
+        return -SHELL_ERR_NOT_FOUND;
     }
-    rc = cmd->handler(sh, argc, argv);
     return (rc < 0) ? rc : SHELL_OK;
 }

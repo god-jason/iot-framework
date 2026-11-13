@@ -17,16 +17,16 @@
  *           本文件不使用静态可变状态，可重入。
  */
 
+#include "ros.h"
+#include "common.h"
+
 #include <stdlib.h>
-#include <string.h>
 
 /* 归一化变量名：去掉可选的前导 '$'，其余字符转大写后写入 out。
  * 参数：name 原始名字，可为 NULL；out 输出缓冲；size 缓冲容量。
  * 返回：无。size 为 0 时不做任何事；超出容量的字符被截断。 */
 static void normalize_name(const char *name, char *out, size_t size)
 {
-    size_t i = 0U;
-
     if (size == 0U) {
         return;
     }
@@ -35,16 +35,8 @@ static void normalize_name(const char *name, char *out, size_t size)
         name++;
     }
 
-    while (name != NULL && name[i] != '\0' && (i + 1U) < size) {
-        char c = name[i];
-
-        if (c >= 'a' && c <= 'z') {
-            c = (char)(c - 'a' + 'A');
-        }
-        out[i] = c;
-        i++;
-    }
-    out[i] = '\0';
+    str_copy(out, (uint32_t)size, name);
+    (void)str_to_upper(out);
 }
 
 /* 初始化变量表：整体清零，count 置 0。 */
@@ -92,10 +84,8 @@ int motion_variable_set(motion_variable_table_t *table, const char *name,
         return MOTION_ERR_VARIABLE; /* 表满，无法新增 */
     }
 
-    strncpy(table->items[table->count].name, normalized,
-            sizeof(table->items[table->count].name) - 1U);
-    table->items[table->count].name[
-        sizeof(table->items[table->count].name) - 1U] = '\0';
+    (void)str_copy(table->items[table->count].name,
+                   sizeof(table->items[table->count].name), normalized);
     table->items[table->count].value = *value;
     table->count++;
     return 0;

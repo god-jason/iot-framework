@@ -5,7 +5,8 @@
 #include "motion_source.h"
 #include "motion_task.h"
 #include "motion_vm.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 #include <string.h>
 

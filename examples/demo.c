@@ -1,6 +1,7 @@
 /* robotos 综合示例：控制台日志 + shell 命令 + LED 闪烁 + 输入处理。
  * 模拟器下控制台使用标准输入/输出；STM32 下同一套 console API 走 UART1。 */
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 #include "console.h"
 #include "hal.h"
 #include "led.h"

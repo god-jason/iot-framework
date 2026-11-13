@@ -12,6 +12,7 @@
 #if defined(ROS_PLATFORM_STM32)
 
 #include "ros.h"
+#include "common.h"
 
 /* 与 hal_uart.h 中原型 ABI 一致；此处不 include hal 头以免引入平台实现依赖 */
 extern int hal_uart_transmit(void *handle, const uint8_t *data,

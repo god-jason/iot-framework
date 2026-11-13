@@ -7,8 +7,9 @@
  */
 
 #include "shell_internal.h"
+#include "ros.h"
+#include "common.h"
 
-#include <string.h>
 #include <stdio.h>
 
 /* 块栈元素 */
@@ -53,26 +54,7 @@ typedef struct {
 } parse_ctx_t;
 
 /* 两段文本的大小写不敏感比较（都不是 C 字符串） */
-static bool text_ieq(const char *a, const char *b, uint16_t len)
-{
-    uint16_t i;
-
-    for (i = 0U; i < len; i++) {
-        char ca = a[i];
-        char cb = b[i];
-
-        if (ca >= 'a' && ca <= 'z') {
-            ca = (char)(ca - 'a' + 'A');
-        }
-        if (cb >= 'a' && cb <= 'z') {
-            cb = (char)(cb - 'a' + 'A');
-        }
-        if (ca != cb) {
-            return false;
-        }
-    }
-    return true;
-}
+#define text_ieq(a, b, len) str_nicmp((a), (b), (uint32_t)(len))
 
 static void parse_fail(parse_ctx_t *ctx, uint16_t line, const char *msg)
 {

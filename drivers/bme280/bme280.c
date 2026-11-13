@@ -1,6 +1,7 @@
 #include "bme280.h"
 #include "bme280_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 /* 12 位补码符号扩展（H4 / H5 在寄存器中只占 12 位） */
 static int16_t bme280_sign12(uint16_t value)

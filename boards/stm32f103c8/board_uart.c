@@ -11,6 +11,7 @@
 
 #include "board.h"
 #include "ros.h"
+#include "common.h"
 
 #include "stm32f10x.h"
 

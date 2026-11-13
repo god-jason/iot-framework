@@ -8,16 +8,12 @@
  */
 
 #include "shell_internal.h"
+#include "ros.h"
+#include "common.h"
 
-#include <string.h>
 #include <stdio.h>
 
 /* ------------------------------ 小工具 ------------------------------ */
-
-static char shell_upper(char c)
-{
-    return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
-}
 
 static bool shell_is_alpha(char c)
 {
@@ -37,17 +33,10 @@ static bool shell_is_space(char c)
 /* 大小写不敏感比较（a 为定长片段，b 为 C 字符串） */
 bool shell_ieq(const char *a, uint16_t alen, const char *b)
 {
-    uint16_t i = 0U;
-
     if (b == NULL) {
         return false;
     }
-    for (i = 0U; i < alen; i++) {
-        if (b[i] == '\0' || shell_upper(a[i]) != shell_upper(b[i])) {
-            return false;
-        }
-    }
-    return b[alen] == '\0';
+    return str_nicmp(a, b, (uint32_t)alen) && (b[alen] == '\0');
 }
 
 bool shell_tok_ieq(const shell_tok_t *t, const char *s)
@@ -308,7 +297,7 @@ shell_var_t *shell_var_find(shell_vars_t *vars, const char *name, uint16_t len)
         }
         same = true;
         for (k = 0U; k < len; k++) {
-            if (shell_upper(var->name[k]) != shell_upper(name[k])) {
+            if (str_upper_char(var->name[k]) != str_upper_char(name[k])) {
                 same = false;
                 break;
             }
@@ -337,7 +326,7 @@ static int shell_var_alloc(shell_vars_t *vars, const char *name, uint16_t len)
 
             memset(&vars->items[i], 0, sizeof(vars->items[i]));
             for (k = 0U; k < len && k + 1U < SHELL_VAR_NAME_MAX; k++) {
-                vars->items[i].name[k] = shell_upper(name[k]);
+                vars->items[i].name[k] = str_upper_char(name[k]);
             }
             vars->items[i].used = true;
             return (int)i;

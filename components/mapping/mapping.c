@@ -13,7 +13,8 @@
  *   - 射线终点越界时仅对越界的一侧做钳位（保持既有行为，见 mapping_og_map_update）。
  */
 #include "mapping.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 #include <math.h>
 

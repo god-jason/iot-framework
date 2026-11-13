@@ -1,6 +1,7 @@
 #include "buzzer.h"
 #include "hal.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 int buzzer_init(buzzer_t *buzzer, uint8_t pin, uint8_t active_level)
 {

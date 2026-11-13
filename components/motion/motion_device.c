@@ -1,6 +1,7 @@
 #include "motion_device.h"
 #include "motion_error.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 
 /*
  * motion_device.c —— 设备操作抽象层实现。

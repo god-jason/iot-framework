@@ -1,6 +1,7 @@
 #include "ds18b20.h"
 #include "ds18b20_register.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 static void ds18b20_low(ds18b20_handle_t *handle)
 {

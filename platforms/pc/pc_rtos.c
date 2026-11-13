@@ -16,7 +16,7 @@
 #if defined(ROS_PLATFORM_PC)
 
 #include "ros.h"
-#include "ros_port.h"
+#include "common.h"
 
 #include <stdint.h>
 #include <stdlib.h>

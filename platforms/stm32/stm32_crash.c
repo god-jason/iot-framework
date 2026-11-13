@@ -16,7 +16,8 @@
  * 该文件不依赖 STM32Cube HAL，只使用 Cortex-M 内核寄存器地址。
  */
 
-#include "ros_crash.h"
+#include "ros.h"
+#include "common.h"
 
 #if defined(ROS_PLATFORM_STM32) && ROS_CRASH_ENABLE
 

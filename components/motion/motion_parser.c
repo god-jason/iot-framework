@@ -1,4 +1,6 @@
 #include "motion_parser.h"
+#include "ros.h"
+#include "common.h"
 
 /*
  * motion_parser.c —— MotionScript 行级语法解析实现。
@@ -23,32 +25,10 @@
  */
 
 #include <stdlib.h>
-#include <string.h>
 
 /* ------------------------------------------------------------------ */
 /* 基础词法工具                                                        */
 /* ------------------------------------------------------------------ */
-
-/* 将小写字母转大写，其他字符原样返回（仅处理 ASCII）。 */
-static char char_upper(char c)
-{
-    if (c >= 'a' && c <= 'z') {
-        return (char)(c - 'a' + 'A');
-    }
-    return c;
-}
-
-/* 跳过空格与制表符，返回首个非空白字符位置；p 为 NULL 时返回 NULL。 */
-static const char *skip_ws(const char *p)
-{
-    if (p == NULL) {
-        return NULL;
-    }
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
-    return p;
-}
 
 /* 原地去掉字符串尾部的空白与换行符（' ' '\t' '\r' '\n'）。 */
 static void trim_tail(char *s)
@@ -110,14 +90,14 @@ static int read_word(const char **cursor, char *out, size_t size)
         return -1;
     }
 
-    p = skip_ws(*cursor);
+    p = str_skip_ws(*cursor);
     if (*p == '\0' || *p == ',') {
         return -1;
     }
 
     while (*p != '\0' && *p != ',' && *p != ' ' && *p != '\t') {
         if ((i + 1U) < size) {
-            out[i++] = char_upper(*p);
+            out[i++] = str_upper_char(*p);
         }
         p++;
     }
@@ -149,7 +129,7 @@ static int read_name(const char **cursor, char *out, size_t size)
     p = *cursor;
     while (is_name_char(*p)) {
         if ((i + 1U) < size) {
-            out[i++] = char_upper(*p);
+            out[i++] = str_upper_char(*p);
         }
         p++;
     }
@@ -195,7 +175,7 @@ static bool unit_equal(const char *unit, const char *name)
     size_t i;
 
     for (i = 0U; unit[i] != '\0' || name[i] != '\0'; i++) {
-        if (char_upper(unit[i]) != char_upper(name[i])) {
+        if (str_upper_char(unit[i]) != str_upper_char(name[i])) {
             return false;
         }
     }
@@ -374,7 +354,7 @@ int motion_parser_value_token(const char **cursor, motion_value_t *value)
     memset(value, 0, sizeof(*value));
     value->unit = MOTION_UNIT_NONE;
 
-    p = skip_ws(*cursor);
+    p = str_skip_ws(*cursor);
     if (*p == '\0' || *p == ',') {
         return -1;
     }
@@ -469,7 +449,7 @@ int motion_parser_parse_value(const char *text, motion_value_t *value)
         return -1;
     }
 
-    p = skip_ws(p);
+    p = str_skip_ws(p);
     return (*p == '\0' || *p == ',') ? 0 : -1;
 }
 
@@ -532,8 +512,7 @@ static int add_param(motion_instruction_t *instruction, const char *name,
 
     param = &instruction->params[instruction->param_count];
     memset(param, 0, sizeof(*param));
-    strncpy(param->name, name, sizeof(param->name) - 1U);
-    param->name[sizeof(param->name) - 1U] = '\0';
+    (void)str_copy(param->name, sizeof(param->name), name);
     param->value = *value;
     instruction->param_count++;
     return 0;
@@ -551,7 +530,7 @@ static motion_parse_result_e parse_param_clauses(const char *p,
         motion_value_t value;
         motion_unit_e unit;
 
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p == '\0') {
             return MOTION_PARSE_OK; /* 正常结束 */
         }
@@ -564,7 +543,7 @@ static motion_parse_result_e parse_param_clauses(const char *p,
             return MOTION_PARSE_INVALID; /* 参数名缺失 */
         }
 
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (motion_parser_value_token(&p, &value) != 0) {
             return MOTION_PARSE_INVALID; /* 参数值缺失或非法 */
         }
@@ -581,7 +560,7 @@ static motion_parse_result_e parse_param_clauses(const char *p,
             return MOTION_PARSE_OVERFLOW;
         }
 
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         /* 一个键值对之后只允许行尾或逗号 */
         if (*p != '\0' && *p != ',') {
             return MOTION_PARSE_INVALID;
@@ -617,10 +596,9 @@ static motion_parse_result_e parse_device_line(const char *p,
     if (read_word(&p, action, sizeof(action)) != 0) {
         return MOTION_PARSE_INVALID;
     }
-    strncpy(instruction->action, action, sizeof(instruction->action) - 1U);
-    instruction->action[sizeof(instruction->action) - 1U] = '\0';
+    (void)str_copy(instruction->action, sizeof(instruction->action), action);
 
-    p = skip_ws(p);
+    p = str_skip_ws(p);
 
     if (command == MOTION_CMD_STEP && strcmp(action, "POSITION") == 0) {
         char sub[16];
@@ -629,11 +607,10 @@ static motion_parse_result_e parse_device_line(const char *p,
         if (read_word(&p, sub, sizeof(sub)) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        strncpy(instruction->subaction, sub,
-                sizeof(instruction->subaction) - 1U);
-        instruction->subaction[sizeof(instruction->subaction) - 1U] = '\0';
+        (void)str_copy(instruction->subaction,
+                       sizeof(instruction->subaction), sub);
 
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (strcmp(sub, "SET") == 0 && *p != '\0' && *p != ',') {
             /* SET 后可直接跟随目标位置，作为 VALUE 参数 */
             if (motion_parser_value_token(&p, &inline_value) != 0) {
@@ -642,7 +619,7 @@ static motion_parse_result_e parse_device_line(const char *p,
             if (add_param(instruction, "VALUE", &inline_value) != 0) {
                 return MOTION_PARSE_OVERFLOW;
             }
-            p = skip_ws(p);
+            p = str_skip_ws(p);
             if (*p == ',') {
                 p++;
             }
@@ -657,7 +634,7 @@ static motion_parse_result_e parse_device_line(const char *p,
         if (add_param(instruction, "VALUE", &inline_value) != 0) {
             return MOTION_PARSE_OVERFLOW;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p == ',') {
             p++;
         }
@@ -691,10 +668,9 @@ static motion_parse_result_e parse_wait_line(const char *p,
         return MOTION_PARSE_INVALID;
     }
 
-    strncpy(instruction->action, target, sizeof(instruction->action) - 1U);
-    instruction->action[sizeof(instruction->action) - 1U] = '\0';
+    (void)str_copy(instruction->action, sizeof(instruction->action), target);
 
-    p = skip_ws(p);
+    p = str_skip_ws(p);
 
     /* WAIT ALL：等待所有已启动设备空闲，后面只能跟参数 */
     if (strcmp(target, "ALL") == 0) {
@@ -710,12 +686,12 @@ static motion_parse_result_e parse_wait_line(const char *p,
 
     /* WAIT JOB <名称>：等待指定任务结束 */
     if (strcmp(target, "JOB") == 0) {
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (read_name(&p, instruction->name,
                       sizeof(instruction->name)) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p == ',') {
             p++;
             return parse_param_clauses(p, instruction);
@@ -736,7 +712,7 @@ static motion_parse_result_e parse_wait_line(const char *p,
         if (add_param(instruction, "VALUE", &value) != 0) {
             return MOTION_PARSE_OVERFLOW;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p == ',') {
             p++;
             return parse_param_clauses(p, instruction);
@@ -750,7 +726,7 @@ static motion_parse_result_e parse_wait_line(const char *p,
         if (read_device_id(&p, &instruction->device_id) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p == ',') {
             p++;
             return parse_param_clauses(p, instruction);
@@ -774,9 +750,8 @@ static void copy_expression(const char *p, char *out, size_t size)
 {
     size_t len;
 
-    p = skip_ws(p);
-    strncpy(out, p, size - 1U);
-    out[size - 1U] = '\0';
+    p = str_skip_ws(p);
+    str_copy(out, (uint32_t)size, p);
     trim_tail(out);
     len = strlen(out);
     (void)len;
@@ -794,7 +769,7 @@ static motion_parse_result_e parse_set_line(const char *p,
 
     instruction->command = MOTION_CMD_SET;
 
-    p = skip_ws(p);
+    p = str_skip_ws(p);
     if (*p != '$') {
         return MOTION_PARSE_INVALID; /* 赋值目标必须以 $ 开头 */
     }
@@ -803,10 +778,9 @@ static motion_parse_result_e parse_set_line(const char *p,
     if (read_name(&p, name, sizeof(name)) != 0) {
         return MOTION_PARSE_INVALID;
     }
-    strncpy(instruction->name, name, sizeof(instruction->name) - 1U);
-    instruction->name[sizeof(instruction->name) - 1U] = '\0';
+    (void)str_copy(instruction->name, sizeof(instruction->name), name);
 
-    p = skip_ws(p);
+    p = str_skip_ws(p);
     if (*p != '=') {
         return MOTION_PARSE_INVALID; /* 缺少赋值号 */
     }
@@ -848,11 +822,11 @@ motion_parse_result_e motion_parser_parse(const char *line,
     }
 
     memset(buffer, 0, sizeof(buffer));
-    strncpy(buffer, line, sizeof(buffer) - 1U);
+    (void)str_copy(buffer, sizeof(buffer), line);
     strip_comment(buffer);
     trim_tail(buffer);
 
-    p = skip_ws(buffer);
+    p = str_skip_ws(buffer);
     if (*p == '\0') {
         return MOTION_PARSE_EMPTY; /* 空行或整行被注释 */
     }
@@ -927,7 +901,7 @@ motion_parse_result_e motion_parser_parse(const char *line,
         if (read_word(&p, name, sizeof(name)) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p != '\0') {
             return MOTION_PARSE_INVALID;
         }
@@ -937,8 +911,7 @@ motion_parse_result_e motion_parser_parse(const char *line,
                                    : ((strcmp(command, "GOTO") == 0)
                                           ? MOTION_CMD_GOTO
                                           : MOTION_CMD_CALL);
-        strncpy(instruction->name, name, sizeof(instruction->name) - 1U);
-        instruction->name[sizeof(instruction->name) - 1U] = '\0';
+        (void)str_copy(instruction->name, sizeof(instruction->name), name);
         return MOTION_PARSE_OK;
     }
     if (strcmp(command, "RETURN") == 0) {
@@ -953,7 +926,7 @@ motion_parse_result_e motion_parser_parse(const char *line,
         if (motion_parser_value_token(&p, &value) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p != '\0') {
             return MOTION_PARSE_INVALID;
         }
@@ -978,7 +951,7 @@ motion_parse_result_e motion_parser_parse(const char *line,
             strcmp(second, "ERROR") != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p != '\0') {
             return MOTION_PARSE_INVALID;
         }
@@ -996,14 +969,13 @@ motion_parse_result_e motion_parser_parse(const char *line,
     if (strcmp(command, "JOB") == 0) {
         char name[MOTION_MAX_JOB_NAME];
 
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (read_name(&p, name, sizeof(name)) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        strncpy(instruction->name, name, sizeof(instruction->name) - 1U);
-        instruction->name[sizeof(instruction->name) - 1U] = '\0';
+        (void)str_copy(instruction->name, sizeof(instruction->name), name);
 
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p == '\0') {
             instruction->command = MOTION_CMD_JOB;
             return MOTION_PARSE_OK;
@@ -1023,7 +995,7 @@ motion_parse_result_e motion_parser_parse(const char *line,
                 return MOTION_PARSE_INVALID;
             }
             instruction->command = MOTION_CMD_JOB_STATE;
-            p = skip_ws(p);
+            p = str_skip_ws(p);
             if (*p == ',') {
                 p++;
                 return parse_param_clauses(p, instruction);
@@ -1044,11 +1016,11 @@ motion_parse_result_e motion_parser_parse(const char *line,
             strcmp(second, "JOB") != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (read_name(&p, name, sizeof(name)) != 0) {
             return MOTION_PARSE_INVALID;
         }
-        p = skip_ws(p);
+        p = str_skip_ws(p);
         if (*p != '\0') {
             return MOTION_PARSE_INVALID;
         }
@@ -1056,8 +1028,7 @@ motion_parse_result_e motion_parser_parse(const char *line,
         instruction->command = (strcmp(command, "START") == 0)
                                    ? MOTION_CMD_START_JOB
                                    : MOTION_CMD_STOP_JOB;
-        strncpy(instruction->name, name, sizeof(instruction->name) - 1U);
-        instruction->name[sizeof(instruction->name) - 1U] = '\0';
+        (void)str_copy(instruction->name, sizeof(instruction->name), name);
         return MOTION_PARSE_OK;
     }
 

@@ -1,5 +1,6 @@
 #include "at24cxx.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 typedef struct {
     uint32_t capacity;

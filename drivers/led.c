@@ -1,6 +1,7 @@
 #include "led.h"
 #include "hal.h"
-#include "log.h"
+#include "ros.h"
+#include "common.h"
 
 int led_init(led_t *led, uint8_t pin, uint8_t active_level)
 {

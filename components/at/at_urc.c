@@ -17,7 +17,8 @@
  *   - 先注册者优先，前缀存在包含关系时应把更长的前缀先注册。
  */
 #include "at_urc.h"
-#include "ros_mem.h"
+#include "ros.h"
+#include "common.h"
 #include <string.h>
 
 /* URC 注册表容量 */

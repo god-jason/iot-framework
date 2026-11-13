@@ -12,6 +12,7 @@
 
 #include "board.h"
 #include "ros.h"
+#include "common.h"
 #include "shell.h"
 
 #include "stm32_cube.h"
