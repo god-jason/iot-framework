@@ -73,6 +73,7 @@ void shell_instance_reset(shell_t *sh)
     sh->ctrlc = false;
     sh->line_len = 0U;
     sh->last_esc = false;
+    sh->last_cr = false;
     sh->paste_len = 0U;
     sh->block_depth = 0;
     sh->in_paste = false;
@@ -665,13 +666,17 @@ static void shell_feed_char(shell_t *sh, int c)
         shell_prompt(sh);
         return;
     }
-    if (c == '\r') {
-        return;
-    }
-    if (c == '\n') {
+    if (c == '\r' || c == '\n') {
+        /* 串口终端可能只发 CR，也可能发 CRLF：都按一次提交处理 */
+        if (c == '\n' && sh->last_cr) {
+            sh->last_cr = false;
+            return;
+        }
+        sh->last_cr = (c == '\r');
         shell_submit_line(sh);
         return;
     }
+    sh->last_cr = false;
     if (c == 0x08 || c == 0x7F) {
         if (sh->line_len > 0U) {
             sh->line_len--;

@@ -2,7 +2,7 @@
  * ros_io.c - 标准输入输出抽象
  *
  * 默认 stdio 的解析顺序：
- *   当前任务绑定的 io → 全局默认 io（可由平台实现 ros_io_platform_default）
+ *   当前任务绑定的 io → 全局默认 io（平台在 ros_init 中初始化）
  *   → 内置 null io（丢弃输出、无输入）。
  */
 
@@ -14,9 +14,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* 平台默认 stdio 为弱符号：未链接平台层时仍可编译 */
-extern ros_io_t *ros_io_platform_default(void) __attribute__((weak));
 
 static ros_io_t *s_default_io;
 
@@ -50,9 +47,6 @@ void ros_io_set_default(ros_io_t *io)
 
 ros_io_t *ros_io_default(void)
 {
-    if (s_default_io == NULL && ros_io_platform_default != NULL) {
-        s_default_io = ros_io_platform_default();
-    }
     return (s_default_io != NULL) ? s_default_io : &s_null_io;
 }
 

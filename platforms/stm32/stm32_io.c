@@ -85,4 +85,10 @@ ros_io_t *ros_io_platform_default(void)
     return &io;
 }
 
+/* ros_init() 调用：把 UART1 注册为默认 stdio */
+void ros_io_platform_init(void)
+{
+    ros_io_set_default(ros_io_platform_default());
+}
+
 #endif /* ROS_PLATFORM_STM32 */

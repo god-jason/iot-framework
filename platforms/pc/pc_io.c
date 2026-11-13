@@ -128,4 +128,10 @@ ros_io_t *ros_io_platform_default(void)
     return &io;
 }
 
+/* ros_init() 调用：把主机标准输入输出注册为默认 stdio */
+void ros_io_platform_init(void)
+{
+    ros_io_set_default(ros_io_platform_default());
+}
+
 #endif /* ROS_PLATFORM_PC */

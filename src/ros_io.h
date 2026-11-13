@@ -13,7 +13,9 @@
  *   write : 返回写入字节数；<0 失败
  *   close : 释放底层资源；可为 NULL，表示无需关闭
  *
- * 默认 stdio 由平台提供（PC：标准输入输出；STM32：UART1）。
+ * 默认 stdio 初始为空（null io），由平台层在 ros_init() 中初始化：
+ *   PC    → 标准输入输出（pc_io.c）
+ *   STM32 → UART1（stm32_io.c）
  * 任务创建时继承创建者的 stdio，因此脚本 JOB 天然共享父任务的 stdio；
  * 也可以在创建任务时显式指定（ros_task_create_dynamic_io）。
  *
@@ -44,12 +46,19 @@ typedef struct ros_io {
 } ros_io_t;
 
 /*
- * 平台默认 stdio：PC 为 stdin/stdout，STM32 为 UART1。
- * 由平台层实现；未提供时 ros_io_default() 返回丢弃输出的 null io。
+ * 平台默认 stdio 工厂：PC 为 stdin/stdout，STM32 为 UART1。
+ * 由平台层实现，供 ros_io_platform_init() 注册为默认 stdio。
  */
 ros_io_t *ros_io_platform_default(void);
 
-/* 注册 / 查询全局默认 stdio（io 为 NULL 表示恢复平台默认） */
+/*
+ * 平台 stdio 初始化：由 ros_init() 调用（弱符号）。
+ * 平台层在此把默认 stdio 设为 PC 标准输入输出或 UART1；
+ * 未实现时默认 stdio 保持为空（null io：丢弃输出、无输入）。
+ */
+void ros_io_platform_init(void);
+
+/* 注册 / 查询全局默认 stdio（io 为 NULL 表示恢复为空） */
 void ros_io_set_default(ros_io_t *io);
 ros_io_t *ros_io_default(void);
 

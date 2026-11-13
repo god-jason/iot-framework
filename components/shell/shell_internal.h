@@ -180,6 +180,7 @@ struct shell {
     char          *line;             /* [SHELL_LINE_MAX] */
     uint16_t       line_len;
     bool           last_esc;
+    bool           last_cr;          /* 上一个输入是 CR（CRLF 只提交一次） */
 
     char          *paste;            /* [SHELL_PASTE_MAX] */
     uint16_t       paste_len;
