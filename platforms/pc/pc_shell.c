@@ -30,6 +30,34 @@
 
 static void *s_rx_task;
 static size_t s_open_pos;               /* 口令匹配进度 */
+static char s_word[8];                  /* 监听态输入的单词（识别 quit/exit） */
+static size_t s_word_len;
+
+/* 监听态识别 quit / exit：按回车/换行判定，命中返回 true */
+static bool pc_watch_word_feed(uint8_t ch)
+{
+    if (ch >= (uint8_t)'A' && ch <= (uint8_t)'Z') {
+        ch = (uint8_t)(ch - 'A' + 'a');
+    }
+    if (ch >= (uint8_t)'a' && ch <= (uint8_t)'z') {
+        if (s_word_len + 1U < sizeof(s_word)) {
+            s_word[s_word_len++] = (char)ch;
+        } else {
+            s_word_len = 0U;
+        }
+        return false;
+    }
+    if (ch == (uint8_t)'\r' || ch == (uint8_t)'\n') {
+        bool stop = (s_word_len == 4U) &&
+                    (memcmp(s_word, "quit", 4U) == 0 ||
+                     memcmp(s_word, "exit", 4U) == 0);
+
+        s_word_len = 0U;
+        return stop;
+    }
+    s_word_len = 0U;
+    return false;
+}
 
 /* 逐字节匹配开启口令；匹配过程中其它字符被丢弃 */
 static bool pc_open_word_match(uint8_t ch)
@@ -64,6 +92,7 @@ static void pc_shell_rx_task(void *arg)
         if (shell_task_finished()) {
             /* exit 之后输入任务已退出：释放实例，回到监听 */
             (void)shell_shutdown();
+            s_word_len = 0U;
             continue;
         }
         if (shell_started()) {
@@ -78,11 +107,23 @@ static void pc_shell_rx_task(void *arg)
                 ros_stop();         /* 口令阶段管道 EOF：停止内核 */
                 return;
             }
-            if (n > 0 && pc_open_word_match(ch)) {
-                (void)fputs("hello!\n", stdout);
-                (void)fflush(stdout);
-                (void)shell_lazy_start();
-                continue;
+            if (n > 0) {
+                bool stop = pc_watch_word_feed(ch);
+
+                if (pc_open_word_match(ch)) {
+                    (void)fputs("hello!\n", stdout);
+                    (void)fflush(stdout);
+                    (void)shell_lazy_start();
+                    s_word_len = 0U;
+                    continue;
+                }
+                if (stop) {
+                    /* 监听态直接输入 quit / exit：结束进程 */
+                    (void)fputs("bye\n", stdout);
+                    (void)fflush(stdout);
+                    ros_stop();
+                    return;
+                }
             }
         }
         /* 没有输入时用 RTOS 睡眠让出 CPU：模拟时间随 idle 继续推进，

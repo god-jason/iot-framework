@@ -181,6 +181,19 @@ local function ros_host_links()
     end
 end
 
+-- 为可执行目标生成链接 map 文件，便于崩溃时用地址回溯符号
+-- 输出位置与 ELF/EXE 同目录：<targetfile>.map
+local function ros_enable_mapfile()
+    after_load(function (target)
+        if target:kind() == "binary" then
+            -- 统一用 '/'：MinGW / arm-none-eabi-gcc 的 ld 会把 '\' 当转义字符
+            local mapfile = target:targetfile() .. ".map"
+            mapfile = mapfile:gsub("\\", "/")
+            target:add("ldflags", "-Wl,-Map=" .. mapfile, {force = true})
+        end
+    end)
+end
+
 -- 每个主机二进制/库目标共用的描述
 local function ros_host_common(with_tests)
     set_toolchains("gcc")            -- Windows / Linux 统一使用系统 gcc
@@ -189,6 +202,7 @@ local function ros_host_common(with_tests)
 
     ros_host_defines()
     ros_trace_defines()
+    ros_enable_mapfile()
     add_files("platforms/pc/**.c")
     ros_framework_sources()
     ros_includedirs()
@@ -243,7 +257,7 @@ if not is_plat("cross") then
         ros_host_links()
     target_end()
 
-    -- 综合示例：日志 + LED 闪烁（真实延时）
+    -- 综合示例：日志 + LED 闪烁 + Shell（真实延时）
     target("ros-demo")
         set_kind("binary")
         ros_host_common(false)
@@ -300,6 +314,8 @@ if is_plat("cross") then
         set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
         set_languages("c99")
         set_warnings("all")
+        -- 保留 DWARF 调试信息，供 addr2line / gdb 回溯崩溃地址
+        add_cflags("-g", {force = true})
 
         add_defines("ROS_PLATFORM_STM32")
         add_defines("ROS_STM32_" .. family:upper())
@@ -308,6 +324,8 @@ if is_plat("cross") then
         -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
         if family == "f1" then
             add_defines("ROS_USE_TRACE=0", "ROS_CRASH_ENABLE=0")
+            -- F103C8 仅 20KB SRAM，默认 32KB TLSF 堆无法容纳，收紧到 8KB
+            add_defines("ROS_MEM_HEAP_SIZE=8192")
         end
         ros_trace_defines()
 
@@ -404,6 +422,8 @@ if is_plat("cross") then
             set_languages("c99")
             set_warnings("all")
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
+            add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）
+            ros_enable_mapfile()
             add_deps("ros-stm32")
 
             add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F1")
@@ -457,10 +477,16 @@ if is_plat("cross") then
                 local dir = target:targetdir()
                 local hex = path.join(dir, target:basename() .. ".hex")
                 local bin = path.join(dir, target:basename() .. ".bin")
+                local map = elf .. ".map"
                 os.execv(oc, {"-O", "ihex", elf, hex})
                 os.execv(oc, {"-O", "binary", elf, bin})
                 cprint("${green}[firmware] HEX: %s${clear}", hex)
                 cprint("${green}[firmware] BIN: %s${clear}", bin)
+                if os.isfile(map) then
+                    cprint("${green}[firmware] MAP: %s${clear}", map)
+                else
+                    cprint("${yellow}[firmware] MAP 未生成: %s${clear}", map)
+                end
             end)
         target_end()
     end
@@ -490,6 +516,8 @@ if is_plat("cross") then
             set_languages("c99")
             set_warnings("all")
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
+            add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）
+            ros_enable_mapfile()
             add_deps("ros-stm32")
 
             add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F4",
@@ -551,10 +579,16 @@ if is_plat("cross") then
                 local dir = target:targetdir()
                 local hex = path.join(dir, target:basename() .. ".hex")
                 local bin = path.join(dir, target:basename() .. ".bin")
+                local map = elf .. ".map"
                 os.execv(oc, {"-O", "ihex", elf, hex})
                 os.execv(oc, {"-O", "binary", elf, bin})
                 cprint("${green}[firmware] HEX: %s${clear}", hex)
                 cprint("${green}[firmware] BIN: %s${clear}", bin)
+                if os.isfile(map) then
+                    cprint("${green}[firmware] MAP: %s${clear}", map)
+                else
+                    cprint("${yellow}[firmware] MAP 未生成: %s${clear}", map)
+                end
             end)
         target_end()
     end

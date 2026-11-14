@@ -120,8 +120,8 @@ int args_parse(const args_def_t *args, uint8_t arg_count,
     bool options_done = false;
     int t;
 
-    if (args == NULL || parsed == NULL || (argv == NULL && argc != 0) ||
-        arg_count > ARGS_MAX) {
+    if (parsed == NULL || (argv == NULL && argc != 0) ||
+        arg_count > ARGS_MAX || (args == NULL && arg_count != 0)) {
         return ARGS_ERR_PARAM;
     }
     memset(parsed, 0, sizeof(*parsed));

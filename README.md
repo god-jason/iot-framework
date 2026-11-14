@@ -59,12 +59,34 @@ robotos/
 xmake build ros-test
 xmake run ros-test
 
-# 综合示例：控制台 + shell + LED
+# 综合示例：日志 + LED
 xmake build ros-demo
 xmake run ros-demo
 
 # 主机静态库（供外部工程集成）
 xmake build ros-pc
+```
+
+所有可执行目标（含 STM32 固件）在链接时都会生成 map 文件，与 ELF/EXE 同目录：
+主机为 `.../ros-test.exe.map`，STM32 为 `.../ros-fw-f407.map`（ELF 无扩展名）。
+STM32 固件 ELF 同时带 DWARF 调试信息（`-g`），可直接解析源码行号与局部变量。
+
+### 崩溃回溯
+
+`ros_crash` 会把 PC/LR/SP、异常栈帧和 256 字节栈快照写入 `.noinit`。把串口输出的
+崩溃文本交给脚本即可得到函数名、源码行与疑似调用栈：
+
+```bash
+python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407 crash.txt
+# 或直接管道输入
+type crash.txt | python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407
+```
+
+脚本自动调用 `arm-none-eabi-addr2line` / `nm`；工具不在 PATH 时用
+`--addr2line <路径>` 指定。地址也可手工解析：
+
+```
+arm-none-eabi-addr2line -e ros-fw-f407 -f -C 0x0800xxxx
 ```
 
 ### 目标一览
@@ -73,7 +95,7 @@ xmake build ros-pc
 | --- | --- | --- |
 | `ros-pc` | static | 主机静态库 |
 | `ros-test` | binary | 单元测试入口 `src/test_main.c` |
-| `ros-demo` | binary | 示例程序 |
+| `ros-demo` | binary | 示例程序（日志 + LED） |
 | `ros-stm32` | static | STM32 交叉编译库 |
 | `ros-fw-f103c8` | binary | 可烧录固件（elf/hex/bin） |
 

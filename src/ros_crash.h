@@ -20,7 +20,7 @@
  *   ros_init();                        // 内部调用 ros_crash_init()：
  *                                      //   校验上次复位留下的记录并安装异常钩子
  *   if (ros_crash_pending()) {
- *       char buf[768];
+ *       char buf[1280];
  *       ros_crash_format(ros_crash_get(), buf, sizeof(buf));
  *       upload(buf);                   // 通过 4G/MQTT/串口上报
  *       ros_crash_clear();             // 上报成功后清除，避免重复上报
@@ -53,9 +53,9 @@ extern "C" {
 #define ROS_CRASH_EXPR_MAX     48U
 #define ROS_CRASH_BUILD_MAX    24U
 
-/* 栈快照字数：16 字 = 64 字节，足够覆盖崩溃点附近的局部变量/返回地址 */
+/* 栈快照字数：64 字 = 256 字节，可覆盖多层返回地址/局部变量 */
 #ifndef ROS_CRASH_STACK_WORDS
-#define ROS_CRASH_STACK_WORDS  16U
+#define ROS_CRASH_STACK_WORDS  64U
 #endif
 
 /* 崩溃原因 */
