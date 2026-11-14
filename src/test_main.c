@@ -58,6 +58,7 @@ void ut_pid(void);
 void ut_params(void);
 void ut_alog(void);
 void ut_cmd(void);
+void ut_args(void);
 void ut_scheduler(void);
 
 /* ---------------- 通信与运维 ---------------- */
@@ -148,6 +149,7 @@ int main(void)
     ut_params();
     ut_alog();
     ut_cmd();
+    ut_args();
     ut_scheduler();
 
     printf("\n--- 通信与运维 ---\n");
