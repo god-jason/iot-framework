@@ -266,29 +266,28 @@ int shell_vars_init(shell_vars_t *vars)
 
 void shell_vars_clear(shell_vars_t *vars)
 {
-    if (vars != NULL && vars->items != NULL) {
-        memset(vars->items, 0, SHELL_VAR_MAX * sizeof(shell_var_t));
+    if (vars != NULL) {
+        vec_clear(&vars->items);
     }
 }
 
 void shell_vars_release(shell_vars_t *vars)
 {
-    if (vars != NULL && vars->items != NULL) {
-        ros_mem_free(vars->items);
-        vars->items = NULL;
+    if (vars != NULL) {
+        vec_deinit(&vars->items);
     }
 }
 
 shell_var_t *shell_var_find(shell_vars_t *vars, const char *name, uint16_t len)
 {
-    uint16_t i;
+    uint32_t i;
 
-    if (vars == NULL || vars->items == NULL || name == NULL || len == 0U ||
+    if (vars == NULL || name == NULL || len == 0U ||
         len >= SHELL_VAR_NAME_MAX) {
         return NULL;
     }
-    for (i = 0U; i < SHELL_VAR_MAX; i++) {
-        shell_var_t *var = &vars->items[i];
+    for (i = 0U; i < vec_size(&vars->items); i++) {
+        shell_var_t *var = (shell_var_t *)vec_at(&vars->items, i);
         uint16_t k;
         bool same;
 
@@ -311,28 +310,42 @@ shell_var_t *shell_var_find(shell_vars_t *vars, const char *name, uint16_t len)
 
 static int shell_var_alloc(shell_vars_t *vars, const char *name, uint16_t len)
 {
-    uint16_t i;
+    uint32_t i;
 
-    if (vars->items == NULL) {
-        vars->items = (shell_var_t *)ros_mem_calloc(SHELL_VAR_MAX,
-                                                    sizeof(shell_var_t));
-        if (vars->items == NULL) {
-            return -1;
-        }
+    if (vec_data(&vars->items) == NULL &&
+        vec_init(&vars->items, sizeof(shell_var_t), 4U) != 0) {
+        return -1;
     }
-    for (i = 0U; i < SHELL_VAR_MAX; i++) {
-        if (!vars->items[i].used) {
+    for (i = 0U; i < vec_size(&vars->items); i++) {
+        shell_var_t *var = (shell_var_t *)vec_at(&vars->items, i);
+        if (!var->used) {
             uint16_t k;
 
-            memset(&vars->items[i], 0, sizeof(vars->items[i]));
+            memset(var, 0, sizeof(*var));
             for (k = 0U; k < len && k + 1U < SHELL_VAR_NAME_MAX; k++) {
-                vars->items[i].name[k] = str_upper_char(name[k]);
+                var->name[k] = str_upper_char(name[k]);
             }
-            vars->items[i].used = true;
+            var->used = true;
             return (int)i;
         }
     }
-    return -1;
+    if (vec_size(&vars->items) >= SHELL_VAR_MAX) {
+        return -1;                      /* 保留变量表容量上限语义 */
+    }
+    {
+        shell_var_t var;
+        uint16_t k;
+
+        memset(&var, 0, sizeof(var));
+        for (k = 0U; k < len && k + 1U < SHELL_VAR_NAME_MAX; k++) {
+            var.name[k] = str_upper_char(name[k]);
+        }
+        var.used = true;
+        if (vec_push(&vars->items, &var) != 0) {
+            return -1;
+        }
+        return (int)(vec_size(&vars->items) - 1U);
+    }
 }
 
 /* 把值写入变量槽位（不检查 readonly，供只读内建变量内部更新） */

@@ -12,6 +12,7 @@
  */
 
 #include "modbus.h"
+#include "vec.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,7 +80,7 @@ typedef struct {
     void *user;                     /* 回调上下文 */
 } modbus_reg_range_t;
 
-/* 映射表最大区间数，可在编译时用 -D 覆盖 */
+/* 映射表初始容量，可在编译时用 -D 覆盖 */
 #ifndef MODBUS_SLAVE_MAX_RANGES
 #define MODBUS_SLAVE_MAX_RANGES 16
 #endif
@@ -88,8 +89,7 @@ typedef struct {
     uint8_t address;            /* 本机地址；0 表示广播模式（只处理不回复） */
     modbus_mode_e mode;         /* RTU / TCP */
 
-    modbus_reg_range_t ranges[MODBUS_SLAVE_MAX_RANGES]; /* 已注册区间表 */
-    uint16_t range_count;       /* 已注册区间数 */
+    vec_t ranges;               /* 已注册区间表（变长数组，元素为 modbus_reg_range_t） */
 
     /* 统计 */
     uint32_t request_count;     /* 收到的有效请求数 */
@@ -103,7 +103,7 @@ void modbus_slave_register_init(modbus_slave_t *slave, uint8_t address, modbus_m
  * 注册连续寄存器/线圈区间（结构体整体拷贝，内部不持有指针生命周期管理）。
  * 参数：slave 从站；range 区间描述。
  * 返回：0 成功；MODBUS_ERR_PARAM 参数非法或地址越界；
- *       MODBUS_ERR_NO_MEMORY 区间表已满。
+ *       MODBUS_ERR_NO_MEMORY 内存不足。
  */
 int modbus_slave_register_range(modbus_slave_t *slave, const modbus_reg_range_t *range);
 

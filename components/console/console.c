@@ -9,8 +9,8 @@
  *   2) Shell：维护命令表，按空格/制表符切分 argv 并分发执行，
  *      同时支持按行喂入字节流（'\n' 触发一条命令）。
  *
- * 缓冲与边界约束（容量为编译期固定值，内存由 ros_mem 运行期分配）：
- *   - s_cmds：命令表，最多 SHELL_MAX_CMD（16）条，满则注册失败。
+ * 缓冲与边界约束（内存由 ros_mem 运行期分配，命令表按需扩容）：
+ *   - s_cmds：命令表（变长数组，初始容量 SHELL_MAX_CMD = 16）。
  *   - s_line：单行命令缓冲，最多 SHELL_LINE_MAX（128）字节（含 '\0'）。
  *   - shell_execute() 内部另有同尺寸栈缓冲与 16 个 argv 槽位。
  *   - 行缓冲溢出时直接清空当前行（丢弃该行），不会截断执行。
@@ -111,7 +111,7 @@ int console_process(void)
 }
 
 /* ==================== Shell ==================== */
-/* 命令表容量：同时可注册的命令条数 */
+/* 命令表初始容量（按需扩容） */
 #define SHELL_MAX_CMD    16
 /* 单行命令最大长度（含结尾 '\0'），超长行整体丢弃 */
 #define SHELL_LINE_MAX   128
@@ -126,21 +126,21 @@ typedef struct {
 } shell_cmd_t;
 
 /* 命令表与行输入缓冲：callback == NULL 表示该槽位空闲；由 ros_mem 分配 */
-static shell_cmd_t *s_cmds = NULL;
+static vec_t s_cmds;
 static char *s_line = NULL;
 static uint32_t s_line_len;
 
 /* 确保命令表与行缓冲已分配；分配失败返回 false（再次调用会重试） */
 static bool shell_ensure(void)
 {
-    if (s_cmds == NULL) {
-        s_cmds = (shell_cmd_t *)ros_mem_calloc(SHELL_MAX_CMD,
-                                            sizeof(shell_cmd_t));
+    if (vec_data(&s_cmds) == NULL &&
+        vec_init(&s_cmds, sizeof(shell_cmd_t), SHELL_MAX_CMD) != 0) {
+        return false;
     }
     if (s_line == NULL) {
         s_line = (char *)ros_mem_calloc(SHELL_LINE_MAX, sizeof(char));
     }
-    return (s_cmds != NULL && s_line != NULL);
+    return (s_line != NULL);
 }
 
 /*
@@ -151,16 +151,15 @@ static bool shell_ensure(void)
  */
 int shell_init(void)
 {
-    ros_mem_free(s_cmds);
     ros_mem_free(s_line);
-    s_cmds = (shell_cmd_t *)ros_mem_calloc(SHELL_MAX_CMD, sizeof(shell_cmd_t));
     s_line = (char *)ros_mem_calloc(SHELL_LINE_MAX, sizeof(char));
+    vec_deinit(&s_cmds);
     s_line_len = 0;
-    if (s_cmds == NULL || s_line == NULL) {
-        ros_mem_free(s_cmds);
+    if (s_line == NULL ||
+        vec_init(&s_cmds, sizeof(shell_cmd_t), SHELL_MAX_CMD) != 0) {
         ros_mem_free(s_line);
-        s_cmds = NULL;
         s_line = NULL;
+        vec_deinit(&s_cmds);
         return -1;
     }
     return 0;
@@ -169,28 +168,34 @@ int shell_init(void)
 /*
  * 注册一条 Shell 命令。
  * 参数：command - 命令描述（name、callback 均不可为 NULL）
- * 返回：0 成功；-1 参数非法或命令表已满
+ * 返回：0 成功；-1 参数非法或内存不足
  * 注意：只保存指针，不拷贝字符串，命令名必须是静态存储或长期有效；
  *       不检查同名命令，重复注册会占用新槽位。
  */
 int shell_register(const shell_command_t *command)
 {
-    int i;
+    uint32_t i;
+    shell_cmd_t cmd;
+
     if (command == NULL || command->name == NULL || command->callback == NULL) {
         return -1;
     }
     if (!shell_ensure()) {
         return -1;   /* 内存分配失败 */
     }
-    for (i = 0; i < SHELL_MAX_CMD; i++) {
-        if (s_cmds[i].callback == NULL) {
-            s_cmds[i].name = command->name;
-            s_cmds[i].description = command->description;
-            s_cmds[i].callback = command->callback;
+    for (i = 0; i < vec_size(&s_cmds); i++) {
+        shell_cmd_t *slot = (shell_cmd_t *)vec_at(&s_cmds, i);
+        if (slot->callback == NULL) {
+            slot->name = command->name;
+            slot->description = command->description;
+            slot->callback = command->callback;
             return 0;
         }
     }
-    return -1;   /* 命令表已满 */
+    cmd.name = command->name;
+    cmd.description = command->description;
+    cmd.callback = command->callback;
+    return vec_push(&s_cmds, &cmd);
 }
 
 /*
@@ -201,17 +206,18 @@ int shell_register(const shell_command_t *command)
  */
 int shell_unregister(const char *name)
 {
-    int i;
+    uint32_t i;
     if (name == NULL) {
         return -1;
     }
     if (!shell_ensure()) {
         return -1;   /* 内存分配失败 */
     }
-    for (i = 0; i < SHELL_MAX_CMD; i++) {
-        if (s_cmds[i].callback != NULL && strcmp(s_cmds[i].name, name) == 0) {
-            s_cmds[i].name = NULL;
-            s_cmds[i].callback = NULL;
+    for (i = 0; i < vec_size(&s_cmds); i++) {
+        shell_cmd_t *slot = (shell_cmd_t *)vec_at(&s_cmds, i);
+        if (slot->callback != NULL && strcmp(slot->name, name) == 0) {
+            slot->name = NULL;
+            slot->callback = NULL;
             return 0;
         }
     }
@@ -231,7 +237,7 @@ int shell_execute(const char *command)
     char *argv[SHELL_ARGC_MAX];
     int argc = 0;
     char *p;
-    int i;
+    uint32_t i;
 
     if (command == NULL) {
         return -1;
@@ -263,9 +269,10 @@ int shell_execute(const char *command)
         return -1;   /* 空行或全空白 */
     }
 
-    for (i = 0; i < SHELL_MAX_CMD; i++) {
-        if (s_cmds[i].callback != NULL && strcmp(s_cmds[i].name, argv[0]) == 0) {
-            return s_cmds[i].callback(argc, argv);
+    for (i = 0; i < vec_size(&s_cmds); i++) {
+        shell_cmd_t *slot = (shell_cmd_t *)vec_at(&s_cmds, i);
+        if (slot->callback != NULL && strcmp(slot->name, argv[0]) == 0) {
+            return slot->callback(argc, argv);
         }
     }
     return -1;   /* 未注册的命令 */

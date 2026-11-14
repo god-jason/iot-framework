@@ -108,9 +108,8 @@ static bool nav_line_of_sight(const navigation_grid_map_t *map, int32_t a, int32
 static uint32_t *s_g = NULL;        /* 起点到各格的最优代价 */
 static int32_t  *s_parent = NULL;   /* 最优路径父节点 */
 static uint8_t  *s_closed = NULL;   /* 已扩展标记 */
-static uint32_t *s_open = NULL;     /* 开放表（存栅格索引） */
+static vec_t s_open;                /* 开放表（变长数组，存栅格索引） */
 static uint8_t  *s_in_open = NULL;  /* 是否已在开放表中 */
-static uint16_t s_open_count;       /* 开放表当前元素数 */
 
 /*
  * 惰性分配工作数组；已分配则直接复用，不重复分配。
@@ -119,7 +118,7 @@ static uint16_t s_open_count;       /* 开放表当前元素数 */
 static int nav_ensure(void)
 {
     if (s_g != NULL && s_parent != NULL && s_closed != NULL &&
-        s_open != NULL && s_in_open != NULL) {
+        vec_data(&s_open) != NULL && s_in_open != NULL) {
         return 0;
     }
     if (s_g == NULL) {
@@ -131,23 +130,22 @@ static int nav_ensure(void)
     if (s_closed == NULL) {
         s_closed = (uint8_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_closed));
     }
-    if (s_open == NULL) {
-        s_open = (uint32_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_open));
+    if (vec_data(&s_open) == NULL) {
+        (void)vec_init(&s_open, sizeof(uint32_t), NAVIGATION_MAX_CELLS);
     }
     if (s_in_open == NULL) {
         s_in_open = (uint8_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*s_in_open));
     }
     if (s_g == NULL || s_parent == NULL || s_closed == NULL ||
-        s_open == NULL || s_in_open == NULL) {
+        vec_data(&s_open) == NULL || s_in_open == NULL) {
         ros_mem_free(s_g);
         ros_mem_free(s_parent);
         ros_mem_free(s_closed);
-        ros_mem_free(s_open);
+        vec_deinit(&s_open);
         ros_mem_free(s_in_open);
         s_g = NULL;
         s_parent = NULL;
         s_closed = NULL;
-        s_open = NULL;
         s_in_open = NULL;
         return -1;                  /* 分配失败：整体释放，便于下次重试 */
     }
@@ -229,22 +227,22 @@ static int nav_astar_search(const navigation_grid_map_t *map,
         s_closed[i] = 0;
         s_in_open[i] = 0;
     }
-    s_open_count = 0;
+    vec_clear(&s_open);
 
     s_g[start] = 0;
-    s_open[s_open_count++] = start;
+    (void)vec_push(&s_open, &start);
     s_in_open[start] = 1;
 
-    while (s_open_count > 0) {
+    while (!vec_empty(&s_open)) {
         /* 线性扫描最小 f 节点（栅格规模受 NAVIGATION_MAX_CELLS 约束，无需优先队列） */
         uint32_t bi = 0, bf = NAV_INF, bn = start;
-        for (uint16_t i = 0; i < s_open_count; i++) {
-            uint32_t n = s_open[i];
+        for (uint32_t i = 0; i < vec_size(&s_open); i++) {
+            uint32_t n = *(uint32_t *)vec_at(&s_open, i);
             uint32_t nx = n % map->width, ny = n / map->width;
             uint32_t f = s_g[n] + nav_h((uint16_t)nx, (uint16_t)ny, gx, gy, use_h);
             if (f < bf) { bf = f; bn = n; bi = i; }     /* 记录最优节点及其在开放表中的位置 */
         }
-        s_open[bi] = s_open[--s_open_count];    /* 用末尾元素覆盖被取出的元素，O(1) 删除 */
+        (void)vec_remove(&s_open, bi, NULL);            /* 从开放表移除被取出的元素 */
         s_in_open[bn] = 0;
 
         if (bn == goal) {
@@ -291,7 +289,8 @@ static int nav_astar_search(const navigation_grid_map_t *map,
                 s_g[nidx] = new_g;
                 s_parent[nidx] = new_parent;
                 if (!s_in_open[nidx]) {
-                    s_open[s_open_count++] = (uint32_t)nidx;
+                    uint32_t nv = (uint32_t)nidx;
+                    (void)vec_push(&s_open, &nv);
                     s_in_open[nidx] = 1;
                 }
             }

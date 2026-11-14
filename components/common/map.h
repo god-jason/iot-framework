@@ -53,7 +53,10 @@ void map_deinit(map_t *m);
 void map_clear(map_t *m);
 
 /* 当前条目数；m 为 NULL 返回 0 */
-uint32_t map_size(const map_t *m);
+static inline uint32_t map_size(const map_t *m)
+{
+    return (m != NULL) ? m->count : 0U;
+}
 
 /* 是否包含 key（大小写敏感） */
 bool map_contains(const map_t *m, const char *key);

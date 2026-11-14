@@ -44,12 +44,24 @@ uint32_t ringbuf_peek(ringbuf_t *rb, void *data, uint32_t len);
 uint32_t ringbuf_skip(ringbuf_t *rb, uint32_t len);
 
 /* 可读字节数；rb 为 NULL 返回 0 */
-uint32_t ringbuf_available(const ringbuf_t *rb);
+static inline uint32_t ringbuf_available(const ringbuf_t *rb)
+{
+    return (rb != NULL) ? (rb->write_pos - rb->read_pos) : 0U;
+}
 /* 剩余可写字节数；rb 为 NULL 返回 0 */
-uint32_t ringbuf_free(const ringbuf_t *rb);
+static inline uint32_t ringbuf_free(const ringbuf_t *rb)
+{
+    return (rb != NULL) ? (rb->capacity - ringbuf_available(rb)) : 0U;
+}
 
 /* 清空缓冲区（读写位置归零，丢弃未读数据） */
-void ringbuf_reset(ringbuf_t *rb);
+static inline void ringbuf_reset(ringbuf_t *rb)
+{
+    if (rb != NULL) {
+        rb->read_pos = 0U;
+        rb->write_pos = 0U;
+    }
+}
 
 #ifdef __cplusplus
 }

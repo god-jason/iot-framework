@@ -22,6 +22,7 @@
 #include "strings.h"  /* 通用字符串处理 */
 #include "list.h"     /* 侵入式双向链表 */
 #include "map.h"      /* 定长字符串键映射表 */
+#include "vec.h"      /* 变长数组 */
 #include "fsm.h"      /* 表驱动状态机 */
 #include "queue.h"    /* 定长 FIFO 队列 */
 #include "ringbuf.h"  /* 字节环形缓冲 */

@@ -10,7 +10,8 @@
  * 日期与星期的组合语义遵循 cron 规则：
  *   两者都受限定时为“或”，任一为 * 时为“与”。
  *
- * 边界：任务表为固定容量（SCHEDULER_MAX_ENTRIES），运行期分配，添加失败返回 -1；
+ * 边界：任务表为变长数组（初始容量 SCHEDULER_MAX_ENTRIES），按需扩容，
+ *       内存不足时添加失败返回 -1；
  *       表达式长度上限 SCHEDULER_EXPR_MAX（含结尾 '\0' 前的有效字符）。
  *       回调在调用 process 的上下文中同步执行。
  */
@@ -18,7 +19,7 @@
 #include "ros.h"
 #include "common.h"
 
-/* 任务表容量（固定，不支持动态扩容） */
+/* 任务表初始容量（按需扩容） */
 #define SCHEDULER_MAX_ENTRIES 8
 /* cron 表达式最大长度（字符数，不含结尾 '\0'） */
 #define SCHEDULER_EXPR_MAX    128
@@ -41,21 +42,20 @@ typedef struct {
     int64_t last_minute;    /* 上次触发的分钟时间戳，用于同分钟去重 */
 } scheduler_entry_t;
 
-/* 任务表指针，由 scheduler_init 或首次使用时分配 */
-static scheduler_entry_t *s_entries;
+/* 任务表（变长数组，元素为 scheduler_entry_t） */
+static vec_t s_entries;
 
 /*
- * 惰性分配任务表（清零）。
- * 返回：0 成功（已分配或本次分配成功）；-1 分配失败。
+ * 惰性初始化任务表。
+ * 返回：0 成功（已初始化或本次初始化成功）；-1 分配失败。
  */
 static int scheduler_ensure(void)
 {
-    if (s_entries != NULL) {
+    if (vec_data(&s_entries) != NULL) {
         return 0;
     }
-    s_entries = (scheduler_entry_t *)ros_mem_calloc(SCHEDULER_MAX_ENTRIES,
-                                                sizeof(*s_entries));
-    return (s_entries != NULL) ? 0 : -1;
+    return vec_init(&s_entries, sizeof(scheduler_entry_t),
+                    SCHEDULER_MAX_ENTRIES);
 }
 
 /*
@@ -344,19 +344,8 @@ static bool sched_match(const scheduler_entry_t *entry,
  * 返回：0 成功；-1 内存分配失败。 */
 int scheduler_init(void)
 {
-    int i;
-
-    ros_mem_free(s_entries);
-    s_entries = NULL;
-    if (scheduler_ensure() != 0) {
-        return -1;
-    }
-    for (i = 0; i < SCHEDULER_MAX_ENTRIES; i++) {
-        s_entries[i].used = false;
-        s_entries[i].has_fired = false;
-        s_entries[i].last_minute = 0;
-    }
-    return 0;
+    vec_deinit(&s_entries);
+    return scheduler_ensure();
 }
 
 /*
@@ -369,7 +358,7 @@ int scheduler_init(void)
 int scheduler_add(const char *crontab, scheduler_fn callback,
                   void *user, uint32_t *id)
 {
-    int i;
+    uint32_t i;
     scheduler_entry_t *entry;
 
     if (crontab == NULL || callback == NULL) {
@@ -379,16 +368,20 @@ int scheduler_add(const char *crontab, scheduler_fn callback,
         return -1;
     }
 
-    for (i = 0; i < SCHEDULER_MAX_ENTRIES; i++) {
-        if (!s_entries[i].used) {
+    for (i = 0; i < vec_size(&s_entries); i++) {
+        if (!((scheduler_entry_t *)vec_at(&s_entries, i))->used) {
             break;
         }
     }
-    if (i == SCHEDULER_MAX_ENTRIES) {
-        return -1;
+    if (i == vec_size(&s_entries)) {
+        scheduler_entry_t empty;
+        memset(&empty, 0, sizeof(empty));
+        if (vec_push(&s_entries, &empty) != 0) {
+            return -1;                  /* 扩容失败 */
+        }
     }
 
-    entry = &s_entries[i];
+    entry = (scheduler_entry_t *)vec_at(&s_entries, i);
     memset(entry, 0, sizeof(*entry));
     if (parse_crontab(crontab, entry) != 0) {
         return -1;
@@ -401,7 +394,7 @@ int scheduler_add(const char *crontab, scheduler_fn callback,
     entry->last_minute = 0;
 
     if (id != NULL) {
-        *id = (uint32_t)i;
+        *id = i;
     }
     return 0;
 }
@@ -413,11 +406,16 @@ int scheduler_add(const char *crontab, scheduler_fn callback,
  */
 int scheduler_remove(uint32_t id)
 {
-    if (s_entries == NULL || id >= SCHEDULER_MAX_ENTRIES ||
-        !s_entries[id].used) {
+    scheduler_entry_t *entry;
+
+    if (id >= vec_size(&s_entries)) {
         return -1;
     }
-    s_entries[id].used = false;
+    entry = (scheduler_entry_t *)vec_at(&s_entries, id);
+    if (!entry->used) {
+        return -1;
+    }
+    entry->used = false;
     return 0;
 }
 
@@ -433,7 +431,7 @@ int scheduler_process(const datetime_t *now)
 {
     int64_t timestamp;
     int64_t minute;
-    int i;
+    uint32_t i;
 
     if (now == NULL) {
         return -1;
@@ -444,13 +442,9 @@ int scheduler_process(const datetime_t *now)
 
     minute = timestamp / 60;
 
-    if (s_entries == NULL) {
-        return 0;
-    }
-
     /* 逐槽位检查：跳过空闲槽位，命中则更新状态并同步回调 */
-    for (i = 0; i < SCHEDULER_MAX_ENTRIES; i++) {
-        scheduler_entry_t *entry = &s_entries[i];
+    for (i = 0; i < vec_size(&s_entries); i++) {
+        scheduler_entry_t *entry = (scheduler_entry_t *)vec_at(&s_entries, i);
 
         if (!entry->used) {
             continue;

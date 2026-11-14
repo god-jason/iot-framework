@@ -32,6 +32,7 @@ void tf_end(void)
 void ut_list(void);
 void ut_strings(void);
 void ut_map(void);
+void ut_vec(void);
 void ut_queue(void);
 void ut_ringbuf(void);
 void ut_fsm(void);
@@ -125,6 +126,7 @@ int main(void)
     ut_list();
     ut_strings();
     ut_map();
+    ut_vec();
     ut_queue();
     ut_ringbuf();
     ut_fsm();

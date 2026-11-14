@@ -10,8 +10,8 @@
  *   遍历表，用 strncmp 做行首前缀匹配 -> 命中即同步调用回调并返回。
  *
  * 静态状态与边界：
- *   - 表容量固定 AT_URC_MAX（8），满时注册失败；
- *   - 表内存由 ros_mem 在首次使用时惰性分配；
+ *   - 表为变长数组（初始容量 AT_URC_MAX），按需扩容，内存不足时注册失败；
+ *   - 表内存由 ros_mem 在首次使用时初始化；
  *   - 仅保存 prefix 指针、不拷贝字符串，调用者需保证其生命周期；
  *   - 匹配只要求行首前缀相同，不要求整行相等；
  *   - 先注册者优先，前缀存在包含关系时应把更长的前缀先注册。
@@ -21,7 +21,7 @@
 #include "common.h"
 #include <string.h>
 
-/* URC 注册表容量 */
+/* URC 注册表初始容量（按需扩容） */
 #define AT_URC_MAX 8
 
 /* 单个 URC 节点：回调为 NULL 表示槽位空闲 */
@@ -31,42 +31,48 @@ typedef struct {
     void *user;           /* 透传给回调的用户指针 */
 } at_urc_node_t;
 
-/* 全局静态注册表（首次使用时分配） */
-static at_urc_node_t *s_nodes = NULL;
+/* 全局静态注册表（首次使用时初始化） */
+static vec_t s_nodes;
 
-/* 确保注册表已分配；失败返回 false（再次调用会重试） */
+/* 确保注册表已初始化；失败返回 false（再次调用会重试） */
 static bool at_urc_ensure(void)
 {
-    if (s_nodes == NULL) {
-        s_nodes = (at_urc_node_t *)ros_mem_calloc(AT_URC_MAX,
-                                               sizeof(at_urc_node_t));
+    if (vec_data(&s_nodes) == NULL &&
+        vec_init(&s_nodes, sizeof(at_urc_node_t), AT_URC_MAX) != 0) {
+        return false;
     }
-    return (s_nodes != NULL);
+    return true;
 }
 
 /*
  * 注册一条 URC。
  * 参数：prefix 行首前缀（非 NULL）；callback 回调（非 NULL）；user 用户指针。
- * 返回：0 成功；参数非法或表已满返回 -1。
+ * 返回：0 成功；参数非法或内存不足返回 -1。
  */
 int at_urc_register(const char *prefix, at_urc_fn callback, void *user)
 {
-    int i;
+    uint32_t i;
+    at_urc_node_t node;
+
     if (prefix == NULL || callback == NULL) {
         return -1;
     }
     if (!at_urc_ensure()) {
         return -1;   /* 内存分配失败 */
     }
-    for (i = 0; i < AT_URC_MAX; i++) {
-        if (s_nodes[i].callback == NULL) {
-            s_nodes[i].prefix = prefix;
-            s_nodes[i].callback = callback;
-            s_nodes[i].user = user;
+    for (i = 0; i < vec_size(&s_nodes); i++) {
+        at_urc_node_t *n = (at_urc_node_t *)vec_at(&s_nodes, i);
+        if (n->callback == NULL) {
+            n->prefix = prefix;
+            n->callback = callback;
+            n->user = user;
             return 0;
         }
     }
-    return -1;
+    node.prefix = prefix;
+    node.callback = callback;
+    node.user = user;
+    return vec_push(&s_nodes, &node);
 }
 
 /*
@@ -76,19 +82,16 @@ int at_urc_register(const char *prefix, at_urc_fn callback, void *user)
  */
 int at_urc_unregister(const char *prefix)
 {
-    int i;
+    uint32_t i;
     if (prefix == NULL) {
         return -1;
     }
-    if (s_nodes == NULL) {
-        return -1;   /* 尚未分配 */
-    }
-    for (i = 0; i < AT_URC_MAX; i++) {
-        if (s_nodes[i].callback != NULL &&
-            strcmp(s_nodes[i].prefix, prefix) == 0) {
-            s_nodes[i].prefix = NULL;
-            s_nodes[i].callback = NULL;
-            s_nodes[i].user = NULL;
+    for (i = 0; i < vec_size(&s_nodes); i++) {
+        at_urc_node_t *n = (at_urc_node_t *)vec_at(&s_nodes, i);
+        if (n->callback != NULL && strcmp(n->prefix, prefix) == 0) {
+            n->prefix = NULL;
+            n->callback = NULL;
+            n->user = NULL;
             return 0;
         }
     }
@@ -103,15 +106,12 @@ int at_urc_unregister(const char *prefix)
  */
 int at_urc_dispatch(const char *line, uint32_t len)
 {
-    int i;
+    uint32_t i;
     if (line == NULL) {
         return -1;
     }
-    if (s_nodes == NULL) {
-        return -1;   /* 尚未分配：无 URC 可匹配 */
-    }
-    for (i = 0; i < AT_URC_MAX; i++) {
-        at_urc_node_t *n = &s_nodes[i];
+    for (i = 0; i < vec_size(&s_nodes); i++) {
+        at_urc_node_t *n = (at_urc_node_t *)vec_at(&s_nodes, i);
         uint32_t plen;
 
         if (n->callback == NULL) {

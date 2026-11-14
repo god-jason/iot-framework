@@ -10,22 +10,6 @@
 
 /* ---------------- 比较 / 判断 ---------------- */
 
-char str_lower_char(char c)
-{
-    if (c >= 'A' && c <= 'Z') {
-        return (char)(c - 'A' + 'a');
-    }
-    return c;
-}
-
-char str_upper_char(char c)
-{
-    if (c >= 'a' && c <= 'z') {
-        return (char)(c - 'a' + 'A');
-    }
-    return c;
-}
-
 bool str_icmp(const char *a, const char *b)
 {
     if (a == NULL || b == NULL) {
@@ -204,17 +188,6 @@ uint32_t str_to_lower(char *s)
         n++;
     }
     return n;
-}
-
-const char *str_skip_ws(const char *s)
-{
-    if (s == NULL) {
-        return NULL;
-    }
-    while (*s == ' ' || *s == '\t') {
-        s++;
-    }
-    return s;
 }
 
 /* ---------------- 解析 ---------------- */

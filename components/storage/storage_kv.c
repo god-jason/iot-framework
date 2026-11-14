@@ -37,20 +37,19 @@ typedef struct {
     bool used;                      /* 槽位占用标志 */
 } storage_kv_entry_t;
 
-/* 全局 KV 表指针，首次使用时分配 */
-static storage_kv_entry_t *s_kv;
+/* 全局 KV 表（变长数组），首次使用时初始化 */
+static vec_t s_kv;
 
 /*
- * 惰性分配 KV 表（清零）。
- * 返回：0 成功（已分配或本次分配成功）；-1 分配失败。
+ * 惰性初始化 KV 表。
+ * 返回：0 成功（已初始化或本次初始化成功）；-1 分配失败。
  */
 static int storage_kv_ensure(void)
 {
-    if (s_kv != NULL) {
+    if (vec_data(&s_kv) != NULL) {
         return 0;
     }
-    s_kv = (storage_kv_entry_t *)ros_mem_calloc(STORAGE_KV_MAX, sizeof(*s_kv));
-    return (s_kv != NULL) ? 0 : -1;
+    return vec_init(&s_kv, sizeof(storage_kv_entry_t), 8U);
 }
 
 /*
@@ -60,13 +59,14 @@ static int storage_kv_ensure(void)
  */
 static storage_kv_entry_t *storage_kv_find(const char *key)
 {
-    int i;
-    if (key == NULL || s_kv == NULL) {
+    uint32_t i;
+    if (key == NULL) {
         return NULL;
     }
-    for (i = 0; i < STORAGE_KV_MAX; i++) {
-        if (s_kv[i].used && strcmp(s_kv[i].key, key) == 0) {
-            return &s_kv[i];
+    for (i = 0; i < vec_size(&s_kv); i++) {
+        storage_kv_entry_t *e = (storage_kv_entry_t *)vec_at(&s_kv, i);
+        if (e->used && strcmp(e->key, key) == 0) {
+            return e;
         }
     }
     return NULL;
@@ -75,21 +75,12 @@ static storage_kv_entry_t *storage_kv_find(const char *key)
 /*
  * 初始化 KV 表。
  * 返回：0 成功；-1 内存分配失败。
- * 说明：先释放旧表再重新分配并清零，可重复调用。
+ * 说明：先释放旧表再重新初始化，可重复调用。
  */
 int storage_kv_init(void)
 {
-    int i;
-
-    ros_mem_free(s_kv);
-    s_kv = NULL;
-    if (storage_kv_ensure() != 0) {
-        return -1;
-    }
-    for (i = 0; i < STORAGE_KV_MAX; i++) {
-        s_kv[i].used = false;
-    }
-    return 0;
+    vec_deinit(&s_kv);
+    return storage_kv_ensure();
 }
 
 /*
@@ -103,7 +94,7 @@ int storage_kv_set(const char *key, storage_kv_type_e type,
                const void *value, uint32_t len)
 {
     storage_kv_entry_t *e;
-    int i;
+    uint32_t i;
 
     if (key == NULL || value == NULL) {
         return -1;
@@ -119,15 +110,25 @@ int storage_kv_set(const char *key, storage_kv_type_e type,
     e = storage_kv_find(key);
     if (e == NULL) {
         /* 新键：分配第一个空闲槽位 */
-        for (i = 0; i < STORAGE_KV_MAX; i++) {
-            if (!s_kv[i].used) {
-                e = &s_kv[i];
+        for (i = 0; i < vec_size(&s_kv); i++) {
+            storage_kv_entry_t *slot = (storage_kv_entry_t *)vec_at(&s_kv, i);
+            if (!slot->used) {
+                e = slot;
                 e->used = true;
                 break;
             }
         }
         if (e == NULL) {
-            return -1;   /* 表满且无可淘汰条目 */
+            storage_kv_entry_t empty;
+            if (vec_size(&s_kv) >= STORAGE_KV_MAX) {
+                return -1;   /* 表满且无可淘汰条目 */
+            }
+            memset(&empty, 0, sizeof(empty));
+            empty.used = true;
+            if (vec_push(&s_kv, &empty) != 0) {
+                return -1;
+            }
+            e = (storage_kv_entry_t *)vec_at(&s_kv, vec_size(&s_kv) - 1U);
         }
     }
 
@@ -196,13 +197,10 @@ int storage_kv_delete(const char *key)
  */
 int storage_kv_clear(void)
 {
-    int i;
     if (storage_kv_ensure() != 0) {
         return -1;
     }
-    for (i = 0; i < STORAGE_KV_MAX; i++) {
-        s_kv[i].used = false;
-    }
+    vec_clear(&s_kv);
     return 0;
 }
 

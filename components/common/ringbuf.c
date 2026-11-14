@@ -40,33 +40,6 @@ int ringbuf_init(ringbuf_t *rb, void *buffer, uint32_t size)
 }
 
 /*
- * 查询可读字节数。
- * 参数：rb - 缓冲区
- * 返回：当前已写入但未读取的字节数；rb 为 NULL 时返回 0
- * 注意：利用无符号减法，计数回绕后结果依然正确。
- */
-uint32_t ringbuf_available(const ringbuf_t *rb)
-{
-    if (rb == NULL) {
-        return 0;
-    }
-    return rb->write_pos - rb->read_pos;
-}
-
-/*
- * 查询剩余可写空间。
- * 参数：rb - 缓冲区
- * 返回：capacity - available；rb 为 NULL 时返回 0
- */
-uint32_t ringbuf_free(const ringbuf_t *rb)
-{
-    if (rb == NULL) {
-        return 0;
-    }
-    return rb->capacity - ringbuf_available(rb);
-}
-
-/*
  * 写入数据。
  * 参数：rb - 缓冲区；data - 源数据；len - 请求写入字节数
  * 返回：实际写入的字节数（0 表示参数非法或缓冲区已满）
@@ -160,19 +133,4 @@ uint32_t ringbuf_skip(ringbuf_t *rb, uint32_t len)
     n = (len < avail) ? len : avail;
     rb->read_pos += n;
     return n;
-}
-
-/*
- * 重置缓冲区为空（读写位置均归零）。
- * 参数：rb - 缓冲区，为 NULL 时直接返回
- * 返回：无
- * 注意：不清零存储内容；所有未读数据被丢弃。
- */
-void ringbuf_reset(ringbuf_t *rb)
-{
-    if (rb == NULL) {
-        return;
-    }
-    rb->read_pos = 0;
-    rb->write_pos = 0;
 }

@@ -21,37 +21,6 @@
 #include "list.h"
 
 /*
- * 初始化链表为空的循环结构（头节点自指）。
- * 参数：list - 待初始化链表，为 NULL 时直接返回
- * 返回：无
- */
-void list_init(list_t *list)
-{
-    if (list == NULL) {
-        return;
-    }
-    list->head.prev = &list->head;
-    list->head.next = &list->head;
-    list->size = 0;   /* 保留字段，当前不使用；大小见 list_size() */
-}
-
-/*
- * 把单个节点初始化为“未挂接”状态（prev/next 指向自身）。
- * 参数：node - 节点，为 NULL 时直接返回
- * 返回：无
- * 注意：插入前应保证节点处于该状态，否则链表指针可能被覆盖。
- */
-void list_node_init(list_node_t *node)
-{
-    if (node == NULL) {
-        return;
-    }
-    node->prev = node;
-    node->next = node;
-    node->sort_key = 0U;
-}
-
-/*
  * 把 node 链接到 prev 与 next 之间。
  * 参数：prev - 前驱；node - 待插入节点；next - 后继
  * 返回：无
@@ -171,19 +140,6 @@ void list_move(list_t *list, list_node_t *node)
 }
 
 /*
- * 判断链表是否为空。
- * 参数：list - 目标链表
- * 返回：true 为空；false 非空（list 为 NULL 也视为空，便于判空习惯用法）
- */
-bool list_empty(const list_t *list)
-{
-    if (list == NULL) {
-        return true;
-    }
-    return list->head.next == &list->head;
-}
-
-/*
  * 统计链表节点数（O(n) 遍历，不使用保留字段 size）。
  * 参数：list - 目标链表
  * 返回：节点个数；list 为 NULL 时返回 0
@@ -200,34 +156,6 @@ uint32_t list_size(const list_t *list)
         n++;
     }
     return n;
-}
-
-/*
- * 取链表首节点。
- * 参数：list - 目标链表
- * 返回：首节点指针；链表为空或 list 为 NULL 时返回 NULL
- */
-list_node_t *list_first(const list_t *list)
-{
-    if (list == NULL || list_empty(list)) {
-        return NULL;
-    }
-    return list->head.next;
-}
-
-/*
- * 取节点的后继节点。
- * 参数：node - 当前节点
- * 返回：后继指针；node 为 NULL（或 next 异常为 NULL）时返回 NULL
- * 注意：不判断是否已到尾节点（尾节点的 next 指向哨兵头，非 NULL），
- *       遍历时需由调用者用“不等于 &list->head”作为结束条件。
- */
-list_node_t *list_next(const list_node_t *node)
-{
-    if (node == NULL || node->next == NULL) {
-        return NULL;
-    }
-    return node->next;
 }
 
 /*

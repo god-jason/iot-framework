@@ -117,11 +117,6 @@ void map_deinit(map_t *m)
     m->count = 0U;
 }
 
-uint32_t map_size(const map_t *m)
-{
-    return (m != NULL) ? m->count : 0U;
-}
-
 bool map_get(const map_t *m, const char *key, void **out)
 {
     map_node_t *node;

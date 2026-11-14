@@ -8,8 +8,7 @@
  *   4) 新格合法且可通行则加入树，若正好是目标点则回溯父链得到路径。
  *
  * 数据结构：
- *   - s_tree[]：树的节点表（坐标 + 父节点下标），容量 NAVIGATION_MAX_NODES，首次调用时惰性分配；
- *   - s_tree_count：已用节点数，节点 0 恒为起点（parent = -1）；
+ *   - s_tree：树的节点表（变长数组，初始容量 NAVIGATION_MAX_NODES），节点 0 恒为起点（parent = -1）；
  *   - rrt_seed：LCG 伪随机种子，固定初值使结果可复现。
  *
  * 边界与注意事项：
@@ -29,20 +28,18 @@ typedef struct {
     int32_t parent;
 } rrt_node_t;
 
-static rrt_node_t *s_tree = NULL;                 /* 树表（惰性分配，容量 NAVIGATION_MAX_NODES） */
-static uint32_t s_tree_count;                     /* 树中节点数 */
+static vec_t s_tree;                              /* 树表（变长数组，节点数为 vec_size） */
 
 /*
- * 惰性分配树表；已分配则直接复用，不重复分配。
- * @return 0 成功（已分配或本次分配成功）；-1 分配失败
+ * 惰性初始化树表；已初始化则直接复用。
+ * @return 0 成功（已初始化或本次初始化成功）；-1 分配失败
  */
 static int rrt_ensure(void)
 {
-    if (s_tree != NULL) {
+    if (vec_data(&s_tree) != NULL) {
         return 0;
     }
-    s_tree = (rrt_node_t *)ros_mem_calloc(NAVIGATION_MAX_NODES, sizeof(*s_tree));
-    return (s_tree != NULL) ? 0 : -1;
+    return vec_init(&s_tree, sizeof(rrt_node_t), NAVIGATION_MAX_NODES);
 }
 
 /* 简单 LCG 伪随机（自包含，测试用） */
@@ -64,9 +61,10 @@ static int32_t rrt_nearest(const navigation_grid_map_t *map, uint16_t tx, uint16
     uint32_t best_d = 0xFFFFFFFFu;
     (void)map;
 
-    for (uint32_t i = 0; i < s_tree_count; i++) {
-        uint32_t dx = (s_tree[i].x > tx) ? (s_tree[i].x - tx) : (tx - s_tree[i].x);
-        uint32_t dy = (s_tree[i].y > ty) ? (s_tree[i].y - ty) : (ty - s_tree[i].y);
+    for (uint32_t i = 0; i < vec_size(&s_tree); i++) {
+        const rrt_node_t *n = (const rrt_node_t *)vec_at(&s_tree, i);
+        uint32_t dx = (n->x > tx) ? (n->x - tx) : (tx - n->x);
+        uint32_t dy = (n->y > ty) ? (n->y - ty) : (ty - n->y);
         uint32_t d = dx * dx + dy * dy;
         if (d < best_d) {
             best_d = d;
@@ -103,15 +101,21 @@ int navigation_rrt(const navigation_grid_map_t *map,
         return -5;                      /* 工作内存分配失败 */
     }
 
-    s_tree_count = 0;
-    s_tree[s_tree_count].x = sx;
-    s_tree[s_tree_count].y = sy;
-    s_tree[s_tree_count].parent = -1;   /* 起点为根，无父节点 */
-    s_tree_count++;
+    vec_clear(&s_tree);
+    {
+        rrt_node_t root;
+        root.x = sx;
+        root.y = sy;
+        root.parent = -1;               /* 起点为根，无父节点 */
+        if (vec_push(&s_tree, &root) != 0) {
+            return -5;
+        }
+    }
 
     for (uint32_t iter = 0; iter < 4000; iter++) {
         uint16_t tx, ty;
         int32_t near;
+        const rrt_node_t *near_node;
         uint16_t nx, ny;
 
         /* 采样：10% 概率直接采样目标 */
@@ -126,37 +130,43 @@ int navigation_rrt(const navigation_grid_map_t *map,
         }
 
         near = rrt_nearest(map, tx, ty);
+        near_node = (const rrt_node_t *)vec_at(&s_tree, (uint32_t)near);
         /* 朝采样点移动一格（8 向）：各轴增量取符号，得到 8 邻域之一 */
-        nx = (uint16_t)((int)s_tree[near].x + nav_sign((int32_t)tx - s_tree[near].x));
-        ny = (uint16_t)((int)s_tree[near].y + nav_sign((int32_t)ty - s_tree[near].y));
+        nx = (uint16_t)((int)near_node->x + nav_sign((int32_t)tx - near_node->x));
+        ny = (uint16_t)((int)near_node->y + nav_sign((int32_t)ty - near_node->y));
         if (nx >= w || ny >= h) {
             continue;                   /* 越界：丢弃 */
         }
         if (!navigation_passable(map, nx, ny)) {
             continue;                   /* 新格为障碍：丢弃 */
         }
-        if (nx == s_tree[near].x && ny == s_tree[near].y) {
+        if (nx == near_node->x && ny == near_node->y) {
             continue;                   /* 未发生位移（已在采样点上）：丢弃 */
         }
 
-        if (s_tree_count >= NAVIGATION_MAX_NODES) {
+        if (vec_size(&s_tree) >= NAVIGATION_MAX_NODES) {
             return -5;   /* 超出容量 */
         }
-        s_tree[s_tree_count].x = nx;
-        s_tree[s_tree_count].y = ny;
-        s_tree[s_tree_count].parent = near;
-        uint32_t ni = s_tree_count++;
-        (void)ni;
+        {
+            rrt_node_t node;
+            node.x = nx;
+            node.y = ny;
+            node.parent = near;
+            if (vec_push(&s_tree, &node) != 0) {
+                return -5;
+            }
+        }
 
         if (nx == gx && ny == gy) {
             /* 回溯 */
-            int32_t c = (int32_t)(s_tree_count - 1);
+            int32_t c = (int32_t)(vec_size(&s_tree) - 1);
             uint16_t temp[NAVIGATION_MAX_NODES];
             uint16_t len = 0;
             while (c >= 0 && len < NAVIGATION_MAX_NODES) {
-                temp[len++] = navigation_idx(s_tree[c].x, s_tree[c].y, w);  /* 倒序收集 */
+                const rrt_node_t *n = (const rrt_node_t *)vec_at(&s_tree, (uint32_t)c);
+                temp[len++] = navigation_idx(n->x, n->y, w);  /* 倒序收集 */
                 if (c == 0) break;      /* 到达根节点 */
-                c = s_tree[c].parent;
+                c = n->parent;
             }
             for (uint16_t i = 0; i < len; i++) {
                 path->nodes[i] = temp[len - 1 - i];     /* 翻转为 起点→终点 */

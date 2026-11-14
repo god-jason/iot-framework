@@ -48,14 +48,30 @@ int queue_pop(queue_t *queue, void *item);
 int queue_peek(queue_t *queue, void *item);
 
 /* 判空；queue 为 NULL 返回 true */
-bool queue_empty(const queue_t *queue);
+static inline bool queue_empty(const queue_t *queue)
+{
+    return queue == NULL || queue->count == 0U;
+}
 /* 判满；queue 为 NULL 返回 false */
-bool queue_full(const queue_t *queue);
+static inline bool queue_full(const queue_t *queue)
+{
+    return queue != NULL && queue->count >= queue->capacity;
+}
 
 /* 当前元素个数；queue 为 NULL 返回 0 */
-uint32_t queue_size(const queue_t *queue);
+static inline uint32_t queue_size(const queue_t *queue)
+{
+    return (queue != NULL) ? queue->count : 0U;
+}
 /* 清空队列（不清零缓冲区内容） */
-void queue_clear(queue_t *queue);
+static inline void queue_clear(queue_t *queue)
+{
+    if (queue != NULL) {
+        queue->head = 0U;
+        queue->tail = 0U;
+        queue->count = 0U;
+    }
+}
 
 #ifdef __cplusplus
 }

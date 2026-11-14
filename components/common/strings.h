@@ -67,11 +67,26 @@ uint32_t str_to_upper(char *s);
 uint32_t str_to_lower(char *s);
 
 /* 单字符大小写转换（非字母原样返回） */
-char str_upper_char(char c);
-char str_lower_char(char c);
+static inline char str_upper_char(char c)
+{
+    return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+}
+static inline char str_lower_char(char c)
+{
+    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+}
 
 /* 返回跳过前导空白后的指针（不修改原串） */
-const char *str_skip_ws(const char *s);
+static inline const char *str_skip_ws(const char *s)
+{
+    if (s == NULL) {
+        return NULL;
+    }
+    while (*s == ' ' || *s == '\t') {
+        s++;
+    }
+    return s;
+}
 
 /* ---------------- 解析 ---------------- */
 

@@ -43,7 +43,7 @@ typedef struct {
 } shell_var_t;
 
 typedef struct {
-    shell_var_t *items;     /* [SHELL_VAR_MAX]，首次写入时动态分配 */
+    vec_t items;            /* shell_var_t 变长数组（上限 SHELL_VAR_MAX），首次写入时分配 */
 } shell_vars_t;
 
 typedef struct {

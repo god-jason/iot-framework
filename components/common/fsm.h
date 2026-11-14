@@ -103,11 +103,23 @@ int fsm_dispatch(fsm_t *fsm, uint32_t event, void *data);
 int fsm_transition(fsm_t *fsm, uint32_t state_id);
 
 /* 当前状态 ID；未启动时返回 0 */
-uint32_t fsm_get_state(const fsm_t *fsm);
+static inline uint32_t fsm_get_state(const fsm_t *fsm)
+{
+    if (fsm == NULL || fsm->current == NULL) {
+        return 0U;
+    }
+    return fsm->current->id;
+}
 /* 当前是否处于指定状态 */
-bool fsm_is_state(const fsm_t *fsm, uint32_t state_id);
+static inline bool fsm_is_state(const fsm_t *fsm, uint32_t state_id)
+{
+    return fsm != NULL && fsm->current != NULL && fsm->current->id == state_id;
+}
 /* 是否已启动（暂停时仍为 true） */
-bool fsm_is_running(const fsm_t *fsm);
+static inline bool fsm_is_running(const fsm_t *fsm)
+{
+    return fsm != NULL && fsm->running;
+}
 
 #ifdef __cplusplus
 }

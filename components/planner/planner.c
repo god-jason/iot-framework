@@ -9,11 +9,11 @@
  *   5) 所有 Action 完成则计划置 SUCCESS 并解除当前指针。
  *
  * 数据结构：
- *   - s_plans[]：计划指针注册表（容量 PLANNER_PLAN_MAX，首次使用时惰性分配），空槽为 NULL；
+ *   - s_plans：计划指针注册表（变长数组，初始容量 PLANNER_PLAN_MAX），空槽为 NULL；
  *   - s_current：当前执行计划，同一时刻最多一个。
  *
  * 边界与注意事项：
- *   - 注册表满了 planner_add 返回 -1；
+ *   - 注册表按需扩容，内存不足时 planner_add 返回 -1；
  *   - 只保存指针，不拷贝 plan/actions，使用方需保证其生命周期；
  *   - 计划结束后 s_current 被清空，状态保留在 plan 结构体内供查询；
  *   - 非线程安全。
@@ -25,20 +25,19 @@
 /* 注册表容量：可同时登记的计划数上限 */
 #define PLANNER_PLAN_MAX 8
 
-static planner_plan_t **s_plans = NULL;   /* 计划注册表（惰性分配），空槽为 NULL */
+static vec_t s_plans;                     /* 计划注册表（元素为 planner_plan_t*），空槽为 NULL */
 static planner_plan_t *s_current = NULL;  /* 当前执行的计划 */
 
 /*
- * 惰性分配计划注册表；已分配则直接复用，不重复分配。
- * @return 0 成功（已分配或本次分配成功）；-1 分配失败
+ * 惰性初始化计划注册表；已初始化则直接复用。
+ * @return 0 成功（已初始化或本次初始化成功）；-1 分配失败
  */
 static int planner_ensure(void)
 {
-    if (s_plans != NULL) {
+    if (vec_data(&s_plans) != NULL) {
         return 0;
     }
-    s_plans = (planner_plan_t **)ros_mem_calloc(PLANNER_PLAN_MAX, sizeof(*s_plans));
-    return (s_plans != NULL) ? 0 : -1;
+    return vec_init(&s_plans, sizeof(planner_plan_t *), PLANNER_PLAN_MAX);
 }
 
 /*
@@ -48,13 +47,10 @@ static int planner_ensure(void)
  */
 int planner_init(void)
 {
-    int i;
     if (planner_ensure() != 0) {
         return -1;                  /* 注册表不可用 */
     }
-    for (i = 0; i < PLANNER_PLAN_MAX; i++) {
-        s_plans[i] = NULL;
-    }
+    vec_clear(&s_plans);
     s_current = NULL;
     return 0;
 }
@@ -66,13 +62,11 @@ int planner_init(void)
  */
 static planner_plan_t *planner_find(uint32_t id)
 {
-    int i;
-    if (s_plans == NULL) {
-        return NULL;                    /* 注册表尚未分配 */
-    }
-    for (i = 0; i < PLANNER_PLAN_MAX; i++) {
-        if (s_plans[i] != NULL && s_plans[i]->id == id) {
-            return s_plans[i];
+    uint32_t i;
+    for (i = 0; i < vec_size(&s_plans); i++) {
+        planner_plan_t *plan = *(planner_plan_t **)vec_at(&s_plans, i);
+        if (plan != NULL && plan->id == id) {
+            return plan;
         }
     }
     return NULL;
@@ -81,26 +75,27 @@ static planner_plan_t *planner_find(uint32_t id)
 /*
  * 注册计划：放入第一个空槽，并初始化为 PENDING、进度 0。
  * @param plan 计划对象，actions 必须非 NULL 且 action_count > 0
- * @return 0 成功；-1 参数非法或注册表已满
+ * @return 0 成功；-1 参数非法或内存不足
  * @note 不做 id 唯一性校验。
  */
 int planner_add(planner_plan_t *plan)
 {
-    int i;
+    uint32_t i;
     if (plan == NULL || plan->actions == NULL || plan->action_count == 0) {
         return -1;                      /* 非法计划：没有可执行的 Action */
     }
     if (planner_ensure() != 0) {
         return -1;                      /* 注册表分配失败 */
     }
-    for (i = 0; i < PLANNER_PLAN_MAX; i++) {
-        if (s_plans[i] == NULL) {
-            s_plans[i] = plan;
-            break;                      /* 找到空槽即停止 */
+    for (i = 0; i < vec_size(&s_plans); i++) {
+        planner_plan_t **slot = (planner_plan_t **)vec_at(&s_plans, i);
+        if (*slot == NULL) {
+            *slot = plan;               /* 复用空槽 */
+            break;
         }
     }
-    if (i == PLANNER_PLAN_MAX) {
-        return -1;                      /* 注册表已满 */
+    if (i == vec_size(&s_plans) && vec_push(&s_plans, &plan) != 0) {
+        return -1;                      /* 扩容失败 */
     }
     plan->state = PLANNER_PLAN_PENDING;
     plan->current_action = 0;
@@ -115,16 +110,14 @@ int planner_add(planner_plan_t *plan)
  */
 int planner_remove(uint32_t id)
 {
-    int i;
-    if (s_plans == NULL) {
-        return -1;                      /* 注册表尚未分配 */
-    }
-    for (i = 0; i < PLANNER_PLAN_MAX; i++) {
-        if (s_plans[i] != NULL && s_plans[i]->id == id) {
-            if (s_current == s_plans[i]) {
+    uint32_t i;
+    for (i = 0; i < vec_size(&s_plans); i++) {
+        planner_plan_t **slot = (planner_plan_t **)vec_at(&s_plans, i);
+        if (*slot != NULL && (*slot)->id == id) {
+            if (s_current == *slot) {
                 s_current = NULL;       /* 防止悬空指针 */
             }
-            s_plans[i] = NULL;
+            *slot = NULL;
             return 0;
         }
     }

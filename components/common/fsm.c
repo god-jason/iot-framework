@@ -241,32 +241,5 @@ int fsm_transition(fsm_t *fsm, uint32_t state_id)
  * 获取当前状态 ID。
  * 参数：fsm - 状态机
  * 返回：当前状态 ID；未启动或无当前状态时返回 0（0 也可能为合法 ID）
+ * 注意：实现位于 fsm.h，作为 static inline 提供。
  */
-uint32_t fsm_get_state(const fsm_t *fsm)
-{
-    if (fsm == NULL || fsm->current == NULL) {
-        return 0;
-    }
-    return fsm->current->id;
-}
-
-/*
- * 判断当前是否处于指定状态。
- * 参数：fsm - 状态机；state_id - 待比较状态 ID
- * 返回：true 是；false 否（含 fsm/current 为 NULL）
- */
-bool fsm_is_state(const fsm_t *fsm, uint32_t state_id)
-{
-    return (fsm != NULL && fsm->current != NULL && fsm->current->id == state_id);
-}
-
-/*
- * 判断状态机是否处于运行状态。
- * 参数：fsm - 状态机
- * 返回：true 运行中；false 未运行或 fsm 为 NULL
- * 注意：暂停状态仍返回 true，需结合 paused 语义由上层判断。
- */
-bool fsm_is_running(const fsm_t *fsm)
-{
-    return (fsm != NULL) && fsm->running;
-}

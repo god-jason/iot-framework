@@ -9,7 +9,8 @@
  *
  * 数据结构（工作数组首次调用时惰性分配，容量 NAVIGATION_MAX_CELLS）：
  *   - g[]/rhs[]：代价表；
- *   - u_list[]/u_in[]/u_cnt：优先队列（数组实现，弹出时线性找最小键）；
+ *   - u_list：优先队列（变长数组，存栅格索引；弹出时线性找最小键）；
+ *   - u_in[]：队列成员标记，用于去重（按格子索引）；
  *   - s_map/s_start/s_goal：上一次搜索的上下文，供增量重规划复用；
  *   - s_km：D* Lite 中随起点移动累加的启发修正量（本实现起点固定，仅初始化为 0）。
  *
@@ -32,9 +33,8 @@ static uint32_t s_start, s_goal, s_km;       /* 起点/终点线性索引与启�
 
 static uint32_t *g = NULL;       /* 各格实际代价（惰性分配） */
 static uint32_t *rhs = NULL;     /* 各格一步前瞻代价（惰性分配） */
-static uint32_t *u_list = NULL;  /* 优先队列（存栅格索引，惰性分配） */
+static vec_t u_list;             /* 优先队列（存栅格索引，变长数组） */
 static uint8_t  *u_in = NULL;    /* 队列成员标记，用于去重（惰性分配） */
-static uint16_t u_cnt;           /* 队列元素个数 */
 
 /*
  * 惰性分配代价表与优先队列；已分配则直接复用，不重复分配。
@@ -42,7 +42,7 @@ static uint16_t u_cnt;           /* 队列元素个数 */
  */
 static int dstar_ensure(void)
 {
-    if (g != NULL && rhs != NULL && u_list != NULL && u_in != NULL) {
+    if (g != NULL && rhs != NULL && vec_data(&u_list) != NULL && u_in != NULL) {
         return 0;
     }
     if (g == NULL) {
@@ -51,20 +51,19 @@ static int dstar_ensure(void)
     if (rhs == NULL) {
         rhs = (uint32_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*rhs));
     }
-    if (u_list == NULL) {
-        u_list = (uint32_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*u_list));
+    if (vec_data(&u_list) == NULL) {
+        (void)vec_init(&u_list, sizeof(uint32_t), NAVIGATION_MAX_CELLS);
     }
     if (u_in == NULL) {
         u_in = (uint8_t *)ros_mem_calloc(NAVIGATION_MAX_CELLS, sizeof(*u_in));
     }
-    if (g == NULL || rhs == NULL || u_list == NULL || u_in == NULL) {
+    if (g == NULL || rhs == NULL || vec_data(&u_list) == NULL || u_in == NULL) {
         ros_mem_free(g);
         ros_mem_free(rhs);
-        ros_mem_free(u_list);
+        vec_deinit(&u_list);
         ros_mem_free(u_in);
         g = NULL;
         rhs = NULL;
-        u_list = NULL;
         u_in = NULL;
         return -1;                  /* 分配失败：整体释放，便于下次重试 */
     }
@@ -121,26 +120,30 @@ static int dstar_key_less(uint32_t a, uint32_t b)
 static void dstar_u_push(uint32_t s)
 {
     if (!u_in[s]) {
-        u_list[u_cnt++] = s;
-        u_in[s] = 1;
+        if (vec_push(&u_list, &s) == 0) {
+            u_in[s] = 1;
+        }
     }
 }
 
 /*
  * 出队：线性扫描 key 最小的节点并移除。
- * @return 弹出的节点线性索引；队列为空时行为未定义（调用方需保证 u_cnt>0）
- * @note 删除采用“末尾元素覆盖”策略，不保持数组顺序。
+ * @return 弹出的节点线性索引；队列为空时行为未定义（调用方需保证队列非空）
  */
 static uint32_t dstar_u_pop(void)
 {
-    uint16_t bi = 0;
-    for (uint16_t i = 1; i < u_cnt; i++) {
-        if (dstar_key_less(u_list[i], u_list[bi])) {
+    uint32_t bi = 0;
+    uint32_t r;
+
+    for (uint32_t i = 1; i < vec_size(&u_list); i++) {
+        uint32_t ni = *(uint32_t *)vec_at(&u_list, i);
+        uint32_t bi_val = *(uint32_t *)vec_at(&u_list, bi);
+        if (dstar_key_less(ni, bi_val)) {
             bi = i;
         }
     }
-    uint32_t r = u_list[bi];
-    u_list[bi] = u_list[--u_cnt];
+    r = *(uint32_t *)vec_at(&u_list, bi);
+    (void)vec_remove(&u_list, bi, NULL);
     u_in[r] = 0;
     return r;
 }
@@ -148,9 +151,9 @@ static uint32_t dstar_u_pop(void)
 /* 从队列中移除指定节点（若存在），并清除去重标记 */
 static void dstar_u_remove(uint32_t s)
 {
-    for (uint16_t i = 0; i < u_cnt; i++) {
-        if (u_list[i] == s) {
-            u_list[i] = u_list[--u_cnt];
+    for (uint32_t i = 0; i < vec_size(&u_list); i++) {
+        if (*(uint32_t *)vec_at(&u_list, i) == s) {
+            (void)vec_remove(&u_list, i, NULL);
             break;
         }
     }
@@ -200,12 +203,13 @@ static void dstar_update_vertex(uint32_t u)
  */
 static void dstar_compute(void)
 {
-    while (u_cnt > 0) {
-        uint32_t u = u_list[0];
+    while (!vec_empty(&u_list)) {
+        uint32_t u = *(uint32_t *)vec_at(&u_list, 0);
         /* 取最小 key */
-        for (uint16_t i = 1; i < u_cnt; i++) {
-            if (dstar_key_less(u_list[i], u)) {
-                u = u_list[i];
+        for (uint32_t i = 1; i < vec_size(&u_list); i++) {
+            uint32_t ni = *(uint32_t *)vec_at(&u_list, i);
+            if (dstar_key_less(ni, u)) {
+                u = ni;
             }
         }
         uint32_t k1, k2, sk1, sk2;
@@ -320,7 +324,7 @@ int navigation_dstar_lite(const navigation_grid_map_t *map,
         rhs[i] = DSTAR_INF;
         u_in[i] = 0;
     }
-    u_cnt = 0;
+    vec_clear(&u_list);
 
     rhs[s_goal] = 0;                    /* 目标点 rhs 为 0，作为反向搜索的种子 */
     dstar_u_push(s_goal);
@@ -342,7 +346,7 @@ int navigation_dstar_replan(const navigation_grid_map_t *map, navigation_path_t 
         s_map = map;
     }
     if (s_map == NULL || path == NULL ||
-        g == NULL || rhs == NULL || u_list == NULL || u_in == NULL) {
+        g == NULL || rhs == NULL || vec_data(&u_list) == NULL || u_in == NULL) {
         return -1;                      /* 参数非法或尚未成功建立搜索状态 */
     }
     dstar_compute();                    /* 复用已有 g/rhs 与队列做增量修复 */

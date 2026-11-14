@@ -10,7 +10,7 @@
  */
 
 #include "args.h"
-#include "list.h"
+#include "vec.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,21 +60,19 @@ int cmd_run(const cmd_entry_t *table, uint32_t count,
 
 /* ============================== 全局命令表 ============================== */
 
-/* 全局命令节点：def/fn/user 注册后挂入 commands 链表 */
-typedef struct cmd_node {
-    list_node_t      node;   /* 链表节点 */
+/* 全局命令节点：def/fn/user 注册后追加到 commands 变长数组 */
+typedef struct {
     const cmd_def_t *def;    /* 命令定义 */
     cmd_fn_t         fn;     /* 处理函数 */
     void            *user;   /* 处理函数上下文（由注册者提供） */
 } cmd_node_t;
 
-/* 全局命令链表（定义在 cmd.c；按注册顺序尾插） */
-extern list_t commands;
+/* 全局命令表（定义在 cmd.c；按注册顺序追加） */
+extern vec_t commands;
 
 /*
- * 注册命令到全局 commands 链表。
+ * 注册命令到全局命令表。
  * 名称重复（不区分大小写）或参数非法时返回 -1；成功返回 0。
- * 节点由 ros_mem 分配，可用 cmd_unregister_all() 统一释放。
  */
 int cmd_register(const cmd_def_t *def, cmd_fn_t fn, void *user);
 

@@ -39,9 +39,26 @@ typedef struct {
     ((type *)((uint8_t *)(ptr) - offsetof(type, member)))
 
 /* 初始化为空链表（哨兵自指） */
-void list_init(list_t *list);
+static inline void list_init(list_t *list)
+{
+    if (list == NULL) {
+        return;
+    }
+    list->head.prev = &list->head;
+    list->head.next = &list->head;
+    list->size = 0U;
+}
+
 /* 将节点初始化为游离态（prev/next 指向自身） */
-void list_node_init(list_node_t *node);
+static inline void list_node_init(list_node_t *node)
+{
+    if (node == NULL) {
+        return;
+    }
+    node->prev = node;
+    node->next = node;
+    node->sort_key = 0U;
+}
 
 /* 头插：插入到 head.next，即成为新的首元素 */
 void list_add(list_t *list, list_node_t *node);
@@ -68,15 +85,27 @@ void list_insert_sorted(list_t *list, list_node_t *node);
 void list_move(list_t *list, list_node_t *node);
 
 /* 判空；list 为 NULL 时返回 true */
-bool list_empty(const list_t *list);
+static inline bool list_empty(const list_t *list)
+{
+    return list == NULL || list->head.next == &list->head;
+}
 /* 遍历统计节点数；list 为 NULL 时返回 0 */
 uint32_t list_size(const list_t *list);
 
 /* 首元素 / 后继节点（便于遍历，未判定尾节点） */
 /* 取首节点；空链表返回 NULL */
-list_node_t *list_first(const list_t *list);
+static inline list_node_t *list_first(const list_t *list)
+{
+    if (list_empty(list)) {
+        return NULL;
+    }
+    return list->head.next;
+}
 /* 取后继节点；遍历结束条件需由调用者判断 pos != &list->head */
-list_node_t *list_next(const list_node_t *node);
+static inline list_node_t *list_next(const list_node_t *node)
+{
+    return (node != NULL) ? node->next : NULL;
+}
 
 #ifdef __cplusplus
 }

@@ -295,28 +295,26 @@ void modbus_slave_register_init(modbus_slave_t *slave, uint8_t address, modbus_m
     memset(slave, 0, sizeof(*slave));
     slave->address = address;
     slave->mode = mode;
+    (void)vec_init(&slave->ranges, sizeof(modbus_reg_range_t),
+                   MODBUS_SLAVE_MAX_RANGES);
 }
 
 /*
  * 追加一个地址区间（结构体按值拷贝）。
  * 参数：slave 从站；range 区间描述（qty 必须 > 0）。
  * 返回：0 成功；MODBUS_ERR_PARAM 参数非法或地址溢出 16 位空间；
- *       MODBUS_ERR_NO_MEMORY 区间表已满。
+ *       MODBUS_ERR_NO_MEMORY 内存不足。
  * 说明：不做重叠检查，查找时返回首个完全包含请求地址的区间。
  */
 int modbus_slave_register_range(modbus_slave_t *slave, const modbus_reg_range_t *range)
 {
-    modbus_reg_range_t *slot;
-
     if (slave == NULL || range == NULL || range->qty == 0 ||
         (uint32_t)range->addr + range->qty > 0x10000u) {
         return MODBUS_ERR_PARAM;
     }
-    if (slave->range_count >= MODBUS_SLAVE_MAX_RANGES) {
+    if (vec_push(&slave->ranges, range) != 0) {
         return MODBUS_ERR_NO_MEMORY;
     }
-    slot = &slave->ranges[slave->range_count++];
-    *slot = *range;
     return 0;
 }
 
@@ -374,16 +372,17 @@ int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_e type, uin
                               modbus_slave_read_cb read_cb, modbus_slave_write_cb write_cb,
                               void *user)
 {
-    uint16_t i;
+    uint32_t i;
 
     if (slave == NULL) {
         return MODBUS_ERR_PARAM;
     }
-    for (i = 0; i < slave->range_count; i++) {
-        if (slave->ranges[i].type == type && slave->ranges[i].addr == addr) {
-            slave->ranges[i].read_cb = read_cb;
-            slave->ranges[i].write_cb = write_cb;
-            slave->ranges[i].user = user;
+    for (i = 0; i < vec_size(&slave->ranges); i++) {
+        modbus_reg_range_t *r = (modbus_reg_range_t *)vec_at(&slave->ranges, i);
+        if (r->type == type && r->addr == addr) {
+            r->read_cb = read_cb;
+            r->write_cb = write_cb;
+            r->user = user;
             return 0;
         }
     }
@@ -398,18 +397,15 @@ int modbus_slave_set_callback(modbus_slave_t *slave, modbus_reg_type_e type, uin
 int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_e type,
                                   uint16_t addr)
 {
-    uint16_t i;
+    uint32_t i;
 
     if (slave == NULL) {
         return MODBUS_ERR_PARAM;
     }
-    for (i = 0; i < slave->range_count; i++) {
-        if (slave->ranges[i].type == type && slave->ranges[i].addr == addr) {
-            if (i + 1 < slave->range_count) {
-                memmove(&slave->ranges[i], &slave->ranges[i + 1],
-                        (slave->range_count - i - 1) * sizeof(slave->ranges[0]));
-            }
-            slave->range_count--;
+    for (i = 0; i < vec_size(&slave->ranges); i++) {
+        modbus_reg_range_t *r = (modbus_reg_range_t *)vec_at(&slave->ranges, i);
+        if (r->type == type && r->addr == addr) {
+            (void)vec_remove(&slave->ranges, i, NULL);
             return 0;
         }
     }
@@ -425,13 +421,13 @@ int modbus_slave_unregister_range(modbus_slave_t *slave, modbus_reg_type_e type,
 static modbus_reg_range_t *map_find_range(modbus_slave_t *slave, modbus_reg_type_e type,
                                           uint16_t addr, uint16_t qty)
 {
-    uint16_t i;
+    uint32_t i;
 
     if (qty == 0) {
         return NULL;
     }
-    for (i = 0; i < slave->range_count; i++) {
-        modbus_reg_range_t *r = &slave->ranges[i];
+    for (i = 0; i < vec_size(&slave->ranges); i++) {
+        modbus_reg_range_t *r = (modbus_reg_range_t *)vec_at(&slave->ranges, i);
 
         if (r->type != type) {
             continue;

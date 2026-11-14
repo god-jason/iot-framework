@@ -524,8 +524,8 @@ static int cmd_state(shell_t *sh, int argc, char **argv)
     }
     ros_printf("\n");
     ros_printf("Shell Vars:");
-    for (i = 0U; sh->vars.items != NULL && i < SHELL_VAR_MAX; i++) {
-        const shell_var_t *v = &sh->vars.items[i];
+    for (i = 0U; i < vec_size(&sh->vars.items); i++) {
+        const shell_var_t *v = (const shell_var_t *)vec_at(&sh->vars.items, i);
 
         if (v->used) {
             ros_printf(" %s=", v->name);
@@ -841,9 +841,10 @@ static int cmd_job(shell_t *sh, int argc, char **argv)
     ros_printf("Stack   : %u\n", (unsigned)job->stack);
     ros_printf("PC      : L%u\n", (unsigned)job->pc);
     ros_printf("Vars    :");
-    for (i = 0U; job->vars.items != NULL && i < SHELL_VAR_MAX; i++) {
-        if (job->vars.items[i].used) {
-            ros_printf(" $%s", job->vars.items[i].name);
+    for (i = 0U; i < vec_size(&job->vars.items); i++) {
+        const shell_var_t *v = (const shell_var_t *)vec_at(&job->vars.items, i);
+        if (v->used) {
+            ros_printf(" $%s", v->name);
         }
     }
     ros_printf("\n");

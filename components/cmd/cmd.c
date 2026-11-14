@@ -136,65 +136,57 @@ int cmd_run(const cmd_entry_t *table, uint32_t count,
 
 /* ============================== 全局命令表 ============================== */
 
-list_t commands;
+vec_t commands;
 
 static bool s_commands_ready;
 
 static void cmd_commands_ensure(void)
 {
     if (!s_commands_ready) {
-        list_init(&commands);
-        s_commands_ready = true;
+        if (vec_init(&commands, sizeof(cmd_node_t), 8U) == 0) {
+            s_commands_ready = true;
+        }
     }
 }
 
 int cmd_register(const cmd_def_t *def, cmd_fn_t fn, void *user)
 {
-    cmd_node_t *node;
+    cmd_node_t node;
 
     if (def == NULL || def->name == NULL || fn == NULL) {
         return -1;
     }
     cmd_commands_ensure();
+    if (!s_commands_ready) {
+        return -1;                  /* 命令表初始化失败 */
+    }
     if (cmd_find_command(def->name) != NULL) {
         return -1;
     }
-    node = (cmd_node_t *)ros_mem_calloc(1U, sizeof(*node));
-    if (node == NULL) {
-        return -1;
-    }
-    node->def = def;
-    node->fn = fn;
-    node->user = user;
-    list_add_tail(&commands, &node->node);
-    return 0;
+    node.def = def;
+    node.fn = fn;
+    node.user = user;
+    return vec_push(&commands, &node);
 }
 
 void cmd_unregister_all(void)
 {
-    list_node_t *pos;
-    list_node_t *next;
-
     cmd_commands_ensure();
-    pos = commands.head.next;
-    while (pos != &commands.head) {
-        next = pos->next;
-        list_remove(pos);
-        ros_mem_free(ROS_CONTAINER_OF(pos, cmd_node_t, node));
-        pos = next;
+    if (s_commands_ready) {
+        vec_clear(&commands);
     }
 }
 
 const cmd_node_t *cmd_find_command(const char *name)
 {
-    list_node_t *pos;
+    uint32_t i;
 
     if (name == NULL) {
         return NULL;
     }
     cmd_commands_ensure();
-    for (pos = commands.head.next; pos != &commands.head; pos = pos->next) {
-        const cmd_node_t *node = ROS_CONTAINER_OF(pos, cmd_node_t, node);
+    for (i = 0; i < vec_size(&commands); i++) {
+        const cmd_node_t *node = (const cmd_node_t *)vec_at(&commands, i);
 
         if (node->def != NULL && node->def->name != NULL &&
             str_icmp(node->def->name, name)) {
@@ -207,21 +199,25 @@ const cmd_node_t *cmd_find_command(const char *name)
 const cmd_node_t *cmd_first(void)
 {
     cmd_commands_ensure();
-    if (commands.head.next == &commands.head) {
-        return NULL;
-    }
-    return ROS_CONTAINER_OF(commands.head.next, cmd_node_t, node);
+    return (const cmd_node_t *)vec_at(&commands, 0);
 }
 
 const cmd_node_t *cmd_next(const cmd_node_t *node)
 {
-    list_node_t *next;
+    uint32_t i;
 
-    if (node == NULL || node->node.next == &commands.head) {
+    if (node == NULL) {
         return NULL;
     }
-    next = node->node.next;
-    return ROS_CONTAINER_OF(next, cmd_node_t, node);
+    cmd_commands_ensure();
+    for (i = 0; i < vec_size(&commands); i++) {
+        if ((const cmd_node_t *)vec_at(&commands, i) == node) {
+            return (i + 1U < vec_size(&commands))
+                       ? (const cmd_node_t *)vec_at(&commands, i + 1U)
+                       : NULL;
+        }
+    }
+    return NULL;
 }
 
 int cmd_run_node(const cmd_node_t *node, int argc, char **argv)
