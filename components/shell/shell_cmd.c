@@ -667,11 +667,13 @@ static int cmd_kill(shell_t *sh, int argc, char **argv)
     }
     job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
+        /* JOB 停止流程内部会通知 on_kill */
         (void)shell_job_stop(job, true);
         job->state = JOB_ABORTED;
         return SHELL_OK;
     }
-    /* 系统任务：直接删除（不再要求确认） */
+    /* 系统任务：先通知命令的 on_kill，再删除 */
+    (void)cmd_notify_kill(task);
     if (ros_task_destroy(task) != ROS_OK) {
         shell_error(sh, SHELL_ERR_STATE, "task busy or not destroyable");
         return -SHELL_ERR_STATE;
@@ -684,6 +686,7 @@ static int cmd_pause(shell_t *sh, int argc, char **argv)
 {
     ros_task_t *task;
     shell_job_t *job;
+    int rc;
 
     if (argc < 2) {
         shell_error(sh, SHELL_ERR_PARAM, "usage: pause <task|#tid>");
@@ -698,7 +701,14 @@ static int cmd_pause(shell_t *sh, int argc, char **argv)
         shell_error(sh, SHELL_ERR_DANGER, "refusing to pause shell/idle");
         return -SHELL_ERR_DANGER;
     }
+    /* 命令可选择拒绝暂停（例如无法保持当前状态） */
+    rc = cmd_notify_pause(task);
+    if (rc < 0) {
+        shell_error(sh, SHELL_ERR_STATE, "command refused pause");
+        return -SHELL_ERR_STATE;
+    }
     if (ros_task_suspend(task) != ROS_OK) {
+        (void)cmd_notify_resume(task);      /* 回滚 pause 钩子 */
         shell_error(sh, SHELL_ERR_STATE, "task cannot be paused");
         return -SHELL_ERR_STATE;
     }
@@ -729,6 +739,7 @@ static int cmd_resume(shell_t *sh, int argc, char **argv)
         shell_error(sh, SHELL_ERR_STATE, "task is not suspended");
         return -SHELL_ERR_STATE;
     }
+    (void)cmd_notify_resume(task);
     job = shell_job_find_by_task(sh, task);
     if (job != NULL) {
         job->state = JOB_RUNNING;

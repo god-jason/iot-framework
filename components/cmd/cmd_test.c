@@ -4,6 +4,7 @@
 
 #include "test.h"
 #include "cmd.h"
+#include "ros.h"
 
 #include <string.h>
 
@@ -35,6 +36,70 @@ static int ping_handler(const args_parsed_t *parsed, void *user)
 
 static const cmd_entry_t s_table[] = {
     { &s_ping_def, ping_handler }
+};
+
+/* ---------------- 生命周期钩子 ---------------- */
+
+static int s_hook_pause_calls;
+static int s_hook_resume_calls;
+static int s_hook_kill_calls;
+
+static int hook_pause(void *user)
+{
+    (void)user;
+    s_hook_pause_calls++;
+    return 0;
+}
+
+static int hook_resume(void *user)
+{
+    (void)user;
+    s_hook_resume_calls++;
+    return 0;
+}
+
+static int hook_kill(void *user)
+{
+    (void)user;
+    s_hook_kill_calls++;
+    return 0;
+}
+
+/* 在命令执行期间模拟 pause/resume/kill 通知 */
+static int hook_handler(const args_parsed_t *parsed, void *user)
+{
+    (void)parsed;
+    (void)user;
+
+    TF_CHECK_INT(cmd_notify_pause(ros_current_task), 0);
+    TF_CHECK_INT(cmd_notify_resume(ros_current_task), 0);
+    TF_CHECK_INT(cmd_notify_kill(ros_current_task), 0);
+    /* kill 已清除登记：再次通知不应触发钩子 */
+    TF_CHECK_INT(cmd_notify_pause(ros_current_task), 0);
+    return 0;
+}
+
+static int deny_pause(void *user)
+{
+    (void)user;
+    return -7;
+}
+
+static int deny_handler(const args_parsed_t *parsed, void *user)
+{
+    (void)parsed;
+    (void)user;
+    TF_CHECK_INT(cmd_notify_pause(ros_current_task), -7);
+    return 0;
+}
+
+static const cmd_def_t s_hook_def = {
+    "hookcmd", "hook test", NULL, 0U,
+    hook_pause, hook_resume, hook_kill
+};
+static const cmd_def_t s_deny_def = {
+    "denycmd", "deny pause", NULL, 0U,
+    deny_pause, NULL, NULL
 };
 
 #define PARSE(argv_, argc_, out_) \
@@ -143,5 +208,53 @@ void ut_cmd(void)
         TF_CHECK_INT(cmd_run(s_table, 1U, 0, NULL, NULL), ARGS_ERR_PARAM);
     }
 
+    tf_end();
+
+    /* ---------------- 生命周期钩子 ---------------- */
+    tf_begin("cmd/生命周期钩子");
+    {
+        const cmd_node_t *node;
+        ros_task_t fake;
+        char *hook_argv[] = { "hookcmd" };
+        char *deny_argv[] = { "denycmd" };
+
+        cmd_unregister_all();
+        TF_CHECK_INT(cmd_register(&s_hook_def, hook_handler, NULL), 0);
+        TF_CHECK_INT(cmd_register(&s_deny_def, deny_handler, NULL), 0);
+
+        node = cmd_find_command("hookcmd");
+        TF_CHECK(node != NULL);
+        TF_CHECK(node->def->on_pause == hook_pause);
+        TF_CHECK(node->def->on_resume == hook_resume);
+        TF_CHECK(node->def->on_kill == hook_kill);
+        node = cmd_find_command("denycmd");
+        TF_CHECK(node != NULL && node->def->on_pause == deny_pause);
+        TF_CHECK(node->def->on_resume == NULL && node->def->on_kill == NULL);
+
+        /* 无任务/无登记：安全返回 0 */
+        TF_CHECK_INT(cmd_notify_pause(NULL), 0);
+        TF_CHECK_INT(cmd_notify_resume(NULL), 0);
+        TF_CHECK_INT(cmd_notify_kill(NULL), 0);
+
+        /* 用一个假任务模拟“命令正在执行” */
+        memset(&fake, 0, sizeof(fake));
+        s_hook_pause_calls = 0;
+        s_hook_resume_calls = 0;
+        s_hook_kill_calls = 0;
+        ros_current_task = &fake;
+
+        TF_CHECK_INT(cmd_dispatch(1, hook_argv), 0);
+        TF_CHECK_INT(s_hook_pause_calls, 1);
+        TF_CHECK_INT(s_hook_resume_calls, 1);
+        TF_CHECK_INT(s_hook_kill_calls, 1);
+        /* 命令返回后登记已弹出 */
+        TF_CHECK_INT(cmd_notify_pause(&fake), 0);
+
+        /* 钩子拒绝暂停：返回负错误码 */
+        TF_CHECK_INT(cmd_dispatch(1, deny_argv), 0);
+
+        ros_current_task = NULL;
+        cmd_unregister_all();
+    }
     tf_end();
 }

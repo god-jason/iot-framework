@@ -9,6 +9,7 @@
  */
 
 #include "shell_internal.h"
+#include "cmd.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -277,8 +278,14 @@ static void shell_job_tree_op(shell_job_t *job, bool pause)
             if (it->state != JOB_RUNNING) {
                 continue;
             }
-            if (it->task != NULL && ros_task_suspend(it->task) != ROS_OK) {
-                continue;
+            if (it->task != NULL) {
+                if (cmd_notify_pause(it->task) < 0) {
+                    continue;               /* 命令拒绝暂停 */
+                }
+                if (ros_task_suspend(it->task) != ROS_OK) {
+                    (void)cmd_notify_resume(it->task);
+                    continue;
+                }
             }
             it->state = JOB_PAUSED;
         } else {
@@ -287,6 +294,9 @@ static void shell_job_tree_op(shell_job_t *job, bool pause)
             }
             if (it->task != NULL && ros_task_resume(it->task) != ROS_OK) {
                 continue;
+            }
+            if (it->task != NULL) {
+                (void)cmd_notify_resume(it->task);
             }
             it->state = JOB_RUNNING;
         }
@@ -1144,6 +1154,10 @@ int shell_job_stop(shell_job_t *job, bool force)
     }
     if (job->state != JOB_RUNNING && job->state != JOB_PAUSED) {
         return -1;
+    }
+    /* 命令的 on_kill：在停止/销毁前通知（仅一次） */
+    if (job->task != NULL) {
+        (void)cmd_notify_kill(job->task);
     }
     job->stop_flag = true;
     job->state = JOB_STOPPING;

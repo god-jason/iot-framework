@@ -20,12 +20,25 @@ extern "C" {
 #define CMD_NAME_MAX        24U     /* 命令名最大长度（含结尾 0） */
 #endif
 
+struct ros_task;
+
+/* 命令生命周期回调（可选）：user 为 cmd_register 传入的上下文 */
+typedef int (*cmd_hook_fn_t)(void *user);
+
 /* 命令定义（帮助文本由参数表动态生成，见 cmd_help） */
 typedef struct {
     const char *name;       /* 命令名 */
     const char *desc;       /* 一句话说明 */
     const args_def_t *args;
     uint8_t     arg_count;
+
+    /* 生命周期钩子，均为可选（NULL 表示不处理）：
+     * on_pause  在命令所在任务被挂起前调用，返回 <0 可拒绝暂停；
+     * on_resume 在任务恢复后调用；
+     * on_kill   在命令/任务被停止或终止前调用。 */
+    cmd_hook_fn_t on_pause;
+    cmd_hook_fn_t on_resume;
+    cmd_hook_fn_t on_kill;
 } cmd_def_t;
 
 /*
@@ -95,6 +108,17 @@ int cmd_run_node(const cmd_node_t *node, int argc, char **argv);
  * 否则返回处理函数的返回值。
  */
 int cmd_dispatch(int argc, char **argv);
+
+/* ============================== 生命周期通知 ============================== */
+/*
+ * 由 shell 的 pause/resume/kill 等入口调用：查找指定任务当前正在执行的
+ * 命令，并调用其 on_pause / on_resume / on_kill 钩子（未实现则忽略）。
+ * 钩子在调用者任务上下文中同步执行，不应长时间阻塞。
+ * cmd_notify_kill 会在回调后清除该任务的命令登记。
+ */
+int cmd_notify_pause(const struct ros_task *task);
+int cmd_notify_resume(const struct ros_task *task);
+int cmd_notify_kill(const struct ros_task *task);
 
 #ifdef __cplusplus
 }

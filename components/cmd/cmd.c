@@ -220,9 +220,122 @@ const cmd_node_t *cmd_next(const cmd_node_t *node)
     return NULL;
 }
 
+/* ============================== 运行中命令登记 ============================== */
+
+/* 记录“某任务正在执行哪条命令”，供 pause/resume/kill 查找钩子 */
+typedef struct {
+    struct ros_task *task;
+    const cmd_node_t *node;
+} cmd_active_t;
+
+static vec_t s_active;
+static bool s_active_ready;
+
+static void cmd_active_push(struct ros_task *task, const cmd_node_t *node)
+{
+    cmd_active_t item;
+
+    if (task == NULL) {
+        return;
+    }
+    if (!s_active_ready) {
+        if (vec_init(&s_active, sizeof(cmd_active_t), 4U) != 0) {
+            return;
+        }
+        s_active_ready = true;
+    }
+    item.task = task;
+    item.node = node;
+    (void)vec_push(&s_active, &item);
+}
+
+static void cmd_active_pop(struct ros_task *task, const cmd_node_t *node)
+{
+    uint32_t i = vec_size(&s_active);
+
+    while (i > 0U) {
+        const cmd_active_t *item =
+            (const cmd_active_t *)vec_at(&s_active, i - 1U);
+
+        if (item->task == task && item->node == node) {
+            (void)vec_remove(&s_active, i - 1U, NULL);
+            return;
+        }
+        i--;
+    }
+}
+
+static const cmd_node_t *cmd_active_find(const struct ros_task *task)
+{
+    uint32_t i = vec_size(&s_active);
+
+    if (task == NULL) {
+        return NULL;
+    }
+    while (i > 0U) {
+        const cmd_active_t *item =
+            (const cmd_active_t *)vec_at(&s_active, i - 1U);
+
+        if (item->task == task) {
+            return item->node;
+        }
+        i--;
+    }
+    return NULL;
+}
+
+static void cmd_active_remove_task(const struct ros_task *task)
+{
+    uint32_t i = 0U;
+
+    while (i < vec_size(&s_active)) {
+        const cmd_active_t *item = (const cmd_active_t *)vec_at(&s_active, i);
+
+        if (item->task == task) {
+            (void)vec_remove(&s_active, i, NULL);
+        } else {
+            i++;
+        }
+    }
+}
+
+int cmd_notify_pause(const struct ros_task *task)
+{
+    const cmd_node_t *node = cmd_active_find(task);
+
+    if (node == NULL || node->def == NULL || node->def->on_pause == NULL) {
+        return 0;
+    }
+    return node->def->on_pause(node->user);
+}
+
+int cmd_notify_resume(const struct ros_task *task)
+{
+    const cmd_node_t *node = cmd_active_find(task);
+
+    if (node == NULL || node->def == NULL || node->def->on_resume == NULL) {
+        return 0;
+    }
+    return node->def->on_resume(node->user);
+}
+
+int cmd_notify_kill(const struct ros_task *task)
+{
+    const cmd_node_t *node = cmd_active_find(task);
+    int rc = 0;
+
+    if (node != NULL && node->def != NULL && node->def->on_kill != NULL) {
+        rc = node->def->on_kill(node->user);
+    }
+    /* 任务即将被停止/销毁：清理登记，避免悬空 */
+    cmd_active_remove_task(task);
+    return rc;
+}
+
 int cmd_run_node(const cmd_node_t *node, int argc, char **argv)
 {
     args_parsed_t parsed;
+    struct ros_task *self = ros_current_task;
     int rc;
 
     if (node == NULL || node->def == NULL || node->fn == NULL ||
@@ -233,7 +346,10 @@ int cmd_run_node(const cmd_node_t *node, int argc, char **argv)
     if (rc != ARGS_OK) {
         return rc;
     }
-    return node->fn(&parsed, node->user);
+    cmd_active_push(self, node);
+    rc = node->fn(&parsed, node->user);
+    cmd_active_pop(self, node);
+    return rc;
 }
 
 int cmd_dispatch(int argc, char **argv)
