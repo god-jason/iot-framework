@@ -243,7 +243,7 @@ if not is_plat("cross") then
         ros_host_links()
     target_end()
 
-    -- 综合示例：串口控制台 + shell + LED 闪烁（真实延时）
+    -- 综合示例：日志 + LED 闪烁（真实延时）
     target("ros-demo")
         set_kind("binary")
         ros_host_common(false)

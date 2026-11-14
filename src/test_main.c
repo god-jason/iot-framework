@@ -74,7 +74,6 @@ void ut_motor(void);
 void ut_servo(void);
 void ut_stepper(void);
 void ut_encoder(void);
-void ut_drive(void);
 void ut_kinematics(void);
 void ut_odometry(void);
 void ut_trajectory(void);
@@ -165,7 +164,6 @@ int main(void)
     ut_servo();
     ut_stepper();
     ut_encoder();
-    ut_drive();
     ut_kinematics();
     ut_odometry();
     ut_trajectory();

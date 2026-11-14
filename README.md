@@ -169,7 +169,6 @@ hal_gpio_write(HAL_PIN(0, 13), HAL_GPIO_HIGH);
 | 运动学 | `components/kinematics`（差速/阿克曼/两连杆臂） |
 | 里程计 | `components/odometry` |
 | 轨迹 | `components/trajectory`（梯形、S 曲线、多轴插补） |
-| 闭环 | `components/drive`（串级 PID） |
 | 姿态 | `components/imu`（Mahony） |
 | 定位 | `components/localization`（EKF） |
 | 感知 | `components/perception` |
@@ -241,7 +240,7 @@ xmake build ros-test && xmake run ros-test
 3. `planner` 同一时刻只执行一个计划，优先级字段尚未参与调度；
 4. 软件定时器回调默认在专用 `timer` 任务执行（`ROS_USE_TIMER_TASK=0` 可退回 tick 上下文）；
 5. STM32 端 tickless 仍为 WFI 占位，未按低功耗定时器补偿 tick；
-6. 电机驱动 IC（TB6612/A4988/TMC 系列）需按 `drive_ops_t` 自行适配。
+6. 电机驱动 IC（TB6612/A4988/TMC 系列）尚未内置，需自行适配 HAL。
 
 ---
 
