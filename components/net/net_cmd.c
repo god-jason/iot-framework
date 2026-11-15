@@ -18,9 +18,9 @@ static void net_ping_reply(uint32_t seq, uint32_t rtt, bool ok, void *user)
     const net_ping_ctx_t *ctx = (const net_ping_ctx_t *)user;
 
     if (ok) {
-        ros_printf("64 bytes from %s: seq=%u time=%u ms\n",
-                   (ctx != NULL) ? ctx->addr : "?", (unsigned)seq,
-                   (unsigned)rtt);
+        LOG_I("net", "64 bytes from %s: seq=%u time=%u ms",
+              (ctx != NULL) ? ctx->addr : "?", (unsigned)seq,
+              (unsigned)rtt);
     } else {
         ros_printf("request timeout: seq=%u\n", (unsigned)seq);
     }
@@ -55,7 +55,7 @@ static int net_ping_cmd(const args_parsed_t *parsed, void *user)
         ros_puts("ping: cannot resolve host");
         return -1;
     }
-    ros_printf("PING %s (%s)\n", host, ip);
+    LOG_I("net", "PING %s (%s)", host, ip);
 
     ctx.addr = ip;
     memset(&stat, 0, sizeof(stat));
@@ -69,16 +69,16 @@ static int net_ping_cmd(const args_parsed_t *parsed, void *user)
         return -1;
     }
 
-    ros_printf("--- %s ping statistics ---\n", host);
-    ros_printf("%u packets transmitted, %u received, %u%% packet loss\n",
-               (unsigned)stat.sent, (unsigned)stat.received,
-               (unsigned)((stat.sent != 0U)
-                          ? ((stat.sent - stat.received) * 100U / stat.sent)
-                          : 0U));
+    LOG_I("net", "--- %s ping statistics ---", host);
+    LOG_I("net", "%u packets transmitted, %u received, %u%% packet loss",
+          (unsigned)stat.sent, (unsigned)stat.received,
+          (unsigned)((stat.sent != 0U)
+                     ? ((stat.sent - stat.received) * 100U / stat.sent)
+                     : 0U));
     if (stat.received != 0U) {
-        ros_printf("rtt min/avg/max = %u/%u/%u ms\n",
-                   (unsigned)stat.min_ms, (unsigned)stat.avg_ms,
-                   (unsigned)stat.max_ms);
+        LOG_I("net", "rtt min/avg/max = %u/%u/%u ms",
+              (unsigned)stat.min_ms, (unsigned)stat.avg_ms,
+              (unsigned)stat.max_ms);
     }
     return 0;
 }

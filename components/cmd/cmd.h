@@ -57,28 +57,23 @@ int cmd_help(const cmd_def_t *def, char *buf, uint32_t size);
 /* 命令处理函数 */
 typedef int (*cmd_fn_t)(const args_parsed_t *parsed, void *user);
 
-/* 命令表条目 */
-typedef struct {
-    const cmd_def_t *def;
-    cmd_fn_t         fn;
-} cmd_entry_t;
-
-/*
- * 在命令表中查找 argv[0] 并解析其余参数，解析成功后调用处理函数。
- * 返回处理函数返回值；未找到命令返回 ARGS_ERR_UNKNOWN；
- * 解析失败返回对应 ARGS_ERR_*。
- */
-int cmd_run(const cmd_entry_t *table, uint32_t count,
-            int argc, char **argv, void *user);
-
-/* ============================== 全局命令表 ============================== */
-
-/* 全局命令节点：def/fn/user 注册后追加到 commands 变长数组 */
+/* 命令节点：定义 + 处理函数 + 上下文（既用于全局命令表，也用于 cmd_run 的局部表） */
 typedef struct {
     const cmd_def_t *def;    /* 命令定义 */
     cmd_fn_t         fn;     /* 处理函数 */
-    void            *user;   /* 处理函数上下文（由注册者提供） */
+    void            *user;   /* 处理函数上下文（可为 NULL） */
 } cmd_node_t;
+
+/*
+ * 在命令表中查找 argv[0] 并解析其余参数，解析成功后调用处理函数。
+ * user 为默认上下文：节点 user 为 NULL 时使用它。
+ * 返回处理函数返回值；未找到命令返回 ARGS_ERR_UNKNOWN；
+ * 解析失败返回对应 ARGS_ERR_*。
+ */
+int cmd_run(const cmd_node_t *table, uint32_t count,
+            int argc, char **argv, void *user);
+
+/* ============================== 全局命令表 ============================== */
 
 /* 全局命令表（定义在 cmd.c；按注册顺序追加） */
 extern vec_t commands;

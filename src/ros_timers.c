@@ -65,6 +65,8 @@ static void ros_timer_task_entry(void *arg)
             ros_timer_cb_t cb;
             void *cb_arg;
             list_node_t *node;
+            ros_timer_t *timer;
+            bool free_after;
 
             ros_port_critical_enter();
             node = list_pop_first(&s_pending);
@@ -72,18 +74,29 @@ static void ros_timer_task_entry(void *arg)
                 ros_port_critical_exit();
                 break;
             }
-            {
-                ros_timer_t *timer = ROS_CONTAINER_OF(node, ros_timer_t,
-                                                      pending_node);
-
-                timer->pending = false;
-                cb = timer->cb;
-                cb_arg = timer->arg;
-            }
+            timer = ROS_CONTAINER_OF(node, ros_timer_t, pending_node);
+            timer->pending = false;
+            timer->executing = true;   /* 标记回调执行中，阻止并发销毁释放 */
+            cb = timer->cb;
+            cb_arg = timer->arg;
             ros_port_critical_exit();
 
             if (cb != NULL) {
                 cb(cb_arg);
+            }
+
+            /* 回调结束：清除执行标志；若期间收到销毁请求则在此释放 */
+            ros_port_critical_enter();
+            timer->executing = false;
+            free_after = timer->pending_delete;
+            if (free_after) {
+                timer->pending_delete = false;
+                timer->initialized = false;
+            }
+            ros_port_critical_exit();
+
+            if (free_after) {
+                ros_mem_free(timer);
             }
         }
     }
@@ -313,7 +326,22 @@ int ros_timer_destroy(ros_timer_t *timer)
     }
 
     (void)ros_timer_stop(timer);    /* 运行中先摘链，避免释放后仍被 tick 访问 */
+
+#if ROS_USE_TIMER_TASK
+    /* 回调正在定时器任务里执行时不能立即释放，否则 use-after-free：
+     * 标记延后销毁，由定时器任务在回调返回后释放。 */
+    ros_port_critical_enter();
+    if (timer->executing) {
+        timer->pending_delete = true;
+        timer->initialized = false;
+        ros_port_critical_exit();
+        return ROS_OK;
+    }
     timer->initialized = false;
+    ros_port_critical_exit();
+#else
+    timer->initialized = false;
+#endif
     ros_mem_free(timer);
     return ROS_OK;
 }

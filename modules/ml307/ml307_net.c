@@ -27,6 +27,7 @@ typedef struct {
     bool connected;
     uint8_t rx[ML307_NET_RX_MAX];
     uint32_t rx_len;
+    uint32_t rx_dropped;   /* 接收缓冲满时被丢弃的字节数（可观测） */
 } ml307_net_socket_t;
 
 static ml307_net_socket_t s_sockets[ML307_NET_MAX_SOCKETS];
@@ -109,12 +110,16 @@ static void ml307_net_urc(const char *line, uint32_t len, void *user)
         }
         avail = (uint32_t)(end - p);
         copy = ((uint32_t)payload_len < avail) ? (uint32_t)payload_len : avail;
+        /* rx_len/rx 与 net_read 消费者共享，需临界区保护 */
+        ros_port_critical_enter();
         room = ML307_NET_RX_MAX - s_sockets[id].rx_len;
         if (copy > room) {
+            s_sockets[id].rx_dropped += copy - room;   /* 缓冲满，记录丢弃 */
             copy = room;
         }
         memcpy(&s_sockets[id].rx[s_sockets[id].rx_len], p, copy);
         s_sockets[id].rx_len += copy;
+        ros_port_critical_exit();
     }
 }
 
@@ -191,6 +196,7 @@ int net_deinit(void)
             s_sockets[i].used = false;
             s_sockets[i].connected = false;
             s_sockets[i].rx_len = 0U;
+            s_sockets[i].rx_dropped = 0U;
         }
     }
     if (s_urc_registered) {
@@ -229,6 +235,7 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     s_sockets[id].used = true;
     s_sockets[id].connected = true;
     s_sockets[id].rx_len = 0U;
+    s_sockets[id].rx_dropped = 0U;
     sock->fd = (intptr_t)id;
     sock->type = (uint8_t)type;
     sock->used = true;
@@ -294,6 +301,7 @@ int net_recv(net_sock_t *sock, void *data, uint32_t len, uint32_t timeout_ms)
 
     start = hal_tick_get();
     for (;;) {
+        ros_port_critical_enter();
         if (s_sockets[id].rx_len > 0U) {
             uint32_t n = (s_sockets[id].rx_len < len) ? s_sockets[id].rx_len
                                                       : len;
@@ -304,8 +312,10 @@ int net_recv(net_sock_t *sock, void *data, uint32_t len, uint32_t timeout_ms)
                 memmove(s_sockets[id].rx, &s_sockets[id].rx[n],
                         s_sockets[id].rx_len);
             }
+            ros_port_critical_exit();
             return (int)n;
         }
+        ros_port_critical_exit();
         if (!s_sockets[id].connected) {
             return NET_ERR_CLOSED;
         }
@@ -333,6 +343,7 @@ int net_close(net_sock_t *sock)
         s_sockets[id].used = false;
         s_sockets[id].connected = false;
         s_sockets[id].rx_len = 0U;
+        s_sockets[id].rx_dropped = 0U;
     }
     sock->fd = (intptr_t)(-1);
     sock->used = false;

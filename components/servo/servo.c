@@ -56,9 +56,9 @@ static int servo_cmd_handler(const args_parsed_t *parsed, void *user)
     servo = s_servos[id];
 
     if (!args_get_uint(parsed, 1U, &angle)) {
-        ros_printf("servo[%u] angle=%u range=%u..%u\n", (unsigned)id,
-                   (unsigned)servo->angle, (unsigned)servo->min_angle,
-                   (unsigned)servo->max_angle);
+        LOG_I("servo", "servo[%u] angle=%u range=%u..%u", (unsigned)id,
+              (unsigned)servo->angle, (unsigned)servo->min_angle,
+              (unsigned)servo->max_angle);
         return 0;
     }
     if (servo_set_angle(servo, (uint16_t)angle) != 0) {

@@ -31,8 +31,10 @@ ros_task_t *ros_sched_select(void);
 /*
  * 从就绪表摘除任务（动态对象销毁用），状态置 TERMINATED。
  * 返回 ROS_OK；任务处于运行/阻塞/延时态返回 ROS_BUSY。
+ * was_ready 非空时回填「摘除前是否处于 READY 态」，供调用方在同一
+ * 临界区内判定，避免「先读 state 再摘除」之间的状态漂移。
  */
-int ros_sched_remove(ros_task_t *task);
+int ros_sched_remove(ros_task_t *task, bool *was_ready);
 
 /*
  * 在临界区内选出下一个要运行的任务（无就绪任务时返回空闲任务）。

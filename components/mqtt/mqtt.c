@@ -124,6 +124,23 @@ static int mqtt_rx(mqtt_client_t *c, uint8_t *type, uint8_t *body,
         return NET_ERR_IO;
     }
     if (remaining > cap) {
+        /* 报文超过缓冲：先丢弃 remaining 字节保持流对齐，再报错，
+         * 否则残留字节会被当作下一个报文的头，导致后续全部错位。 */
+        uint32_t left = remaining;
+
+        if (cap == 0U) {
+            c->connected = false;
+            return NET_ERR_NOMEM;
+        }
+        while (left > 0U) {
+            uint32_t chunk = (left < cap) ? left : cap;
+
+            rc = mqtt_read_full(c, body, chunk, timeout_ms);
+            if (rc != NET_OK) {
+                return rc;
+            }
+            left -= chunk;
+        }
         return NET_ERR_NOMEM;
     }
     if (remaining != 0U) {
@@ -162,7 +179,11 @@ static int mqtt_dispatch(mqtt_client_t *c, uint8_t type, const uint8_t *body,
         topic[n] = '\0';
         off = 2U + tlen;
 
-        if (qos > 0U) {
+        if (qos == 2U) {
+            /* 不支持 QoS2（订阅侧已限制为 ≤1）：直接丢弃，不做 PUBREC 握手 */
+            return NET_OK;
+        }
+        if (qos == 1U) {
             uint8_t ack[2];
 
             if (off + 2U > len) {
@@ -174,10 +195,7 @@ static int mqtt_dispatch(mqtt_client_t *c, uint8_t type, const uint8_t *body,
             if (c->cb != NULL) {
                 c->cb(topic, &body[off], len - off, c->user);
             }
-            if (qos == 1U) {
-                return mqtt_send(c, MQTT_PUBACK, ack, 2U);
-            }
-            return NET_OK;
+            return mqtt_send(c, MQTT_PUBACK, ack, 2U);
         }
         if (c->cb != NULL) {
             c->cb(topic, &body[off], len - off, c->user);
@@ -352,6 +370,11 @@ int mqtt_publish(mqtt_client_t *c, const char *topic, const void *payload,
         rc = mqtt_wait(c, MQTT_PUBACK, ack, sizeof(ack), &ack_len, 5000U);
         if (rc != NET_OK) {
             return rc;
+        }
+        /* 校验 PUBACK 的 packet id 与本次发布一致，避免误认历史应答 */
+        if (ack_len < 2U ||
+            (uint16_t)(((uint16_t)ack[0] << 8) | ack[1]) != pid) {
+            return NET_ERR_IO;
         }
     }
     return NET_OK;

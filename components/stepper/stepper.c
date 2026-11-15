@@ -9,8 +9,9 @@
  *   发脉冲，每发一步累加/累减 position -> move_to() 换算成相对步数。
  *
  * 依赖与边界：
- *   - step 回调必须实现，set_dir 可选；
- *   - move/move_to 为阻塞式执行，脉冲间隔由底层实现决定；
+ *   - step 回调必须实现，set_dir / delay_us 可选；
+ *   - move/move_to 为阻塞式执行；未启用加减速时脉冲间隔由底层决定；
+ *   - 启用加减速后按梯形速度曲线调整步间隔，避免骤起骤停丢步；
  *   - position 为 int32_t，长时间单向运行可能溢出；
  *   - steps 为 INT32_MIN 时取反会溢出，调用者应避免该极值。
  */
@@ -62,12 +63,12 @@ static int stepper_cmd_handler(const args_parsed_t *parsed, void *user)
         int32_t pos = 0;
 
         (void)stepper_get_position(st, &pos);
-        ros_printf("stepper[%u] pos=%ld\n", (unsigned)id, (long)pos);
+        LOG_I("stepper", "stepper[%u] pos=%ld", (unsigned)id, (long)pos);
         return 0;
     }
     if (str_icmp(action, "info")) {
-        ros_printf("stepper[%u] pos=%ld dir=%u\n", (unsigned)id,
-                   (long)st->position, (unsigned)st->direction);
+        LOG_I("stepper", "stepper[%u] pos=%ld dir=%u", (unsigned)id,
+              (long)st->position, (unsigned)st->direction);
         return 0;
     }
     if (value == NULL || !str_parse_int(value, &v)) {
@@ -129,7 +130,48 @@ int stepper_init(stepper_t *st, const stepper_ops_t *ops)
     st->ops = ops;
     st->position = 0;
     st->direction = 0;
+    /* 加减速默认关闭 */
+    st->max_speed = 0U;
+    st->start_speed = 0U;
+    st->accel = 0U;
+    st->decel = 0U;
     stepper_cmd_add(st);
+    return 0;
+}
+
+/*
+ * 配置加减速参数。
+ * max_speed 或 accel 为 0 时关闭；start_speed 为 0 时自动取 max_speed/4。
+ */
+int stepper_set_ramp(stepper_t *st, uint32_t max_speed, uint32_t start_speed,
+                     uint32_t accel, uint32_t decel)
+{
+    if (st == NULL) {
+        return -1;
+    }
+    if (max_speed == 0U || accel == 0U) {
+        st->max_speed = 0U;
+        st->start_speed = 0U;
+        st->accel = 0U;
+        st->decel = 0U;
+        return 0;
+    }
+    if (start_speed == 0U) {
+        start_speed = max_speed / 4U;
+    }
+    if (start_speed == 0U) {
+        start_speed = 1U;
+    }
+    if (start_speed > max_speed) {
+        start_speed = max_speed;
+    }
+    if (decel == 0U) {
+        decel = accel;
+    }
+    st->max_speed = max_speed;
+    st->start_speed = start_speed;
+    st->accel = accel;
+    st->decel = decel;
     return 0;
 }
 
@@ -154,12 +196,105 @@ int stepper_set_direction(stepper_t *st, uint8_t dir)
     return 0;
 }
 
+/* 整数平方根（用于由停车距离约束反推允许的最高速度） */
+static uint32_t stepper_isqrt(uint64_t x)
+{
+    uint64_t r = 0U;
+    uint64_t bit = 1ULL << 62;
+
+    while (bit > x) {
+        bit >>= 2;
+    }
+    while (bit != 0U) {
+        if (x >= r + bit) {
+            x -= r + bit;
+            r = (r >> 1) + bit;
+        } else {
+            r >>= 1;
+        }
+        bit >>= 2;
+    }
+    return (uint32_t)r;
+}
+
+/*
+ * 按梯形速度曲线发出 count 个脉冲（count > 0）。
+ * 速度按 dv = a/v 逐步变化；同时用剩余步数约束减速度，
+ * 保证在到达目标前能降到 start_speed，避免过冲/丢步。
+ */
+static int stepper_move_ramp(stepper_t *st, uint32_t count, uint8_t dir)
+{
+    uint32_t v = st->start_speed;
+    uint32_t remaining = count;
+    uint32_t us_acc = 0U;
+
+    while (remaining > 0U) {
+        if (v == 0U) {
+            v = 1U;
+        }
+        if (st->ops->step(st->ops->ctx) != 0) {
+            LOG_E("stepper", "step fail");
+            return -1;
+        }
+        st->position += (dir == 0) ? 1 : -1;
+        remaining--;
+        if (remaining == 0U) {
+            break;              /* 最后一步不再等待 */
+        }
+
+        /* 步间隔由当前速度决定，随后再更新速度 */
+        {
+            uint32_t period_us = 1000000U / v;
+
+            if (st->ops->delay_us != NULL) {
+                st->ops->delay_us(st->ops->ctx, period_us);
+            } else {
+                us_acc += period_us;
+                if (us_acc >= 1000U) {
+                    ros_sleep_ms(us_acc / 1000U);
+                    us_acc %= 1000U;
+                }
+            }
+        }
+
+        /* 计算下一速度：先按加速度提升，再按剩余距离限制 */
+        {
+            uint32_t dv = st->accel / v;
+            uint32_t v_next = v + ((dv == 0U) ? 1U : dv);
+            uint64_t stop2;
+
+            if (v_next > st->max_speed) {
+                v_next = st->max_speed;
+            }
+            /* 剩余 remaining 步内必须能从 v_next 降到 start_speed */
+            stop2 = (uint64_t)st->start_speed * st->start_speed +
+                    2ULL * st->decel * remaining;
+            if ((uint64_t)v_next * v_next > stop2) {
+                /* 按停车距离反推允许速度：v <= sqrt(start² + 2*d*remaining) */
+                uint32_t v_allow = stepper_isqrt(stop2);
+
+                if (v_allow > st->max_speed) {
+                    v_allow = st->max_speed;
+                }
+                if (v_allow < st->start_speed) {
+                    v_allow = st->start_speed;
+                }
+                if (v_next > v_allow) {
+                    v_next = v_allow;
+                }
+            }
+            v = (v_next == 0U) ? 1U : v_next;
+        }
+    }
+    return 0;
+}
+
 /*
  * 相对移动若干步（阻塞）。
  * 参数：st 对象指针；steps 步数（正=正向，负=反向）。
  * 返回：0 成功；参数非法、设方向失败或中途发脉冲失败返回 -1。
- * 说明：按符号确定方向后取绝对值逐步发脉冲；一旦某步失败立即返回，
- *       此时 position 只反映已成功发出的步数。
+ * 说明：启用加减速时走梯形曲线，否则保持原有定速方式；
+ *       一旦某步失败立即返回，position 只反映已成功发出的步数。
  */
 int stepper_move(stepper_t *st, int32_t steps)
 {
@@ -176,6 +311,9 @@ int stepper_move(stepper_t *st, int32_t steps)
     }
     if (steps < 0) {
         steps = -steps;   /* 注意：INT32_MIN 取反会溢出 */
+    }
+    if (st->max_speed != 0U && st->accel != 0U && steps > 1) {
+        return stepper_move_ramp(st, (uint32_t)steps, dir);
     }
     for (i = 0; i < steps; i++) {
         if (st->ops->step(st->ops->ctx) != 0) {

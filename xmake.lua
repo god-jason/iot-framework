@@ -194,11 +194,41 @@ local function ros_enable_mapfile()
     end)
 end
 
+-- 更严格的告警集（在 set_warnings("all") 之外补充）
+local function ros_extra_warnings()
+    add_cflags("-Wextra", "-Wshadow", "-Wformat=2", {force = true})
+end
+
+-- 固件构建后导出 hex/bin 并打印 map 路径（f103c8 / f407 共用）
+local function ros_fw_objcopy()
+    after_build(function (target)
+        local elf = target:targetfile()
+        if not os.isfile(elf) then
+            return
+        end
+        local oc  = target:tool("objcopy") or "arm-none-eabi-objcopy"
+        local dir = target:targetdir()
+        local hex = path.join(dir, target:basename() .. ".hex")
+        local bin = path.join(dir, target:basename() .. ".bin")
+        local map = elf .. ".map"
+        os.execv(oc, {"-O", "ihex", elf, hex})
+        os.execv(oc, {"-O", "binary", elf, bin})
+        cprint("${green}[firmware] HEX: %s${clear}", hex)
+        cprint("${green}[firmware] BIN: %s${clear}", bin)
+        if os.isfile(map) then
+            cprint("${green}[firmware] MAP: %s${clear}", map)
+        else
+            cprint("${yellow}[firmware] MAP 未生成: %s${clear}", map)
+        end
+    end)
+end
+
 -- 每个主机二进制/库目标共用的描述
 local function ros_host_common(with_tests)
     set_toolchains("gcc")            -- Windows / Linux 统一使用系统 gcc
     set_languages("c99")
     set_warnings("all")
+    ros_extra_warnings()
 
     ros_host_defines()
     ros_trace_defines()
@@ -314,6 +344,7 @@ if is_plat("cross") then
         set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
         set_languages("c99")
         set_warnings("all")
+        ros_extra_warnings()
         -- 保留 DWARF 调试信息，供 addr2line / gdb 回溯崩溃地址
         add_cflags("-g", {force = true})
 
@@ -345,9 +376,8 @@ if is_plat("cross") then
         add_files("drivers/**.c")
         add_files("platforms/stm32/**.c")
         add_files("modules/**.c")
-        add_files("vendor/tlsf/**.c")
-        add_files("vendor/arena/**.c")
-        add_files("vendor/cjson/**.c")
+        -- vendor 源码集合与主机目标口径对齐（ros_includedirs 已纳入全部子目录）
+        add_files("vendor/**.c")
 
         -- 网络实现按目标选择：ML307 用 modules/ml307 的原生实现，
         -- 排除 components 下的 BSD socket / 通用 HTTP、MQTT 实现
@@ -421,6 +451,8 @@ if is_plat("cross") then
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
+            set_optimize("s")           -- 固件按体积优化
+            ros_extra_warnings()
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
             add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）
             ros_enable_mapfile()
@@ -468,26 +500,7 @@ if is_plat("cross") then
                 end
             end)
 
-            after_build(function (target)
-                local elf = target:targetfile()
-                if not os.isfile(elf) then
-                    return
-                end
-                local oc  = target:tool("objcopy") or "arm-none-eabi-objcopy"
-                local dir = target:targetdir()
-                local hex = path.join(dir, target:basename() .. ".hex")
-                local bin = path.join(dir, target:basename() .. ".bin")
-                local map = elf .. ".map"
-                os.execv(oc, {"-O", "ihex", elf, hex})
-                os.execv(oc, {"-O", "binary", elf, bin})
-                cprint("${green}[firmware] HEX: %s${clear}", hex)
-                cprint("${green}[firmware] BIN: %s${clear}", bin)
-                if os.isfile(map) then
-                    cprint("${green}[firmware] MAP: %s${clear}", map)
-                else
-                    cprint("${yellow}[firmware] MAP 未生成: %s${clear}", map)
-                end
-            end)
+            ros_fw_objcopy()
         target_end()
     end
 
@@ -515,6 +528,8 @@ if is_plat("cross") then
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
+            set_optimize("s")           -- 固件按体积优化
+            ros_extra_warnings()
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
             add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）
             ros_enable_mapfile()
@@ -570,26 +585,7 @@ if is_plat("cross") then
                 cprint("${dim}[f407] chip=%s${clear}", chip)
             end)
 
-            after_build(function (target)
-                local elf = target:targetfile()
-                if not os.isfile(elf) then
-                    return
-                end
-                local oc  = target:tool("objcopy") or "arm-none-eabi-objcopy"
-                local dir = target:targetdir()
-                local hex = path.join(dir, target:basename() .. ".hex")
-                local bin = path.join(dir, target:basename() .. ".bin")
-                local map = elf .. ".map"
-                os.execv(oc, {"-O", "ihex", elf, hex})
-                os.execv(oc, {"-O", "binary", elf, bin})
-                cprint("${green}[firmware] HEX: %s${clear}", hex)
-                cprint("${green}[firmware] BIN: %s${clear}", bin)
-                if os.isfile(map) then
-                    cprint("${green}[firmware] MAP: %s${clear}", map)
-                else
-                    cprint("${yellow}[firmware] MAP 未生成: %s${clear}", map)
-                end
-            end)
+            ros_fw_objcopy()
         target_end()
     end
 

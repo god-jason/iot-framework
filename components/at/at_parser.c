@@ -23,6 +23,8 @@ static uint8_t *s_buf;
 static uint32_t s_size;
 /* 当前行已累积字节数（不含结尾 '\0'） */
 static uint32_t s_len;
+/* 行溢出标志：置位后丢弃后续字节直到遇到 '\n'，避免残留字节拼成脏行 */
+static bool s_discard;
 /* token 回调与用户指针 */
 static at_token_fn s_cb;
 static void *s_user;
@@ -62,6 +64,7 @@ int at_parser_init(void *buffer, uint32_t size,
     s_cb = callback;
     s_user = user;
     s_len = 0;
+    s_discard = false;
     return 0;
 }
 
@@ -69,6 +72,7 @@ int at_parser_init(void *buffer, uint32_t size,
 int at_parser_reset(void)
 {
     s_len = 0;
+    s_discard = false;
     return 0;
 }
 
@@ -90,6 +94,14 @@ int at_parser_input(const uint8_t *data, uint32_t len)
 
     for (i = 0; i < len; i++) {
         uint8_t c = data[i];
+
+        if (s_discard) {
+            /* 溢出后的残留字节：丢弃直到行结束，避免拼成脏行 */
+            if (c == '\n') {
+                s_discard = false;
+            }
+            continue;
+        }
 
         if (c == '\n') {
             /* 行结束：先去掉可能存在的结尾 '\r' */
@@ -114,6 +126,7 @@ int at_parser_input(const uint8_t *data, uint32_t len)
             } else {
                 parser_emit(AT_OVERFLOW, NULL, 0);
                 s_len = 0;
+                s_discard = true;
             }
         } else if (c == '\r') {
             /* 忽略 CR，等待 LF 统一收尾 */
@@ -121,9 +134,10 @@ int at_parser_input(const uint8_t *data, uint32_t len)
             /* 预留 1 字节给结尾 '\0' */
             s_buf[s_len++] = c;
         } else {
-            /* 行过长：上报溢出并丢弃当前行 */
+            /* 行过长：上报溢出并丢弃当前行剩余字节直到换行 */
             parser_emit(AT_OVERFLOW, NULL, 0);
             s_len = 0;
+            s_discard = true;
         }
     }
     return 0;

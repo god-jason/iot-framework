@@ -314,8 +314,7 @@ int ros_task_destroy(ros_task_t *task)
         return ROS_BUSY;            /* 不能在自身上下文释放自己的栈 */
     }
 
-    was_ready = (task->state == ROS_TASK_READY);
-    if (ros_sched_remove(task) != ROS_OK) {
+    if (ros_sched_remove(task, &was_ready) != ROS_OK) {
         return ROS_BUSY;            /* 运行/阻塞/延时中的任务不能销毁 */
     }
 

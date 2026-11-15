@@ -70,7 +70,7 @@ void ros_test_suspend(void)
 
     /* 收尾：从就绪表摘除，避免该静态任务被后续套件调度到 */
     s_worker.state = ROS_TASK_READY;
-    TF_CHECK_INT(ros_sched_remove(&s_worker), ROS_OK);
+    TF_CHECK_INT(ros_sched_remove(&s_worker, NULL), ROS_OK);
     TF_CHECK_INT(s_worker.state, ROS_TASK_TERMINATED);
 
     tf_end();

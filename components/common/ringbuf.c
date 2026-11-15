@@ -21,6 +21,8 @@
 
 #include "ringbuf.h"
 
+#include <string.h>
+
 /*
  * 初始化环形缓冲区。
  * 参数：rb - 缓冲区对象；buffer - 外部存储；size - 容量（字节，> 0）
@@ -49,20 +51,27 @@ int ringbuf_init(ringbuf_t *rb, void *buffer, uint32_t size)
 uint32_t ringbuf_write(ringbuf_t *rb, const void *data, uint32_t len)
 {
     const uint8_t *src = (const uint8_t *)data;
-    uint32_t avail, free, n, i;
+    uint32_t free, n, idx, first;
 
     if (rb == NULL || data == NULL || len == 0) {
         return 0;
     }
     free = ringbuf_free(rb);
     n = (len < free) ? len : free;   /* 取请求量与空闲量的较小值 */
-
-    for (i = 0; i < n; i++) {
-        uint32_t idx = (rb->write_pos + i) % rb->capacity;   /* 环形回绕 */
-        rb->buffer[idx] = src[i];
+    if (n == 0U) {
+        return 0;
     }
-    avail = ringbuf_available(rb);
-    (void)avail;   /* 写入前的占用量仅用于调试观察，此处不参与计算 */
+
+    /* 回绕拆成两段连续拷贝，避免逐字节取模 */
+    idx = rb->write_pos % rb->capacity;
+    first = rb->capacity - idx;
+    if (first > n) {
+        first = n;
+    }
+    memcpy(rb->buffer + idx, src, first);
+    if (n > first) {
+        memcpy(rb->buffer, src + first, n - first);
+    }
     rb->write_pos += n;
     return n;
 }
@@ -76,17 +85,26 @@ uint32_t ringbuf_write(ringbuf_t *rb, const void *data, uint32_t len)
 uint32_t ringbuf_read(ringbuf_t *rb, void *data, uint32_t len)
 {
     uint8_t *dst = (uint8_t *)data;
-    uint32_t avail, n, i;
+    uint32_t avail, n, idx, first;
 
     if (rb == NULL || data == NULL || len == 0) {
         return 0;
     }
     avail = ringbuf_available(rb);
     n = (len < avail) ? len : avail;
+    if (n == 0U) {
+        return 0;
+    }
 
-    for (i = 0; i < n; i++) {
-        uint32_t idx = (rb->read_pos + i) % rb->capacity;
-        dst[i] = rb->buffer[idx];
+    /* 回绕拆成两段连续拷贝，避免逐字节取模 */
+    idx = rb->read_pos % rb->capacity;
+    first = rb->capacity - idx;
+    if (first > n) {
+        first = n;
+    }
+    memcpy(dst, rb->buffer + idx, first);
+    if (n > first) {
+        memcpy(dst + first, rb->buffer, n - first);
     }
     rb->read_pos += n;
     return n;
@@ -101,17 +119,26 @@ uint32_t ringbuf_read(ringbuf_t *rb, void *data, uint32_t len)
 uint32_t ringbuf_peek(ringbuf_t *rb, void *data, uint32_t len)
 {
     uint8_t *dst = (uint8_t *)data;
-    uint32_t avail, n, i;
+    uint32_t avail, n, idx, first;
 
     if (rb == NULL || data == NULL || len == 0) {
         return 0;
     }
     avail = ringbuf_available(rb);
     n = (len < avail) ? len : avail;
+    if (n == 0U) {
+        return 0;
+    }
 
-    for (i = 0; i < n; i++) {
-        uint32_t idx = (rb->read_pos + i) % rb->capacity;
-        dst[i] = rb->buffer[idx];
+    /* 回绕拆成两段连续拷贝，避免逐字节取模 */
+    idx = rb->read_pos % rb->capacity;
+    first = rb->capacity - idx;
+    if (first > n) {
+        first = n;
+    }
+    memcpy(dst, rb->buffer + idx, first);
+    if (n > first) {
+        memcpy(dst + first, rb->buffer, n - first);
     }
     return n;
 }

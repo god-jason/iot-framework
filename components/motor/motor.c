@@ -75,9 +75,9 @@ static int motor_cmd_handler(const args_parsed_t *parsed, void *user)
     } else if (str_icmp(action, "stop")) {
         rc = motor_stop(motor);
     } else if (str_icmp(action, "info")) {
-        ros_printf("motor[%u] speed=%ld max=%ld dir=%d\n", (unsigned)id,
-                   (long)motor->speed, (long)motor->max_speed,
-                   (int)motor->direction);
+        LOG_I("motor", "motor[%u] speed=%ld max=%ld dir=%d", (unsigned)id,
+              (long)motor->speed, (long)motor->max_speed,
+              (int)motor->direction);
         return 0;
     } else {
         ros_printf("motor: unknown action '%s'\n", action);

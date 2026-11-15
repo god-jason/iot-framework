@@ -113,9 +113,10 @@ ros_task_t *ros_sched_select(void)
  * 从就绪表摘除任务（动态对象销毁用），状态置 TERMINATED。
  * 任务处于运行/阻塞/延时态时返回 ROS_BUSY。
  */
-int ros_sched_remove(ros_task_t *task)
+int ros_sched_remove(ros_task_t *task, bool *was_ready)
 {
     int rc = ROS_OK;
+    bool ready = false;
 
     if (task == NULL) {
         return ROS_INVALID_PARAM;
@@ -123,6 +124,7 @@ int ros_sched_remove(ros_task_t *task)
 
     ros_port_critical_enter();
     if (task->state == ROS_TASK_READY) {
+        ready = true;
         list_remove(&task->ready_node);
         if (list_empty(&s_ready[task->priority])) {
             s_ready_bitmap &= ~(1U << task->priority);
@@ -134,6 +136,9 @@ int ros_sched_remove(ros_task_t *task)
     }
     ros_port_critical_exit();
 
+    if (was_ready != NULL) {
+        *was_ready = ready;
+    }
     return rc;
 }
 
@@ -356,14 +361,13 @@ ros_task_t *ros_sched_from_isr(void)
         s_ctx_switches++;
         next->switches++;
 #endif
-    }
 
-    if (next != prev) {
         ROS_TRACE(ROS_EVT_SWITCH, (uint32_t)(uintptr_t)next,
                   (uint32_t)(uintptr_t)prev);
+        return next;
     }
 
-    return (next != prev) ? next : NULL;
+    return NULL;
 }
 
 /* 判断就绪表中是否存在比当前任务优先级更高的任务（FromISR 抢占依据）。 */

@@ -103,6 +103,10 @@ int storage_kv_set(const char *key, storage_kv_type_e type,
     if (len > STORAGE_KV_VAL_MAX) {
         return -1;
     }
+    /* 键名超长会被 str_copy 静默截断，导致不同键碰撞，直接拒绝 */
+    if (strlen(key) >= STORAGE_KV_KEY_MAX) {
+        return -1;
+    }
     if (storage_kv_ensure() != 0) {
         return -1;
     }

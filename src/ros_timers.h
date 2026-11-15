@@ -25,6 +25,8 @@ struct ros_timer {
     bool periodic;                  /* true=周期，false=单次 */
     bool running;                   /* 是否已启动 */
     bool pending;                   /* 已到期、等待回调任务执行 */
+    volatile bool executing;        /* 任务模式：回调正在执行（临界区内读写） */
+    bool pending_delete;            /* 任务模式：销毁请求延后到回调结束 */
     uint32_t deadline;              /* 下次到期时刻 */
     bool initialized;               /* 已初始化（动态销毁校验用） */
 };

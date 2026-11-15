@@ -69,16 +69,28 @@ int ros_queue_init(ros_queue_t *queue, void *buffer,
 /*
  * 发送一条消息：队列未满直接入队；已满时与等待的接收者直接握手，
  * 否则按 timeout 阻塞（ROS_TIMEOUT_NONE 立即返回 ROS_TIMEOUT）。
+ *
+ * 「检查满 → 入等待链 → 选任务」在同一临界区内完成，杜绝发送方
+ * 退出临界区后被接收方抢先入队而丢失唤醒、进而永久阻塞的竞态。
  */
 int ros_queue_send(ros_queue_t *queue, const void *item,
                               uint32_t timeout)
 {
     ros_task_t *receiver;
+    ros_task_t *cur;
+    uint32_t deadline;
+    uint32_t now;
+    uint32_t wait;
 
     if (!ROS_OBJ_VALID(queue) || item == NULL) {
         LOG_E(ROS_TAG, "queue_send: invalid param");
         return ROS_INVALID_PARAM;
     }
+    if (!ros_wait_blockable(timeout)) {
+        return ROS_FORBIDDEN_IN_ISR;
+    }
+
+    deadline = ros_tick_get() + timeout;
 
     ros_port_critical_enter();
 
@@ -108,31 +120,65 @@ int ros_queue_send(ros_queue_t *queue, const void *item,
         return ROS_OK;
     }
 
-    ros_port_critical_exit();
-
+    /* 3) 队列满：在同一临界区内决定立即失败或阻塞 */
     if (timeout == ROS_TIMEOUT_NONE) {
+        ros_port_critical_exit();
         LOG_D(ROS_TAG, "queue send: full, non-blocking");
         return ROS_TIMEOUT;
     }
 
-    /* 3) 队列满：阻塞等待接收方腾出空间（item 缓冲需保持有效） */
-    ros_current_task->wait_ptr = (void *)item;
+    cur = ros_current_task;
+    if (cur == NULL) {
+        ros_port_critical_exit();
+        return ROS_NOT_READY;
+    }
+    now = ros_tick_get();
+    if (timeout != ROS_TIMEOUT_FOREVER && !ROS_TICK_AFTER(deadline, now)) {
+        ros_port_critical_exit();
+        LOG_D(ROS_TAG, "queue send: full, deadline passed");
+        return ROS_TIMEOUT;
+    }
+    wait = (timeout == ROS_TIMEOUT_FOREVER) ? ROS_TIMEOUT_FOREVER
+                                            : (deadline - now);
+
+    /* item 缓冲需保持有效：入等待链与选任务原子完成 */
+    cur->wait_ptr = (void *)item;
     LOG_D(ROS_TAG, "queue send: full, blocking timeout=%u", (unsigned)timeout);
-    return ros_block_current(&queue->send_wait, timeout);
+    ros_block_current_locked(&queue->send_wait, wait);
+
+    if (cur->wait_result == ROS_OK) {
+        /* 接收方已把本条消息直接转入队列并唤醒 */
+        ROS_TRACE_OBJ(ROS_EVT_QUEUE_SEND, (uint32_t)(uintptr_t)queue, queue->count);
+        return ROS_OK;
+    }
+    LOG_D(ROS_TAG, "queue send: block timeout");
+    return ROS_TIMEOUT;
 }
 
 /*
  * 接收一条消息：队列非空直接出队；为空时与等待的发送者直接握手，
  * 否则按 timeout 阻塞（ROS_TIMEOUT_NONE 立即返回 ROS_TIMEOUT）。
+ *
+ * 「检查空 → 入等待链 → 选任务」在同一临界区内完成，杜绝接收方
+ * 退出临界区后被发送方抢先入队而丢失唤醒、进而永久阻塞的竞态。
  */
 int ros_queue_recv(ros_queue_t *queue, void *item, uint32_t timeout)
 {
     ros_task_t *sender;
+    ros_task_t *cur;
+    uint32_t deadline;
+    uint32_t now;
+    uint32_t wait;
 
     if (!ROS_OBJ_VALID(queue) || item == NULL) {
         LOG_E(ROS_TAG, "queue_recv: invalid param");
         return ROS_INVALID_PARAM;
     }
+    if (!ros_wait_blockable(timeout)) {
+        return ROS_FORBIDDEN_IN_ISR;
+    }
+
+    deadline = ros_tick_get() + timeout;
 
     ros_port_critical_enter();
 
@@ -161,17 +207,37 @@ int ros_queue_recv(ros_queue_t *queue, void *item, uint32_t timeout)
         return ROS_OK;
     }
 
-    ros_port_critical_exit();
-
+    /* 2) 队列空：在同一临界区内决定立即失败或阻塞 */
     if (timeout == ROS_TIMEOUT_NONE) {
+        ros_port_critical_exit();
         LOG_D(ROS_TAG, "queue recv: empty, non-blocking");
         return ROS_TIMEOUT;
     }
 
-    /* 2) 队列空：阻塞等待发送方 */
-    ros_current_task->wait_ptr = item;
+    cur = ros_current_task;
+    if (cur == NULL) {
+        ros_port_critical_exit();
+        return ROS_NOT_READY;
+    }
+    now = ros_tick_get();
+    if (timeout != ROS_TIMEOUT_FOREVER && !ROS_TICK_AFTER(deadline, now)) {
+        ros_port_critical_exit();
+        return ROS_TIMEOUT;
+    }
+    wait = (timeout == ROS_TIMEOUT_FOREVER) ? ROS_TIMEOUT_FOREVER
+                                            : (deadline - now);
+
+    cur->wait_ptr = item;
     LOG_D(ROS_TAG, "queue recv: empty, blocking timeout=%u", (unsigned)timeout);
-    return ros_block_current(&queue->recv_wait, timeout);
+    ros_block_current_locked(&queue->recv_wait, wait);
+
+    if (cur->wait_result == ROS_OK) {
+        /* 发送方已把消息直接交付到 item 并唤醒 */
+        ROS_TRACE_OBJ(ROS_EVT_QUEUE_RECV, (uint32_t)(uintptr_t)queue, queue->count);
+        return ROS_OK;
+    }
+    LOG_D(ROS_TAG, "queue recv: block timeout");
+    return ROS_TIMEOUT;
 }
 
 /*

@@ -64,7 +64,7 @@ static int encoder_cmd_handler(const args_parsed_t *parsed, void *user)
             ros_printf("encoder[%u] read failed\n", (unsigned)id);
             return -1;
         }
-        ros_printf("encoder[%u] count=%ld\n", (unsigned)id, (long)count);
+        LOG_I("encoder", "encoder[%u] count=%ld", (unsigned)id, (long)count);
         return 0;
     }
     if (str_icmp(action, "reset")) {
@@ -86,13 +86,13 @@ static int encoder_cmd_handler(const args_parsed_t *parsed, void *user)
             ros_printf("encoder[%u] speed failed\n", (unsigned)id);
             return -1;
         }
-        ros_printf("encoder[%u] speed=%ld pulse/s\n", (unsigned)id,
-                   (long)speed);
+        LOG_I("encoder", "encoder[%u] speed=%ld pulse/s", (unsigned)id,
+              (long)speed);
         return 0;
     }
     if (str_icmp(action, "info")) {
-        ros_printf("encoder[%u] count=%ld speed=%ld pulse/s\n", (unsigned)id,
-                   (long)enc->count, (long)enc->speed);
+        LOG_I("encoder", "encoder[%u] count=%ld speed=%ld pulse/s", (unsigned)id,
+              (long)enc->count, (long)enc->speed);
         return 0;
     }
 

@@ -58,8 +58,8 @@ static int fan_cmd_handler(const args_parsed_t *parsed, void *user)
     fan = s_fans[id];
 
     if (!args_get_uint(parsed, 1U, &duty)) {
-        ros_printf("fan[%u] duty=%u rpm=%u\n", (unsigned)id,
-                   (unsigned)fan->duty, (unsigned)fan->rpm);
+        LOG_I("fan", "fan[%u] duty=%u rpm=%u", (unsigned)id,
+              (unsigned)fan->duty, (unsigned)fan->rpm);
         return 0;
     }
     if (fan_set_speed(fan, (uint16_t)duty) != 0) {

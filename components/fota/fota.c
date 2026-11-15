@@ -151,7 +151,11 @@ int fota_run(uint32_t version, uint32_t size)
             return -1;
         }
         if (n == 0) {
-            break;   /* 数据源提前结束 */
+            /* 数据源提前结束：镜像不完整，绝不能继续走校验/升级 */
+            LOG_E("fota", "source ended early at %u/%u",
+                  (unsigned)offset, (unsigned)size);
+            upgrade_abort();
+            return -1;
         }
         if (upgrade_write(offset, buf, (uint32_t)n) != 0) {
             LOG_E("fota", "write error at %u", (unsigned)offset);   /* 失败：写入升级分区出错 */

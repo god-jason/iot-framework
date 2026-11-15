@@ -87,12 +87,13 @@ void ut_at_parser(void)
     TF_CHECK_INT(at_parser_reset(), 0);
 
     {
-        /* 超过 15 字符的行触发溢出；剩余字符构成新的一行 */
+        /* 超过 15 字符的行触发溢出；溢出后丢弃该行剩余字节直到换行，
+         * 因此不会产生由残留字符拼成的“脏行” */
         static const char longline[] = "0123456789ABCDEFGHIJ\r\n";
         TF_CHECK_INT(at_parser_input((const uint8_t *)longline,
                                      (uint32_t)strlen(longline)), 0);
         TF_CHECK_INT(s_overflow_count, 1);
-        TF_CHECK_INT(s_line_count, 1);
+        TF_CHECK_INT(s_line_count, 0);
     }
 
     TF_CHECK_INT(at_parser_input(NULL, 4U), 0);

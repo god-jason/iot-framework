@@ -34,8 +34,8 @@ static int ping_handler(const args_parsed_t *parsed, void *user)
     return 42;
 }
 
-static const cmd_entry_t s_table[] = {
-    { &s_ping_def, ping_handler }
+static const cmd_node_t s_table[] = {
+    { &s_ping_def, ping_handler, NULL }
 };
 
 /* ---------------- 生命周期钩子 ---------------- */

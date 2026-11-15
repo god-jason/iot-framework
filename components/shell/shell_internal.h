@@ -174,8 +174,8 @@ struct shell {
     uint16_t       job_seq;
 
     char          *rx;               /* [SHELL_RX_MAX] */
-    uint16_t       rx_head;
-    uint16_t       rx_tail;
+    volatile uint16_t rx_head;       /* 生产者（ISR）写入，消费者（任务）读取 */
+    volatile uint16_t rx_tail;       /* volatile 防止跨上下文读写被编译器缓存 */
     volatile bool  ctrlc;
 
     char          *line;             /* [SHELL_LINE_MAX] */

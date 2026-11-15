@@ -12,6 +12,13 @@ typedef struct {
     int steps;
     int last_dir;
     int step_fail;
+
+    uint64_t time_us;       /* 累计延时 */
+    uint32_t delay_calls;
+    uint32_t first_us;
+    uint32_t last_us;
+    uint32_t min_us;
+    uint32_t max_us;
 } step_sim_t;
 
 static int sim_set_dir(void *ctx, uint8_t dir)
@@ -31,6 +38,25 @@ static int sim_step(void *ctx)
     return 0;
 }
 
+static void sim_delay_us(void *ctx, uint32_t us)
+{
+    step_sim_t *s = (step_sim_t *)ctx;
+
+    s->time_us += us;
+    if (s->delay_calls == 0U) {
+        s->first_us = us;
+        s->min_us = us;
+    }
+    if (us < s->min_us) {
+        s->min_us = us;
+    }
+    if (us > s->max_us) {
+        s->max_us = us;
+    }
+    s->last_us = us;
+    s->delay_calls++;
+}
+
 void ut_stepper(void)
 {
     step_sim_t sim;
@@ -39,8 +65,10 @@ void ut_stepper(void)
     int32_t pos = 0;
 
     memset(&sim, 0, sizeof(sim));
+    memset(&ops, 0, sizeof(ops));
     ops.set_dir = sim_set_dir;
     ops.step = sim_step;
+    ops.delay_us = sim_delay_us;
     ops.ctx = &sim;
 
     tf_begin("stepper/初始化");
@@ -97,6 +125,60 @@ void ut_stepper(void)
     TF_CHECK_INT(stepper_move_to(NULL, 1), -1);
     TF_CHECK_INT(stepper_get_position(&st, NULL), -1);
     TF_CHECK_INT(stepper_set_direction(NULL, 0U), -1);
+    TF_CHECK_INT(stepper_set_ramp(NULL, 1000U, 100U, 2000U, 2000U), -1);
+
+    /* 默认关闭加减速：不产生任何步间隔延时 */
+    TF_CHECK_INT(sim.delay_calls, 0);
+
+    tf_end();
+
+    /* ---------------- 加减速 ---------------- */
+    tf_begin("stepper/加减速");
+    {
+        step_sim_t rs;
+        stepper_t rst;
+        stepper_ops_t rops;
+        uint32_t calls_before;
+
+        memset(&rs, 0, sizeof(rs));
+        rops = ops;
+        rops.ctx = &rs;
+
+        TF_CHECK_INT(stepper_init(&rst, &rops), 0);
+        TF_CHECK_INT(rst.max_speed, 0);
+        TF_CHECK_INT(stepper_set_ramp(&rst, 1000U, 100U, 2000U, 2000U), 0);
+        TF_CHECK_INT(rst.max_speed, 1000);
+        TF_CHECK_INT(rst.start_speed, 100);
+        TF_CHECK_INT(rst.accel, 2000);
+        TF_CHECK_INT(rst.decel, 2000);
+
+        TF_CHECK_INT(stepper_move(&rst, 400), 0);
+        TF_CHECK_INT(rs.steps, 400);
+        TF_CHECK_INT(rst.position, 400);
+        TF_CHECK_INT(rs.delay_calls, 399);      /* 最后一步不等待 */
+        TF_CHECK(rs.time_us > 0U);
+
+        /* 起步 100 步/秒 → 10000us；中间加速变快，末段减速变慢 */
+        TF_CHECK_INT(rs.first_us, 10000);
+        TF_CHECK(rs.min_us < rs.first_us);
+        TF_CHECK(rs.last_us > rs.min_us);
+        TF_CHECK(rs.last_us >= 6000U && rs.last_us <= 12000U);
+
+        /* 反向移动同样走加减速，位置正确回退 */
+        TF_CHECK_INT(stepper_move(&rst, -100), 0);
+        TF_CHECK_INT(rs.steps, 500);
+        TF_CHECK_INT(rst.position, 300);
+        TF_CHECK_INT(rst.direction, 1);
+        TF_CHECK_INT(rs.delay_calls, 399 + 99);
+
+        /* 关闭加减速：恢复定速发脉冲，不再产生延时 */
+        calls_before = rs.delay_calls;
+        TF_CHECK_INT(stepper_set_ramp(&rst, 0U, 0U, 0U, 0U), 0);
+        TF_CHECK_INT(rst.max_speed, 0);
+        TF_CHECK_INT(stepper_move(&rst, 10), 0);
+        TF_CHECK_INT(rs.steps, 510);
+        TF_CHECK_INT(rs.delay_calls, calls_before);
+    }
 
     tf_end();
 }

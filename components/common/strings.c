@@ -7,6 +7,8 @@
 #include "common.h"
 
 #include <stdlib.h>
+#include <errno.h>
+#include <stdint.h>
 
 /* ---------------- 比较 / 判断 ---------------- */
 
@@ -200,8 +202,13 @@ bool str_parse_int(const char *s, int32_t *out)
     if (s == NULL || out == NULL || s[0] == '\0') {
         return false;
     }
+    errno = 0;
     v = strtol(s, &end, 10);
     if (end == s || *end != '\0') {
+        return false;
+    }
+    /* 溢出（ERANGE）或在 long 比 int32 更宽的平台超出 int32 范围 */
+    if (errno == ERANGE || v > (long)INT32_MAX || v < (long)INT32_MIN) {
         return false;
     }
     *out = (int32_t)v;
@@ -216,8 +223,13 @@ bool str_parse_uint(const char *s, uint32_t *out)
     if (s == NULL || out == NULL || s[0] == '\0' || s[0] == '-') {
         return false;
     }
+    errno = 0;
     v = strtoul(s, &end, 10);
     if (end == s || *end != '\0') {
+        return false;
+    }
+    /* 溢出（ERANGE）或在 unsigned long 比 uint32 更宽的平台超出 uint32 范围 */
+    if (errno == ERANGE || v > (unsigned long)UINT32_MAX) {
         return false;
     }
     *out = (uint32_t)v;

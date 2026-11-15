@@ -96,18 +96,22 @@ static void ros_mem_stat_sub(uint32_t tid, uint32_t size)
 static uint32_t s_used_total;
 static uint32_t s_used_untracked;
 
-/* 记账入口：总量始终累加，再由 tid 决定记到任务还是“未归属” */
+/* 记账入口：总量始终累加，再由 tid 决定记到任务还是“未归属”。
+ * 全局计数与任务表遍历均需在临界区内完成，避免多任务并发记账丢更新。 */
 static void ros_mem_account_add(uint32_t tid, uint32_t size)
 {
     if (size == 0U) {
         return;
     }
+    ros_port_critical_enter();
     s_used_total += size;
     if (tid == 0U) {
         s_used_untracked += size;
+        ros_port_critical_exit();
         return;
     }
     ros_mem_stat_add(tid, size);
+    ros_port_critical_exit();
 }
 
 static void ros_mem_account_sub(uint32_t tid, uint32_t size)
@@ -115,13 +119,16 @@ static void ros_mem_account_sub(uint32_t tid, uint32_t size)
     if (size == 0U) {
         return;
     }
+    ros_port_critical_enter();
     s_used_total = (s_used_total >= size) ? (s_used_total - size) : 0U;
     if (tid == 0U) {
         s_used_untracked = (s_used_untracked >= size)
             ? (s_used_untracked - size) : 0U;
+        ros_port_critical_exit();
         return;
     }
     ros_mem_stat_sub(tid, size);
+    ros_port_critical_exit();
 }
 
 #endif /* ROS_USE_MEM_STATS */
