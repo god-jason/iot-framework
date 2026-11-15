@@ -6,21 +6,27 @@
  * 位置以「步数」为单位。
  *
  * 模块说明：
- *   - 每次移动通过循环发脉冲实现，属于阻塞式接口；
  *   - 同时维护软件侧绝对位置 position，便于 move_to 换算相对步数；
  *   - 方向取值 0（正向）/ 1（反向），仅最低位有效；
  *   - 可选加减速（默认关闭）：按梯形速度曲线逐步改变步间隔，
  *     避免骤起骤停导致丢步。
+ *   - 启用加减速且配置了硬件定时器（stepper_set_timer）时，脉冲由
+ *     定时器更新中断发出，回调内按梯形曲线调整周期（即脉冲频率）；
+ *     stepper_move 阻塞等待移动完成后返回。
  * 使用约束：
  *   - step 回调必须实现，set_dir / delay_us 可选；
  *   - 未启用加减速时，脉冲频率完全由底层决定，模块不插入延时；
- *   - 启用加减速后，若提供 delay_us 则由底层精确延时，否则退回
- *     ros_sleep_ms（需要内核已启动，精度约 1ms）。
+ *   - 启用加减速但未挂定时器时退回软件延时：若提供 delay_us 则由
+ *     底层精确延时，否则退回 ros_sleep_ms（精度约 1ms）；
+ *   - 定时器加减速要求内核已启动（stepper_move 阻塞在信号量上），
+ *     且平台 TIM 更新中断需把事件派发到句柄 callback。
  */
 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "hal.h"
+#include "ros.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +53,14 @@ typedef struct {
     uint32_t start_speed;       /* 起始/停止速度，步/秒 */
     uint32_t accel;             /* 加速度，步/秒² */
     uint32_t decel;             /* 减速度，步/秒² */
+
+    /* 硬件定时器加减速（可选，见 stepper_set_timer） */
+    hal_tim_t *tim;             /* 定时器句柄；NULL 时加减速退回软件延时 */
+    uint32_t tim_tick_hz;       /* 定时器分频后的计数时钟（Hz） */
+    ros_sem_t ramp_done;        /* 一次加减速移动完成信号 */
+    volatile uint32_t ramp_remaining; /* 剩余步数（中断上下文读写） */
+    volatile uint32_t ramp_speed;     /* 当前脉冲速度，步/秒（中断上下文读写） */
+    volatile int ramp_status;         /* 本次移动结果：0 成功 / -1 底层失败 */
 } stepper_t;
 
 /*
@@ -75,6 +89,24 @@ int stepper_move(stepper_t *st, int32_t steps);
  */
 int stepper_set_ramp(stepper_t *st, uint32_t max_speed, uint32_t start_speed,
                      uint32_t accel, uint32_t decel);
+
+/*
+ * 挂接硬件定时器用于加减速脉冲生成。
+ * 参数：tim 定时器句柄（NULL 表示卸载，加减速退回软件延时）；
+ *       tick_hz 定时器分频后的计数时钟（Hz），决定周期换算精度。
+ * 返回：0 成功；st 为 NULL 或 tim 非 NULL 而 tick_hz 为 0 返回 -1。
+ * 说明：会把 tim 的 callback/user_data 绑定到本模块；定时器本身的
+ *       初始化、时钟与预分频配置由调用者完成。
+ */
+int stepper_set_timer(stepper_t *st, hal_tim_t *tim, uint32_t tick_hz);
+
+/*
+ * 定时器更新中断入口（已由各平台 IRQ 派发接入，一般无需手动调用）。
+ * 每次触发发出一个步进脉冲，并按梯形曲线设置下一步的定时器周期；
+ * 移动结束时停止定时器并唤醒等待 stepper_move 的任务。
+ * 说明：也可在主机测试中直接调用以模拟周期中断。
+ */
+void stepper_tim_irq(void *handle, hal_event_e event, void *user_data);
 
 /* 移动到绝对目标位置（内部换算为相对步数） */
 int stepper_move_to(stepper_t *st, int32_t target);

@@ -10,8 +10,11 @@
  *
  * 依赖与边界：
  *   - step 回调必须实现，set_dir / delay_us 可选；
- *   - move/move_to 为阻塞式执行；未启用加减速时脉冲间隔由底层决定；
- *   - 启用加减速后按梯形速度曲线调整步间隔，避免骤起骤停丢步；
+ *   - 启用加减速且挂接了硬件定时器（stepper_set_timer）时，脉冲在
+ *     定时器更新中断中发出，回调内按梯形曲线调整周期改变频率，
+ *     stepper_move 阻塞到移动结束；
+ *   - 启用加减速但未挂定时器时，move/move_to 仍为软件延时的阻塞执行；
+ *   - 未启用加减速时保持原有定速发脉冲行为；
  *   - position 为 int32_t，长时间单向运行可能溢出；
  *   - steps 为 INT32_MIN 时取反会溢出，调用者应避免该极值。
  */
@@ -135,6 +138,13 @@ int stepper_init(stepper_t *st, const stepper_ops_t *ops)
     st->start_speed = 0U;
     st->accel = 0U;
     st->decel = 0U;
+    /* 硬件定时器加减速：默认未挂接 */
+    st->tim = NULL;
+    st->tim_tick_hz = 0U;
+    st->ramp_remaining = 0U;
+    st->ramp_speed = 0U;
+    st->ramp_status = 0;
+    (void)ros_sem_init(&st->ramp_done, 0U);
     stepper_cmd_add(st);
     return 0;
 }
@@ -218,9 +228,59 @@ static uint32_t stepper_isqrt(uint64_t x)
 }
 
 /*
- * 按梯形速度曲线发出 count 个脉冲（count > 0）。
- * 速度按 dv = a/v 逐步变化；同时用剩余步数约束减速度，
- * 保证在到达目标前能降到 start_speed，避免过冲/丢步。
+ * 按梯形曲线计算下一步的速度。
+ * 参数：v 当前速度（步/秒）；remaining 本次脉冲之后剩余的步数。
+ * 说明：先按加速度提升（dv = accel / v），再按停车距离约束：
+ *       剩余 remaining 步内必须能从 v_next 降到 start_speed，
+ *       即 v_next <= sqrt(start_speed² + 2 * decel * remaining)。
+ */
+static uint32_t stepper_next_speed(const stepper_t *st, uint32_t v,
+                                   uint32_t remaining)
+{
+    uint32_t dv = st->accel / v;
+    uint32_t v_next = v + ((dv == 0U) ? 1U : dv);
+    uint64_t stop2;
+
+    if (v_next > st->max_speed) {
+        v_next = st->max_speed;
+    }
+    stop2 = (uint64_t)st->start_speed * st->start_speed +
+            2ULL * st->decel * remaining;
+    if ((uint64_t)v_next * v_next > stop2) {
+        /* 按停车距离反推允许速度 */
+        uint32_t v_allow = stepper_isqrt(stop2);
+
+        if (v_allow > st->max_speed) {
+            v_allow = st->max_speed;
+        }
+        if (v_allow < st->start_speed) {
+            v_allow = st->start_speed;
+        }
+        if (v_next > v_allow) {
+            v_next = v_allow;
+        }
+    }
+    return (v_next == 0U) ? 1U : v_next;
+}
+
+/*
+ * 速度换算为定时器周期（计数 tick 数）：period = tick_hz / 速度，
+ * 至少为 1（速度超过计数时钟时按每 tick 一步封顶）。
+ */
+static uint32_t stepper_tim_period(const stepper_t *st, uint32_t speed)
+{
+    uint32_t p;
+
+    if (speed == 0U) {
+        speed = 1U;
+    }
+    p = st->tim_tick_hz / speed;
+    return (p == 0U) ? 1U : p;
+}
+
+/*
+ * 按梯形速度曲线发出 count 个脉冲（count > 0，软件延时方式）。
+ * 速度按 stepper_next_speed() 逐步变化，步间隔由当前速度换算。
  */
 static int stepper_move_ramp(stepper_t *st, uint32_t count, uint8_t dir)
 {
@@ -258,33 +318,99 @@ static int stepper_move_ramp(stepper_t *st, uint32_t count, uint8_t dir)
         }
 
         /* 计算下一速度：先按加速度提升，再按剩余距离限制 */
-        {
-            uint32_t dv = st->accel / v;
-            uint32_t v_next = v + ((dv == 0U) ? 1U : dv);
-            uint64_t stop2;
+        v = stepper_next_speed(st, v, remaining);
+    }
+    return 0;
+}
 
-            if (v_next > st->max_speed) {
-                v_next = st->max_speed;
-            }
-            /* 剩余 remaining 步内必须能从 v_next 降到 start_speed */
-            stop2 = (uint64_t)st->start_speed * st->start_speed +
-                    2ULL * st->decel * remaining;
-            if ((uint64_t)v_next * v_next > stop2) {
-                /* 按停车距离反推允许速度：v <= sqrt(start² + 2*d*remaining) */
-                uint32_t v_allow = stepper_isqrt(stop2);
+/*
+ * 定时器更新中断入口：发出一个步进脉冲并按梯形曲线调整下一步周期。
+ * 说明：运行于中断上下文，只做发脉冲/改周期/结束唤醒三件事；
+ *       ramp_remaining 为 0 表示不在移动中，忽略伪中断。
+ */
+void stepper_tim_irq(void *handle, hal_event_e event, void *user_data)
+{
+    stepper_t *st = (stepper_t *)user_data;
+    uint32_t remaining;
+    bool need_yield = false;
 
-                if (v_allow > st->max_speed) {
-                    v_allow = st->max_speed;
-                }
-                if (v_allow < st->start_speed) {
-                    v_allow = st->start_speed;
-                }
-                if (v_next > v_allow) {
-                    v_next = v_allow;
-                }
-            }
-            v = (v_next == 0U) ? 1U : v_next;
+    (void)handle;
+    (void)event;
+    if (st == NULL || st->tim == NULL) {
+        return;
+    }
+    remaining = st->ramp_remaining;
+    if (remaining == 0U) {
+        return;
+    }
+    if (st->ops->step(st->ops->ctx) != 0) {
+        /* 底层发脉冲失败：立即停定时器并结束本次移动 */
+        st->ramp_status = -1;
+        st->ramp_remaining = 0U;
+        (void)hal_tim_stop_it(st->tim);
+        (void)ros_sem_give_from_isr(&st->ramp_done, &need_yield);
+        if (need_yield) {
+            ros_yield_from_isr();
         }
+        return;
+    }
+    st->position += (st->direction == 0U) ? 1 : -1;
+    remaining--;
+    st->ramp_remaining = remaining;
+    if (remaining == 0U) {
+        (void)hal_tim_stop_it(st->tim);
+        (void)ros_sem_give_from_isr(&st->ramp_done, &need_yield);
+        if (need_yield) {
+            ros_yield_from_isr();
+        }
+        return;
+    }
+    /* 回调中调整脉冲频率：算出下一速度并重装定时器周期 */
+    st->ramp_speed = stepper_next_speed(st, st->ramp_speed, remaining);
+    (void)hal_tim_set_period(st->tim, stepper_tim_period(st, st->ramp_speed));
+}
+
+/*
+ * 硬件定时器方式执行加减速移动（count > 0，方向已提前设置）。
+ * 流程：置运行状态 -> 按 start_speed 装周期 -> 启动更新中断 ->
+ *       阻塞等完成信号 -> 兜底停定时器并返回结果。
+ */
+static int stepper_move_timed(stepper_t *st, uint32_t count)
+{
+    st->ramp_speed = st->start_speed;
+    st->ramp_status = 0;
+    /* 最后置剩余步数：非 0 后中断回调才开始响应 */
+    st->ramp_remaining = count;
+
+    (void)hal_tim_set_period(st->tim,
+                             stepper_tim_period(st, st->start_speed));
+    (void)hal_tim_set_counter(st->tim, 0U);
+    if (hal_tim_start_it(st->tim) != HAL_OK) {
+        st->ramp_remaining = 0U;
+        LOG_E("stepper", "tim start fail");
+        return -1;
+    }
+    (void)ros_sem_take(&st->ramp_done, ROS_TIMEOUT_FOREVER);
+    /* 正常路径回调已停；失败/竞态路径兜底 */
+    (void)hal_tim_stop_it(st->tim);
+    return st->ramp_status;
+}
+
+/*
+ * 挂接/卸载加减速用硬件定时器。
+ * 挂接时把句柄的 callback/user_data 绑定到本模块，
+ * 平台 TIM 更新中断派发到 stepper_tim_irq()。
+ */
+int stepper_set_timer(stepper_t *st, hal_tim_t *tim, uint32_t tick_hz)
+{
+    if (st == NULL || (tim != NULL && tick_hz == 0U)) {
+        return -1;
+    }
+    st->tim = tim;
+    st->tim_tick_hz = (tim != NULL) ? tick_hz : 0U;
+    if (tim != NULL) {
+        tim->callback = stepper_tim_irq;
+        tim->user_data = st;
     }
     return 0;
 }
@@ -313,6 +439,10 @@ int stepper_move(stepper_t *st, int32_t steps)
         steps = -steps;   /* 注意：INT32_MIN 取反会溢出 */
     }
     if (st->max_speed != 0U && st->accel != 0U && steps > 1) {
+        if (st->tim != NULL) {
+            /* 硬件定时器：更新中断发脉冲并调整频率 */
+            return stepper_move_timed(st, (uint32_t)steps);
+        }
         return stepper_move_ramp(st, (uint32_t)steps, dir);
     }
     for (i = 0; i < steps; i++) {

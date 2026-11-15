@@ -2,7 +2,7 @@
  * stepper_test.c - 步进电机测试（对应 stepper.c）
  *
  * 覆盖：初始化校验、方向设置、相对/绝对移动、位置读取、
- *       回调缺失与底层失败。
+ *       回调缺失与底层失败、软件加减速、硬件定时器加减速。
  */
 
 #include "test.h"
@@ -178,6 +178,94 @@ void ut_stepper(void)
         TF_CHECK_INT(stepper_move(&rst, 10), 0);
         TF_CHECK_INT(rs.steps, 510);
         TF_CHECK_INT(rs.delay_calls, calls_before);
+    }
+
+    tf_end();
+
+    /* ---------------- 硬件定时器加减速 ---------------- */
+    tf_begin("stepper/硬件定时器加减速");
+    {
+        step_sim_t ts;
+        stepper_t tst;
+        stepper_ops_t tops;
+        hal_tim_t tim;
+        hal_tim_config_t tcfg;
+        uint32_t i;
+        uint32_t min_period;
+
+        memset(&ts, 0, sizeof(ts));
+        tops = ops;
+        tops.ctx = &ts;
+
+        memset(&tcfg, 0, sizeof(tcfg));
+        tcfg.prescaler = 0U;
+        tcfg.period = 10000U;
+        tcfg.counter_mode = HAL_TIM_COUNTER_UP;
+        TF_CHECK_INT(hal_tim_init(&tim, &tcfg), HAL_OK);
+
+        TF_CHECK_INT(stepper_init(&tst, &tops), 0);
+        TF_CHECK_INT(stepper_set_ramp(&tst, 1000U, 100U, 2000U, 2000U), 0);
+
+        /* 参数校验与绑定 */
+        TF_CHECK_INT(stepper_set_timer(NULL, &tim, 1000000U), -1);
+        TF_CHECK_INT(stepper_set_timer(&tst, &tim, 0U), -1);
+        TF_CHECK_INT(stepper_set_timer(&tst, &tim, 1000000U), 0);
+        TF_CHECK(tim.callback == stepper_tim_irq);
+        TF_CHECK(tim.user_data == &tst);
+
+        /*
+         * 主机测试跑在未启动内核的主线程：stepper_move 启动定时器后
+         * 无法阻塞等待会立即返回（主机 start_it 已同步触发一次回调），
+         * 其余脉冲直接调 stepper_tim_irq() 模拟定时器中断逐拍驱动。
+         */
+        TF_CHECK_INT(stepper_move(&tst, 200), 0);
+        TF_CHECK_INT(ts.steps, 1);
+        TF_CHECK_INT(tst.ramp_remaining, 199);
+        /* 1MHz 计数时钟：起步 100 步/秒→10000；一拍后 120 步/秒→8333 */
+        TF_CHECK_INT(tim.config.period, 8333U);
+
+        min_period = tim.config.period;
+        for (i = 0U; i < 199U && tst.ramp_remaining != 0U; i++) {
+            stepper_tim_irq(&tim, HAL_EVENT_COMPLETE, &tst);
+            if (tim.config.period < min_period) {
+                min_period = tim.config.period;
+            }
+        }
+        TF_CHECK_INT(ts.steps, 200);
+        TF_CHECK_INT(tst.position, 200);
+        TF_CHECK_INT(tst.ramp_remaining, 0);
+        TF_CHECK_INT(tst.ramp_status, 0);
+        TF_CHECK_INT(tim.base.state, HAL_STATE_READY);   /* 结束由回调停表 */
+        /* 加速缩短周期（>=1000 步/秒封顶），减速恢复 */
+        TF_CHECK(min_period < 10000U);
+        TF_CHECK(min_period >= 1000U);
+
+        /* 反向：同样由定时器驱动，位置回退 */
+        TF_CHECK_INT(stepper_move(&tst, -100), 0);
+        for (i = 0U; i < 100U && tst.ramp_remaining != 0U; i++) {
+            stepper_tim_irq(&tim, HAL_EVENT_COMPLETE, &tst);
+        }
+        TF_CHECK_INT(ts.steps, 300);
+        TF_CHECK_INT(tst.position, 100);
+        TF_CHECK_INT(tst.direction, 1);
+        TF_CHECK_INT(tst.ramp_remaining, 0);
+
+        /* 底层发脉冲失败：回调内立即停表结束并返回错误 */
+        ts.step_fail = 1;
+        TF_CHECK_INT(stepper_move(&tst, 10), -1);
+        ts.step_fail = 0;
+        TF_CHECK_INT(tst.ramp_remaining, 0);
+        TF_CHECK_INT(ts.steps, 300);
+        TF_CHECK_INT(tim.base.state, HAL_STATE_READY);
+
+        /* 卸载定时器：加减速退回软件延时路径 */
+        TF_CHECK_INT(stepper_set_timer(&tst, NULL, 0U), 0);
+        TF_CHECK(tst.tim == NULL);
+        TF_CHECK_INT(stepper_move(&tst, 50), 0);
+        TF_CHECK_INT(ts.steps, 350);
+        TF_CHECK(ts.delay_calls > 0U);
+
+        TF_CHECK_INT(hal_tim_deinit(&tim), HAL_OK);
     }
 
     tf_end();
