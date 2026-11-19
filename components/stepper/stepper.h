@@ -11,7 +11,10 @@
  *   - 可选加减速（默认关闭）：按梯形速度曲线逐步改变步间隔，
  *     避免骤起骤停导致丢步。
  *   - 启用加减速且配置了硬件定时器（stepper_set_timer）时，脉冲由
- *     定时器更新中断发出，回调内按梯形曲线调整周期（即脉冲频率）；
+ *     定时器更新中断发出，采用与参考实现一致的 S 形速度曲线
+ *     v = -2t³ + 3t²（缓起缓停）：速度按固定时间间隔
+ *     （ramp_interval_us，默认 10ms）更新一次，每级速度步长恒定，
+ *     加速时间只由目标速度差决定；回调内调整定时器周期改变脉冲频率；
  *     stepper_move 阻塞等待移动完成后返回。
  * 使用约束：
  *   - step 回调必须实现，set_dir / delay_us 可选；
@@ -51,16 +54,28 @@ typedef struct {
     /* 加减速参数；max_speed 或 accel 为 0 表示关闭（默认） */
     uint32_t max_speed;         /* 最高速度，步/秒 */
     uint32_t start_speed;       /* 起始/停止速度，步/秒 */
-    uint32_t accel;             /* 加速度，步/秒² */
-    uint32_t decel;             /* 减速度，步/秒² */
+    uint32_t accel;             /* 平均加速度，步/秒² */
+    uint32_t decel;             /* 平均减速度，步/秒² */
 
     /* 硬件定时器加减速（可选，见 stepper_set_timer） */
     hal_tim_t *tim;             /* 定时器句柄；NULL 时加减速退回软件延时 */
     uint32_t tim_tick_hz;       /* 定时器分频后的计数时钟（Hz） */
+    uint32_t ramp_interval_us;  /* 速度更新间隔（µs），默认 10000 */
     ros_sem_t ramp_done;        /* 一次加减速移动完成信号 */
     volatile uint32_t ramp_remaining; /* 剩余步数（中断上下文读写） */
     volatile uint32_t ramp_speed;     /* 当前脉冲速度，步/秒（中断上下文读写） */
     volatile int ramp_status;         /* 本次移动结果：0 成功 / -1 底层失败 */
+    /* S 曲线运行状态（中断上下文读写） */
+    volatile uint8_t ramp_phase;      /* 0 加速 / 1 匀速 / 2 减速 */
+    volatile uint32_t ramp_idx;       /* 当前阶段已走过的更新次数 */
+    volatile uint32_t ramp_steps;     /* 当前阶段总更新次数 */
+    volatile uint32_t ramp_v_from;    /* 阶段起始速度 */
+    volatile uint32_t ramp_v_to;      /* 阶段结束速度 */
+    volatile uint32_t ramp_cruise_v;  /* 匀速段速度 */
+    volatile uint32_t ramp_decel_dist;/* 剩余步数低于该值时进入减速 */
+    volatile uint32_t ramp_pulse_acc; /* 间隔内脉冲数定点累加器 */
+    volatile uint32_t ramp_pulses_left; /* 当前间隔应发脉冲数 */
+    volatile uint32_t ramp_pulses_done;  /* 当前间隔已发脉冲数 */
 } stepper_t;
 
 /*
@@ -101,8 +116,17 @@ int stepper_set_ramp(stepper_t *st, uint32_t max_speed, uint32_t start_speed,
 int stepper_set_timer(stepper_t *st, hal_tim_t *tim, uint32_t tick_hz);
 
 /*
+ * 设置硬件定时器加减速的速度更新间隔（参考实现的 acc_interval）。
+ * 参数：interval_us 间隔微秒（如 10000=10ms、1000=1ms）。
+ * 返回：0 成功；st 为 NULL 或 interval_us 为 0 返回 -1。
+ * 说明：默认 10000µs；间隔越小曲线越平滑，但中断内计算更频繁。
+ */
+int stepper_set_ramp_interval(stepper_t *st, uint32_t interval_us);
+
+/*
  * 定时器更新中断入口（已由各平台 IRQ 派发接入，一般无需手动调用）。
- * 每次触发发出一个步进脉冲，并按梯形曲线设置下一步的定时器周期；
+ * 每次触发发出一个步进脉冲；每经过一个速度更新间隔（ramp_interval_us
+ * 对应的脉冲数）沿 S 形曲线推进一档并重装定时器周期；
  * 移动结束时停止定时器并唤醒等待 stepper_move 的任务。
  * 说明：也可在主机测试中直接调用以模拟周期中断。
  */

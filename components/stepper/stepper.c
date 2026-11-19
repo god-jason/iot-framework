@@ -11,7 +11,8 @@
  * 依赖与边界：
  *   - step 回调必须实现，set_dir / delay_us 可选；
  *   - 启用加减速且挂接了硬件定时器（stepper_set_timer）时，脉冲在
- *     定时器更新中断中发出，回调内按梯形曲线调整周期改变频率，
+ *     定时器更新中断中发出，速度按固定时间间隔沿 S 形曲线
+ *     v = -2t³ + 3t² 更新（参考原 Lua 实现），回调内调整周期改变频率；
  *     stepper_move 阻塞到移动结束；
  *   - 启用加减速但未挂定时器时，move/move_to 仍为软件延时的阻塞执行；
  *   - 未启用加减速时保持原有定速发脉冲行为；
@@ -138,12 +139,23 @@ int stepper_init(stepper_t *st, const stepper_ops_t *ops)
     st->start_speed = 0U;
     st->accel = 0U;
     st->decel = 0U;
-    /* 硬件定时器加减速：默认未挂接 */
+    /* 硬件定时器加减速：默认未挂接，速度更新间隔 10ms */
     st->tim = NULL;
     st->tim_tick_hz = 0U;
+    st->ramp_interval_us = 10000U;
     st->ramp_remaining = 0U;
     st->ramp_speed = 0U;
     st->ramp_status = 0;
+    st->ramp_phase = 0U;
+    st->ramp_idx = 0U;
+    st->ramp_steps = 0U;
+    st->ramp_v_from = 0U;
+    st->ramp_v_to = 0U;
+    st->ramp_cruise_v = 0U;
+    st->ramp_decel_dist = 0U;
+    st->ramp_pulse_acc = 0U;
+    st->ramp_pulses_left = 0U;
+    st->ramp_pulses_done = 0U;
     (void)ros_sem_init(&st->ramp_done, 0U);
     stepper_cmd_add(st);
     return 0;
@@ -279,6 +291,183 @@ static uint32_t stepper_tim_period(const stepper_t *st, uint32_t speed)
 }
 
 /*
+ * S 形速度曲线插值（参考实现 v = -2t³ + 3t²，缓起缓停）。
+ * 参数：idx/steps 为归一化进度，毫度定点计算。
+ */
+static uint32_t stepper_scurve(uint32_t v_from, uint32_t v_to, uint32_t idx,
+                               uint32_t steps)
+{
+    uint32_t x;
+    uint32_t s;
+    uint32_t diff;
+    uint32_t dv;
+
+    if (steps == 0U || idx >= steps) {
+        return v_to;
+    }
+    x = idx * 1000U / steps;                    /* 0..999 */
+    s = (x * x * (3000U - 2U * x)) / 1000000U;  /* 0..1000，毫度 */
+    if (v_to >= v_from) {
+        diff = v_to - v_from;
+        dv = diff * s / 1000U;
+        return v_from + dv;
+    }
+    diff = v_from - v_to;
+    dv = diff * s / 1000U;
+    return v_from - dv;
+}
+
+/* 每个速度更新区间的速度步长：平均加速度 a 对应每档增量 */
+static uint32_t stepper_v_step(uint32_t a, uint32_t interval_us)
+{
+    uint32_t v = (uint32_t)((uint64_t)a * interval_us / 1000000ULL);
+
+    return (v == 0U) ? 1U : v;
+}
+
+/*
+ * 计算一个速度更新区间内应发的脉冲数（定点累加，低速不丢脉冲）。
+ * 说明：定时器每拍发一个脉冲，脉冲周期 1/v，因此每区间约 v*interval 个脉冲。
+ */
+static uint32_t stepper_interval_pulses(stepper_t *st, uint32_t v)
+{
+    uint64_t acc;
+    uint32_t n;
+
+    acc = (uint64_t)v * st->ramp_interval_us + st->ramp_pulse_acc;
+    n = (uint32_t)(acc / 1000000ULL);
+    st->ramp_pulse_acc = (uint32_t)(acc % 1000000ULL);
+    return (n == 0U) ? 1U : n;
+}
+
+/*
+ * 移动开始时规划 S 曲线：巡航速度、加速档数与减速距离。
+ * 说明：S 曲线段平均速度为 (v0+v1)/2，距离公式与梯形一致；
+ *       加速时间 = 速度差 / 每档速度步长，只由目标速度差决定，
+ *       避免了逐脉冲 dv=a/v 造成低速档跳变大、高速档爬升慢。
+ */
+static void stepper_ramp_plan(stepper_t *st, uint32_t count)
+{
+    uint32_t vs = st->start_speed;
+    uint32_t vc;
+    uint32_t va;
+    uint32_t vd;
+    uint32_t diff;
+    uint64_t reach;
+    uint64_t v2;
+
+    va = stepper_v_step(st->accel, st->ramp_interval_us);
+    vd = stepper_v_step(st->decel, st->ramp_interval_us);
+
+    if (st->max_speed <= vs) {
+        vc = vs;
+    } else {
+        /* 从 vs 加速到 max_speed 所需脉冲数 */
+        reach = ((uint64_t)st->max_speed * st->max_speed - (uint64_t)vs * vs) *
+                ((uint64_t)st->accel + st->decel) /
+                (2ULL * st->accel * st->decel);
+        if (count >= reach) {
+            vc = st->max_speed;
+        } else {
+            /* 行程不足以到顶速：三角形曲线，按总距离反推峰值 */
+            v2 = (uint64_t)vs * vs +
+                 2ULL * count * st->accel * st->decel /
+                 ((uint64_t)st->accel + st->decel);
+            vc = stepper_isqrt(v2);
+            if (vc > st->max_speed) {
+                vc = st->max_speed;
+            }
+            if (vc < vs) {
+                vc = vs;
+            }
+        }
+    }
+
+    st->ramp_cruise_v = vc;
+    st->ramp_speed = vs;
+    st->ramp_pulse_acc = 0U;
+    st->ramp_pulses_done = 0U;
+    st->ramp_idx = 0U;
+    if (vc > vs) {
+        diff = vc - vs;
+        st->ramp_phase = 0U;      /* 加速段 */
+        st->ramp_steps = (diff + va - 1U) / va;
+        st->ramp_v_from = vs;
+        st->ramp_v_to = vc;
+        /* 减速距离 = 平均速度 * 减速时长，再加 1/4 余量提前起减，
+         * 保证曲线在行程结束前减回 start_speed（余量段匀速） */
+        st->ramp_decel_dist =
+            (uint32_t)((uint64_t)(vs + vc) * ((diff + vd - 1U) / vd) *
+                       st->ramp_interval_us / 2000000ULL);
+        st->ramp_decel_dist += st->ramp_decel_dist / 4U + 1U;
+    } else {
+        st->ramp_phase = 1U;      /* 直接以 start_speed 匀速 */
+        st->ramp_steps = 0U;
+        st->ramp_v_from = vs;
+        st->ramp_v_to = vs;
+        st->ramp_decel_dist = 0U;
+    }
+    st->ramp_pulses_left = stepper_interval_pulses(st, vs);
+}
+
+/*
+ * 每个速度更新区间结束推进一次 S 曲线，重装定时器周期并计算
+ * 下一区间的脉冲数（在定时器中断上下文执行）。
+ */
+static void stepper_ramp_advance(stepper_t *st)
+{
+    uint32_t v = st->ramp_speed;
+
+    /* 剩余脉冲进入减速距离：立即从当前速度沿 S 曲线减回 start_speed。
+     * 每个区间边界都检查（含加速段），避免高速段脉冲/档粒度误差
+     * 导致曲线到行程结束仍未减完 */
+    if (st->ramp_phase != 2U && st->ramp_decel_dist != 0U &&
+        st->ramp_remaining <= st->ramp_decel_dist) {
+        uint32_t vd = stepper_v_step(st->decel, st->ramp_interval_us);
+        uint32_t diff = v - st->start_speed;
+
+        if (diff > 0U) {
+            st->ramp_phase = 2U;
+            st->ramp_idx = 0U;
+            st->ramp_steps = (diff + vd - 1U) / vd;
+            st->ramp_v_from = v;
+            st->ramp_v_to = st->start_speed;
+        } else {
+            st->ramp_phase = 1U;
+        }
+    }
+
+    switch (st->ramp_phase) {
+    case 0U:     /* 加速段 */
+        st->ramp_idx++;
+        if (st->ramp_idx >= st->ramp_steps) {
+            st->ramp_phase = 1U;
+            v = st->ramp_cruise_v;
+        } else {
+            v = stepper_scurve(st->ramp_v_from, st->ramp_v_to,
+                               st->ramp_idx, st->ramp_steps);
+        }
+        break;
+    case 1U:     /* 匀速段 */
+        break;
+    case 2U:     /* 减速段：走完档数后保持 start_speed 直到结束 */
+        st->ramp_idx++;
+        v = stepper_scurve(st->ramp_v_from, st->ramp_v_to,
+                           st->ramp_idx, st->ramp_steps);
+        break;
+    default:
+        break;
+    }
+    if (v == 0U) {
+        v = 1U;
+    }
+    st->ramp_speed = v;
+    (void)hal_tim_set_period(st->tim, stepper_tim_period(st, v));
+    st->ramp_pulses_left = stepper_interval_pulses(st, v);
+    st->ramp_pulses_done = 0U;
+}
+
+/*
  * 按梯形速度曲线发出 count 个脉冲（count > 0，软件延时方式）。
  * 速度按 stepper_next_speed() 逐步变化，步间隔由当前速度换算。
  */
@@ -365,25 +554,27 @@ void stepper_tim_irq(void *handle, hal_event_e event, void *user_data)
         }
         return;
     }
-    /* 回调中调整脉冲频率：算出下一速度并重装定时器周期 */
-    st->ramp_speed = stepper_next_speed(st, st->ramp_speed, remaining);
-    (void)hal_tim_set_period(st->tim, stepper_tim_period(st, st->ramp_speed));
+    /* 按固定时间间隔推进 S 曲线：区间脉冲发完才更新一次脉冲频率 */
+    st->ramp_pulses_done++;
+    if (st->ramp_pulses_done >= st->ramp_pulses_left) {
+        stepper_ramp_advance(st);
+    }
 }
 
 /*
  * 硬件定时器方式执行加减速移动（count > 0，方向已提前设置）。
- * 流程：置运行状态 -> 按 start_speed 装周期 -> 启动更新中断 ->
+ * 流程：规划 S 曲线 -> 按 start_speed 装周期 -> 启动更新中断 ->
  *       阻塞等完成信号 -> 兜底停定时器并返回结果。
  */
 static int stepper_move_timed(stepper_t *st, uint32_t count)
 {
-    st->ramp_speed = st->start_speed;
     st->ramp_status = 0;
+    stepper_ramp_plan(st, count);
     /* 最后置剩余步数：非 0 后中断回调才开始响应 */
     st->ramp_remaining = count;
 
     (void)hal_tim_set_period(st->tim,
-                             stepper_tim_period(st, st->start_speed));
+                             stepper_tim_period(st, st->ramp_speed));
     (void)hal_tim_set_counter(st->tim, 0U);
     if (hal_tim_start_it(st->tim) != HAL_OK) {
         st->ramp_remaining = 0U;
@@ -394,6 +585,18 @@ static int stepper_move_timed(stepper_t *st, uint32_t count)
     /* 正常路径回调已停；失败/竞态路径兜底 */
     (void)hal_tim_stop_it(st->tim);
     return st->ramp_status;
+}
+
+/*
+ * 设置速度更新间隔（µs），如 10000=10ms、1000=1ms。
+ */
+int stepper_set_ramp_interval(stepper_t *st, uint32_t interval_us)
+{
+    if (st == NULL || interval_us == 0U) {
+        return -1;
+    }
+    st->ramp_interval_us = interval_us;
+    return 0;
 }
 
 /*

@@ -213,6 +213,12 @@ void ut_stepper(void)
         TF_CHECK(tim.callback == stepper_tim_irq);
         TF_CHECK(tim.user_data == &tst);
 
+        /* 速度更新间隔参数校验，默认 10ms */
+        TF_CHECK_INT(stepper_set_ramp_interval(NULL, 1000U), -1);
+        TF_CHECK_INT(stepper_set_ramp_interval(&tst, 0U), -1);
+        TF_CHECK_INT(stepper_set_ramp_interval(&tst, 10000U), 0);
+        TF_CHECK_INT(tst.ramp_interval_us, 10000U);
+
         /*
          * 主机测试跑在未启动内核的主线程：stepper_move 启动定时器后
          * 无法阻塞等待会立即返回（主机 start_it 已同步触发一次回调），
@@ -221,8 +227,14 @@ void ut_stepper(void)
         TF_CHECK_INT(stepper_move(&tst, 200), 0);
         TF_CHECK_INT(ts.steps, 1);
         TF_CHECK_INT(tst.ramp_remaining, 199);
-        /* 1MHz 计数时钟：起步 100 步/秒→10000；一拍后 120 步/秒→8333 */
-        TF_CHECK_INT(tim.config.period, 8333U);
+        /*
+         * 1MHz 计数时钟、10ms 更新间隔：起步 100 步/秒（周期 10000，
+         * 每区间 1 个脉冲）。S 曲线 27 档从 100 爬到 640（三角形曲线
+         * 峰值），第一档 v=100+540*4/1000=102 → 周期 9803。
+         */
+        TF_CHECK_INT(tim.config.period, 9803U);
+        TF_CHECK_INT(tst.ramp_speed, 102);
+        TF_CHECK_INT(tst.ramp_phase, 0);   /* 加速段 */
 
         min_period = tim.config.period;
         for (i = 0U; i < 199U && tst.ramp_remaining != 0U; i++) {
@@ -236,9 +248,10 @@ void ut_stepper(void)
         TF_CHECK_INT(tst.ramp_remaining, 0);
         TF_CHECK_INT(tst.ramp_status, 0);
         TF_CHECK_INT(tim.base.state, HAL_STATE_READY);   /* 结束由回调停表 */
-        /* 加速缩短周期（>=1000 步/秒封顶），减速恢复 */
-        TF_CHECK(min_period < 10000U);
+        /* 减速提前起减：峰值约 500+ 步/秒（周期 <2000），结束已减回起步速度 */
+        TF_CHECK(min_period < 2500U);
         TF_CHECK(min_period >= 1000U);
+        TF_CHECK_INT(tim.config.period, 10000U);
 
         /* 反向：同样由定时器驱动，位置回退 */
         TF_CHECK_INT(stepper_move(&tst, -100), 0);
@@ -258,11 +271,22 @@ void ut_stepper(void)
         TF_CHECK_INT(ts.steps, 300);
         TF_CHECK_INT(tim.base.state, HAL_STATE_READY);
 
+        /* 1ms 更新间隔：曲线档数更细，同样完整走完 */
+        TF_CHECK_INT(stepper_set_ramp_interval(&tst, 1000U), 0);
+        TF_CHECK_INT(stepper_move(&tst, 150), 0);
+        for (i = 0U; i < 2000U && tst.ramp_remaining != 0U; i++) {
+            stepper_tim_irq(&tim, HAL_EVENT_COMPLETE, &tst);
+        }
+        TF_CHECK_INT(ts.steps, 450);
+        TF_CHECK_INT(tst.position, 250);
+        TF_CHECK_INT(tst.ramp_remaining, 0);
+        TF_CHECK_INT(stepper_set_ramp_interval(&tst, 10000U), 0);
+
         /* 卸载定时器：加减速退回软件延时路径 */
         TF_CHECK_INT(stepper_set_timer(&tst, NULL, 0U), 0);
         TF_CHECK(tst.tim == NULL);
         TF_CHECK_INT(stepper_move(&tst, 50), 0);
-        TF_CHECK_INT(ts.steps, 350);
+        TF_CHECK_INT(ts.steps, 500);
         TF_CHECK(ts.delay_calls > 0U);
 
         TF_CHECK_INT(hal_tim_deinit(&tim), HAL_OK);
