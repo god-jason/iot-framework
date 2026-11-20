@@ -1,4 +1,5 @@
-#include "log.h"
+﻿#include "log.h"
+#include "common.h"
 
 #include <stdio.h>
 
@@ -51,7 +52,7 @@ void log_hexdump(int level, const char *tag, const void *data, uint32_t len)
             off = (int)sizeof(line) - 1;
         }
         for (i = 0U; i < LOG_HEX_PER_LINE && (offset + i) < len; i++) {
-            int n = snprintf(&line[off], sizeof(line) - (size_t)off,
+            int n = snprintf(&line[off], (uint32_t)(sizeof(line) - (size_t)off),
                              " %02X", (unsigned)p[offset + i]);
 
             if (n < 0 || (size_t)n >= sizeof(line) - (size_t)off) {

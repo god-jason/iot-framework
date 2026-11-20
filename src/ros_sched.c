@@ -18,7 +18,6 @@
 #include "ros.h"
 #include "common.h"
 #include "ros_port.h"
-#include "ros_assert.h"
 
 #include <string.h>
 
@@ -63,7 +62,6 @@ void ros_make_ready(ros_task_t *task)
 
     prio = task->priority;
     if (prio >= ROS_MAX_PRIORITY) {
-        ROS_ASSERT(prio < ROS_MAX_PRIORITY);
         prio = ROS_PRIORITY_IDLE;
     }
 
@@ -94,9 +92,8 @@ ros_task_t *ros_sched_select(void)
 
     node = list_pop_first(&s_ready[prio]);
     if (node == NULL) {
-        /* 位图与链表不一致：清除该位自愈，并断言暴露问题 */
+        /* 位图与链表不一致：清除该位自愈 */
         s_ready_bitmap &= ~(1U << prio);
-        ROS_ASSERT(0);
         return NULL;
     }
 
@@ -259,18 +256,10 @@ static void ros_stack_guard(const ros_task_t *task)
 
     base = (const uint32_t *)task->stack_mem;
     if (*base != ROS_STACK_MAGIC) {
-        ros_crash_context_t ctx;
-
-        /* 先记录专用原因，随后 ROS_ASSERT 不会覆盖它（只保留第一次） */
-        memset(&ctx, 0, sizeof(ctx));
-        ctx.expr = "stack overflow";
         ROS_TRACE(ROS_EVT_STACK_OVERFLOW, (uint32_t)(uintptr_t)task,
                   task->stack_size);
-        (void)ros_crash_record(ROS_CRASH_STACK_OVERFLOW, &ctx);
-
         LOG_E(ROS_TAG, "stack overflow detected: task=%s size=%u",
                   task->name != NULL ? task->name : "?", (unsigned)task->stack_size);
-        ROS_ASSERT(0);
     }
 }
 #endif

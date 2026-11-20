@@ -1,23 +1,25 @@
 /*
- * pc_shell.c - 主机平台 Shell 默认绑定（口令开启，与 STM32 绑定一致）
+ * pc_shell.c - 主机平台 roshell 默认绑定（口令开启，与 STM32 绑定一致）
  *
- *   - 上电只启动一个监听任务，不创建 Shell 实例、不打印 banner；
- *   - 输入 hello 回车 → 回复 hello! → 惰性创建实例与输入任务；
- *   - Shell 常驻，不因空闲自动关闭；输入 exit 回收实例，回到监听状态；
- *   - 日志走 stdout，与 Shell 实例是否存在无关。
+ *   - 上电只启动一个监听任务，不创建 roshell 实例、不打印 banner；
+ *   - 输入 hello 回车 → 回复 hello! → 创建实例与输入任务；
+ *   - 会话激活后本任务继续读取 stdin 并逐字节 feed 给会话；
+ *   - 输入 exit 回收实例，回到监听状态；
+ *   - 日志走 stdout，与实例是否存在无关。
  *
  * 输出：stdout（与 log 的 printf 同一路，保证顺序一致）
- * 输入：Shell 任务通过默认 stdio（pc_io.c）读取 stdin；
- *       本文件的监听任务只负责口令与实例回收
- *     - 管道/重定向输入：读到 EOF 后 Shell 退出，监听任务随之停止内核
- *     - 交互输入：终端按键直接送入 Shell 行编辑器
+ * 输入：本文件的监听任务统一读取 stdin（ros_io_read），
+ *       会话未激活时匹配口令，激活后投喂 roshell_shell_feed()
+ *     - 管道/重定向输入：会话激活时读到 EOF 先关闭会话，
+ *       回到监听态后再次 EOF 停止内核
+ *     - 交互输入：终端按键逐字节进入会话行编辑器
  *
  * 本文件不参与 STM32 构建。
  */
 
 #if defined(ROS_PLATFORM_PC)
 
-#include "shell.h"
+#include "roshell_cmd.h"
 #include "ros.h"
 #include "common.h"
 
@@ -27,8 +29,10 @@
 #define PC_OPEN_WORD    "hello"
 #define PC_OPEN_LEN     5U
 #define PC_WATCH_STACK  2048U
+#define PC_WATCH_PRIO   6U              /* 低于会话任务，高于 idle */
 
 static void *s_rx_task;
+static const char *s_version;
 static size_t s_open_pos;               /* 口令匹配进度 */
 static char s_word[8];                  /* 监听态输入的单词（识别 quit/exit） */
 static size_t s_word_len;
@@ -77,10 +81,10 @@ static bool pc_open_word_match(uint8_t ch)
 }
 
 /*
- * 口令监听 + 回收：
- *   未激活时从默认 stdio 逐字节匹配 hello；激活后输入由 Shell 任务
- *   通过同一个 stdio 读取，这里只负责在任务退出（exit / 输入 EOF）后
- *   回收实例并回到监听；口令阶段遇到 EOF 则停止内核。
+ * 口令监听 + 输入泵 + 回收：
+ *   未激活时逐字节匹配 hello；激活后把 stdin 字节投喂会话；
+ *   会话任务退出（exit / EOF 请求）后回收实例并回到监听；
+ *   监听阶段遇到 EOF 则停止内核。
  */
 static void pc_shell_rx_task(void *arg)
 {
@@ -89,14 +93,10 @@ static void pc_shell_rx_task(void *arg)
 
     (void)arg;
     for (;;) {
-        if (shell_task_finished()) {
+        if (roshell_shell_task_finished()) {
             /* exit 之后输入任务已退出：释放实例，回到监听 */
-            (void)shell_shutdown();
+            (void)roshell_shell_shutdown();
             s_word_len = 0U;
-            continue;
-        }
-        if (shell_started()) {
-            ros_sleep_ms(5U);
             continue;
         }
 
@@ -104,16 +104,31 @@ static void pc_shell_rx_task(void *arg)
             int n = ros_io_read(io, &ch, 1U);
 
             if (n < 0) {
+                if (roshell_shell_started()) {
+                    /* 会话激活时管道 EOF：关闭会话，下一轮 EOF 停内核。
+                     * 必须让出 CPU，否则 EOF 读立即返回会饿死会话任务 */
+                    roshell_shell_request_exit();
+                    ros_sleep_ms(5U);
+                    continue;
+                }
                 ros_stop();         /* 口令阶段管道 EOF：停止内核 */
                 return;
             }
-            if (n > 0) {
+            if (n == 0) {
+                ros_sleep_ms(5U);   /* 无输入：让出 CPU 给调度器 */
+                continue;
+            }
+            if (roshell_shell_started()) {
+                roshell_shell_feed((const char *)&ch, 1U);
+                continue;
+            }
+            {
                 bool stop = pc_watch_word_feed(ch);
 
                 if (pc_open_word_match(ch)) {
                     (void)fputs("hello!\n", stdout);
                     (void)fflush(stdout);
-                    (void)shell_lazy_start();
+                    (void)roshell_shell_start(s_version);
                     s_word_len = 0U;
                     continue;
                 }
@@ -126,31 +141,18 @@ static void pc_shell_rx_task(void *arg)
                 }
             }
         }
-        /* 没有输入时用 RTOS 睡眠让出 CPU：模拟时间随 idle 继续推进，
-         * 否则阻塞在内核里会让整个协作式调度器与时钟一起冻结。 */
-        ros_sleep_ms(5U);
     }
 }
 
-int shell_platform_start(const char *version)
+int roshell_platform_start(const char *version)
 {
-    shell_config_t cfg;
-
     /* 立即刷新，避免管道场景下输出滞后 */
     (void)setvbuf(stdout, NULL, _IONBF, 0);
+    s_version = version;
 
-    memset(&cfg, 0, sizeof(cfg));
-    cfg.version = version;
-    cfg.reset = NULL;           /* PC 上 reboot 报未支持 */
-    /* 输入输出直接使用任务 stdio（默认 pc_io.c 的 stdin / stdout） */
-
-    /* 只保存配置；实例与输入任务等收到 hello 才创建 */
-    if (shell_lazy_setup(&cfg) != 0) {
-        return -1;
-    }
+    /* 实例与输入任务等收到 hello 才创建 */
     if (s_rx_task == NULL) {
-        s_rx_task = ros_task_create_dynamic("sh_watch",
-                                            (uint8_t)SHELL_WATCH_PRIO,
+        s_rx_task = ros_task_create_dynamic("sh_watch", PC_WATCH_PRIO,
                                             pc_shell_rx_task, NULL,
                                             PC_WATCH_STACK);
     }

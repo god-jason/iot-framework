@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 robotos contributors
  *
@@ -64,8 +64,6 @@
 
 #define ROS_VERSION_FEATURES                                        \
     ((ROS_USE_TRACE            ? ROS_FEATURE_TRACE          : 0UL) | \
-     (ROS_ASSERT_ENABLE        ? ROS_FEATURE_ASSERT         : 0UL) | \
-     (ROS_CRASH_ENABLE         ? ROS_FEATURE_CRASH          : 0UL) | \
      (ROS_USE_STACK_CHECK      ? ROS_FEATURE_STACK_CHECK    : 0UL) | \
      (ROS_USE_PRIORITY_INHERIT ? ROS_FEATURE_PRIO_INHERIT   : 0UL) | \
      (ROS_USE_TIME_SLICING     ? ROS_FEATURE_TIME_SLICING   : 0UL) | \
@@ -129,8 +127,6 @@ static void ros_version_features_text(uint32_t features, char *buf, size_t cap)
         const char *name;
     } table[] = {
         { ROS_FEATURE_TRACE,        "trace" },
-        { ROS_FEATURE_ASSERT,       "assert" },
-        { ROS_FEATURE_CRASH,        "crash" },
         { ROS_FEATURE_STACK_CHECK,  "stack_check" },
         { ROS_FEATURE_PRIO_INHERIT, "prio_inherit" },
         { ROS_FEATURE_TIME_SLICING, "time_slice" },
@@ -157,7 +153,7 @@ static void ros_version_features_text(uint32_t features, char *buf, size_t cap)
         if ((features & table[i].bit) == 0U) {
             continue;
         }
-        n = snprintf(&buf[pos], cap - pos, "%s%s",
+        n = snprintf(&buf[pos], (uint32_t)(cap - pos), "%s%s",
                      any ? " " : "", table[i].name);
         if (n < 0) {
             break;
@@ -170,7 +166,7 @@ static void ros_version_features_text(uint32_t features, char *buf, size_t cap)
         pos += (size_t)n;
     }
     if (!any) {
-        (void)snprintf(buf, cap, "none");
+        (void)snprintf(buf, (uint32_t)cap, "none");
     }
 }
 
@@ -190,7 +186,7 @@ int ros_version_format(char *buf, size_t cap)
     pre = (v->prerelease[0] != '\0') ? "-" : "";
     bld = (v->build[0] != '\0') ? "+" : "";
 
-    n = snprintf(buf, cap,
+    n = snprintf(buf, (uint32_t)cap,
                  "%s %s%s%s%s%s\n"
                  "  compiled : %s\n"
                  "  platform : %s\n"

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * net_bsd.c - BSD socket 后端的原始接口（PC / lwIP）
  *
  * 提供 net_init / net_open / net_send / net_recv / net_close 与

@@ -344,6 +344,7 @@ if is_plat("cross") then
         set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
         set_languages("c99")
         set_warnings("all")
+        set_optimize("smallest")     -- -Os，F1 资源受限
         ros_extra_warnings()
         -- 保留 DWARF 调试信息，供 addr2line / gdb 回溯崩溃地址
         add_cflags("-g", {force = true})
@@ -354,7 +355,7 @@ if is_plat("cross") then
         add_defines("ROS_MEM_PORT")
         -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
         if family == "f1" then
-            add_defines("ROS_USE_TRACE=0", "ROS_CRASH_ENABLE=0")
+            add_defines("ROS_USE_TRACE=0")
             -- F103C8 仅 20KB SRAM，默认 32KB TLSF 堆无法容纳，收紧到 8KB
             add_defines("ROS_MEM_HEAP_SIZE=8192")
         end
@@ -451,7 +452,7 @@ if is_plat("cross") then
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
-            set_optimize("s")           -- 固件按体积优化
+            set_optimize("smallest")     -- 固件按体积优化（-Os）
             ros_extra_warnings()
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
             add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）
@@ -461,7 +462,7 @@ if is_plat("cross") then
             add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F1")
             add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
             -- 与 ros-stm32 库保持一致：F1 裁剪 trace 与崩溃记录
-            add_defines("ROS_USE_TRACE=0", "ROS_CRASH_ENABLE=0")
+            add_defines("ROS_USE_TRACE=0")
             ros_trace_defines()
             add_defines("LOG_LEVEL=LOG_LEVEL_NONE")
 
@@ -528,7 +529,7 @@ if is_plat("cross") then
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
-            set_optimize("s")           -- 固件按体积优化
+            set_optimize("smallest")     -- 固件按体积优化（-Os）
             ros_extra_warnings()
             set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
             add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）

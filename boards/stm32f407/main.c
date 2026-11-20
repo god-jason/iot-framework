@@ -7,13 +7,13 @@
  *   -> ros_init() -> 创建 blink 任务 -> ros_sched_start()（不返回）
  *
  * 现象：板载 LED（PA6/PA7）以 1Hz 闪烁；串口 USART1 115200 8N1 可看到
- *       启动日志与 Shell 提示符。
+ *       启动日志，输入口令 hello 后进入 roshell 提示符。
  */
 
 #include "board.h"
 #include "ros.h"
 #include "common.h"
-#include "shell.h"
+#include "roshell_cmd.h"
 
 #include "stm32_cube.h"
 
@@ -41,8 +41,8 @@ int main(void)
     board_led_init();
     board_trace_start(115200U); /* trace 经 USART1/PA9 输出 */
 
-    /* Shell 与 printf 复用同一个 UART1 句柄（PA9 发送 / PA10 接收） */
-    (void)shell_platform_start("f407");
+    /* roshell 与 printf 复用同一个 UART1 句柄（PA9 发送 / PA10 接收） */
+    (void)roshell_platform_start("f407");
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

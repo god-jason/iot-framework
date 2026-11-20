@@ -1,4 +1,4 @@
-/*
+﻿/*
  * params.c - 参数表实现
  *
  * 名称采用固定长度拷贝，超长直接拒绝，避免截断后重名。
@@ -150,7 +150,7 @@ int params_serialize(const param_store_t *store, char *buf, uint32_t size)
         if (remain <= 1) {
             return -1;
         }
-        n = snprintf(buf + off, (size_t)remain, "%s=%.6g\n",
+        n = snprintf(buf + off, (uint32_t)remain, "%s=%.6g\n",
                      store->items[i].name, (double)store->items[i].value);
         if (n < 0 || n >= remain) {
             return -1;

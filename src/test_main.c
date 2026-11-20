@@ -98,7 +98,8 @@ void ut_motion_error(void);
 /* ---------------- 其它组件 ---------------- */
 void ut_breath_led(void);
 void ut_fan(void);
-void ut_shell(void);
+void ut_roshell(void);
+void ut_roshell_cmd(void);
 void ut_net(void);
 void ut_http(void);
 void ut_mqtt(void);
@@ -108,7 +109,6 @@ void ut_bootloader(void);
 
 /* ---------------- 内核 ---------------- */
 void ut_version(void);
-void ut_crash(void);
 void ut_trace(void);
 void ut_ros(void);
 void ut_dynamic(void);
@@ -188,7 +188,8 @@ int main(void)
     printf("\n--- 其它组件 ---\n");
     ut_breath_led();
     ut_fan();
-    ut_shell();
+    ut_roshell();
+    ut_roshell_cmd();
     ut_net();
     ut_http();
     ut_mqtt();
@@ -198,7 +199,6 @@ int main(void)
 
     printf("\n--- 内核 ---\n");
     ut_version();
-    ut_crash();
     ut_ros();
     ut_trace();
     ut_dynamic();

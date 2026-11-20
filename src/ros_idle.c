@@ -10,7 +10,6 @@
 #include "ros.h"
 #include "common.h"
 #include "ros_port.h"
-#include "ros_assert.h"
 
 #define ROS_IDLE_STACK_SIZE 1024
 
@@ -83,7 +82,6 @@ void ros_idle_init(void)
     rc = ros_port_stack_init(&s_idle_tcb);
     if (rc != ROS_OK) {
         LOG_E(ROS_TAG, "idle: port stack init failed: %d", rc);
-        ROS_ASSERT(0);
         return;
     }
 

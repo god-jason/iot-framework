@@ -16,7 +16,6 @@
 #include "ros.h"
 #include "common.h"
 #include "ros_port.h"
-#include "ros_assert.h"
 #include "ros_mem.h"
 
 #include <string.h>
@@ -396,7 +395,6 @@ void ros_sleep_until(uint32_t wake_tick)
     ros_task_t *next;
 
     if (ros_in_isr()) {
-        ROS_ASSERT(!ros_in_isr());
         LOG_W(ROS_TAG, "sleep: forbidden in ISR");
         return;
     }

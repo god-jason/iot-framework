@@ -67,8 +67,6 @@ extern "C" {
 /* ============================== 编译期特性位 ============================== */
 
 #define ROS_FEATURE_TRACE          (1UL << 0)    /* 事件跟踪 */
-#define ROS_FEATURE_ASSERT         (1UL << 1)    /* 断言 */
-#define ROS_FEATURE_CRASH          (1UL << 2)    /* 崩溃现场记录 */
 #define ROS_FEATURE_STACK_CHECK    (1UL << 3)    /* 栈溢出检测 */
 #define ROS_FEATURE_PRIO_INHERIT   (1UL << 4)    /* 互斥量优先级继承 */
 #define ROS_FEATURE_TIME_SLICING   (1UL << 5)    /* 同优先级时间片 */

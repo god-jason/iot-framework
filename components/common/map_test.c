@@ -1,9 +1,10 @@
-/*
+﻿/*
  * map_test.c - 跳表键值映射回归测试
  */
 
 #include "test.h"
 #include "map.h"
+#include "common.h"
 
 #include <stdio.h>
 

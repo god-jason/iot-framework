@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ml307_ping.c - ML307 的 ping 实现（AT+MPING），作为 components/net 后端
  *
  * 命令：AT+MPING="<host>",<count>,<size>,<timeout_s>

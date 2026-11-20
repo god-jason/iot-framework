@@ -156,9 +156,8 @@ int ros_msgq_recv(ros_msgq_t *mq, void *msg, uint32_t max_len,
                 *out_len = len;
             }
             if (len == 0U || len > (mq->size - ROS_MSGQ_HDR_SIZE)) {
-                /* 内部数据损坏：拒绝继续，交由断言暴露 */
+                /* 内部数据损坏：拒绝继续 */
                 ros_port_critical_exit();
-                ROS_ASSERT(0);
                 return ROS_ERROR;
             }
             if (max_len < len) {

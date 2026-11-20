@@ -6,7 +6,7 @@
  *   ros_tick.c    tick 与延时链表    ros_timers.c  软件定时器
  *   ros_task.c    任务/通知/注册表   ros_idle.c    空闲任务
  *   ros_sem.c / ros_mutex.c / ros_queue.c / ros_event.c
- *   ros_stats.c / ros_isr.c / ros_assert.c
+ *   ros_stats.c / ros_isr.c
  */
 
 #include "ros.h"
@@ -15,15 +15,12 @@
 
 /*
  * 初始化内核。
- * 顺序：崩溃记录 -> 移植层 -> 平台 stdio -> 调度器 -> tick -> 定时器
+ * 顺序：移植层 -> 平台 stdio -> 调度器 -> tick -> 定时器
  *       -> 任务注册表 -> 空闲任务。
  * 必须在创建任务和启动调度之前调用一次。
  */
 void ros_init(void)
 {
-    /* 0. 校验上次复位留下的崩溃现场并安装异常捕获钩子 */
-    ros_crash_init();
-
     /* 1. 移植层初始化（PC 端把主线程转换为 Fiber） */
     ros_port_init();
 

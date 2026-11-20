@@ -21,9 +21,9 @@
  *   ros_io.h      标准输入输出  ros_queue.h   消息队列   ros_event.h   事件组
  *   ros_sbuf.h    流式缓冲      ros_msgq.h    变长消息队列
  *   ros_tick.h    tick/延时     ros_sched.h   调度器     ros_wait.h    等待队列
- *   ros_idle.h    空闲任务      ros_stats.h   运行时统计 ros_assert.h  断言
+ *   ros_idle.h    空闲任务      ros_stats.h   运行时统计
  *   ros_isr.h     中断上下文 API                         ros_port.h    移植层接口
- *   ros_crash.h   崩溃现场记录  ros_mem.h     内存分配
+ *   ros_mem.h     内存分配
  *   ros_trace.h   事件跟踪宏    ros_types.h   公共常量/状态码/前向声明
  *   ros_version.h 版本/构建时间/编译配置/许可证
  *   ros_config.h  编译期裁剪开关
@@ -36,8 +36,6 @@
 
 #include "ros_types.h"
 #include "ros_mem.h"
-#include "ros_assert.h"
-#include "ros_crash.h"
 #include "ros_io.h"
 #include "ros_task.h"
 #include "ros_sem.h"

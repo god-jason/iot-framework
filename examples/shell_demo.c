@@ -1,16 +1,16 @@
-/*
- * shell_demo.c - PC 平台 IoT Shell 交互示例
+﻿/*
+ * shell_demo.c - PC 平台 roshell 交互示例
  *
- * shell_platform_start() 完成默认绑定：
+ * roshell_platform_start() 完成默认绑定：
  *   - 输出：stdout（与 log 的 printf 同一路）
- *   - 输入：默认 stdio（pc_io.c）逐字节读入；监听任务只匹配 hello 口令
- * 与 STM32 一致：上电只跑监听任务，输入 hello 回车才创建 Shell 实例；
+ *   - 输入：监听任务逐字节读 stdin；未激活时只匹配 hello 口令，
+ *     激活后投喂 roshell 会话
+ * 上电只跑监听任务，输入 hello 回车才创建 roshell 实例与输入任务；
  * 输入 exit 回收实例回到监听；管道 EOF 或 quit 命令后停止内核。
- * 输入结束（管道 EOF）或 quit 命令后停止内核，进程正常返回。
  *
  * 额外创建两个测试任务，用于验证 ps / state 的统计：
  *   cpu_load : 每轮把模拟时间推进 3 tick 再睡 15 tick → CPU 约 25%
- *   mem_load : 逐秒 +512B 再逐秒 -512B（每块持有 1s）→ ps 的 MEM 列阶梯变化
+ *   mem_load : 逐秒 +512B 再逐秒 -512B（每块持有 1s）→ ps 可见
  *
  * 本目标定义了 ROS_PC_REAL_TIME：模拟时间跟随墙钟，1 tick ≈ 1ms 真实时间，
  * 因此上面说的"秒"就是现实中的秒。
@@ -20,31 +20,25 @@
  *   > hello          （开启口令，回复 hello!）
  *   > ps
  *   > state
- *   > gpio mode PA5 out
+ *   > help
+ *   > echo hello roshell
+ *   > $x = 40 + 2            （脚本行：赋值给 roshell 变量）
+ *   > echo $x                （echo 做 $var 替换 → 42）
+ *   > if $x > 40 then echo big end
+ *   > run "for $i = 1 to 3 echo $i end"   （后台 run，jobs 查看）
+ *   > jobs                   （查看 run 槽位）
+ *   > waitjob 0              （等待槽位 0 结束）
+ *   > gpio mode PA5 out      （设备命令走 cmd 全局命令表）
  *   > gpio set PA5 1
- *   > pwm list                （[0] pwm1 / [1] pwm2）
- *   > pwm 0 duty 25%          （按槽位序号）
- *   > pwm pwm2 duty 75%       （按绑定名）
- *   > stepper 0 init PA6 PA7  （实例 0：step / dir 引脚）
- *   > stepper 0 speed 200
- *   > stepper 0 dir 1
- *   > stepper 0 move 100
- *   > -stepper 0 move 100     （行首 -：后台执行，立即回到提示符）
- *   > jobs                    （查看后台 JOB，stop / waitjob 管理）
- *   > stepper list
- *   > fan list                （[0] fan0 / [1] fan1）
- *   > fan 0 speed 60%         （等价 fan 0 speed 600）
- *   > fan 1 on
- *   > fan 0 rpm
- *   > fan 0 off
- *   > ping 127.0.0.1 count 4     （走 components/net 的 net_ping）
- *   > -ping 8.8.8.8 count 10     （后台 ping，jobs 可查看）
- *   > exit           （回收 Shell，回到口令监听）
+ *   > pwm list
+ *   > fan 0 speed 60%
+ *   > ping 127.0.0.1 count 4
+ *   > exit           （回收会话，回到口令监听）
  * 管道测试：
  *   "hello`nps`nstate`nquit`n" | ros-shell.exe
  */
 
-#include "shell.h"
+#include "roshell_cmd.h"
 #include "device.h"
 #include "cmd.h"
 #include "fan.h"
@@ -52,6 +46,8 @@
 #include "common.h"
 
 #include <stdio.h>
+
+#define DEMO_PWM_NAME_MAX 16U
 
 static int cmd_quit(const args_parsed_t *parsed, void *user)
 {
@@ -74,10 +70,10 @@ static uint8_t    s_cpu_stack[1024];
 static ros_task_t s_mem_task;
 static uint8_t    s_mem_stack[1024];
 
-/* 演示用 PWM 通道：由应用准备句柄并绑定名字，Shell 里用 pwm1/pwm2 或 0/1 操作 */
+/* 演示用 PWM 通道：由应用准备句柄并绑定名字，pwm 命令里用 pwm1/pwm2 或 0/1 操作 */
 static hal_pwm_t s_demo_pwm[2];
 
-/* 演示用风扇：把 PWM 通道包装成 fan 实例，Shell 里用 fan 0 / fan 1 操作 */
+/* 演示用风扇：把 PWM 通道包装成 fan 实例，fan 命令里用 fan 0 / fan 1 操作 */
 static fan_t     s_demo_fan[2];
 static fan_ops_t s_demo_fan_ops[2];
 
@@ -128,8 +124,8 @@ static void mem_load_entry(void *arg)
 int main(void)
 {
     ros_init();
-    if (shell_platform_start("pc-demo") != 0) {
-        printf("shell start failed\n");
+    if (roshell_platform_start("pc-demo") != 0) {
+        printf("roshell start failed\n");
         return 1;
     }
     (void)device_init();
@@ -137,7 +133,7 @@ int main(void)
         printf("register quit failed\n");
     }
 
-    /* 准备两路 PWM 并绑定给 Shell（PC 平台为模拟实现） */
+    /* 准备两路 PWM 并绑定（PC 平台为模拟实现） */
     {
         static const hal_pwm_config_t pcfg = {
             1000U, 5000U, HAL_PWM_POLARITY_HIGH
@@ -145,7 +141,7 @@ int main(void)
         uint32_t i;
 
         for (i = 0U; i < 2U; i++) {
-            char name[SHELL_PWM_NAME_MAX];
+            char name[DEMO_PWM_NAME_MAX];
 
             s_demo_pwm[i].channel = (uint8_t)(i + 1U);
             if (hal_pwm_init(&s_demo_pwm[i], &pcfg) != HAL_OK) {

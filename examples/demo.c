@@ -1,12 +1,12 @@
-/* robotos 综合示例：LED 闪烁 + 命令行 Shell。
+/* robotos 综合示例：LED 闪烁 + roshell 命令行。
  *
- * 上电只运行 LED 任务和 Shell 监听任务，串口输入 hello 后创建 Shell 实例；
+ * 上电只运行 LED 任务和监听任务，输入 hello 后创建 roshell 会话；
  * 支持 exit（退回监听）与 quit（结束进程）。
  */
 #include "ros.h"
 #include "common.h"
 #include "cmd.h"
-#include "shell.h"
+#include "roshell_cmd.h"
 #include "led.h"
 
 #include <stdio.h>
@@ -47,8 +47,8 @@ int main(void)
     printf("robotos demo ready\n");
 
     (void)cmd_register(&s_quit_def, demo_quit, NULL);
-    if (shell_platform_start("pc-demo") != 0) {
-        printf("shell start failed\n");
+    if (roshell_platform_start("pc-demo") != 0) {
+        printf("roshell start failed\n");
         return 1;
     }
 

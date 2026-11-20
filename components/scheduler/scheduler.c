@@ -270,9 +270,7 @@ static int parse_crontab(const char *expression, scheduler_entry_t *entry)
         return -1;
     }
 
-    while (*src == ' ' || *src == '\t') {
-        src++;
-    }
+    src = str_skip_ws(src);
     len = strlen(src);
     while (len > 0U && (src[len - 1U] == ' ' || src[len - 1U] == '\t')) {
         len--;

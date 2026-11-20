@@ -1,4 +1,4 @@
-/*
+﻿/*
  * device.c - 通用设备命令（GPIO / PWM）
  *
  * 命令在 device_init() 中注册到 cmd 全局命令表，所有 Shell 实例共享。
@@ -61,7 +61,7 @@ static bool dev_parse_pin(const char *s, hal_pin_t *pin)
 
 static void dev_format_pin(hal_pin_t pin, char *buf, size_t cap)
 {
-    (void)snprintf(buf, cap, "P%c%u",
+    (void)snprintf(buf, (uint32_t)cap, "P%c%u",
                    (char)('A' + (char)HAL_PIN_GET_PORT(pin)),
                    (unsigned)HAL_PIN_GET_INDEX(pin));
 }

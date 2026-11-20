@@ -15,7 +15,6 @@
 #include "ros.h"
 #include "common.h"
 #include "ros_port.h"
-#include "ros_assert.h"
 
 /* ------------------------------ 等待队列 ------------------------------ */
 
@@ -89,7 +88,6 @@ ros_task_t *ros_wait_queue_pop_highest(ros_wait_queue_t *queue)
     node = list_pop_first(&queue->prio[prio]);
     if (node == NULL) {
         queue->bitmap &= ~(1U << (uint32_t)prio);
-        ROS_ASSERT(0);          /* bitmap 与链表不一致 */
         return NULL;
     }
 
@@ -155,7 +153,6 @@ bool ros_wait_blockable(uint32_t timeout)
         return true;
     }
     if (ros_in_isr()) {
-        ROS_ASSERT(!ros_in_isr());
         LOG_E(ROS_TAG, "blocking API called in ISR, timeout=%u",
                   (unsigned)timeout);
         return false;

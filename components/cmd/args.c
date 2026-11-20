@@ -1,4 +1,4 @@
-/*
+﻿/*
  * args.c - 命令参数解析实现
  *
  * 解析规则：
@@ -264,19 +264,14 @@ bool args_get_str(const args_parsed_t *parsed, uint8_t index, const char **out)
 bool args_get_int(const args_parsed_t *parsed, uint8_t index, int *out)
 {
     const char *v;
-    char *end = NULL;
-    long n;
+    int32_t n;
 
     if (out == NULL || parsed == NULL || parsed->args == NULL ||
         index >= parsed->arg_count) {
         return false;
     }
     v = args_value(parsed, index);
-    if (v == NULL) {
-        return false;
-    }
-    n = strtol(v, &end, 10);
-    if (end == v || *end != '\0') {
+    if (v == NULL || !str_parse_int(v, &n)) {
         return false;
     }
     *out = (int)n;
@@ -286,23 +281,16 @@ bool args_get_int(const args_parsed_t *parsed, uint8_t index, int *out)
 bool args_get_uint(const args_parsed_t *parsed, uint8_t index, uint32_t *out)
 {
     const char *v;
-    char *end = NULL;
-    unsigned long n;
 
     if (out == NULL || parsed == NULL || parsed->args == NULL ||
         index >= parsed->arg_count) {
         return false;
     }
     v = args_value(parsed, index);
-    if (v == NULL || v[0] == '-') {
+    if (v == NULL) {
         return false;
     }
-    n = strtoul(v, &end, 10);
-    if (end == v || *end != '\0') {
-        return false;
-    }
-    *out = (uint32_t)n;
-    return true;
+    return str_parse_uint(v, out);
 }
 
 bool args_get_bool(const args_parsed_t *parsed, uint8_t index, bool *out)
