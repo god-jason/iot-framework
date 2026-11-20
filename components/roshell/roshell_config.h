@@ -10,9 +10,15 @@
 
 /* ------------------------------ 能力开关 ------------------------------ */
 /* 表达式/变量支持：0 时移除求值器与变量表，
- * if/while/for/赋值在扫描期报 unsupported，函数退化为无参形式 */
+ * if/while/for/赋值在扫描期报 unsupported，函数退化为无参形式。
+ * 默认按平台选择：小 Flash 平台（stm32f1 系列）关闭，其余开放；
+ * 仍可在构建时 -D ROSHELL_ENABLE_EXPR=0/1 覆盖 */
 #ifndef ROSHELL_ENABLE_EXPR
+#if defined(ROS_STM32_F1)
+#define ROSHELL_ENABLE_EXPR   0
+#else
 #define ROSHELL_ENABLE_EXPR   1
+#endif
 #endif
 
 /* 文件系统：0 时 load 语句报 unsupported */

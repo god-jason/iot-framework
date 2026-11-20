@@ -1925,6 +1925,10 @@ static int ro_stmt_args(ro_env_t *env, const ro_tok_t *t, int tn,
 #endif
 }
 
+static int ro_call_body(roshell_t *rs, ro_prog_t *prog, const ro_func_t *f,
+                        const ro_value_t *args, uint8_t depth,
+                        ro_ctx_t *caller, ro_value_t *out, roshell_err_t *err);
+
 static int ro_stmt_call(ro_env_t *env, const ro_tok_t *t, int tn)
 {
     ro_value_t args[ROSHELL_FUNC_ARGS_MAX];
