@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 
-struct ros_sbuf {
+typedef struct ros_sbuf {
     uint8_t *buffer;               /* 字节缓冲区（调用者提供或动态分配） */
     uint32_t size;                 /* 缓冲区容量（字节，非 2 的幂也可） */
     uint32_t head;                 /* 读位置 */
@@ -40,7 +40,7 @@ struct ros_sbuf {
 
     bool initialized;              /* 初始化标志 */
     bool buffer_owned;             /* 缓冲区是否由 ros_sbuf_create 分配 */
-};
+} ros_sbuf_t;
 
 #if ROS_USE_SBUF
 

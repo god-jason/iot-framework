@@ -13,7 +13,7 @@
 #include "board.h"
 #include "ros.h"
 #include "common.h"
-#include "roshell_cmd.h"
+#include "roshell.h"
 
 #include "stm32_cube.h"
 
@@ -42,7 +42,7 @@ int main(void)
     board_trace_start(115200U); /* trace 经 USART1/PA9 输出 */
 
     /* roshell 与 printf 复用同一个 UART1 句柄（PA9 发送 / PA10 接收） */
-    (void)roshell_platform_start("f407");
+    (void)rs_platform_start("f407");
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

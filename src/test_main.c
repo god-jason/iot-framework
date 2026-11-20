@@ -93,7 +93,6 @@ void ut_robot_action(void);
 void ut_robot_bt(void);
 void ut_robot_planner(void);
 void ut_robot_executor(void);
-void ut_motion_error(void);
 
 /* ---------------- 其它组件 ---------------- */
 void ut_breath_led(void);
@@ -183,7 +182,6 @@ int main(void)
     ut_robot_bt();
     ut_robot_planner();
     ut_robot_executor();
-    ut_motion_error();
 
     printf("\n--- 其它组件 ---\n");
     ut_breath_led();

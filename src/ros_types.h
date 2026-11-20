@@ -105,15 +105,19 @@ enum {
 
 /* ============================== 对象前向声明 ============================== */
 
-typedef struct ros_task        ros_task_t;
-typedef struct ros_sem         ros_sem_t;
-typedef struct ros_mutex       ros_mutex_t;
-typedef struct ros_event       ros_event_t;
-typedef struct ros_queue       ros_queue_t;
-typedef struct ros_sbuf        ros_sbuf_t;
-typedef struct ros_msgq        ros_msgq_t;
-typedef struct ros_timer       ros_timer_t;
-typedef struct ros_wait_queue  ros_wait_queue_t;
+/*
+ * 只提供标签前向声明，供仅需指针的头文件使用；
+ * typedef 定义见各自头文件（见文件头列表），需要按值定义或访问成员时包含它。
+ */
+struct ros_task;
+struct ros_sem;
+struct ros_mutex;
+struct ros_event;
+struct ros_queue;
+struct ros_sbuf;
+struct ros_msgq;
+struct ros_timer;
+struct ros_wait_queue;
 
 #ifdef __cplusplus
 }

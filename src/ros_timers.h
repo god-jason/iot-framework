@@ -15,7 +15,7 @@ extern "C" {
 
 typedef void (*ros_timer_cb_t)(void *arg);     /* 定时器回调 */
 
-struct ros_timer {
+typedef struct ros_timer {
     list_node_t node;               /* 定时器链表节点（排序键 deadline） */
     list_node_t pending_node;       /* 到期待执行链表节点（任务模式） */
     const char *name;               /* 定时器名 */
@@ -29,7 +29,7 @@ struct ros_timer {
     bool pending_delete;            /* 任务模式：销毁请求延后到回调结束 */
     uint32_t deadline;              /* 下次到期时刻 */
     bool initialized;               /* 已初始化（动态销毁校验用） */
-};
+} ros_timer_t;
 
 /*
  * 定时器回调执行上下文：

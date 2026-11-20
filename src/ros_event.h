@@ -20,11 +20,11 @@ extern "C" {
 #define ROS_EVENT_ALL    0x01U   /* 所有请求位满足才返回 */
 #define ROS_EVENT_CLEAR  0x02U   /* 返回前清除已满足的位 */
 
-struct ros_event {
+typedef struct ros_event {
     uint32_t flags;                 /* 当前事件标志位 */
     ros_wait_queue_t wait;         /* 等待该事件的任务 */
     bool initialized;               /* 初始化标志 */
-};
+} ros_event_t;
 
 #if ROS_USE_EVENT
 

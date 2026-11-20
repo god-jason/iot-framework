@@ -19,29 +19,32 @@
 extern "C" {
 #endif
 
-struct ros_wait_queue {
+/* 任务控制块定义见 ros_task.h；本文件只用指针，故仅前置声明标签 */
+struct ros_task;
+
+typedef struct ros_wait_queue {
     uint32_t bitmap;                       /* bit i = 优先级 i 有等待者 */
     list_t   prio[ROS_MAX_PRIORITY];        /* 每优先级一条 FIFO 链表 */
-};
+} ros_wait_queue_t;
 
 /* 初始化等待队列（对象 init 时调用） */
 void ros_wait_queue_init(ros_wait_queue_t *queue);
 
 /* 挂入当前任务（wait_node）；调用者需已持有临界区 */
-void ros_wait_queue_add(ros_wait_queue_t *queue, ros_task_t *task);
+void ros_wait_queue_add(ros_wait_queue_t *queue, struct ros_task *task);
 
 /* 摘除任务并维护位图；对未挂入的任务安全 */
-void ros_wait_queue_remove(ros_wait_queue_t *queue, ros_task_t *task);
+void ros_wait_queue_remove(ros_wait_queue_t *queue, struct ros_task *task);
 
 /* 取出优先级最高的等待者并摘链；空队列返回 NULL */
-ros_task_t *ros_wait_queue_pop_highest(ros_wait_queue_t *queue);
+struct ros_task *ros_wait_queue_pop_highest(ros_wait_queue_t *queue);
 
 /* 队列中最高优先级；空队列返回 0xFF */
 uint8_t ros_wait_queue_top_priority(const ros_wait_queue_t *queue);
 
 /* 任务是否正挂在指定等待队列上 */
 bool ros_wait_queue_contains(const ros_wait_queue_t *queue,
-                             const ros_task_t *task);
+                             const struct ros_task *task);
 
 /* 等待队列是否为空（无任何等待者） */
 bool ros_wait_queue_empty(const ros_wait_queue_t *queue);
@@ -84,7 +87,7 @@ void ros_block_current_locked(ros_wait_queue_t *wait_queue, uint32_t timeout);
 int ros_wait_retry(ros_wait_queue_t *queue, uint32_t deadline, uint32_t timeout);
 
 /* 唤醒任务：摘除等待/延时节点，写入结果并加入就绪表 */
-void ros_task_wake(ros_task_t *task, int result);
+void ros_task_wake(struct ros_task *task, int result);
 
 /*
  * 销毁对象前的统一收尾：等待队列均空时在临界区内把 *initialized 置 false。

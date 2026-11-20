@@ -9,7 +9,7 @@
  *
  * 输出：stdout（与 log 的 printf 同一路，保证顺序一致）
  * 输入：本文件的监听任务统一读取 stdin（ros_io_read），
- *       会话未激活时匹配口令，激活后投喂 roshell_shell_feed()
+ *       会话未激活时匹配口令，激活后投喂 rs_shell_feed()
  *     - 管道/重定向输入：会话激活时读到 EOF 先关闭会话，
  *       回到监听态后再次 EOF 停止内核
  *     - 交互输入：终端按键逐字节进入会话行编辑器
@@ -19,7 +19,7 @@
 
 #if defined(ROS_PLATFORM_PC)
 
-#include "roshell_cmd.h"
+#include "roshell.h"
 #include "ros.h"
 #include "common.h"
 
@@ -93,9 +93,9 @@ static void pc_shell_rx_task(void *arg)
 
     (void)arg;
     for (;;) {
-        if (roshell_shell_task_finished()) {
+        if (rs_shell_task_finished()) {
             /* exit 之后输入任务已退出：释放实例，回到监听 */
-            (void)roshell_shell_shutdown();
+            (void)rs_shell_shutdown();
             s_word_len = 0U;
             continue;
         }
@@ -104,10 +104,10 @@ static void pc_shell_rx_task(void *arg)
             int n = ros_io_read(io, &ch, 1U);
 
             if (n < 0) {
-                if (roshell_shell_started()) {
+                if (rs_shell_started()) {
                     /* 会话激活时管道 EOF：关闭会话，下一轮 EOF 停内核。
                      * 必须让出 CPU，否则 EOF 读立即返回会饿死会话任务 */
-                    roshell_shell_request_exit();
+                    rs_shell_request_exit();
                     ros_sleep_ms(5U);
                     continue;
                 }
@@ -118,8 +118,8 @@ static void pc_shell_rx_task(void *arg)
                 ros_sleep_ms(5U);   /* 无输入：让出 CPU 给调度器 */
                 continue;
             }
-            if (roshell_shell_started()) {
-                roshell_shell_feed((const char *)&ch, 1U);
+            if (rs_shell_started()) {
+                rs_shell_feed((const char *)&ch, 1U);
                 continue;
             }
             {
@@ -128,7 +128,7 @@ static void pc_shell_rx_task(void *arg)
                 if (pc_open_word_match(ch)) {
                     (void)fputs("hello!\n", stdout);
                     (void)fflush(stdout);
-                    (void)roshell_shell_start(s_version);
+                    (void)rs_shell_start(s_version);
                     s_word_len = 0U;
                     continue;
                 }
@@ -144,7 +144,7 @@ static void pc_shell_rx_task(void *arg)
     }
 }
 
-int roshell_platform_start(const char *version)
+int rs_platform_start(const char *version)
 {
     /* 立即刷新，避免管道场景下输出滞后 */
     (void)setvbuf(stdout, NULL, _IONBF, 0);

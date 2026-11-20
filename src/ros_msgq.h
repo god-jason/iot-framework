@@ -29,7 +29,7 @@ extern "C" {
 /* 每条消息的长度头字节数 */
 #define ROS_MSGQ_HDR_SIZE 4U
 
-struct ros_msgq {
+typedef struct ros_msgq {
     uint8_t *buffer;               /* 环形字节缓冲（调用者提供或动态分配） */
     uint32_t size;                 /* 缓冲容量（字节） */
     uint32_t head;                 /* 队首（读位置） */
@@ -42,7 +42,7 @@ struct ros_msgq {
 
     bool initialized;              /* 初始化标志 */
     bool buffer_owned;             /* 缓冲区是否由 ros_msgq_create 分配 */
-};
+} ros_msgq_t;
 
 #if ROS_USE_MSGQ
 

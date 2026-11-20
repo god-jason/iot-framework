@@ -33,7 +33,7 @@ typedef void (*ros_entry_t)(void *arg);        /* 任务入口 */
 
 /* ============================== 任务控制块 ============================== */
 
-struct ros_task {
+typedef struct ros_task {
     /* 移植层上下文：PC 端为 Fiber 句柄，STM32 端为保存的栈指针。
      * 必须是第一个成员：Cortex-M PendSV 汇编用 [tcb] 直接存取栈指针。 */
     void *stack_ptr;
@@ -93,7 +93,7 @@ struct ros_task {
     bool created;                   /* 是否已创建（调试用） */
     bool stack_owned;               /* 栈是否由 ros_task_create_dynamic 分配 */
     uint16_t tid;                   /* 任务 ID：注册时分配，0 表示未注册 */
-};
+} ros_task_t;
 
 /*
  * 移植层契约：Cortex-M 的 PendSV / ros_port_start_first 汇编用

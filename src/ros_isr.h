@@ -18,6 +18,12 @@
  */
 
 #include "ros_types.h"
+#include "ros_task.h"   /* ros_task_t */
+#include "ros_sem.h"    /* ros_sem_t */
+#include "ros_queue.h"  /* ros_queue_t */
+#include "ros_sbuf.h"   /* ros_sbuf_t */
+#include "ros_msgq.h"   /* ros_msgq_t */
+#include "ros_event.h"  /* ros_event_t */
 
 #ifdef __cplusplus
 extern "C" {

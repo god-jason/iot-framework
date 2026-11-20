@@ -25,7 +25,7 @@
 #include "bootloader.h"
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
+#include "roshell.h"
 #include <string.h>
 
 /* 固件读取回调，由 fota_set_read() 注册 */
@@ -36,14 +36,13 @@ static void *s_read_user = NULL;
 static fota_apply_fn s_apply = NULL;
 static bool s_fota_cmd_ready;
 
-static int fota_cmd_handler(const args_parsed_t *parsed, void *user)
+static int fota_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     uint32_t version = 0U;
     uint32_t size = 0U;
 
-    (void)user;
-    if (!args_get_uint(parsed, 0U, &version) ||
-        !args_get_uint(parsed, 1U, &size)) {
+    if (!rs_args_get_uint(ctx->parsed, 0U, &version) ||
+        !rs_args_get_uint(ctx->parsed, 1U, &size)) {
         ros_puts("usage: fota <version> <size>");
         return -1;
     }
@@ -54,13 +53,14 @@ static int fota_cmd_handler(const args_parsed_t *parsed, void *user)
     return 0;
 }
 
-static const args_def_t s_fota_args[] = {
-    { "version", 0, ARGS_TYPE_UINT, true, true, NULL, "firmware version" },
-    { "size", 0, ARGS_TYPE_UINT, true, true, NULL, "firmware bytes" }
+static const rs_args_t s_fota_args[] = {
+    { "version", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "firmware version" },
+    { "size", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "firmware bytes" }
 };
 
-static const cmd_def_t s_fota_def = {
-    "fota", "remote firmware upgrade", s_fota_args, 2U
+static const rs_cmd_t s_fota_def = {
+    "fota", "remote firmware upgrade", NULL, NULL,
+    s_fota_args, 2U, fota_cmd_handler, NULL
 };
 
 /*
@@ -75,7 +75,7 @@ int fota_init(void)
     s_apply = NULL;
     if (!s_fota_cmd_ready) {
         s_fota_cmd_ready = true;
-        (void)cmd_register(&s_fota_def, fota_cmd_handler, NULL);
+        (void)rs_cmd_register(&s_fota_def);
     }
     return upgrade_init();
 }

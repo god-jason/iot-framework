@@ -8,6 +8,7 @@
  */
 
 #include "ros_types.h"
+#include "ros_task.h"   /* ros_task_t */
 
 #ifdef __cplusplus
 extern "C" {

@@ -10,16 +10,17 @@
 
 #include "ros_types.h"
 #include "ros_wait.h"
+#include "ros_task.h"   /* ros_task_t：owner 字段 */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct ros_mutex {
+typedef struct ros_mutex {
     ros_task_t *owner;             /* 当前持有者，NULL 表示空闲 */
     ros_wait_queue_t wait;         /* 等待该互斥量的任务 */
     bool initialized;               /* 初始化标志 */
-};
+} ros_mutex_t;
 
 int ros_mutex_init(ros_mutex_t *mutex);
 int ros_mutex_lock(ros_mutex_t *mutex, uint32_t timeout);

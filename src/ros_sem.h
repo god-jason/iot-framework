@@ -14,11 +14,11 @@
 extern "C" {
 #endif
 
-struct ros_sem {
+typedef struct ros_sem {
     uint32_t count;                 /* 当前计数值（上限 ROS_SEM_MAX_COUNT） */
     ros_wait_queue_t wait;          /* 等待该信号量的任务 */
     bool initialized;               /* 初始化标志 */
-};
+} ros_sem_t;
 
 int ros_sem_init(ros_sem_t *sem, uint32_t initial_count);
 int ros_sem_take(ros_sem_t *sem, uint32_t timeout);

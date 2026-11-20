@@ -22,7 +22,7 @@
 #include "stepper.h"
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
+#include "roshell.h"
 
 #define STEPPER_CMD_MAX 8U
 
@@ -42,7 +42,7 @@ static int stepper_cmd_index(const stepper_t *st)
     return -1;
 }
 
-static int stepper_cmd_handler(const args_parsed_t *parsed, void *user)
+static int stepper_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     uint32_t id;
     const char *action = NULL;
@@ -51,8 +51,7 @@ static int stepper_cmd_handler(const args_parsed_t *parsed, void *user)
     int32_t v = 0;
     int rc;
 
-    (void)user;
-    if (!args_get_uint(parsed, 0U, &id) || !args_get_str(parsed, 1U, &action)) {
+    if (!rs_args_get_uint(ctx->parsed, 0U, &id) || !rs_args_get_str(ctx->parsed, 1U, &action)) {
         ros_puts("usage: stepper <id> dir|move|moveto|pos|info [value]");
         return -1;
     }
@@ -61,7 +60,7 @@ static int stepper_cmd_handler(const args_parsed_t *parsed, void *user)
         return -1;
     }
     st = s_steppers[id];
-    (void)args_get_str(parsed, 2U, &value);
+    (void)rs_args_get_str(ctx->parsed, 2U, &value);
 
     if (str_icmp(action, "pos")) {
         int32_t pos = 0;
@@ -97,15 +96,16 @@ static int stepper_cmd_handler(const args_parsed_t *parsed, void *user)
     return 0;
 }
 
-static const args_def_t s_stepper_args[] = {
-    { "id", 0, ARGS_TYPE_UINT, true, true, NULL, "stepper instance id" },
-    { "action", 0, ARGS_TYPE_STR, true, true, NULL,
+static const rs_args_t s_stepper_args[] = {
+    { "id", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "stepper instance id" },
+    { "action", 0, RS_ARGS_TYPE_STR, true, true, NULL,
       "dir|move|moveto|pos|info" },
-    { "value", 0, ARGS_TYPE_STR, true, false, NULL, "steps / direction" }
+    { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL, "steps / direction" }
 };
 
-static const cmd_def_t s_stepper_def = {
-    "stepper", "stepper motion control", s_stepper_args, 3U
+static const rs_cmd_t s_stepper_def = {
+    "stepper", "stepper motion control", NULL, NULL, s_stepper_args, 3U,
+    stepper_cmd_handler, NULL
 };
 
 static void stepper_cmd_add(stepper_t *st)
@@ -116,7 +116,7 @@ static void stepper_cmd_add(stepper_t *st)
     s_steppers[s_stepper_count++] = st;
     if (!s_stepper_cmd_ready) {
         s_stepper_cmd_ready = true;
-        (void)cmd_register(&s_stepper_def, stepper_cmd_handler, NULL);
+        (void)rs_cmd_register(&s_stepper_def);
     }
 }
 

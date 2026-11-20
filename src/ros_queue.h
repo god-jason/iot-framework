@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-struct ros_queue {
+typedef struct ros_queue {
     uint8_t *buffer;                /* 消息缓冲区（调用者提供或动态分配） */
     bool buffer_owned;              /* 缓冲区是否由 ros_queue_create 分配 */
     uint32_t item_size;             /* 单条消息大小（字节） */
@@ -28,7 +28,7 @@ struct ros_queue {
     ros_wait_queue_t recv_wait;     /* 队列空时等待接收的任务 */
 
     bool initialized;               /* 初始化标志 */
-};
+} ros_queue_t;
 
 /*
  * 初始化定长消息队列。

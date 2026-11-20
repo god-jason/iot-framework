@@ -1,5 +1,19 @@
 ﻿/*
- * args.c - 命令参数解析实现
+ * roshell_args.c - roshell 命令参数解析
+ *
+ * 解析 "--name value" / "--name=value" / "-s value" / 布尔开关与位置参数，
+ * 按定义下标取值；与命令表解耦，所有文本均为只读引用，不分配内存。
+ */
+
+#include "roshell.h"
+#include "common.h"
+
+#include <string.h>
+#include <stdio.h>
+
+/* ============ 参数解析（原 args 模块） ============ */
+/*
+ * 命令参数解析实现
  *
  * 解析规则：
  *   --name value / --name=value / -x value；
@@ -8,16 +22,9 @@
  *   "--" 之后全部按位置参数处理。
  */
 
-#include "args.h"
-#include "ros.h"
-#include "common.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-
 /* ---------------- 小工具 ---------------- */
 
-static bool args_value_valid(uint8_t type, const char *s)
+static bool rs_args_value_valid(uint8_t type, const char *s)
 {
     int32_t iv;
     uint32_t uv;
@@ -27,26 +34,26 @@ static bool args_value_valid(uint8_t type, const char *s)
         return false;
     }
     switch (type) {
-    case ARGS_TYPE_INT:
+    case RS_ARGS_TYPE_INT:
         return str_parse_int(s, &iv);
-    case ARGS_TYPE_UINT:
+    case RS_ARGS_TYPE_UINT:
         return str_parse_uint(s, &uv);
-    case ARGS_TYPE_BOOL:
+    case RS_ARGS_TYPE_BOOL:
         return str_parse_bool(s, &b);
-    case ARGS_TYPE_STR:
+    case RS_ARGS_TYPE_STR:
     default:
         return true;
     }
 }
 
 /* 按长名查找（仅选项） */
-static int args_find_len(const args_def_t *args, uint8_t count,
+static int rs_args_find_len(const rs_args_t *args, uint8_t count,
                          const char *name, uint32_t len)
 {
     uint8_t i;
 
     for (i = 0U; i < count; i++) {
-        const args_def_t *a = &args[i];
+        const rs_args_t *a = &args[i];
 
         if (a->positional || a->name == NULL) {
             continue;
@@ -59,7 +66,7 @@ static int args_find_len(const args_def_t *args, uint8_t count,
 }
 
 /* 第 nth 个位置参数在定义表中的下标 */
-static int args_positional_index(const args_def_t *args, uint8_t count,
+static int rs_args_positional_index(const rs_args_t *args, uint8_t count,
                                  uint8_t nth)
 {
     uint8_t i;
@@ -76,7 +83,7 @@ static int args_positional_index(const args_def_t *args, uint8_t count,
     return -1;
 }
 
-static int args_fail(args_parsed_t *parsed, int err, const char *arg)
+static int rs_args_fail(rs_args_parsed_t *parsed, int err, const char *arg)
 {
     parsed->error = err;
     (void)snprintf(parsed->err_arg, sizeof(parsed->err_arg), "%s",
@@ -86,15 +93,15 @@ static int args_fail(args_parsed_t *parsed, int err, const char *arg)
 
 /* ---------------- 查找 ---------------- */
 
-int args_find(const args_def_t *args, uint8_t arg_count, const char *name)
+int rs_args_find(const rs_args_t *args, uint8_t arg_count, const char *name)
 {
     if (args == NULL || name == NULL) {
         return -1;
     }
-    return args_find_len(args, arg_count, name, (uint32_t)strlen(name));
+    return rs_args_find_len(args, arg_count, name, (uint32_t)strlen(name));
 }
 
-int args_find_short(const args_def_t *args, uint8_t arg_count,
+int rs_args_find_short(const rs_args_t *args, uint8_t arg_count,
                    char short_name)
 {
     uint8_t i;
@@ -103,7 +110,7 @@ int args_find_short(const args_def_t *args, uint8_t arg_count,
         return -1;
     }
     for (i = 0U; i < arg_count; i++) {
-        const args_def_t *a = &args[i];
+        const rs_args_t *a = &args[i];
 
         if (!a->positional && a->short_name == short_name) {
             return (int)i;
@@ -114,27 +121,27 @@ int args_find_short(const args_def_t *args, uint8_t arg_count,
 
 /* ---------------- 解析 ---------------- */
 
-int args_parse(const args_def_t *args, uint8_t arg_count,
-              char *const *argv, int argc, args_parsed_t *parsed)
+int rs_args_parse(const rs_args_t *args, uint8_t arg_count,
+              char *const *argv, int argc, rs_args_parsed_t *parsed)
 {
     bool options_done = false;
     int t;
 
     if (parsed == NULL || (argv == NULL && argc != 0) ||
-        arg_count > ARGS_MAX || (args == NULL && arg_count != 0)) {
-        return ARGS_ERR_PARAM;
+        arg_count > RS_ARGS_MAX || (args == NULL && arg_count != 0)) {
+        return RS_ARGS_ERR_PARAM;
     }
     memset(parsed, 0, sizeof(*parsed));
     parsed->args = args;
     parsed->arg_count = arg_count;
-    parsed->error = ARGS_OK;
+    parsed->error = RS_ARGS_OK;
 
     for (t = 0; t < argc; t++) {
         const char *tok = argv[t];
         int idx;
 
         if (tok == NULL) {
-            return args_fail(parsed, ARGS_ERR_PARAM, NULL);
+            return rs_args_fail(parsed, RS_ARGS_ERR_PARAM, NULL);
         }
 
         if (!options_done) {
@@ -149,16 +156,16 @@ int args_parse(const args_def_t *args, uint8_t arg_count,
                                              : (uint32_t)strlen(nm);
                 const char *val = (eq != NULL) ? (eq + 1) : NULL;
 
-                idx = args_find_len(args, arg_count, nm, nlen);
+                idx = rs_args_find_len(args, arg_count, nm, nlen);
                 if (idx < 0) {
-                    return args_fail(parsed, ARGS_ERR_UNKNOWN, "long option");
+                    return rs_args_fail(parsed, RS_ARGS_ERR_UNKNOWN, "long option");
                 }
-                if (args[idx].type == ARGS_TYPE_BOOL) {
+                if (args[idx].type == RS_ARGS_TYPE_BOOL) {
                     if (val != NULL) {
                         bool b;
 
                         if (!str_parse_bool(val, &b)) {
-                            return args_fail(parsed, ARGS_ERR_TYPE,
+                            return rs_args_fail(parsed, RS_ARGS_ERR_TYPE,
                                              args[idx].name);
                         }
                     }
@@ -167,13 +174,13 @@ int args_parse(const args_def_t *args, uint8_t arg_count,
                 } else {
                     if (val == NULL) {
                         if (t + 1 >= argc) {
-                            return args_fail(parsed, ARGS_ERR_MISSING_VALUE,
+                            return rs_args_fail(parsed, RS_ARGS_ERR_MISSING_VALUE,
                                              args[idx].name);
                         }
                         val = argv[++t];
                     }
-                    if (!args_value_valid(args[idx].type, val)) {
-                        return args_fail(parsed, ARGS_ERR_TYPE, args[idx].name);
+                    if (!rs_args_value_valid(args[idx].type, val)) {
+                        return rs_args_fail(parsed, RS_ARGS_ERR_TYPE, args[idx].name);
                     }
                     parsed->present[idx] = true;
                     parsed->vals[idx] = val;
@@ -184,22 +191,22 @@ int args_parse(const args_def_t *args, uint8_t arg_count,
                 char c = tok[1];
 
                 if (tok[2] != '\0') {
-                    return args_fail(parsed, ARGS_ERR_UNKNOWN, tok);
+                    return rs_args_fail(parsed, RS_ARGS_ERR_UNKNOWN, tok);
                 }
-                idx = args_find_short(args, arg_count, c);
+                idx = rs_args_find_short(args, arg_count, c);
                 if (idx < 0) {
-                    return args_fail(parsed, ARGS_ERR_UNKNOWN, tok);
+                    return rs_args_fail(parsed, RS_ARGS_ERR_UNKNOWN, tok);
                 }
-                if (args[idx].type == ARGS_TYPE_BOOL) {
+                if (args[idx].type == RS_ARGS_TYPE_BOOL) {
                     parsed->present[idx] = true;
                     parsed->vals[idx] = NULL;
                 } else {
                     if (t + 1 >= argc) {
-                        return args_fail(parsed, ARGS_ERR_MISSING_VALUE,
+                        return rs_args_fail(parsed, RS_ARGS_ERR_MISSING_VALUE,
                                          args[idx].name);
                     }
-                    if (!args_value_valid(args[idx].type, argv[t + 1])) {
-                        return args_fail(parsed, ARGS_ERR_TYPE, args[idx].name);
+                    if (!rs_args_value_valid(args[idx].type, argv[t + 1])) {
+                        return rs_args_fail(parsed, RS_ARGS_ERR_TYPE, args[idx].name);
                     }
                     parsed->present[idx] = true;
                     parsed->vals[idx] = argv[++t];
@@ -209,12 +216,12 @@ int args_parse(const args_def_t *args, uint8_t arg_count,
         }
 
         /* 位置参数 */
-        idx = args_positional_index(args, arg_count, parsed->positionals);
+        idx = rs_args_positional_index(args, arg_count, parsed->positionals);
         if (idx < 0) {
-            return args_fail(parsed, ARGS_ERR_EXTRA, tok);
+            return rs_args_fail(parsed, RS_ARGS_ERR_EXTRA, tok);
         }
-        if (!args_value_valid(args[idx].type, tok)) {
-            return args_fail(parsed, ARGS_ERR_TYPE, args[idx].name);
+        if (!rs_args_value_valid(args[idx].type, tok)) {
+            return rs_args_fail(parsed, RS_ARGS_ERR_TYPE, args[idx].name);
         }
         parsed->present[idx] = true;
         parsed->vals[idx] = tok;
@@ -227,16 +234,16 @@ int args_parse(const args_def_t *args, uint8_t arg_count,
 
         for (i = 0U; i < arg_count; i++) {
             if (args[i].required && !parsed->present[i]) {
-                return args_fail(parsed, ARGS_ERR_MISSING_ARG, args[i].name);
+                return rs_args_fail(parsed, RS_ARGS_ERR_MISSING_ARG, args[i].name);
             }
         }
     }
-    return ARGS_OK;
+    return RS_ARGS_OK;
 }
 
 /* ---------------- 取值 ---------------- */
 
-static const char *args_value(const args_parsed_t *parsed, uint8_t index)
+static const char *rs_args_value(const rs_args_parsed_t *parsed, uint8_t index)
 {
     if (parsed == NULL || parsed->args == NULL ||
         index >= parsed->arg_count) {
@@ -248,7 +255,7 @@ static const char *args_value(const args_parsed_t *parsed, uint8_t index)
     return parsed->args[index].def;
 }
 
-bool args_get_str(const args_parsed_t *parsed, uint8_t index, const char **out)
+bool rs_args_get_str(const rs_args_parsed_t *parsed, uint8_t index, const char **out)
 {
     const char *v;
 
@@ -256,12 +263,12 @@ bool args_get_str(const args_parsed_t *parsed, uint8_t index, const char **out)
         index >= parsed->arg_count) {
         return false;
     }
-    v = args_value(parsed, index);
+    v = rs_args_value(parsed, index);
     *out = v;
     return v != NULL;
 }
 
-bool args_get_int(const args_parsed_t *parsed, uint8_t index, int *out)
+bool rs_args_get_int(const rs_args_parsed_t *parsed, uint8_t index, int *out)
 {
     const char *v;
     int32_t n;
@@ -270,7 +277,7 @@ bool args_get_int(const args_parsed_t *parsed, uint8_t index, int *out)
         index >= parsed->arg_count) {
         return false;
     }
-    v = args_value(parsed, index);
+    v = rs_args_value(parsed, index);
     if (v == NULL || !str_parse_int(v, &n)) {
         return false;
     }
@@ -278,7 +285,7 @@ bool args_get_int(const args_parsed_t *parsed, uint8_t index, int *out)
     return true;
 }
 
-bool args_get_uint(const args_parsed_t *parsed, uint8_t index, uint32_t *out)
+bool rs_args_get_uint(const rs_args_parsed_t *parsed, uint8_t index, uint32_t *out)
 {
     const char *v;
 
@@ -286,14 +293,14 @@ bool args_get_uint(const args_parsed_t *parsed, uint8_t index, uint32_t *out)
         index >= parsed->arg_count) {
         return false;
     }
-    v = args_value(parsed, index);
+    v = rs_args_value(parsed, index);
     if (v == NULL) {
         return false;
     }
     return str_parse_uint(v, out);
 }
 
-bool args_get_bool(const args_parsed_t *parsed, uint8_t index, bool *out)
+bool rs_args_get_bool(const rs_args_parsed_t *parsed, uint8_t index, bool *out)
 {
     const char *v;
 
@@ -316,16 +323,16 @@ bool args_get_bool(const args_parsed_t *parsed, uint8_t index, bool *out)
     return str_parse_bool(v, out);
 }
 
-const char *args_error_str(int err)
+const char *rs_args_error_str(int err)
 {
     switch (err) {
-    case ARGS_OK:                return "ok";
-    case ARGS_ERR_PARAM:         return "invalid parameter";
-    case ARGS_ERR_UNKNOWN:       return "unknown option";
-    case ARGS_ERR_MISSING_VALUE: return "missing option value";
-    case ARGS_ERR_MISSING_ARG:   return "missing required argument";
-    case ARGS_ERR_TYPE:          return "invalid value type";
-    case ARGS_ERR_EXTRA:         return "unexpected argument";
+    case RS_ARGS_OK:                return "ok";
+    case RS_ARGS_ERR_PARAM:         return "invalid parameter";
+    case RS_ARGS_ERR_UNKNOWN:       return "unknown option";
+    case RS_ARGS_ERR_MISSING_VALUE: return "missing option value";
+    case RS_ARGS_ERR_MISSING_ARG:   return "missing required argument";
+    case RS_ARGS_ERR_TYPE:          return "invalid value type";
+    case RS_ARGS_ERR_EXTRA:         return "unexpected argument";
     default:                    return "command error";
     }
 }

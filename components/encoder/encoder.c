@@ -18,7 +18,7 @@
 #include "encoder.h"
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
+#include "roshell.h"
 
 #define ENCODER_CMD_MAX 8U
 
@@ -38,15 +38,14 @@ static int encoder_cmd_index(const encoder_t *enc)
     return -1;
 }
 
-static int encoder_cmd_handler(const args_parsed_t *parsed, void *user)
+static int encoder_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     uint32_t id;
     const char *action = NULL;
     const char *value = NULL;
     encoder_t *enc;
 
-    (void)user;
-    if (!args_get_uint(parsed, 0U, &id) || !args_get_str(parsed, 1U, &action)) {
+    if (!rs_args_get_uint(ctx->parsed, 0U, &id) || !rs_args_get_str(ctx->parsed, 1U, &action)) {
         ros_puts("usage: encoder <id> read | reset | speed <dt_ms> | info");
         return -1;
     }
@@ -55,7 +54,7 @@ static int encoder_cmd_handler(const args_parsed_t *parsed, void *user)
         return -1;
     }
     enc = s_encoders[id];
-    (void)args_get_str(parsed, 2U, &value);
+    (void)rs_args_get_str(ctx->parsed, 2U, &value);
 
     if (str_icmp(action, "read")) {
         int32_t count = 0;
@@ -100,14 +99,15 @@ static int encoder_cmd_handler(const args_parsed_t *parsed, void *user)
     return -1;
 }
 
-static const args_def_t s_encoder_args[] = {
-    { "id", 0, ARGS_TYPE_UINT, true, true, NULL, "encoder instance id" },
-    { "action", 0, ARGS_TYPE_STR, true, true, NULL, "read|reset|speed|info" },
-    { "value", 0, ARGS_TYPE_STR, true, false, NULL, "speed: dt_ms" }
+static const rs_args_t s_encoder_args[] = {
+    { "id", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "encoder instance id" },
+    { "action", 0, RS_ARGS_TYPE_STR, true, true, NULL, "read|reset|speed|info" },
+    { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL, "speed: dt_ms" }
 };
 
-static const cmd_def_t s_encoder_def = {
-    "encoder", "encoder read/reset/speed", s_encoder_args, 3U
+static const rs_cmd_t s_encoder_def = {
+    "encoder", "encoder read/reset/speed", NULL, NULL, s_encoder_args, 3U,
+    encoder_cmd_handler, NULL
 };
 
 static void encoder_cmd_add(encoder_t *enc)
@@ -118,7 +118,7 @@ static void encoder_cmd_add(encoder_t *enc)
     s_encoders[s_encoder_count++] = enc;
     if (!s_encoder_cmd_ready) {
         s_encoder_cmd_ready = true;
-        (void)cmd_register(&s_encoder_def, encoder_cmd_handler, NULL);
+        (void)rs_cmd_register(&s_encoder_def);
     }
 }
 

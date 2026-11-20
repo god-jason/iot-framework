@@ -1,7 +1,7 @@
 ﻿/*
  * shell_demo.c - PC 平台 roshell 交互示例
  *
- * roshell_platform_start() 完成默认绑定：
+ * rs_platform_start() 完成默认绑定：
  *   - 输出：stdout（与 log 的 printf 同一路）
  *   - 输入：监听任务逐字节读 stdin；未激活时只匹配 hello 口令，
  *     激活后投喂 roshell 会话
@@ -38,9 +38,9 @@
  *   "hello`nps`nstate`nquit`n" | ros-shell.exe
  */
 
-#include "roshell_cmd.h"
+#include "roshell.h"
 #include "device.h"
-#include "cmd.h"
+#include "roshell.h"
 #include "fan.h"
 #include "ros.h"
 #include "common.h"
@@ -49,17 +49,16 @@
 
 #define DEMO_PWM_NAME_MAX 16U
 
-static int cmd_quit(const args_parsed_t *parsed, void *user)
+static int cmd_quit(const rs_cmd_ctx_t *ctx)
 {
-    (void)parsed;
-    (void)user;
+    (void)ctx;
     ros_puts("bye");
     ros_stop();
     return 0;
 }
 
-static const cmd_def_t s_quit_def = {
-    "quit", "stop the shell demo", NULL, 0U
+static const rs_cmd_t s_quit_def = {
+    "quit", "stop the shell demo", NULL, NULL, NULL, 0U, cmd_quit, NULL
 };
 
 /* ------------------------------ 测试任务 ------------------------------ */
@@ -124,12 +123,12 @@ static void mem_load_entry(void *arg)
 int main(void)
 {
     ros_init();
-    if (roshell_platform_start("pc-demo") != 0) {
+    if (rs_platform_start("pc-demo") != 0) {
         printf("roshell start failed\n");
         return 1;
     }
     (void)device_init();
-    if (cmd_register(&s_quit_def, cmd_quit, NULL) != 0) {
+    if (rs_cmd_register(&s_quit_def) != 0) {
         printf("register quit failed\n");
     }
 

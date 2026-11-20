@@ -18,7 +18,7 @@
 #include "servo.h"
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
+#include "roshell.h"
 
 #define SERVO_CMD_MAX 8U
 
@@ -38,14 +38,13 @@ static int servo_cmd_index(const servo_t *servo)
     return -1;
 }
 
-static int servo_cmd_handler(const args_parsed_t *parsed, void *user)
+static int servo_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     uint32_t id;
     uint32_t angle = 0U;
     servo_t *servo;
 
-    (void)user;
-    if (!args_get_uint(parsed, 0U, &id)) {
+    if (!rs_args_get_uint(ctx->parsed, 0U, &id)) {
         ros_puts("usage: servo <id> [angle]");
         return -1;
     }
@@ -55,7 +54,7 @@ static int servo_cmd_handler(const args_parsed_t *parsed, void *user)
     }
     servo = s_servos[id];
 
-    if (!args_get_uint(parsed, 1U, &angle)) {
+    if (!rs_args_get_uint(ctx->parsed, 1U, &angle)) {
         LOG_I("servo", "servo[%u] angle=%u range=%u..%u", (unsigned)id,
               (unsigned)servo->angle, (unsigned)servo->min_angle,
               (unsigned)servo->max_angle);
@@ -68,13 +67,14 @@ static int servo_cmd_handler(const args_parsed_t *parsed, void *user)
     return 0;
 }
 
-static const args_def_t s_servo_args[] = {
-    { "id", 0, ARGS_TYPE_UINT, true, true, NULL, "servo instance id" },
-    { "angle", 0, ARGS_TYPE_UINT, true, false, NULL, "target angle" }
+static const rs_args_t s_servo_args[] = {
+    { "id", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "servo instance id" },
+    { "angle", 0, RS_ARGS_TYPE_UINT, true, false, NULL, "target angle" }
 };
 
-static const cmd_def_t s_servo_def = {
-    "servo", "servo angle control", s_servo_args, 2U
+static const rs_cmd_t s_servo_def = {
+    "servo", "servo angle control", NULL, NULL, s_servo_args, 2U,
+    servo_cmd_handler, NULL
 };
 
 static void servo_cmd_add(servo_t *servo)
@@ -85,7 +85,7 @@ static void servo_cmd_add(servo_t *servo)
     s_servos[s_servo_count++] = servo;
     if (!s_servo_cmd_ready) {
         s_servo_cmd_ready = true;
-        (void)cmd_register(&s_servo_def, servo_cmd_handler, NULL);
+        (void)rs_cmd_register(&s_servo_def);
     }
 }
 

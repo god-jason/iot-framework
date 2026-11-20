@@ -20,7 +20,7 @@
 #include "fan.h"
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
+#include "roshell.h"
 
 #define FAN_CMD_MAX 8U
 
@@ -40,14 +40,13 @@ static int fan_cmd_index(const fan_t *fan)
     return -1;
 }
 
-static int fan_cmd_handler(const args_parsed_t *parsed, void *user)
+static int fan_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     uint32_t id;
     uint32_t duty = 0U;
     fan_t *fan;
 
-    (void)user;
-    if (!args_get_uint(parsed, 0U, &id)) {
+    if (!rs_args_get_uint(ctx->parsed, 0U, &id)) {
         ros_puts("usage: fan <id> [duty]");
         return -1;
     }
@@ -57,7 +56,7 @@ static int fan_cmd_handler(const args_parsed_t *parsed, void *user)
     }
     fan = s_fans[id];
 
-    if (!args_get_uint(parsed, 1U, &duty)) {
+    if (!rs_args_get_uint(ctx->parsed, 1U, &duty)) {
         LOG_I("fan", "fan[%u] duty=%u rpm=%u", (unsigned)id,
               (unsigned)fan->duty, (unsigned)fan->rpm);
         return 0;
@@ -69,13 +68,13 @@ static int fan_cmd_handler(const args_parsed_t *parsed, void *user)
     return 0;
 }
 
-static const args_def_t s_fan_args[] = {
-    { "id", 0, ARGS_TYPE_UINT, true, true, NULL, "fan instance id" },
-    { "duty", 0, ARGS_TYPE_UINT, true, false, NULL, "duty 0..1000" }
+static const rs_args_t s_fan_args[] = {
+    { "id", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "fan instance id" },
+    { "duty", 0, RS_ARGS_TYPE_UINT, true, false, NULL, "duty 0..1000" }
 };
 
-static const cmd_def_t s_fan_def = {
-    "fan", "fan duty / rpm", s_fan_args, 2U
+static const rs_cmd_t s_fan_def = {
+    "fan", "fan duty / rpm", NULL, NULL, s_fan_args, 2U, fan_cmd_handler, NULL
 };
 
 static void fan_cmd_add(fan_t *fan)
@@ -86,7 +85,7 @@ static void fan_cmd_add(fan_t *fan)
     s_fans[s_fan_count++] = fan;
     if (!s_fan_cmd_ready) {
         s_fan_cmd_ready = true;
-        (void)cmd_register(&s_fan_def, fan_cmd_handler, NULL);
+        (void)rs_cmd_register(&s_fan_def);
     }
 }
 

@@ -18,7 +18,7 @@
 #include "motor.h"
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
+#include "roshell.h"
 
 #define MOTOR_CMD_MAX 8U
 
@@ -38,7 +38,7 @@ static int motor_cmd_index(const motor_t *motor)
     return -1;
 }
 
-static int motor_cmd_handler(const args_parsed_t *parsed, void *user)
+static int motor_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     uint32_t id;
     const char *action = NULL;
@@ -47,8 +47,7 @@ static int motor_cmd_handler(const args_parsed_t *parsed, void *user)
     int32_t v = 0;
     int rc;
 
-    (void)user;
-    if (!args_get_uint(parsed, 0U, &id) || !args_get_str(parsed, 1U, &action)) {
+    if (!rs_args_get_uint(ctx->parsed, 0U, &id) || !rs_args_get_str(ctx->parsed, 1U, &action)) {
         ros_puts("usage: motor <id> speed <n> | dir <0-3> | stop | info");
         return -1;
     }
@@ -57,7 +56,7 @@ static int motor_cmd_handler(const args_parsed_t *parsed, void *user)
         return -1;
     }
     motor = s_motors[id];
-    (void)args_get_str(parsed, 2U, &value);
+    (void)rs_args_get_str(ctx->parsed, 2U, &value);
 
     if (str_icmp(action, "speed")) {
         if (value == NULL || !str_parse_int(value, &v)) {
@@ -91,14 +90,14 @@ static int motor_cmd_handler(const args_parsed_t *parsed, void *user)
     return 0;
 }
 
-static const args_def_t s_motor_args[] = {
-    { "id", 0, ARGS_TYPE_UINT, true, true, NULL, "motor instance id" },
-    { "action", 0, ARGS_TYPE_STR, true, true, NULL, "speed|dir|stop|info" },
-    { "value", 0, ARGS_TYPE_STR, true, false, NULL, "speed or direction" }
+static const rs_args_t s_motor_args[] = {
+    { "id", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "motor instance id" },
+    { "action", 0, RS_ARGS_TYPE_STR, true, true, NULL, "speed|dir|stop|info" },
+    { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL, "speed or direction" }
 };
 
-static const cmd_def_t s_motor_def = {
-    "motor", "motor control", s_motor_args, 3U
+static const rs_cmd_t s_motor_def = {
+    "motor", "motor control", NULL, NULL, s_motor_args, 3U, motor_cmd_handler, NULL
 };
 
 static void motor_cmd_add(motor_t *motor)
@@ -109,7 +108,7 @@ static void motor_cmd_add(motor_t *motor)
     s_motors[s_motor_count++] = motor;
     if (!s_motor_cmd_ready) {
         s_motor_cmd_ready = true;
-        (void)cmd_register(&s_motor_def, motor_cmd_handler, NULL);
+        (void)rs_cmd_register(&s_motor_def);
     }
 }
 

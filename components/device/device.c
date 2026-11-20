@@ -5,7 +5,7 @@
  */
 
 #include "device.h"
-#include "cmd.h"
+#include "roshell.h"
 
 #include <stdio.h>
 
@@ -94,7 +94,7 @@ static int gpio_apply(int rc, const char *what, hal_pin_t pin)
     return 0;
 }
 
-static int device_gpio_cmd(const args_parsed_t *parsed, void *user)
+static int device_gpio_cmd(const rs_cmd_ctx_t *ctx)
 {
     const char *action = NULL;
     const char *pin_s = NULL;
@@ -103,16 +103,15 @@ static int device_gpio_cmd(const args_parsed_t *parsed, void *user)
     hal_pin_t pin;
     int rc;
 
-    (void)user;
-    if (!args_get_str(parsed, 0U, &action) ||
-        !args_get_str(parsed, 1U, &pin_s) || action == NULL || pin_s == NULL ||
+    if (!rs_args_get_str(ctx->parsed, 0U, &action) ||
+        !rs_args_get_str(ctx->parsed, 1U, &pin_s) || action == NULL || pin_s == NULL ||
         !dev_parse_pin(pin_s, &pin)) {
         ros_puts("usage: gpio mode <pin> in|out [pull] | set <pin> <0|1> | "
                  "get <pin> | toggle <pin> | deinit <pin>");
         return -1;
     }
-    (void)args_get_str(parsed, 2U, &a1);
-    (void)args_get_str(parsed, 3U, &a2);
+    (void)rs_args_get_str(ctx->parsed, 2U, &a1);
+    (void)rs_args_get_str(ctx->parsed, 3U, &a2);
 
     if (str_icmp(action, "mode")) {
         if (a1 == NULL) {
@@ -178,16 +177,17 @@ static int device_gpio_cmd(const args_parsed_t *parsed, void *user)
     return -1;
 }
 
-static const args_def_t s_gpio_args[] = {
-    { "action", 0, ARGS_TYPE_STR, true, true, NULL,
+static const rs_args_t s_gpio_args[] = {
+    { "action", 0, RS_ARGS_TYPE_STR, true, true, NULL,
       "mode|set|get|toggle|deinit" },
-    { "pin", 0, ARGS_TYPE_STR, true, true, NULL, "PA5 / 0x0105" },
-    { "arg1", 0, ARGS_TYPE_STR, true, false, NULL, "in|out / level" },
-    { "arg2", 0, ARGS_TYPE_STR, true, false, NULL, "pull / initial level" }
+    { "pin", 0, RS_ARGS_TYPE_STR, true, true, NULL, "PA5 / 0x0105" },
+    { "arg1", 0, RS_ARGS_TYPE_STR, true, false, NULL, "in|out / level" },
+    { "arg2", 0, RS_ARGS_TYPE_STR, true, false, NULL, "pull / initial level" }
 };
 
-static const cmd_def_t s_gpio_def = {
-    "gpio", "GPIO mode / read / write", s_gpio_args, 4U
+static const rs_cmd_t s_gpio_def = {
+    "gpio", "GPIO mode / read / write", NULL, NULL,
+    s_gpio_args, 4U, device_gpio_cmd, NULL
 };
 
 /* ============================== pwm ============================== */
@@ -329,7 +329,7 @@ static void pwm_print_info(const device_pwm_slot_t *slot)
                pwm_state_name(h->base.state));
 }
 
-static int device_pwm_cmd(const args_parsed_t *parsed, void *user)
+static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
 {
     const char *target = NULL;
     const char *action = NULL;
@@ -337,8 +337,7 @@ static int device_pwm_cmd(const args_parsed_t *parsed, void *user)
     device_pwm_slot_t *slot;
     int rc;
 
-    (void)user;
-    if (!args_get_str(parsed, 0U, &target) || target == NULL) {
+    if (!rs_args_get_str(ctx->parsed, 0U, &target) || target == NULL) {
         ros_puts("usage: pwm list | pwm <name|index> start|stop|freq|duty|info");
         return -1;
     }
@@ -359,8 +358,8 @@ static int device_pwm_cmd(const args_parsed_t *parsed, void *user)
         return 0;
     }
 
-    (void)args_get_str(parsed, 1U, &action);
-    (void)args_get_str(parsed, 2U, &value);
+    (void)rs_args_get_str(ctx->parsed, 1U, &action);
+    (void)rs_args_get_str(ctx->parsed, 2U, &value);
     if (action == NULL) {
         return -1;
     }
@@ -403,15 +402,16 @@ static int device_pwm_cmd(const args_parsed_t *parsed, void *user)
     return 0;
 }
 
-static const args_def_t s_pwm_args[] = {
-    { "target", 0, ARGS_TYPE_STR, true, true, NULL, "list / name / index" },
-    { "action", 0, ARGS_TYPE_STR, true, false, NULL,
+static const rs_args_t s_pwm_args[] = {
+    { "target", 0, RS_ARGS_TYPE_STR, true, true, NULL, "list / name / index" },
+    { "action", 0, RS_ARGS_TYPE_STR, true, false, NULL,
       "start|stop|freq|duty|info" },
-    { "value", 0, ARGS_TYPE_STR, true, false, NULL, "hz / duty" }
+    { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL, "hz / duty" }
 };
 
-static const cmd_def_t s_pwm_def = {
-    "pwm", "PWM channel control", s_pwm_args, 3U
+static const rs_cmd_t s_pwm_def = {
+    "pwm", "PWM channel control", NULL, NULL,
+    s_pwm_args, 3U, device_pwm_cmd, NULL
 };
 
 /* ============================== 注册 ============================== */
@@ -424,10 +424,10 @@ int device_init(void)
         return 0;
     }
     ready = true;
-    if (cmd_register(&s_gpio_def, device_gpio_cmd, NULL) != 0) {
+    if (rs_cmd_register(&s_gpio_def) != 0) {
         return -1;
     }
-    if (cmd_register(&s_pwm_def, device_pwm_cmd, NULL) != 0) {
+    if (rs_cmd_register(&s_pwm_def) != 0) {
         return -1;
     }
     return 0;

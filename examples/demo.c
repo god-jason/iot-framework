@@ -5,8 +5,8 @@
  */
 #include "ros.h"
 #include "common.h"
-#include "cmd.h"
-#include "roshell_cmd.h"
+#include "roshell.h"
+#include "roshell.h"
 #include "led.h"
 
 #include <stdio.h>
@@ -26,17 +26,16 @@ static void led_entry(void *arg)
 }
 
 /* quit：结束演示进程 */
-static int demo_quit(const args_parsed_t *parsed, void *user)
+static int demo_quit(const rs_cmd_ctx_t *ctx)
 {
-    (void)parsed;
-    (void)user;
+    (void)ctx;
     ros_puts("bye");
     ros_stop();
     return 0;
 }
 
-static const cmd_def_t s_quit_def = {
-    "quit", "stop demo", NULL, 0U
+static const rs_cmd_t s_quit_def = {
+    "quit", "stop demo", NULL, NULL, NULL, 0U, demo_quit, NULL
 };
 
 int main(void)
@@ -46,8 +45,8 @@ int main(void)
 
     printf("robotos demo ready\n");
 
-    (void)cmd_register(&s_quit_def, demo_quit, NULL);
-    if (roshell_platform_start("pc-demo") != 0) {
+    (void)rs_cmd_register(&s_quit_def);
+    if (rs_platform_start("pc-demo") != 0) {
         printf("roshell start failed\n");
         return 1;
     }

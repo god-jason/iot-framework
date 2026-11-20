@@ -17,12 +17,12 @@
  * 输入：本任务 hal_uart_receive 轮询读取后 feed
  *
  * hal_uart_* 以 weak 方式引用：未链接 HAL/板级实现时仍可编译，
- * 此时 roshell_platform_start() 返回 -1，不影响内核其余部分。
+ * 此时 rs_platform_start() 返回 -1，不影响内核其余部分。
  */
 
 #if defined(ROS_PLATFORM_STM32)
 
-#include "roshell_cmd.h"
+#include "roshell.h"
 #include "ros.h"
 #include "common.h"
 #include "hal_uart.h"
@@ -108,26 +108,26 @@ static void stm32_shell_watch_task(void *arg)
     uint8_t ch;
 
     for (;;) {
-        if (roshell_shell_task_finished()) {
+        if (rs_shell_task_finished()) {
             /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
-            (void)roshell_shell_shutdown();
+            (void)rs_shell_shutdown();
             s_open_pos = 0U;
             continue;
         }
 
         if (hal_uart_receive != NULL &&
             hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK) {
-            if (roshell_shell_started()) {
-                roshell_shell_feed((const char *)&ch, 1U);
+            if (rs_shell_started()) {
+                rs_shell_feed((const char *)&ch, 1U);
             } else if (stm32_open_word_match(ch)) {
                 (void)stm32_shell_write(reply, sizeof(reply) - 1U, NULL);
-                (void)roshell_shell_start(s_version);
+                (void)rs_shell_start(s_version);
             }
         }
     }
 }
 
-int roshell_platform_start(const char *version)
+int rs_platform_start(const char *version)
 {
     hal_uart_t *uart;
 
