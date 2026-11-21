@@ -475,7 +475,10 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
+            -- Bootloader 的元数据/Flash 实现（App 侧用于 boot_confirm / 崩溃计数）
+            add_files(path.join(board_dir, "boot", "boot_meta.c"))
             add_includedirs(board_dir)
+            add_includedirs(path.join(board_dir, "boot"))
             ros_includedirs()
             if dfp_inc then
                 add_includedirs(dfp_inc)
@@ -506,7 +509,6 @@ if is_plat("cross") then
 
         -- ====================================================================
         -- B 区固件（OTA 升级包）：链接到 0x08010000，其余配置与 A 区一致
-        -- bootloader.c 以 App 模式编入（提供 boot_confirm），不定义 BOOTLOADER_BUILD
         -- ====================================================================
         target("ros-fw-f108cb-b")
             set_kind("binary")
@@ -535,7 +537,10 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
+            -- Bootloader 的元数据/Flash 实现（App 侧用于 boot_confirm / 崩溃计数）
+            add_files(path.join(board_dir, "boot", "boot_meta.c"))
             add_includedirs(board_dir)
+            add_includedirs(path.join(board_dir, "boot"))
             ros_includedirs()
             if dfp_inc then
                 add_includedirs(dfp_inc)
@@ -556,7 +561,7 @@ if is_plat("cross") then
         -- ====================================================================
         -- A/B OTA Bootloader（F1 / 128KB Flash，8KB，独立于 App，不依赖 RTOS/HAL/libc）
         -- 产物：ros-boot-f108cb.elf/.hex/.bin（烧录到 0x08000000）
-        -- App 需链接到 A 区 0x08002000（或目标槽基址）并调用 boot_confirm()
+        -- App 需链接到 A 区 0x08002000（或目标槽基址），不参与启动确认
         -- ====================================================================
         target("ros-boot-f108cb")
             set_kind("binary")
@@ -568,7 +573,7 @@ if is_plat("cross") then
             add_cflags("-g", {force = true})
             ros_enable_mapfile()
 
-            add_defines("STM32F10X_MD", "HSE_VALUE=8000000", "BOOTLOADER_BUILD=1")
+            add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
             for _, flag in ipairs(cpuflags) do
                 add_cflags(flag, {force = true})
                 add_asflags(flag, {force = true})
@@ -578,8 +583,10 @@ if is_plat("cross") then
                        "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "startup_stm32f10x_md.S"))
-            add_files(path.join(board_dir, "bootloader.c"))
+            add_files(path.join(board_dir, "boot", "bootloader.c"))
+            add_files(path.join(board_dir, "boot", "boot_meta.c"))
             add_includedirs(board_dir)
+            add_includedirs(path.join(board_dir, "boot"))
             if dfp_inc then
                 add_includedirs(dfp_inc)
             end
@@ -589,7 +596,7 @@ if is_plat("cross") then
 
             add_ldflags("-nostartfiles",
                         "-nostdlib",
-                        "-T" .. path.join(board_dir, "bootloader.ld"),
+                        "-T" .. path.join(board_dir, "boot", "bootloader.ld"),
                         "-Wl,--gc-sections",
                         {force = true})
 

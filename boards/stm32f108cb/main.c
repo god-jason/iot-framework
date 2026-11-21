@@ -15,14 +15,12 @@
 #include "roshell.h"
 
 #include "stm32f10x.h"
+#include "boot_meta.h"
 
 /* 本固件所在 A/B 槽的向量表基址；B 槽构建时由 -DAPP_VECTOR_BASE=0x08010000U 覆盖 */
 #ifndef APP_VECTOR_BASE
 #define APP_VECTOR_BASE 0x08002000U
 #endif
-
-/* Bootloader 共享部分提供的启动确认接口（bootloader.c 以 App 模式编入） */
-void boot_confirm(void);
 
 static ros_task_t s_blink_task;
 static uint8_t    s_blink_stack[1024];
@@ -71,5 +69,18 @@ int main(void)
 
     for (;;) {
         /* MCU 端不返回 */
+    }
+}
+
+/*
+ * HardFault：把崩溃次数写入启动元数据后复位。
+ * Bootloader 下次启动发现 crash > BOOT_MAX_CRASH 时回退到另一个分区。
+ */
+void HardFault_Handler(void)
+{
+    boot_crash_count();
+    NVIC_SystemReset();
+
+    for (;;) {
     }
 }
