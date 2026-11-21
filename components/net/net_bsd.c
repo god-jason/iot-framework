@@ -163,7 +163,7 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = (type == NET_UDP) ? SOCK_DGRAM : SOCK_STREAM;
-    snprintf(port_text, sizeof(port_text), "%u", (unsigned)port);
+    str_printf(port_text, sizeof(port_text), "%u", (unsigned)port);
     if (getaddrinfo(host, port_text, &hints, &res) != 0) {
         return NET_ERR_IO;
     }
@@ -319,7 +319,7 @@ int net_dns_resolve(const char *host, char *ip, uint32_t size)
         const char *text = inet_ntoa(sin->sin_addr);
 
         if (text != NULL) {
-            (void)snprintf(ip, size, "%s", text);
+            (void)str_printf(ip, size, "%s", text);
             rc = NET_OK;
             break;
         }

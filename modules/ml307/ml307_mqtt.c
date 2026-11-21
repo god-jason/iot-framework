@@ -197,7 +197,7 @@ int mqtt_connect(mqtt_client_t *c, const char *host, uint16_t port,
     s_user = c->user;
     s_rx_count = 0U;
 
-    snprintf(cmd, sizeof(cmd),
+    str_printf(cmd, sizeof(cmd),
              "AT+MQTTCFG=\"%s\",%u,\"%s\",\"%s\",\"%s\",%u",
              host, (unsigned)port, opt->client_id, user, pass,
              (unsigned)keepalive);
@@ -236,7 +236,7 @@ int mqtt_publish(mqtt_client_t *c, const char *topic, const void *payload,
     }
     text[len] = '\0';
 
-    n = snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=\"%s\",%u,%u,\"%s\"",
+    n = str_printf(cmd, sizeof(cmd), "AT+MQTTPUB=\"%s\",%u,%u,\"%s\"",
                  topic, (unsigned)qos, retain ? 1U : 0U, text);
     if (n <= 0 || n >= (int)sizeof(cmd)) {
         return NET_ERR_PARAM;
@@ -255,7 +255,7 @@ int mqtt_subscribe(mqtt_client_t *c, const char *topic, uint8_t qos)
         !ml307_mqtt_text_ok(topic, (uint32_t)strlen(topic))) {
         return NET_ERR_PARAM;
     }
-    snprintf(cmd, sizeof(cmd), "AT+MQTTSUB=\"%s\",%u",
+    str_printf(cmd, sizeof(cmd), "AT+MQTTSUB=\"%s\",%u",
              topic, (unsigned)qos);
     if (at_exec(cmd, ML307_MQTT_DEFAULT_MS) != AT_RESULT_OK) {
         return NET_ERR_IO;

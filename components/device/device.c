@@ -61,7 +61,7 @@ static bool dev_parse_pin(const char *s, hal_pin_t *pin)
 
 static void dev_format_pin(hal_pin_t pin, char *buf, size_t cap)
 {
-    (void)snprintf(buf, (uint32_t)cap, "P%c%u",
+    (void)str_printf(buf, (uint32_t)cap, "P%c%u",
                    (char)('A' + (char)HAL_PIN_GET_PORT(pin)),
                    (unsigned)HAL_PIN_GET_INDEX(pin));
 }

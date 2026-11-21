@@ -10,6 +10,7 @@
 #include "ros_version.h"
 #include "ros_config.h"
 #include "ros_types.h"      /* ROS_MAX_PRIORITY */
+#include "strings.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -153,7 +154,7 @@ static void ros_version_features_text(uint32_t features, char *buf, size_t cap)
         if ((features & table[i].bit) == 0U) {
             continue;
         }
-        n = snprintf(&buf[pos], (uint32_t)(cap - pos), "%s%s",
+        n = str_printf(&buf[pos], (uint32_t)(cap - pos), "%s%s",
                      any ? " " : "", table[i].name);
         if (n < 0) {
             break;
@@ -166,7 +167,7 @@ static void ros_version_features_text(uint32_t features, char *buf, size_t cap)
         pos += (size_t)n;
     }
     if (!any) {
-        (void)snprintf(buf, (uint32_t)cap, "none");
+        (void)str_printf(buf, (uint32_t)cap, "none");
     }
 }
 
@@ -186,7 +187,7 @@ int ros_version_format(char *buf, size_t cap)
     pre = (v->prerelease[0] != '\0') ? "-" : "";
     bld = (v->build[0] != '\0') ? "+" : "";
 
-    n = snprintf(buf, (uint32_t)cap,
+    n = str_printf(buf, (uint32_t)cap,
                  "%s %s%s%s%s%s\n"
                  "  compiled : %s\n"
                  "  platform : %s\n"

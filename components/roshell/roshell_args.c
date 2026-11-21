@@ -89,7 +89,7 @@ static int rs_args_positional_index(const rs_args_t *args, uint8_t count,
 static int rs_args_fail(rs_args_parsed_t *parsed, int err, const char *arg)
 {
     parsed->error = err;
-    (void)snprintf(parsed->err_arg, sizeof(parsed->err_arg), "%s",
+    (void)str_printf(parsed->err_arg, sizeof(parsed->err_arg), "%s",
                    (arg != NULL) ? arg : "?");
     return err;
 }

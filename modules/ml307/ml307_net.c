@@ -191,7 +191,7 @@ int net_deinit(void)
         if (s_sockets[i].used) {
             char cmd[32];
 
-            snprintf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", i);
+            str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", i);
             (void)at_exec(cmd, 3000);
             s_sockets[i].used = false;
             s_sockets[i].connected = false;
@@ -226,7 +226,7 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
         return NET_ERR_NOMEM;
     }
 
-    snprintf(cmd, sizeof(cmd), "AT+MIPOPEN=%d,\"%s\",\"%s\",%u",
+    str_printf(cmd, sizeof(cmd), "AT+MIPOPEN=%d,\"%s\",\"%s\",%u",
              id, proto, host, (unsigned)port);
     if (at_exec(cmd, wait) != AT_RESULT_OK) {
         return NET_ERR_IO;
@@ -265,7 +265,7 @@ int net_send(net_sock_t *sock, const void *data, uint32_t len)
         return 0;
     }
 
-    snprintf(cmd, sizeof(cmd), "AT+MIPSEND=%d,%u", id, (unsigned)len);
+    str_printf(cmd, sizeof(cmd), "AT+MIPSEND=%d,%u", id, (unsigned)len);
 
     memset(&phase, 0, sizeof(phase));
     phase.command = cmd;
@@ -338,7 +338,7 @@ int net_close(net_sock_t *sock)
     }
     if (net_is_open(sock)) {
         id = (int)sock->fd;
-        snprintf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", id);
+        str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", id);
         (void)at_exec(cmd, 3000);
         s_sockets[id].used = false;
         s_sockets[id].connected = false;
@@ -366,7 +366,7 @@ int net_dns_resolve(const char *host, char *ip, uint32_t size)
         return NET_OK;
     }
 
-    snprintf(cmd, sizeof(cmd), "AT+MDNSGIP=\"%s\"", host);
+    str_printf(cmd, sizeof(cmd), "AT+MDNSGIP=\"%s\"", host);
     if (at_exec(cmd, 30000U) != AT_RESULT_OK) {
         return NET_ERR_IO;
     }

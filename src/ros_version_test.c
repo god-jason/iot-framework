@@ -10,6 +10,7 @@
 
 #include "test.h"
 #include "ros_version.h"
+#include "strings.h"
 #include "ros_config.h"
 #include "ros_types.h"      /* ROS_MAX_PRIORITY */
 
@@ -33,7 +34,7 @@ void ut_version(void)
     }
 
     /* semver：字段与自动拼接的字符串一致 */
-    (void)snprintf(semver, sizeof(semver), "%u.%u.%u",
+    (void)str_printf(semver, sizeof(semver), "%u.%u.%u",
                    (unsigned)v->major, (unsigned)v->minor,
                    (unsigned)v->patch);
     TF_CHECK_STR(v->semver, semver);

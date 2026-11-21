@@ -225,7 +225,7 @@ static void wait_worker_entry(void *arg)
     char line[32];
 
     (void)arg;
-    (void)snprintf(line, sizeof(line), "wait %lu", (unsigned long)s_wait_ms);
+    (void)str_printf(line, sizeof(line), "wait %lu", (unsigned long)s_wait_ms);
     (void)rs_cmd_dispatch(NULL, line);
     s_wait_done_tick = ros_tick_get();
     s_wait_done = true;

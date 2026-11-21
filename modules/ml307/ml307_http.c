@@ -71,9 +71,9 @@ static int ml307_http_build_url(const http_url_t *u, char *buf, uint32_t size)
     int n;
 
     if (u->port == 80U) {
-        n = snprintf(buf, size, "http://%s%s", u->host, u->path);
+        n = str_printf(buf, size, "http://%s%s", u->host, u->path);
     } else {
-        n = snprintf(buf, size, "http://%s:%u%s", u->host,
+        n = str_printf(buf, size, "http://%s:%u%s", u->host,
                      (unsigned)u->port, u->path);
     }
     return (n > 0 && n < (int)size) ? NET_OK : NET_ERR_PARAM;
@@ -85,7 +85,7 @@ static int ml307_http_send_body(const void *body, uint32_t len)
     char cmd[48];
     at_request_t phase;
 
-    snprintf(cmd, sizeof(cmd), "AT+HTTPDATA=%u,10000", (unsigned)len);
+    str_printf(cmd, sizeof(cmd), "AT+HTTPDATA=%u,10000", (unsigned)len);
     memset(&phase, 0, sizeof(phase));
     phase.command = cmd;
     phase.success = ">";
@@ -156,12 +156,12 @@ static int ml307_http_request(const char *method, const char *url,
         return NET_ERR_IO;
     }
 
-    snprintf(cmd, sizeof(cmd), "AT+HTTPPARA=\"URL\",\"%s\"", urlbuf);
+    str_printf(cmd, sizeof(cmd), "AT+HTTPPARA=\"URL\",\"%s\"", urlbuf);
     if (at_exec(cmd, 5000U) != AT_RESULT_OK) {
         goto fail;
     }
     if (is_post) {
-        snprintf(cmd, sizeof(cmd), "AT+HTTPPARA=\"CONTENT\",\"%s\"",
+        str_printf(cmd, sizeof(cmd), "AT+HTTPPARA=\"CONTENT\",\"%s\"",
                  (content_type != NULL) ? content_type
                                         : "application/octet-stream");
         if (at_exec(cmd, 5000U) != AT_RESULT_OK) {
@@ -175,7 +175,7 @@ static int ml307_http_request(const char *method, const char *url,
     s_action_done = false;
     s_action_status = 0;
     s_action_len = 0;
-    snprintf(cmd, sizeof(cmd), "AT+HTTPACTION=%d", is_post ? 1 : 0);
+    str_printf(cmd, sizeof(cmd), "AT+HTTPACTION=%d", is_post ? 1 : 0);
     if (at_exec(cmd, 5000U) != AT_RESULT_OK) {
         goto fail;
     }

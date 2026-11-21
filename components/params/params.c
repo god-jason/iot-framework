@@ -2,10 +2,12 @@
  * params.c - 参数表实现
  *
  * 名称采用固定长度拷贝，超长直接拒绝，避免截断后重名。
- * 序列化使用 "%.6g" 以兼顾可读性与精度；反序列化逐行解析。
+ * 序列化使用约 6 位有效数字的十进制文本以兼顾可读性与精度；
+ * 反序列化逐行解析。
  */
 
 #include "params.h"
+#include "strings.h"
 
 #include <stddef.h>
 
@@ -130,6 +132,61 @@ void params_reset_all(param_store_t *store)
     }
 }
 
+/* 浮点转文本：约 6 位有效数字，去掉尾随 0（不依赖 libc 浮点格式化） */
+static int params_fmt_value(char *buf, uint32_t size, float v)
+{
+    static const uint32_t pow10[] = { 1U, 10U, 100U, 1000U,
+                                      10000U, 100000U, 1000000U };
+    bool neg = (v < 0.0f);
+    float a = neg ? -v : v;
+    uint32_t ip = (uint32_t)a;
+    uint32_t decimals;
+    uint32_t fp;
+    char *dot;
+    int n;
+
+    /* 整数部分越大，保留的小数位越少，整体约 6 位有效数字 */
+    if (ip >= 100000U) {
+        decimals = 0U;
+    } else if (ip >= 10000U) {
+        decimals = 1U;
+    } else if (ip >= 1000U) {
+        decimals = 2U;
+    } else if (ip >= 100U) {
+        decimals = 3U;
+    } else if (ip >= 10U) {
+        decimals = 4U;
+    } else if (ip >= 1U) {
+        decimals = 5U;
+    } else {
+        decimals = 6U;
+    }
+    fp = (uint32_t)((a - (float)ip) * (float)pow10[decimals] + 0.5f);
+    if (fp >= pow10[decimals]) {
+        ip++;
+        fp = 0U;
+    }
+    if (decimals == 0U) {
+        return str_printf(buf, size, "%s%u", neg ? "-" : "", (unsigned)ip);
+    }
+    n = str_printf(buf, size, "%s%u.%0*u", neg ? "-" : "", (unsigned)ip,
+                   (int)decimals, (unsigned)fp);
+    dot = strchr(buf, '.');
+    if (dot != NULL) {
+        char *end = buf + strlen(buf);
+
+        while (end > dot + 1 && end[-1] == '0') {
+            end--;
+        }
+        if (end == dot + 1) {
+            end = dot;                      /* 小数位全为 0：去掉小数点 */
+        }
+        *end = '\0';
+        n = (int)(end - buf);
+    }
+    return n;
+}
+
 int params_serialize(const param_store_t *store, char *buf, uint32_t size)
 {
     uint32_t off = 0U;
@@ -142,6 +199,7 @@ int params_serialize(const param_store_t *store, char *buf, uint32_t size)
     for (i = 0U; i < PARAM_STORE_MAX; i++) {
         int n;
         int remain;
+        char val[24];
 
         if (!store->items[i].used) {
             continue;
@@ -150,8 +208,11 @@ int params_serialize(const param_store_t *store, char *buf, uint32_t size)
         if (remain <= 1) {
             return -1;
         }
-        n = snprintf(buf + off, (uint32_t)remain, "%s=%.6g\n",
-                     store->items[i].name, (double)store->items[i].value);
+        if (params_fmt_value(val, sizeof(val), store->items[i].value) < 0) {
+            return -1;
+        }
+        n = str_printf(buf + off, (uint32_t)remain, "%s=%s\n",
+                       store->items[i].name, val);
         if (n < 0 || n >= remain) {
             return -1;
         }

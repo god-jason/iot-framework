@@ -121,5 +121,45 @@ void ut_strings(void)
     TF_CHECK(strcmp(items[1], "b") == 0);
     TF_CHECK_INT((int)str_split(csv, ',', NULL, 4U), 0);
 
+    /* 格式化输出 */
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%d %u %x %X",
+                            -42, 42U, 0xbeefU, 0xbeefU), 16);
+    TF_CHECK(strcmp(buf, "-42 42 beef BEEF") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%04lX", 0x2aUL), 4);
+    TF_CHECK(strcmp(buf, "002A") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%-5s|", "ab"), 6);
+    TF_CHECK(strcmp(buf, "ab   |") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%02u", 7U), 2);
+    TF_CHECK(strcmp(buf, "07") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%.*s", 3, "abcdef"), 3);
+    TF_CHECK(strcmp(buf, "abc") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%.3d", 7), 3);
+    TF_CHECK(strcmp(buf, "007") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%ld", -1234567890L), 11);
+    TF_CHECK(strcmp(buf, "-1234567890") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%p", (void *)0x1234), 6);
+    TF_CHECK(strcmp(buf, "0x1234") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%c%%", 'A'), 2);
+    TF_CHECK(strcmp(buf, "A%") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%s", (char *)NULL), 6);
+    TF_CHECK(strcmp(buf, "(null)") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%*s", -5, "ab"), 5);
+    TF_CHECK(strcmp(buf, "ab   ") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), "%q"), 2);   /* 未知转换原样输出 */
+    TF_CHECK(strcmp(buf, "%q") == 0);
+    TF_CHECK_INT(str_printf(buf, sizeof(buf), ""), 0);
+    TF_CHECK(buf[0] == '\0');
+
+    /* 截断与 cap=0（C99 返回值语义） */
+    {
+        char small[5];
+        int n = str_printf(small, sizeof(small), "%s", "abcdefgh");
+
+        TF_CHECK_INT(n, 8);
+        TF_CHECK(strcmp(small, "abcd") == 0);
+        TF_CHECK_INT(str_printf(NULL, 0U, "%d", 1234), 4);
+        TF_CHECK_INT(str_printf(small, 0U, "%s", "xyz"), 3);
+    }
+
     tf_end();
 }

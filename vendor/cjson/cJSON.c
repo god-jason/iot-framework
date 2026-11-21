@@ -45,6 +45,8 @@
 #include <ctype.h>
 #include <float.h>
 
+#include "strings.h"
+
 #ifdef ENABLE_LOCALES
 #include <locale.h>
 #endif
@@ -124,7 +126,7 @@ CJSON_PUBLIC(double) cJSON_GetNumberValue(const cJSON * const item)
 CJSON_PUBLIC(const char*) cJSON_Version(void)
 {
     static char version[15];
-    sprintf(version, "%i.%i.%i", CJSON_VERSION_MAJOR, CJSON_VERSION_MINOR, CJSON_VERSION_PATCH);
+    (void)str_printf(version, sizeof(version), "%i.%i.%i", CJSON_VERSION_MAJOR, CJSON_VERSION_MINOR, CJSON_VERSION_PATCH);
 
     return version;
 }
@@ -592,7 +594,51 @@ static cJSON_bool compare_double(double a, double b)
     return (fabs(a - b) <= maxVal * DBL_EPSILON);
 }
 
-/* Render the number nicely from the given item into a string. */
+/* 浮点转文本：最多 6 位小数并去掉尾随 0。
+ * 项目统一使用 str_printf，libc 的 %g 在 nano 版不支持浮点格式化。 */
+static int print_double_value(char *buf, size_t size, double d)
+{
+    double a = (d < 0.0) ? -d : d;
+    unsigned long ip = 0UL;
+    unsigned long fp = 0UL;
+    char *dot = NULL;
+    int n = 0;
+
+    if (a >= 4294967295.0)
+    {
+        a = 4294967295.0;               /* 定点范围上限 */
+    }
+    ip = (unsigned long)a;
+    fp = (unsigned long)((a - (double)ip) * 1000000.0 + 0.5);
+    if (fp >= 1000000UL)
+    {
+        ip++;
+        fp = 0UL;
+    }
+    if ((ip == 0UL) && (fp == 0UL))
+    {
+        return str_printf(buf, size, "0");
+    }
+    if (fp == 0UL)
+    {
+        return str_printf(buf, size, "%s%lu", (d < 0.0) ? "-" : "", ip);
+    }
+    n = str_printf(buf, size, "%s%lu.%06lu", (d < 0.0) ? "-" : "", ip, fp);
+    dot = strchr(buf, '.');
+    if (dot != NULL)
+    {
+        char *end = buf + strlen(buf);
+
+        while ((end > (dot + 1)) && (end[-1] == '0'))
+        {
+            end--;
+        }
+        *end = '\0';
+        n = (int)(end - buf);
+    }
+    return n;
+}
+
 static cJSON_bool print_number(const cJSON * const item, printbuffer * const output_buffer)
 {
     unsigned char *output_pointer = NULL;
@@ -601,7 +647,6 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
     size_t i = 0;
     unsigned char number_buffer[26] = {0}; /* temporary buffer to print the number into */
     unsigned char decimal_point = get_decimal_point();
-    double test = 0.0;
 
     if (output_buffer == NULL)
     {
@@ -611,26 +656,19 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
     /* This checks for NaN and Infinity */
     if (isnan(d) || isinf(d))
     {
-        length = sprintf((char*)number_buffer, "null");
+        length = str_printf((char*)number_buffer, sizeof(number_buffer), "null");
     }
     else if(d == (double)item->valueint)
     {
-        length = sprintf((char*)number_buffer, "%d", item->valueint);
+        length = str_printf((char*)number_buffer, sizeof(number_buffer), "%d", item->valueint);
     }
     else
     {
-        /* Try 15 decimal places of precision to avoid nonsignificant nonzero digits */
-        length = sprintf((char*)number_buffer, "%1.15g", d);
-
-        /* Check whether the original double can be recovered */
-        if ((sscanf((char*)number_buffer, "%lg", &test) != 1) || !compare_double((double)test, d))
-        {
-            /* If not, print with 17 decimal places of precision */
-            length = sprintf((char*)number_buffer, "%1.17g", d);
-        }
+        /* 定点小数输出（最多 6 位小数），不依赖 libc 浮点格式化 */
+        length = print_double_value((char*)number_buffer, sizeof(number_buffer), d);
     }
 
-    /* sprintf failed or buffer overrun occurred */
+    /* formatting failed or buffer overrun occurred */
     if ((length < 0) || (length > (int)(sizeof(number_buffer) - 1)))
     {
         return false;
@@ -1060,7 +1098,7 @@ static cJSON_bool print_string_ptr(const unsigned char * const input, printbuffe
                     break;
                 default:
                     /* escape and print as unicode codepoint */
-                    sprintf((char*)output_pointer, "u%04x", *input_pointer);
+                    (void)str_printf((char*)output_pointer, 6, "u%04x", *input_pointer);
                     output_pointer += 4;
                     break;
             }

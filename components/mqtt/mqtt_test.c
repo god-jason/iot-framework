@@ -30,7 +30,7 @@ static void msg_cb(const char *topic, const uint8_t *payload, uint32_t len,
     uint32_t n = len;
 
     (void)user;
-    (void)snprintf(s_topic, sizeof(s_topic), "%s", topic);
+    (void)str_printf(s_topic, sizeof(s_topic), "%s", topic);
     if (n >= sizeof(s_payload)) {
         n = (uint32_t)sizeof(s_payload) - 1U;
     }

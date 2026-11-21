@@ -39,7 +39,7 @@ static bool map_collect_cb(const map_item_t *item, void *ctx)
     map_walk_t *walk = (map_walk_t *)ctx;
 
     if (walk->count < 4) {
-        (void)snprintf(walk->keys[walk->count], sizeof(walk->keys[0]),
+        (void)str_printf(walk->keys[walk->count], sizeof(walk->keys[0]),
                        "%s", item->key);
     }
     walk->count++;
@@ -67,7 +67,7 @@ void ut_map(void)
 
     /* 大量插入（key 由 map 复制，可复用可变缓冲） */
     for (i = 0U; i < 64U; i++) {
-        (void)snprintf(key, sizeof(key), "k%u", (unsigned)i);
+        (void)str_printf(key, sizeof(key), "k%u", (unsigned)i);
         values[i] = (int)i;
         TF_CHECK(map_put(&m, key, &values[i]));
     }
@@ -75,7 +75,7 @@ void ut_map(void)
 
     /* 查找全部键 */
     for (i = 0U; i < 64U; i++) {
-        (void)snprintf(key, sizeof(key), "k%u", (unsigned)i);
+        (void)str_printf(key, sizeof(key), "k%u", (unsigned)i);
         TF_CHECK(map_get(&m, key, &out) && out == &values[i]);
     }
     TF_CHECK(!map_get(&m, "k64", &out));

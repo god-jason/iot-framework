@@ -123,7 +123,7 @@ static int http_request(const char *method, const char *url,
         return rc;
     }
 
-    n = snprintf(line, sizeof(line),
+    n = str_printf(line, sizeof(line),
                  "%s %s HTTP/1.1\r\n"
                  "Host: %s\r\n"
                  "User-Agent: robotos-net\r\n"
@@ -141,7 +141,7 @@ static int http_request(const char *method, const char *url,
 
     /* 自定义请求头 */
     for (i = 0U; i < header_count; i++) {
-        n = snprintf(line, sizeof(line), "%s: %s\r\n",
+        n = str_printf(line, sizeof(line), "%s: %s\r\n",
                      headers[i].name, headers[i].value);
         if (n <= 0 || n >= (int)sizeof(line)) {
             rc = NET_ERR_PARAM;
@@ -154,7 +154,7 @@ static int http_request(const char *method, const char *url,
     }
 
     if (body != NULL && body_len > 0U) {
-        n = snprintf(line, sizeof(line),
+        n = str_printf(line, sizeof(line),
                      "Content-Type: %s\r\nContent-Length: %u\r\n",
                      (content_type != NULL) ? content_type
                                             : "application/octet-stream",

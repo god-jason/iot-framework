@@ -376,3 +376,294 @@ uint32_t str_split(char *s, char delim, char **items, uint32_t max_items)
     }
     return count;
 }
+
+/* ---------------- 格式化输出 ---------------- */
+
+typedef struct {
+    char    *buf;
+    uint32_t cap;
+    uint32_t pos;       /* 已尝试写入的字符数 */
+    int      total;     /* 本应写入的总长度（C99 返回值） */
+} str_fmt_t;
+
+static void str_fmt_putc(str_fmt_t *f, char c)
+{
+    if (f->buf != NULL && f->pos + 1U < f->cap) {
+        f->buf[f->pos] = c;
+    }
+    f->pos++;
+    f->total++;
+}
+
+static void str_fmt_pad(str_fmt_t *f, char c, uint32_t n)
+{
+    while (n > 0U) {
+        str_fmt_putc(f, c);
+        n--;
+    }
+}
+
+/* 十进制无符号转字符（逆序写入 tmp） */
+static uint32_t str_fmt_utoa10(char *tmp, unsigned long v)
+{
+    uint32_t n = 0U;
+
+    do {
+        tmp[n++] = (char)('0' + (char)(v % 10U));
+        v /= 10U;
+    } while (v != 0U);
+    return n;
+}
+
+/* 十六进制无符号转字符（逆序写入 tmp） */
+static uint32_t str_fmt_utoa16(char *tmp, unsigned long v, bool upper)
+{
+    const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
+    uint32_t n = 0U;
+
+    do {
+        tmp[n++] = digits[v & 0x0FU];
+        v >>= 4;
+    } while (v != 0U);
+    return n;
+}
+
+/*
+ * 按宽度 / 精度 / 标志输出一个整数。
+ * prefix 为 "0x" 等前缀（%p 用），neg 表示负数符号。
+ */
+static void str_fmt_number(str_fmt_t *f, unsigned long uv, bool hex, bool upper,
+                           bool neg, bool left, bool zero,
+                           uint32_t width, int32_t prec, const char *prefix)
+{
+    char tmp[32];
+    uint32_t n = hex ? str_fmt_utoa16(tmp, uv, upper)
+                     : str_fmt_utoa10(tmp, uv);
+    uint32_t plen = 0U;
+    uint32_t zeros = 0U;
+    uint32_t len;
+    uint32_t i;
+
+    while (prefix != NULL && prefix[plen] != '\0') {
+        plen++;
+    }
+    if (prec >= 0 && (uint32_t)prec > n) {
+        zeros = (uint32_t)prec - n;             /* 精度：最小位数 */
+    } else if (zero && prec < 0) {
+        uint32_t base = plen + (neg ? 1U : 0U) + n;
+
+        if (width > base) {
+            zeros = width - base;               /* '0' 标志：补到宽度 */
+        }
+    }
+    len = plen + (neg ? 1U : 0U) + zeros + n;
+    if (!left && len < width) {
+        str_fmt_pad(f, ' ', width - len);
+    }
+    if (neg) {
+        str_fmt_putc(f, '-');
+    }
+    for (i = 0U; i < plen; i++) {
+        str_fmt_putc(f, prefix[i]);
+    }
+    str_fmt_pad(f, '0', zeros);
+    while (n > 0U) {
+        str_fmt_putc(f, tmp[--n]);
+    }
+    if (left && len < width) {
+        str_fmt_pad(f, ' ', width - len);
+    }
+}
+
+int str_vsnprintf(char *buf, uint32_t cap, const char *fmt, va_list ap)
+{
+    str_fmt_t f;
+    const char *p;
+
+    f.buf = buf;
+    f.cap = cap;
+    f.pos = 0U;
+    f.total = 0;
+    if (buf != NULL && cap > 0U) {
+        buf[0] = '\0';
+    }
+    if (fmt == NULL || (buf == NULL && cap > 0U)) {
+        return -1;
+    }
+
+    p = fmt;
+    while (*p != '\0') {
+        bool left = false;
+        bool zero = false;
+        bool is_long = false;
+        uint32_t width = 0U;
+        int32_t prec = -1;
+        char conv;
+
+        if (*p != '%') {
+            str_fmt_putc(&f, *p++);
+            continue;
+        }
+        p++;
+
+        /* 标志 */
+        while (*p == '-' || *p == '0') {
+            if (*p == '-') {
+                left = true;
+            } else {
+                zero = true;
+            }
+            p++;
+        }
+
+        /* 宽度 */
+        if (*p == '*') {
+            int w = va_arg(ap, int);
+
+            p++;
+            if (w < 0) {
+                left = true;
+                w = -w;
+            }
+            width = (uint32_t)w;
+        } else {
+            while (*p >= '0' && *p <= '9') {
+                width = width * 10U + (uint32_t)(*p - '0');
+                p++;
+            }
+        }
+
+        /* 精度 */
+        if (*p == '.') {
+            p++;
+            if (*p == '*') {
+                int v = va_arg(ap, int);
+
+                p++;
+                prec = (v >= 0) ? v : -1;
+            } else {
+                prec = 0;
+                while (*p >= '0' && *p <= '9') {
+                    prec = prec * 10 + (*p - '0');
+                    p++;
+                }
+            }
+        }
+
+        /* 长度修饰（仅支持 long） */
+        if (*p == 'l') {
+            is_long = true;
+            p++;
+        }
+
+        conv = *p;
+        if (conv == '\0') {
+            break;
+        }
+        p++;
+
+        switch (conv) {
+        case '%':
+            str_fmt_putc(&f, '%');
+            break;
+
+        case 'c': {
+            char ch = (char)va_arg(ap, int);
+
+            if (!left && width > 1U) {
+                str_fmt_pad(&f, ' ', width - 1U);
+            }
+            str_fmt_putc(&f, ch);
+            if (left && width > 1U) {
+                str_fmt_pad(&f, ' ', width - 1U);
+            }
+            break;
+        }
+
+        case 's': {
+            const char *s = va_arg(ap, const char *);
+            uint32_t n = 0U;
+            uint32_t i;
+
+            if (s == NULL) {
+                s = "(null)";
+            }
+            while (s[n] != '\0' && (prec < 0 || n < (uint32_t)prec)) {
+                n++;
+            }
+            if (!left && width > n) {
+                str_fmt_pad(&f, ' ', width - n);
+            }
+            for (i = 0U; i < n; i++) {
+                str_fmt_putc(&f, s[i]);
+            }
+            if (left && width > n) {
+                str_fmt_pad(&f, ' ', width - n);
+            }
+            break;
+        }
+
+        case 'd':
+        case 'i': {
+            long v = is_long ? va_arg(ap, long) : (long)va_arg(ap, int);
+            bool neg = (v < 0);
+            unsigned long uv = neg ? ((unsigned long)(-(v + 1)) + 1UL)
+                                   : (unsigned long)v;
+
+            str_fmt_number(&f, uv, false, false, neg, left, zero,
+                           width, prec, NULL);
+            break;
+        }
+
+        case 'u': {
+            unsigned long uv = is_long ? va_arg(ap, unsigned long)
+                                       : (unsigned long)va_arg(ap, unsigned int);
+
+            str_fmt_number(&f, uv, false, false, false, left, zero,
+                           width, prec, NULL);
+            break;
+        }
+
+        case 'x':
+        case 'X': {
+            unsigned long uv = is_long ? va_arg(ap, unsigned long)
+                                       : (unsigned long)va_arg(ap, unsigned int);
+
+            str_fmt_number(&f, uv, true, conv == 'X', false, left, zero,
+                           width, prec, NULL);
+            break;
+        }
+
+        case 'p': {
+            unsigned long uv = (unsigned long)(uintptr_t)va_arg(ap, void *);
+
+            str_fmt_number(&f, uv, true, false, false, left, zero,
+                           width, prec, "0x");
+            break;
+        }
+
+        default:                            /* 未知转换：原样输出 */
+            str_fmt_putc(&f, '%');
+            str_fmt_putc(&f, conv);
+            break;
+        }
+    }
+
+    if (buf != NULL && cap > 0U) {
+        uint32_t end = (f.pos < cap) ? f.pos : (cap - 1U);
+
+        buf[end] = '\0';
+    }
+    return f.total;
+}
+
+int str_printf(char *buf, uint32_t cap, const char *fmt, ...)
+{
+    va_list ap;
+    int n;
+
+    va_start(ap, fmt);
+    n = str_vsnprintf(buf, cap, fmt, ap);
+    va_end(ap);
+    return n;
+}

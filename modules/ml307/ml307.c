@@ -206,14 +206,14 @@ int ml307_set_apn(const char *apn, const char *username, const char *password)
         return -1;
     }
 
-    snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", apn);
+    str_printf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", apn);
     if (at_exec(cmd, 5000) != AT_RESULT_OK) {
         return -1;
     }
 
     if ((username != NULL && username[0] != '\0') ||
         (password != NULL && password[0] != '\0')) {
-        snprintf(cmd, sizeof(cmd), "AT+CGAUTH=1,1,\"%s\",\"%s\"",
+        str_printf(cmd, sizeof(cmd), "AT+CGAUTH=1,1,\"%s\",\"%s\"",
                  (username != NULL) ? username : "",
                  (password != NULL) ? password : "");
         if (at_exec(cmd, 5000) != AT_RESULT_OK) {
@@ -358,7 +358,7 @@ int ml307_network_connect(const pdp_config_t *config)
         return -1;
     }
     if (config != NULL && config->apn[0] != '\0') {
-        snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", config->apn);
+        str_printf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", config->apn);
         if (at_exec(cmd, 5000) != AT_RESULT_OK) {
             return -1;
         }

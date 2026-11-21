@@ -33,7 +33,7 @@ static int rs_cmd_append(char *buf, uint32_t size, int off, const char *fmt, ...
         return -1;
     }
     va_start(ap, fmt);
-    n = vsnprintf(&buf[off], size - (uint32_t)off, fmt, ap);
+    n = str_vsnprintf(&buf[off], size - (uint32_t)off, fmt, ap);
     va_end(ap);
     if (n < 0 || (uint32_t)n >= size - (uint32_t)off) {
         return -1;

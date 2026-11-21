@@ -41,7 +41,7 @@ void rs_error(int code, const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    (void)vsnprintf(msg, sizeof(msg), fmt, ap);
+    (void)str_vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
     ros_printf("ERR %d: %s\n", code, msg);
 }

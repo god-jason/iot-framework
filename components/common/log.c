@@ -40,7 +40,7 @@ void log_hexdump(int level, const char *tag, const void *data, uint32_t len)
 
     /* 整行拼到本地缓冲后一次性输出，避免逐段 ros_printf 被其他日志打断 */
     for (offset = 0U; offset < len; offset += LOG_HEX_PER_LINE) {
-        int off = snprintf(line, sizeof(line), "[%c][%s] %04lX:",
+        int off = str_printf(line, sizeof(line), "[%c][%s] %04lX:",
                            log_level_char(level), (tag != NULL) ? tag : "-",
                            (unsigned long)offset);
         uint32_t i;
@@ -52,7 +52,7 @@ void log_hexdump(int level, const char *tag, const void *data, uint32_t len)
             off = (int)sizeof(line) - 1;
         }
         for (i = 0U; i < LOG_HEX_PER_LINE && (offset + i) < len; i++) {
-            int n = snprintf(&line[off], (uint32_t)(sizeof(line) - (size_t)off),
+            int n = str_printf(&line[off], (uint32_t)(sizeof(line) - (size_t)off),
                              " %02X", (unsigned)p[offset + i]);
 
             if (n < 0 || (size_t)n >= sizeof(line) - (size_t)off) {

@@ -58,7 +58,7 @@ int http_url_parse(const char *url, http_url_t *out)
     }
 
     if (*p == '\0') {
-        (void)snprintf(out->path, sizeof(out->path), "/");
+        (void)str_printf(out->path, sizeof(out->path), "/");
     } else if (*p == '/') {
         path_len = strlen(p);
         if (path_len >= sizeof(out->path)) {

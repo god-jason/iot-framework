@@ -543,12 +543,12 @@ static void rs_t_math2(void)
     /* ---------- 错误路径逐函数 ---------- */
     /* 1 参函数传 2 参 → ARG_COUNT */
     for (i = 0; i < (int)(sizeof(one_arg) / sizeof(one_arg[0])); i++) {
-        snprintf(buf, sizeof(buf), "$x = %s(1, 2)", one_arg[i]);
+        str_printf(buf, sizeof(buf), "$x = %s(1, 2)", one_arg[i]);
         TF_CHECK_INT(rsexec(buf), RS_ERR_ARG_COUNT);
     }
     /* 2 参函数传 1 参 → ARG_COUNT */
     for (i = 0; i < (int)(sizeof(two_arg) / sizeof(two_arg[0])); i++) {
-        snprintf(buf, sizeof(buf), "$x = %s(1)", two_arg[i]);
+        str_printf(buf, sizeof(buf), "$x = %s(1)", two_arg[i]);
         TF_CHECK_INT(rsexec(buf), RS_ERR_ARG_COUNT);
     }
     /* 非数值实参 → TYPE（abs/min 已在 rs_t_math 覆盖） */
@@ -783,7 +783,7 @@ static void rs_t_extfunc(void)
     TF_CHECK_INT(rsexec("$x = noext(1)"), RS_ERR_UNDEF_FUNC);
     /* ---------- 表满（EXT_FUNC_MAX=8：已有 dadd/dflag/dbad） ---------- */
     for (i = 0U; i < 5U; i++) {
-        (void)snprintf(name, sizeof(name), "e%u", (unsigned)i);
+        (void)str_printf(name, sizeof(name), "e%u", (unsigned)i);
         TF_CHECK_INT(rs_func_register(name, 2U, ext_add), RS_OK);
     }
     TF_CHECK_INT(rs_func_register("e5", 2U, ext_add), RS_ERR_LIMIT);
@@ -791,7 +791,7 @@ static void rs_t_extfunc(void)
     TF_CHECK_INT(rsi("x"), 3);
     /* 常量表满（EXT_CONST_MAX=8：已有 G） */
     for (i = 0U; i < 7U; i++) {
-        (void)snprintf(name, sizeof(name), "c%u", (unsigned)i);
+        (void)str_printf(name, sizeof(name), "c%u", (unsigned)i);
         TF_CHECK_INT(rs_const_register(name, 1.0), RS_OK);
     }
     TF_CHECK_INT(rs_const_register("c7", 1.0), RS_ERR_LIMIT);
@@ -835,7 +835,7 @@ static void rs_t_errors(void)
     for (i = 0U; i < 33U; i++) {
         char fn[32];
 
-        snprintf(fn, sizeof(fn), "function f%u()\nend\n", (unsigned)i);
+        str_printf(fn, sizeof(fn), "function f%u()\nend\n", (unsigned)i);
         if (strlen(buf) + strlen(fn) < sizeof(buf)) {
             strcat(buf, fn);
         }

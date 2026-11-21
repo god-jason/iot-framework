@@ -174,7 +174,7 @@ int ros_printf(const char *fmt, ...)
         return -1;
     }
     va_start(ap, fmt);
-    n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    n = str_vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     if (n < 0) {
         return -1;

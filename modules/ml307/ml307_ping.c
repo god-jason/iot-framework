@@ -200,7 +200,7 @@ int net_ping(const char *host, uint32_t count, uint32_t interval_ms,
     s_ping.stat = stat;
     s_ping.count = count;
 
-    snprintf(cmd, sizeof(cmd), "AT+MPING=\"%s\",%u,%u,%u", host,
+    str_printf(cmd, sizeof(cmd), "AT+MPING=\"%s\",%u,%u,%u", host,
              (unsigned)count, (unsigned)ML307_PING_SIZE,
              (unsigned)((timeout_ms + 999U) / 1000U));
     if (at_exec(cmd, 3000U) != AT_RESULT_OK) {

@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 
 #ifdef __cplusplus
@@ -113,6 +114,24 @@ bool str_parse_bool(const char *s, bool *out);
  * 返回实际段数；items 或 s 为 NULL 时返回 0。
  */
 uint32_t str_split(char *s, char delim, char **items, uint32_t max_items);
+
+/* ---------------- 格式化输出 ---------------- */
+
+/*
+ * 精简 printf（不依赖 libc 的 vfprintf）：
+ *   转换：%s %c %d %i %u %x %X %p %%
+ *   标志：'-'（左对齐）、'0'（补零）
+ *   宽度：十进制数字或 '*'；精度：'.数字' 或 '.*'（字符串截断、整数最小位数）
+ *   长度：'l'（long / unsigned long）
+ * 不支持浮点（%f/%g/%e），未知转换按 "%<字符>" 原样输出。
+ *
+ * 返回值同 C99：本应写入的字符数（不含结尾 '\0'），超长时截断。
+ * cap 为 0 时不写 buf，仅返回长度；buf 非空且 cap>0 时总是以 '\0' 结尾。
+ */
+int str_vsnprintf(char *buf, uint32_t cap, const char *fmt, va_list ap);
+
+/* str_vsnprintf 的可变参数版本 */
+int str_printf(char *buf, uint32_t cap, const char *fmt, ...);
 
 #ifdef __cplusplus
 }

@@ -31,7 +31,7 @@ static void rs_fmt_float(char *buf, uint32_t cap, float f)
         fp -= 100U;
         ip++;
     }
-    (void)snprintf(buf, cap, "%s%ld.%02u", neg ? "-" : "", ip, (unsigned)fp);
+    (void)str_printf(buf, cap, "%s%ld.%02u", neg ? "-" : "", ip, (unsigned)fp);
 }
 
 /* 去掉 token 包裹的双引号（echo 用） */
@@ -60,7 +60,7 @@ static bool rs_var_text(rs_t *rs, const char *name, uint16_t nlen,
     memcpy(nm, name, nlen);
     nm[nlen] = '\0';
     if (rs_get_int(rs, nm, &i) == RS_OK) {
-        (void)snprintf(buf, cap, "%ld", (long)i);
+        (void)str_printf(buf, cap, "%ld", (long)i);
         return true;
     }
     if (rs_get_float(rs, nm, &f) == RS_OK) {
@@ -260,11 +260,11 @@ int rs_cmd_ps(const rs_cmd_ctx_t *ctx)
         if (task->state == ROS_TASK_TERMINATED) {
             continue;
         }
-        (void)snprintf(stack, sizeof(stack), "%u", (unsigned)task->stack_size);
+        (void)str_printf(stack, sizeof(stack), "%u", (unsigned)task->stack_size);
         {
             uint32_t pm = ros_task_cpu_permille(task);
 
-            (void)snprintf(cpu, sizeof(cpu), "%u.%u", (unsigned)(pm / 10U),
+            (void)str_printf(cpu, sizeof(cpu), "%u.%u", (unsigned)(pm / 10U),
                            (unsigned)(pm % 10U));
         }
         ros_printf("%3u  %-13s %4u  %-10s %6s  %5s\n",

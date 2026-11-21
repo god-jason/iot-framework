@@ -146,7 +146,7 @@ int main(void)
             if (hal_pwm_init(&s_demo_pwm[i], &pcfg) != HAL_OK) {
                 continue;
             }
-            (void)snprintf(name, sizeof(name), "pwm%u", (unsigned)(i + 1U));
+            (void)str_printf(name, sizeof(name), "pwm%u", (unsigned)(i + 1U));
             (void)device_pwm_bind(name, &s_demo_pwm[i]);
 
             /* 同一个 PWM 通道再包装成风扇实例（fan_init 会注册 fan 命令） */

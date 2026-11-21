@@ -74,13 +74,13 @@ static void http_server(intptr_t fd, void *user)
     is_post = (strncmp(req, "POST ", 5U) == 0);
 
     if (!is_post && strstr(req, " /hello ") != NULL) {
-        body_len = snprintf(resp, sizeof(resp),
+        body_len = str_printf(resp, sizeof(resp),
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/plain\r\n"
             "Content-Length: 5\r\n"
             "Connection: close\r\n\r\nhello");
     } else if (is_post && strstr(req, " /echo ") != NULL) {
-        body_len = snprintf(resp, sizeof(resp),
+        body_len = str_printf(resp, sizeof(resp),
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/plain\r\n"
             "Content-Length: %u\r\n"
@@ -93,14 +93,14 @@ static void http_server(intptr_t fd, void *user)
     } else if (!is_post && strstr(req, " /hdr ") != NULL) {
         bool has = (strstr(req, "X-Test: 42") != NULL);
 
-        body_len = snprintf(resp, sizeof(resp),
+        body_len = str_printf(resp, sizeof(resp),
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/plain\r\n"
             "Content-Length: 2\r\n"
             "Connection: close\r\n\r\n%s",
             has ? "ok" : "no");
     } else {
-        body_len = snprintf(resp, sizeof(resp),
+        body_len = str_printf(resp, sizeof(resp),
             "HTTP/1.1 404 Not Found\r\n"
             "Content-Type: text/plain\r\n"
             "Content-Length: 4\r\n"

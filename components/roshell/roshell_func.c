@@ -225,14 +225,14 @@ static void rs_f_date(const rs_value_t *a, rs_value_t *out)
 
     (void)a;
     if (hal_rtc_get_time(&t) == HAL_OK && t.year >= 1970U) {
-        (void)snprintf(s_date_buf, sizeof(s_date_buf), "%04u-%02u-%02u",
+        (void)str_printf(s_date_buf, sizeof(s_date_buf), "%04u-%02u-%02u",
                        (unsigned)t.year, (unsigned)t.month, (unsigned)t.day);
     } else {
         int y;
         unsigned m, d;
 
         rs_date_from_days((int64_t)rs_time_seconds() / 86400, &y, &m, &d);
-        (void)snprintf(s_date_buf, sizeof(s_date_buf), "%04d-%02u-%02u",
+        (void)str_printf(s_date_buf, sizeof(s_date_buf), "%04d-%02u-%02u",
                        y, m, d);
     }
     out->type = RS_VAL_STRING;
