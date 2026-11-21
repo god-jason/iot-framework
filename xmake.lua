@@ -24,9 +24,9 @@
                 --sdk=... --bin=... -c
         xmake b ros-fw-f407
 
-        # 可烧录固件：STM32F103C8T6（纯寄存器实现，不需要 Cube HAL）
+        # 可烧录固件：STM32F1 / 128KB Flash（纯寄存器实现，不需要 Cube HAL）
         xmake f -p cross --stm32_family=f1 --cube_hal_dir="" ... -c
-        xmake b ros-fw-f103c8
+        xmake b ros-fw-f108cb
 
         # Linux 下换成 --sdk=/opt/xpack-arm-none-eabi-gcc-15.2.1-1.1 等安装路径
         # --cube_hal_dir 可传 .../STM32F4xx_HAL_Driver 或其 Inc 子目录
@@ -41,7 +41,7 @@
         ros-shell     Shell 交互示例（stdin/stdout）
         ros-stm32     STM32 交叉编译静态库（仅 -p cross 时可见）
         ros-fw-f407   STM32F407VET6 可烧录固件（PA6/PA7 LED，USART1）
-        ros-fw-f103c8 STM32F103C8T6 可烧录固件（PC13 LED，USART1）
+        ros-fw-f108cb STM32F1 128KB Flash 可烧录固件（PC13 LED，USART1）
 ]]
 
 add_rules("mode.debug", "mode.release")
@@ -118,7 +118,7 @@ local function ros_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena",
-        "bootloader", "modules",
+        "modules",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
     for _, dir in ipairs(os.dirs("components/*")) do
@@ -129,8 +129,9 @@ end
 -- 框架全量源码（平台层由各目标单独 add_files）
 local function ros_framework_sources()
     add_files("src/**.c")
-    add_files("bootloader/**.c")
     add_files("components/**.c")
+    -- fota 依赖已移除的通用 bootloader 框架，待基于新 A/B 协议重写
+    remove_files("components/fota/**.c")
     add_files("vendor/**.c")
     add_files("drivers/**.c")
 end
@@ -140,8 +141,6 @@ local function ros_exclude_tests()
     remove_files(
         "src/*_test.c", "src/**/*_test.c",
         "src/test_*.c", "src/**/test_*.c",
-        "bootloader/*_test.c", "bootloader/**/*_test.c",
-        "bootloader/test_*.c", "bootloader/**/test_*.c",
         "components/*_test.c", "components/**/*_test.c",
         "components/test_*.c", "components/**/test_*.c",
         "vendor/*_test.c", "vendor/**/*_test.c",
@@ -199,7 +198,7 @@ local function ros_extra_warnings()
     add_cflags("-Wextra", "-Wshadow", "-Wformat=2", {force = true})
 end
 
--- 固件构建后导出 hex/bin 并打印 map 路径（f103c8 / f407 共用）
+-- 固件构建后导出 hex/bin 并打印 map 路径（f108cb / f407 共用）
 local function ros_fw_objcopy()
     after_build(function (target)
         local elf = target:targetfile()
@@ -370,10 +369,11 @@ if is_plat("cross") then
         add_cflags("-ffunction-sections", "-fdata-sections", "-fno-common",
                    {force = true})
 
-        -- 内核 + Bootloader 公共逻辑 + 组件 + 驱动 + 平台层 + 内存后端 + 蜂窝模组
+        -- 内核 + 组件 + 驱动 + 平台层 + 内存后端 + 蜂窝模组
         add_files("src/**.c")
-        add_files("bootloader/**.c")
         add_files("components/**.c")
+        -- fota 依赖已移除的通用 bootloader 框架，待基于新 A/B 协议重写
+        remove_files("components/fota/**.c")
         add_files("drivers/**.c")
         add_files("platforms/stm32/**.c")
         add_files("modules/**.c")
@@ -431,11 +431,11 @@ if is_plat("cross") then
     target_end()
 
     -- ========================================================================
-    -- 可烧录固件（STM32F103C8T6 / Medium Density / PC13 LED）
+    -- 可烧录固件（STM32F1 / 128KB Flash / Medium Density / PC13 LED）
     -- 链接 libros-stm32-f1.a + 板级启动代码，产出 .elf/.hex/.bin
     -- ========================================================================
     if family == "f1" then
-        local board_dir = "boards/stm32f103c8"
+        local board_dir = "boards/stm32f108cb"
         local dfp       = ros_find_pack_version("Keil/STM32F1xx_DFP")
         local cmsis     = ros_find_pack_version("ARM/CMSIS")
         local dfp_inc   = get_config("dfp_inc") or ""
@@ -447,7 +447,7 @@ if is_plat("cross") then
             cmsis_inc = cmsis and path.join(cmsis, "CMSIS", "Core", "Include") or nil
         end
 
-        target("ros-fw-f103c8")
+        target("ros-fw-f108cb")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
@@ -474,6 +474,8 @@ if is_plat("cross") then
             add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "*.c"))
+            -- bootloader.c 属于独立固件，不能编进 App（会重复定义 main/SystemInit）
+            remove_files(path.join(board_dir, "bootloader.c"))
             add_files(path.join(board_dir, "*.S"))
             add_includedirs(board_dir)
             ros_includedirs()
@@ -486,7 +488,7 @@ if is_plat("cross") then
 
             -- 自定义启动文件与向量表，禁用 crt0；nano newlib 减小体积
             add_ldflags("-nostartfiles",
-                        "-T" .. path.join(board_dir, "stm32f103c8.ld"),
+                        "-T" .. path.join(board_dir, "stm32f108cb.ld"),
                         "--specs=nano.specs",
                         "-Wl,--gc-sections",
                         {force = true})
@@ -500,6 +502,49 @@ if is_plat("cross") then
                     cprint("${dim}[firmware] CMSIS: %s${clear}", cmsis_inc)
                 end
             end)
+
+            ros_fw_objcopy()
+        target_end()
+
+        -- ====================================================================
+        -- A/B OTA Bootloader（F1 / 128KB Flash，8KB，独立于 App，不依赖 RTOS/HAL/libc）
+        -- 产物：ros-boot-f108cb.elf/.hex/.bin（烧录到 0x08000000）
+        -- App 需链接到 A 区 0x08002000（或目标槽基址）并调用 boot_confirm()
+        -- ====================================================================
+        target("ros-boot-f108cb")
+            set_kind("binary")
+            set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
+            set_languages("c99")
+            set_warnings("all")
+            set_optimize("smallest")
+            set_strip("none")
+            add_cflags("-g", {force = true})
+            ros_enable_mapfile()
+
+            add_defines("STM32F10X_MD", "HSE_VALUE=8000000", "BOOTLOADER_BUILD=1")
+            for _, flag in ipairs(cpuflags) do
+                add_cflags(flag, {force = true})
+                add_asflags(flag, {force = true})
+                add_ldflags(flag, {force = true})
+            end
+            add_cflags("-ffreestanding", "-ffunction-sections",
+                       "-fdata-sections", {force = true})
+
+            add_files(path.join(board_dir, "startup_stm32f10x_md.S"))
+            add_files(path.join(board_dir, "bootloader.c"))
+            add_includedirs(board_dir)
+            if dfp_inc then
+                add_includedirs(dfp_inc)
+            end
+            if cmsis_inc then
+                add_includedirs(cmsis_inc)
+            end
+
+            add_ldflags("-nostartfiles",
+                        "-nostdlib",
+                        "-T" .. path.join(board_dir, "bootloader.ld"),
+                        "-Wl,--gc-sections",
+                        {force = true})
 
             ros_fw_objcopy()
         target_end()
@@ -549,6 +594,8 @@ if is_plat("cross") then
             add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "*.c"))
+            -- bootloader.c 属于独立固件，不能编进 App（会重复定义 main/SystemInit）
+            remove_files(path.join(board_dir, "bootloader.c"))
             add_files(path.join(board_dir, "*.S"))
             add_includedirs(board_dir)
             ros_includedirs()

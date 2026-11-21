@@ -1,18 +1,18 @@
 /*
- * stm32f103c8.ld - STM32F103C8T6 链接脚本（GNU ld）
+ * stm32f108cb.ld - STM32F1 128KB Flash 板链接脚本（GNU ld）
  *
- * FLASH 64KB @ 0x08000000, SRAM 20KB @ 0x20000000。
- * 换其它 F1 中容量芯片时只需修改下面 MEMORY 里的两个 LENGTH：
- *   64K/20K : STM32F103C8T6 (Blue Pill)
- *  128K/20K : STM32F103CBT6
- *  512K/64K : STM32F103ZET6（需同时换 HD 启动向量表与 STM32F10X_HD 宏）
+ * FLASH 128KB @ 0x08000000, SRAM 20KB @ 0x20000000。
+ * 当前为独立 App 链接（从 0x08000000 启动）。
+ * 若要启用 boards/stm32f108cb/bootloader.ld 的 A/B OTA：
+ *   - App 链接基址改为 A 区 0x08002000，LENGTH 改为 56K；
+ *   - Bootloader 自身占用 0x08000000..0x08001FFF（8KB）。
  */
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 64K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 128K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 

@@ -66,7 +66,6 @@ void ut_at(void);
 void ut_at_parser(void);
 void ut_at_urc(void);
 void ut_storage(void);
-void ut_fota(void);
 void ut_robot_proto(void);
 void ut_can_proto(void);
 
@@ -102,9 +101,6 @@ void ut_roshell_cmd(void);
 void ut_net(void);
 void ut_http(void);
 void ut_mqtt(void);
-
-/* ---------------- 启动升级（实现在 platforms/stm32/stm32_bootloader.c） ---------------- */
-void ut_bootloader(void);
 
 /* ---------------- 内核 ---------------- */
 void ut_version(void);
@@ -156,7 +152,6 @@ int main(void)
     ut_at_parser();
     ut_at_urc();
     ut_storage();
-    ut_fota();
     ut_robot_proto();
     ut_can_proto();
 
@@ -191,9 +186,6 @@ int main(void)
     ut_net();
     ut_http();
     ut_mqtt();
-
-    printf("\n--- 启动升级 ---\n");
-    ut_bootloader();
 
     printf("\n--- 内核 ---\n");
     ut_version();

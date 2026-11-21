@@ -33,8 +33,7 @@ robotos/
 ├── components/     业务/算法组件（含 net / http / mqtt 网络组件）
 ├── drivers/        器件驱动（50 个）
 ├── modules/        模组后端（ml307：net 原始接口 + 原生 HTTP/MQTT）
-├── bootloader/     分区、镜像校验、升级、串口升级协议（平台无关）
-├── platforms/      pc / stm32 / avr 平台实现（含 *_bootloader 移植层）
+├── platforms/      pc / stm32 / avr 平台实现
 ├── boards/         板级工程（启动文件、链接脚本、main）
 ├── vendor/         cjson、tlsf、arena
 ├── examples/       综合示例
@@ -97,7 +96,7 @@ arm-none-eabi-addr2line -e ros-fw-f407 -f -C 0x0800xxxx
 | `ros-test` | binary | 单元测试入口 `src/test_main.c` |
 | `ros-demo` | binary | 示例程序（日志 + LED） |
 | `ros-stm32` | static | STM32 交叉编译库 |
-| `ros-fw-f103c8` | binary | 可烧录固件（elf/hex/bin） |
+| `ros-fw-f108cb` | binary | 可烧录固件（elf/hex/bin） |
 
 ---
 
@@ -211,11 +210,11 @@ xmake build ros-stm32
 xmake f -p cross --stm32_family=f1 --cube_hal_dir=<STM32CubeF1 路径> -c
 xmake build ros-stm32
 
-# 可烧录固件（F103C8T6）
+# 可烧录固件（F1 / 128KB Flash）
 xmake f -p cross --stm32_family=f1 \
         --dfp_inc=<STM32F1xx_DFP>/Device/Include \
         --cmsis_inc=<CMSIS>/Core/Include -c
-xmake build ros-fw-f103c8
+xmake build ros-fw-f108cb
 ```
 
 `stm32_family` 支持 `f1` / `f4` / `h7`。
