@@ -210,10 +210,16 @@ local function ros_fw_objcopy()
         local hex = path.join(dir, target:basename() .. ".hex")
         local bin = path.join(dir, target:basename() .. ".bin")
         local map = elf .. ".map"
+        local elf_out = path.join(dir, target:basename() .. ".elf")
         os.execv(oc, {"-O", "ihex", elf, hex})
         os.execv(oc, {"-O", "binary", elf, bin})
+        -- 保留一份带 DWARF 的 ELF，供 addr2line / crash_decode.py 还原崩溃现场
+        if elf ~= elf_out then
+            os.cp(elf, elf_out)
+        end
         cprint("${green}[firmware] HEX: %s${clear}", hex)
         cprint("${green}[firmware] BIN: %s${clear}", bin)
+        cprint("${green}[firmware] ELF: %s${clear}", elf_out)
         if os.isfile(map) then
             cprint("${green}[firmware] MAP: %s${clear}", map)
         else
@@ -516,7 +522,7 @@ if is_plat("cross") then
             set_languages("c99")
             set_warnings("all")
             set_optimize("smallest")
-            set_strip("none")
+            set_strip("none")            -- 保留 DWARF 调试信息，用于 addr2line 还原崩溃现场
             add_cflags("-g", {force = true})
             ros_enable_mapfile()
             add_deps("ros-stm32")
@@ -569,7 +575,7 @@ if is_plat("cross") then
             set_languages("c99")
             set_warnings("all")
             set_optimize("smallest")
-            set_strip("none")
+            set_strip("none")            -- 保留 DWARF 调试信息（Bootloader 崩溃也可回溯）
             add_cflags("-g", {force = true})
             ros_enable_mapfile()
 

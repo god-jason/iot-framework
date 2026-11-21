@@ -280,13 +280,186 @@ void boot_confirm(void)
     }
 }
 
-void boot_crash_count(void)
+/* ==========================================================================
+ * 五、崩溃日志（BOOT_LOG_BASE 起 2KB 文本区，只保留最近一次崩溃）
+ * ========================================================================== */
+
+#define BOOT_LOG_STACK_WORDS    128U    /* 栈快照字数（512 字节） */
+#define BOOT_LOG_LINE_SIZE      128U    /* 单行文本缓冲 */
+
+static char s_log_line[BOOT_LOG_LINE_SIZE];   /* 静态缓冲，异常上下文不占栈 */
+
+static char *log_put_str(char *p, const char *s)
+{
+    while (*s != '\0') {
+        *p++ = *s++;
+    }
+    return p;
+}
+
+/* 8 位十六进制（不带 0x 前缀，便于 crash_decode.py 直接解析 pc=/lr=） */
+static char *log_put_hex(char *p, uint32_t v)
+{
+    int shift;
+
+    for (shift = 28; shift >= 0; shift -= 4) {
+        uint32_t d = (v >> (uint32_t)shift) & 0x0FU;
+
+        *p++ = (char)(d < 10U ? ('0' + d) : ('A' + d - 10U));
+    }
+    return p;
+}
+
+static char *log_put_dec(char *p, uint32_t v)
+{
+    char tmp[10];
+    uint32_t n = 0U;
+
+    if (v == 0U) {
+        *p++ = '0';
+        return p;
+    }
+    while (v > 0U) {
+        tmp[n++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    }
+    while (n > 0U) {
+        *p++ = tmp[--n];
+    }
+    return p;
+}
+
+/*
+ * 写一行文本到日志区：必要时补一个空格使长度成为偶数（半字编程要求），
+ * 返回新的写入偏移。空间不足时停止后续写入。
+ */
+static void log_emit(uint32_t *off, char *text)
+{
+    uint32_t n = 0U;
+
+    while (text[n] != '\0') {
+        n++;
+    }
+    if ((n & 1U) != 0U) {
+        text[n++] = ' ';
+        text[n] = '\0';
+    }
+    if (*off + n > BOOT_LOG_SIZE) {
+        return;
+    }
+    (void)boot_flash_write(BOOT_LOG_BASE + *off, text, n);
+    *off += n;
+}
+
+void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
 {
     boot_meta_t m;
+    char *p;
+    uint32_t off = 0U;
+    uint32_t addr;
+    uint32_t words;
+    uint32_t i;
 
+    if (frame == NULL) {
+        return;
+    }
+
+    /* 1) 崩溃计数 +1 并保存（Bootloader 据此判断是否回滚分区） */
     boot_meta_load(&m);
     if (m.crash < 0xFFFFFFFFU) {
         m.crash++;
     }
     (void)boot_meta_save(&m);
+
+    /* 2) 整区擦除：只保留本次崩溃记录，不做追加 */
+    (void)boot_flash_erase(BOOT_LOG_BASE, BOOT_LOG_SIZE);
+
+    /* 3) 摘要行：原因、所在槽、崩溃次数 */
+    p = s_log_line;
+    p = log_put_str(p, "reason=HARDFAULT slot=");
+    *p++ = (SCB->VTOR == BOOT_SLOT_BASE1) ? 'B' : 'A';
+    p = log_put_str(p, " crash=");
+    p = log_put_dec(p, m.crash);
+    p = log_put_str(p, "\r\n");
+    *p = '\0';
+    log_emit(&off, s_log_line);
+
+    /* 4) 异常栈帧：PC/LR/SP/xPSR */
+    p = s_log_line;
+    p = log_put_str(p, "pc=");
+    p = log_put_hex(p, frame[6]);
+    p = log_put_str(p, " lr=");
+    p = log_put_hex(p, frame[5]);
+    p = log_put_str(p, " sp=");
+    p = log_put_hex(p, sp);
+    p = log_put_str(p, " xpsr=");
+    p = log_put_hex(p, frame[7]);
+    p = log_put_str(p, "\r\n");
+    *p = '\0';
+    log_emit(&off, s_log_line);
+
+    /* 5) 通用寄存器 */
+    p = s_log_line;
+    p = log_put_str(p, "r0=");
+    p = log_put_hex(p, frame[0]);
+    p = log_put_str(p, " r1=");
+    p = log_put_hex(p, frame[1]);
+    p = log_put_str(p, " r2=");
+    p = log_put_hex(p, frame[2]);
+    p = log_put_str(p, " r3=");
+    p = log_put_hex(p, frame[3]);
+    p = log_put_str(p, " r12=");
+    p = log_put_hex(p, frame[4]);
+    p = log_put_str(p, "\r\n");
+    *p = '\0';
+    log_emit(&off, s_log_line);
+
+    /* 6) 故障状态寄存器 */
+    p = s_log_line;
+    p = log_put_str(p, "cfsr=");
+    p = log_put_hex(p, SCB->CFSR);
+    p = log_put_str(p, " hfsr=");
+    p = log_put_hex(p, SCB->HFSR);
+    p = log_put_str(p, " excr=");
+    p = log_put_hex(p, exc_return);
+    p = log_put_str(p, "\r\n");
+    *p = '\0';
+    log_emit(&off, s_log_line);
+
+    p = s_log_line;
+    p = log_put_str(p, "mmfar=");
+    p = log_put_hex(p, SCB->MMFAR);
+    p = log_put_str(p, " bfar=");
+    p = log_put_hex(p, SCB->BFAR);
+    p = log_put_str(p, "\r\n");
+    *p = '\0';
+    log_emit(&off, s_log_line);
+
+    /* 7) 栈快照：从异常栈指针起 128 字，每行 8 字（crash_decode.py 可扫描） */
+    addr = sp & ~3U;
+    if (addr > 0x20005000U) {
+        addr = 0x20005000U;
+    }
+    words = BOOT_LOG_STACK_WORDS;
+    if ((0x20005000U - addr) / 4U < words) {
+        words = (0x20005000U - addr) / 4U;
+    }
+    i = 0U;
+    while (i < words) {
+        uint32_t j;
+
+        p = s_log_line;
+        p = log_put_str(p, "stack[");
+        p = log_put_hex(p, addr + i * 4U);
+        p = log_put_str(p, "]:");
+        for (j = 0U; j < 8U && i < words; j++, i++) {
+            uint32_t v = *(const volatile uint32_t *)(uintptr_t)(addr + i * 4U);
+
+            *p++ = ' ';
+            p = log_put_hex(p, v);
+        }
+        p = log_put_str(p, "\r\n");
+        *p = '\0';
+        log_emit(&off, s_log_line);
+    }
 }

@@ -23,6 +23,8 @@
 #define BOOT_SLOT_SIZE      (56U * 1024U)   /* 单槽大小 */
 #define BOOT_META_PAGE0     0x0801E000U     /* 元数据页 0 */
 #define BOOT_META_PAGE1     0x0801E400U     /* 元数据页 1 */
+#define BOOT_LOG_BASE       0x0801E800U     /* 崩溃日志区起始（文本，2KB） */
+#define BOOT_LOG_SIZE       (2U * 1024U)    /* 崩溃日志区大小：两个 1KB 页 */
 
 #define BOOT_FLASH_PAGE     1024U           /* F103 中容量：1KB/页 */
 #define BOOT_META_MAGIC     0x42534F52U     /* 'ROSB'，元数据结构有效标识 */
@@ -72,9 +74,14 @@ int boot_meta_save(boot_meta_t *m);
 void boot_confirm(void);
 
 /*
- * 记录一次崩溃（HardFault 中调用）：crash 自增并写回元数据。
- * Bootloader 下次启动时若 crash > BOOT_MAX_CRASH，会回退到另一个分区。
+ * 记录一次崩溃（HardFault 中调用）：
+ *   - crash 计数 +1 并写回元数据；
+ *   - 整区擦除后覆盖写入一条文本记录（只保留最近一次，不做追加）。
+ * 参数：
+ *   frame       Cortex-M 异常栈帧，顺序为 r0 r1 r2 r3 r12 lr pc xpsr；
+ *   sp          异常发生时的栈指针（MSP 或 PSP）；
+ *   exc_return  异常返回码（LR），用于判断使用的是哪个栈。
  */
-void boot_crash_count(void);
+void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return);
 
 #endif /* ROS_BOOT_META_H */

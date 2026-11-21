@@ -12,10 +12,11 @@
  *   3. 回滚：
  *      - pending 槽连续 BOOT_MAX_TRIES 次启动仍未确认 → 回到 active 槽；
  *      - App HardFault 记录到 meta.crash，超过 BOOT_MAX_CRASH 次 → 切到另一槽。
- *   4. 校验：OTA 传输时边收边算 CRC32，收完后与主机给出的 CRC 比对；
+ *   4. 启动时通过 UART1 打印上一次崩溃日志（含寄存器、故障状态与栈快照）。
+ *   5. 校验：OTA 传输时边收边算 CRC32，收完后与主机给出的 CRC 比对；
  *      启动前对记录过长度的槽再做一次整段 CRC32 校验。手工烧录的槽没有
  *      长度记录，只校验向量表。
- *   5. 体积：不依赖 HAL / RTOS / libc（-nostdlib -Os），约 3KB，
+ *   6. 体积：不依赖 HAL / RTOS / libc（-nostdlib -Os），约 3KB，
  *      限制在 Flash 前 8KB 内。
  *
  * ============================================================================
@@ -27,6 +28,7 @@
  *   Slot B      0x08010000      56KB
  *   Meta 页 0   0x0801E000      1KB（两页轮换写，掉电保留一份）
  *   Meta 页 1   0x0801E400      1KB
+ *   崩溃日志    0x0801E800      2KB（文本追加写，写满整区擦除）
  *
  * ============================================================================
  * 三、升级协议（Bootloader 收到 'R' 之后）
@@ -199,6 +201,32 @@ static void uart_put_dec(uint32_t v)
 static char slot_char(uint32_t slot)
 {
     return (slot == 0U) ? 'A' : 'B';
+}
+
+/*
+ * 打印上次崩溃日志（BOOT_LOG_BASE 起 2KB 文本，由 App 的 HardFault 写入）。
+ * 擦除态 0xFF 或 '\0' 视为记录结束；只输出可打印字符与换行。
+ */
+static void print_crash_log(void)
+{
+    const uint8_t *p = (const uint8_t *)(uintptr_t)BOOT_LOG_BASE;
+    uint32_t i;
+
+    if (p[0] == 0xFFU || p[0] == 0U) {
+        return;                                 /* 没有崩溃记录 */
+    }
+    uart_puts("\r\n[BOOT] last crash log:\r\n");
+    for (i = 0U; i < BOOT_LOG_SIZE; i++) {
+        uint8_t c = p[i];
+
+        if (c == 0xFFU || c == 0U) {
+            break;
+        }
+        if ((c >= 0x20U && c < 0x7FU) || c == '\r' || c == '\n') {
+            uart_putc(c);
+        }
+    }
+    uart_puts("\r\n");
 }
 
 /*
@@ -434,6 +462,9 @@ int main(void)
     uart_puts(" crash=");
     uart_put_dec(m.crash);
     uart_puts("\r\n");
+
+    /* 打印上一次崩溃的现场记录（如有） */
+    print_crash_log();
 
     /* 2) 连续崩溃超限：回退到另一个分区 */
     if (m.crash > BOOT_MAX_CRASH) {

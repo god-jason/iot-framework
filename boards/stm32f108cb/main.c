@@ -73,12 +73,34 @@ int main(void)
 }
 
 /*
- * HardFault：把崩溃次数写入启动元数据后复位。
- * Bootloader 下次启动发现 crash > BOOT_MAX_CRASH 时回退到另一个分区。
+ * HardFault：提取异常栈帧（PC/LR），把崩溃日志写入 Flash 文本区并累加计数，
+ * 随后复位。Bootloader 下次启动发现 crash > BOOT_MAX_CRASH 时回退到另一分区。
  */
+void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp);
+
+void HardFault_Handler(void) __attribute__((naked));
 void HardFault_Handler(void)
 {
-    boot_crash_count();
+    /* r0=异常栈帧指针，r1=EXC_RETURN，r2=异常发生时栈指针；随后切回 MSP */
+    __asm(
+        "tst lr, #4         \n"
+        "ite eq             \n"
+        "mrseq r0, msp      \n"
+        "mrsne r0, psp      \n"
+        "mov r1, lr         \n"
+        "mov r2, r0         \n"
+        "mrs r3, control    \n"
+        "bic r3, r3, #2     \n"
+        "msr control, r3    \n"
+        "isb                \n"
+        "b hardfault_report \n"
+    );
+}
+
+void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp)
+{
+    /* 记录崩溃现场（寄存器/故障状态/栈快照）并累加计数，然后复位 */
+    boot_crash_log(frame, sp, exc_return);
     NVIC_SystemReset();
 
     for (;;) {
