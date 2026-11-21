@@ -1,18 +1,17 @@
 /*
- * stm32f108cb.ld - STM32F1 128KB Flash 板链接脚本（GNU ld）
+ * stm32f108cb.ld - STM32F1 128KB Flash 板 A 区固件链接脚本（GNU ld）
  *
- * FLASH 128KB @ 0x08000000, SRAM 20KB @ 0x20000000。
- * 当前为独立 App 链接（从 0x08000000 启动）。
- * 若要启用 boards/stm32f108cb/bootloader.ld 的 A/B OTA：
- *   - App 链接基址改为 A 区 0x08002000，LENGTH 改为 56K；
- *   - Bootloader 自身占用 0x08000000..0x08001FFF（8KB）。
+ * A 区：FLASH 0x08002000 起 56KB；SRAM 20KB @ 0x20000000。
+ * Bootloader 占用 0x08000000..0x08001FFF（8KB），B 区在 0x08010000。
+ * App 启动时需把 SCB->VTOR 指向本槽基址，并在初始化完成后调用
+ * boot_confirm()，详见 boards/stm32f108cb/bootloader.c。
  */
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 128K
+    FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 56K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 

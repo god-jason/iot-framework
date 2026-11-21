@@ -474,8 +474,6 @@ if is_plat("cross") then
             add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "*.c"))
-            -- bootloader.c 属于独立固件，不能编进 App（会重复定义 main/SystemInit）
-            remove_files(path.join(board_dir, "bootloader.c"))
             add_files(path.join(board_dir, "*.S"))
             add_includedirs(board_dir)
             ros_includedirs()
@@ -502,6 +500,55 @@ if is_plat("cross") then
                     cprint("${dim}[firmware] CMSIS: %s${clear}", cmsis_inc)
                 end
             end)
+
+            ros_fw_objcopy()
+        target_end()
+
+        -- ====================================================================
+        -- B 区固件（OTA 升级包）：链接到 0x08010000，其余配置与 A 区一致
+        -- bootloader.c 以 App 模式编入（提供 boot_confirm），不定义 BOOTLOADER_BUILD
+        -- ====================================================================
+        target("ros-fw-f108cb-b")
+            set_kind("binary")
+            set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
+            set_languages("c99")
+            set_warnings("all")
+            set_optimize("smallest")
+            set_strip("none")
+            add_cflags("-g", {force = true})
+            ros_enable_mapfile()
+            add_deps("ros-stm32")
+
+            add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F1")
+            add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
+            add_defines("ROS_USE_TRACE=0")
+            ros_trace_defines()
+            add_defines("LOG_LEVEL=LOG_LEVEL_NONE")
+            add_defines("APP_VECTOR_BASE=0x08010000U")
+
+            for _, flag in ipairs(cpuflags) do
+                add_cflags(flag, {force = true})
+                add_asflags(flag, {force = true})
+                add_ldflags(flag, {force = true})
+            end
+            add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
+
+            add_files(path.join(board_dir, "*.c"))
+            add_files(path.join(board_dir, "*.S"))
+            add_includedirs(board_dir)
+            ros_includedirs()
+            if dfp_inc then
+                add_includedirs(dfp_inc)
+            end
+            if cmsis_inc then
+                add_includedirs(cmsis_inc)
+            end
+
+            add_ldflags("-nostartfiles",
+                        "-T" .. path.join(board_dir, "stm32f108cb_b.ld"),
+                        "--specs=nano.specs",
+                        "-Wl,--gc-sections",
+                        {force = true})
 
             ros_fw_objcopy()
         target_end()
@@ -594,8 +641,6 @@ if is_plat("cross") then
             add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "*.c"))
-            -- bootloader.c 属于独立固件，不能编进 App（会重复定义 main/SystemInit）
-            remove_files(path.join(board_dir, "bootloader.c"))
             add_files(path.join(board_dir, "*.S"))
             add_includedirs(board_dir)
             ros_includedirs()

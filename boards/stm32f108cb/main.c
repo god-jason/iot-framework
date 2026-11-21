@@ -14,6 +14,16 @@
 #include "common.h"
 #include "roshell.h"
 
+#include "stm32f10x.h"
+
+/* 本固件所在 A/B 槽的向量表基址；B 槽构建时由 -DAPP_VECTOR_BASE=0x08010000U 覆盖 */
+#ifndef APP_VECTOR_BASE
+#define APP_VECTOR_BASE 0x08002000U
+#endif
+
+/* Bootloader 共享部分提供的启动确认接口（bootloader.c 以 App 模式编入） */
+void boot_confirm(void);
+
 static ros_task_t s_blink_task;
 static uint8_t    s_blink_stack[1024];
 
@@ -35,9 +45,12 @@ int main(void)
     board_led_init();
     board_trace_start(115200U);   /* trace 经 USART1/PA9 输出，串口助手 115200 8N1 */
 
+    /* A/B 槽固件：向量表重定位到本槽基址 */
+    SCB->VTOR = APP_VECTOR_BASE;
+
     /* roshell 默认绑定 UART1（PA9 发送 / PA10 接收）；
      * log 的 printf 由 syscalls.c 的 _write 同样走 UART1 */
-    (void)rs_platform_start("f103c8");
+    (void)rs_platform_start("f108cb");
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));
@@ -49,6 +62,10 @@ int main(void)
             }
         }
     }
+
+    /* 初始化完成：向 Bootloader 确认本次启动成功。
+     * 升级后的新槽若连续 3 次未确认，Bootloader 会自动回滚到旧槽。 */
+    boot_confirm();
 
     ros_sched_start();
 

@@ -2,3 +2,4 @@
 /build
 /.codebuddy
 /*.log
+__pycache__

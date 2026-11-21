@@ -33,12 +33,16 @@
  * ============================================================================
  * 三、升级协议（Bootloader 收到 'R' 之后）
  * ============================================================================
- *   Boot -> Host : 'K'                          （就绪）
+ *   应答采用不可打印控制字符，避免与 UART 日志里的 'K'/'E' 等字母混淆：
+ *     ACK = 0x06，NAK = 0x15
+ *
+ *   Boot -> Host : ACK                          （就绪：可发送长度/CRC）
  *   Host -> Boot : u32 len（小端，1..槽大小）
  *                  u32 crc32（小端，覆盖后面 len 字节负载）
+ *   Boot -> Host : ACK                          （目标区擦除完成，可发负载）
  *   Host -> Boot : len 字节负载（每字节等待上限 3s）
- *   Boot -> Host : 'K' 成功（随后 MCU 复位，启动新槽）
- *                  'E' 失败（长度/CRC/Flash 错误，返回继续启动旧槽）
+ *   Boot -> Host : ACK 成功（随后 MCU 复位，启动新槽）
+ *                  NAK 失败（长度/CRC/Flash 错误，返回继续启动旧槽）
  *
  * ============================================================================
  * 四、App 侧配合（把本文件加入 App 工程，且不要定义 BOOTLOADER_BUILD）
@@ -85,13 +89,13 @@
 #endif
 
 #define BOOT_FLASH_PAGE     1024U           /* F103 中容量：1KB/页 */
-#define BOOT_META_MAGIC     0x54454D42U     /* 'BMET'，元数据结构有效标识 */
+#define BOOT_META_MAGIC     0x42534F52U     /* 'ROSB'，元数据结构有效标识 */
 #define BOOT_SLOT_NONE      0xFFFFFFFFU     /* pending = 无待确认槽 */
 #define BOOT_MAX_TRIES      3U              /* 新槽最多尝试启动次数 */
 
 /*
  * 启动元数据：保存在两个独立的 1KB 页中，seq 较大的有效副本优先。
- * 结构按 4 字节对齐，长度 36 字节，写入时按半字（2 字节）编程。
+ * 结构按 4 字节对齐，长度 40 字节，写入时按半字（2 字节）编程。
  */
 typedef struct {
     uint32_t magic;         /* BOOT_META_MAGIC */
@@ -347,9 +351,10 @@ static int boot_meta_save(boot_meta_t *m)
     if (m == NULL) {
         return -1;
     }
+    /* 注意：seq 必须先自增再算 CRC，否则 CRC 覆盖的是旧 seq，写回的副本永远校验失败 */
     m->magic = BOOT_META_MAGIC;
-    m->meta_crc = boot_crc32(m, (uint32_t)sizeof(*m) - 4U);
     m->seq++;
+    m->meta_crc = boot_crc32(m, (uint32_t)sizeof(*m) - 4U);
 
     page = ((m->seq & 1U) != 0U) ? BOOT_META_PAGE0 : BOOT_META_PAGE1;
     if (boot_flash_erase(page, BOOT_FLASH_PAGE) != 0) {
@@ -403,6 +408,8 @@ void boot_confirm(void)
 #define UART_BRR_8MHZ_115200    69U     /* 8MHz / 115200 ≈ 69.44，误差 0.6% */
 #define UPDATE_BYTE_TIMEOUT_MS  3000U   /* 升级时单字节接收超时 */
 #define UPDATE_HANDSHAKE_MS     500U    /* 上电等待 'R' 的时间 */
+#define BOOT_ACK_CHAR           0x06U   /* 应答：就绪 / 擦除完成 / 升级成功 */
+#define BOOT_NAK_CHAR           0x15U   /* 应答：升级失败 */
 
 /*
  * 运行在 HSI 8MHz：串口 115200 与 Flash 编程都够用，省去 PLL 配置代码
@@ -491,6 +498,32 @@ static void uart_flush(void)
     }
 }
 
+/* 输出字符串 / 8 位十六进制数（仅日志用，避免引入 printf） */
+static void uart_puts(const char *s)
+{
+    while (*s != '\0') {
+        uart_putc((uint8_t)*s++);
+    }
+}
+
+static void uart_put_hex32(uint32_t v)
+{
+    int shift;
+
+    uart_puts("0x");
+    for (shift = 28; shift >= 0; shift -= 4) {
+        uint32_t d = (v >> (uint32_t)shift) & 0x0FU;
+
+        uart_putc((uint8_t)(d < 10U ? ('0' + d) : ('A' + d - 10U)));
+    }
+}
+
+/* 槽号转 'A' / 'B' */
+static char slot_char(uint32_t slot)
+{
+    return (slot == 0U) ? 'A' : 'B';
+}
+
 /*
  * 在 ms 毫秒内等待升级口令 'R'（大小写均可），其它字符直接丢弃。
  * 返回 true 表示需要进入升级。
@@ -574,13 +607,19 @@ static void jump_to(uint32_t base)
     uint32_t sp = *(volatile uint32_t *)(uintptr_t)base;
     uint32_t pc = *(volatile uint32_t *)(uintptr_t)(base + 4U);
 
+    /* 关闭 SysTick 并清掉挂起位，避免跳转后立刻用 App 向量表进中断 */
     SysTick->CTRL = 0U;
+    SysTick->VAL = 0U;
+    SCB->ICSR = (1UL << 25);                        /* PENDSTCLR */
+
     SCB->VTOR = base;
 
     __asm volatile ("cpsid i" ::: "memory");
     __asm volatile ("msr msp, %0" :: "r" (sp));
     __asm volatile ("msr control, %0" :: "r" (0));
     __asm volatile ("isb");
+    /* 必须恢复开中断：App 启动阶段依赖 SysTick / UART 中断 */
+    __asm volatile ("cpsie i" ::: "memory");
     ((void (*)(void))(uintptr_t)pc)();
 
     for (;;) {
@@ -605,23 +644,38 @@ static void do_update(boot_meta_t *m)
     uint32_t calc = 0xFFFFFFFFU;
     uint8_t buf[64];
     uint32_t n = 0U;
+    uint32_t next_dot = 4096U;
 
-    uart_putc('K');                                 /* 就绪 */
+    uart_puts("[BOOT] OTA request, target slot ");
+    uart_putc((uint8_t)slot_char(target));
+    uart_puts("\r\n");
+    uart_putc(BOOT_ACK_CHAR);                                 /* 就绪 */
     if (uart_read_u32(&len) != 0 || uart_read_u32(&crc) != 0 ||
         len == 0U || len > BOOT_SLOT_SIZE) {
-        uart_putc('E');
+        uart_puts("[BOOT] OTA error: bad header\r\n");
+        uart_putc(BOOT_NAK_CHAR);
         return;
     }
+    uart_puts("[BOOT] OTA len=");
+    uart_put_hex32(len);
+    uart_puts(" crc=");
+    uart_put_hex32(crc);
+    uart_puts("\r\n");
+
     if (boot_flash_erase(base, len) != 0) {         /* 按需擦除目标区 */
-        uart_putc('E');
+        uart_puts("[BOOT] OTA error: erase failed\r\n");
+        uart_putc(BOOT_NAK_CHAR);
         return;
     }
+    uart_puts("[BOOT] OTA erase done, receiving");
+    uart_putc(BOOT_ACK_CHAR);                                 /* 擦除完成，可发负载 */
 
     while (got < len) {
         int c = uart_getc(UPDATE_BYTE_TIMEOUT_MS);
 
         if (c < 0) {
-            uart_putc('E');
+            uart_puts("\r\n[BOOT] OTA error: rx timeout\r\n");
+            uart_putc(BOOT_NAK_CHAR);
             return;
         }
         buf[n++] = (uint8_t)c;
@@ -630,15 +684,22 @@ static void do_update(boot_meta_t *m)
         if (n == sizeof(buf) || got == len) {
             calc = boot_crc32_update(calc, buf, n);
             if (boot_flash_write(base + got - n, buf, n) != 0) {
-                uart_putc('E');
+                uart_puts("\r\n[BOOT] OTA error: flash write\r\n");
+                uart_putc(BOOT_NAK_CHAR);
                 return;
             }
             n = 0U;
         }
+        if (got >= next_dot) {                      /* 每 4KB 打一个进度点 */
+            uart_putc('.');
+            next_dot += 4096U;
+        }
     }
+    uart_puts("\r\n");
 
     if ((calc ^ 0xFFFFFFFFU) != crc) {              /* 整包 CRC 不符 */
-        uart_putc('E');
+        uart_puts("[BOOT] OTA error: crc mismatch\r\n");
+        uart_putc(BOOT_NAK_CHAR);
         return;
     }
 
@@ -648,11 +709,15 @@ static void do_update(boot_meta_t *m)
     m->len[target] = len;
     m->crc[target] = crc;
     if (boot_meta_save(m) != 0) {
-        uart_putc('E');
+        uart_puts("[BOOT] OTA error: meta save\r\n");
+        uart_putc(BOOT_NAK_CHAR);
         return;
     }
 
-    uart_putc('K');
+    uart_puts("[BOOT] OTA ok, pending slot ");
+    uart_putc((uint8_t)slot_char(target));
+    uart_puts(", rebooting\r\n");
+    uart_putc(BOOT_ACK_CHAR);
     uart_flush();
     NVIC_SystemReset();                             /* 复位并启动新槽 */
 }
@@ -677,7 +742,21 @@ int main(void)
     uart_init();
     boot_meta_load(&m);
 
+    /* 启动信息：当前元数据（active / pending / tries） */
+    uart_puts("\r\n[BOOT] meta active=");
+    uart_putc((uint8_t)slot_char(m.active));
+    uart_puts(" pending=");
+    if (m.pending == BOOT_SLOT_NONE) {
+        uart_puts("none");
+    } else {
+        uart_putc((uint8_t)slot_char(m.pending));
+    }
+    uart_puts(" tries=");
+    uart_putc((uint8_t)('0' + (m.tries > 9U ? 9U : m.tries)));
+    uart_puts("\r\n");
+
     /* 1) 启动前 500ms 升级握手 */
+    uart_puts("[BOOT] wait 'R' 500ms\r\n");
     if (wait_update_req(UPDATE_HANDSHAKE_MS)) {
         do_update(&m);                              /* 成功不返回 */
     }
@@ -687,12 +766,19 @@ int main(void)
     if (!slot_valid(&m, target)) {
         uint32_t other = target ^ 1U;               /* 0/1 互换 */
 
+        uart_puts("[BOOT] slot ");
+        uart_putc((uint8_t)slot_char(target));
+        uart_puts(" invalid\r\n");
         if (slot_valid(&m, other)) {
+            uart_puts("[BOOT] fallback to slot ");
+            uart_putc((uint8_t)slot_char(other));
+            uart_puts(", clear pending\r\n");
             target = other;
             m.pending = BOOT_SLOT_NONE;             /* 回落到旧槽 */
             (void)boot_meta_save(&m);
         } else {
             /* 两槽都没有可运行程序：留在 Bootloader 等待升级 */
+            uart_puts("[BOOT] no valid slot, wait OTA\r\n");
             for (;;) {
                 if (wait_update_req(1000U)) {
                     do_update(&m);
@@ -704,6 +790,13 @@ int main(void)
     /* 3) 崩溃回滚：pending 槽连续 BOOT_MAX_TRIES 次未确认则退回 active */
     if (m.pending != BOOT_SLOT_NONE) {
         if (m.tries >= BOOT_MAX_TRIES) {
+            uart_puts("[BOOT] slot ");
+            uart_putc((uint8_t)slot_char(m.pending));
+            uart_puts(" unconfirmed ");
+            uart_putc((uint8_t)('0' + (m.tries > 9U ? 9U : m.tries)));
+            uart_puts(" times, rollback to slot ");
+            uart_putc((uint8_t)slot_char(m.active));
+            uart_puts("\r\n");
             m.pending = BOOT_SLOT_NONE;
             m.tries = 0U;
             (void)boot_meta_save(&m);
@@ -711,11 +804,17 @@ int main(void)
         } else {
             m.tries++;                              /* 本次启动尝试 +1 */
             (void)boot_meta_save(&m);
+            uart_puts("[BOOT] try slot ");
+            uart_putc((uint8_t)slot_char(target));
+            uart_puts(" (");
+            uart_putc((uint8_t)('0' + (m.tries > 9U ? 9U : m.tries)));
+            uart_puts("/3)\r\n");
         }
     }
 
     /* 4) 回滚目标也必须有效，否则停在 Bootloader */
     if (!slot_valid(&m, target)) {
+        uart_puts("[BOOT] target invalid, wait OTA\r\n");
         for (;;) {
             if (wait_update_req(1000U)) {
                 do_update(&m);
@@ -723,7 +822,12 @@ int main(void)
         }
     }
 
-    delay_ms(10U);                                  /* 等串口最后一字节发完 */
+    uart_puts("[BOOT] boot slot ");
+    uart_putc((uint8_t)slot_char(target));
+    uart_puts("\r\n");
+    uart_flush();                                   /* 等日志发完再跳转 */
+
+    delay_ms(10U);
     jump_to(slot_base(target));
     return 0;                                       /* 不会到这里 */
 }
