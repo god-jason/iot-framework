@@ -182,19 +182,9 @@ static bool rs_cmd_add(const rs_cmd_t *def)
         return false;
     }
     if (map_contains(&rs_cmd_table, def->name)) {
-        ros_printf("cmd dup: %s\r\n", def->name);
         return false;
     }
-    if (!map_put(&rs_cmd_table, def->name, (void *)def)) {
-        ros_mem_info_t info;
-
-        (void)memset(&info, 0, sizeof(info));
-        (void)ros_mem_get_info(&info);
-        ros_printf("cmd put fail: %s free=%u max=%u\r\n", def->name,
-                   (unsigned)info.free_bytes, (unsigned)info.max_free_bytes);
-        return false;
-    }
-    return true;
+    return map_put(&rs_cmd_table, def->name, (void *)def);
 }
 
 /* 把内建命令全部登记到命令表（调用方持有临界区） */
@@ -206,10 +196,7 @@ static void rs_cmd_add_builtins(void)
 
     builtins = rs_builtin_table(&count);
     for (i = 0U; i < count; i++) {
-        if (!rs_cmd_add(&builtins[i])) {
-            ros_printf("cmd add fail: %s\r\n",
-                       builtins[i].name != NULL ? builtins[i].name : "?");
-        }
+        (void)rs_cmd_add(&builtins[i]);
     }
 }
 
@@ -218,15 +205,8 @@ static void rs_cmd_commands_ensure(void)
     ros_port_critical_enter();
     if (!s_commands_ready) {
         if (map_init(&rs_cmd_table) == 0) {
-            ros_mem_info_t info;
-
             s_commands_ready = true;
             rs_cmd_add_builtins();
-            (void)memset(&info, 0, sizeof(info));
-            (void)ros_mem_get_info(&info);
-            ros_printf("cmd table: %u entries, free=%u\r\n",
-                       (unsigned)map_size(&rs_cmd_table),
-                       (unsigned)info.free_bytes);
         }
     }
     ros_port_critical_exit();

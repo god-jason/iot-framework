@@ -36,8 +36,13 @@ g_pfnVectors:
     .word 0                             /* 13: 保留 */
     .word PendSV_Handler                /* 14: PendSV（RTOS 切换） */
     .word SysTick_Handler               /* 15: SysTick（RTOS tick） */
-    /* STM32F10x MD 共 43 个外部中断，全部落进 Default_Handler */
-    .rept 43
+    /* STM32F10x MD 共 43 个外部中断：默认落在 Default_Handler，
+     * 其中 IRQ37（USART1）保留可覆盖入口，供板级中断接收使用 */
+    .rept 37
+    .word Default_Handler
+    .endr
+    .word USART1_IRQHandler             /* 37: USART1 */
+    .rept 5
     .word Default_Handler
     .endr
     .size g_pfnVectors, . - g_pfnVectors
@@ -98,6 +103,9 @@ Default_Handler:
     .thumb_set UsageFault_Handler, Default_Handler
     .weak      DebugMon_Handler
     .thumb_set DebugMon_Handler, Default_Handler
+    /* 板级可选的 USART1 接收中断（board_uart.c 提供强定义时覆盖） */
+    .weak      USART1_IRQHandler
+    .thumb_set USART1_IRQHandler, Default_Handler
     /* SVC / PendSV / SysTick 刻意不在此定义：让向量表的未定义引用
      * 把 libros-stm32-f1.a 中的 RTOS 移植层对象拉入链接。 */
 

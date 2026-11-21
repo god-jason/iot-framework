@@ -377,22 +377,8 @@ int rs_shell_start(const char *version)
 
         (void)memset(&info, 0, sizeof(info));
         (void)ros_mem_get_info(&info);
-        ros_printf("shell: task create failed (stack=%u, free=%u, max=%u)\r\n",
-                   (unsigned)RS_SHELL_STACK, (unsigned)info.free_bytes,
-                   (unsigned)info.max_free_bytes);
-        {
-            void *p1 = ros_mem_malloc(64U);
-            void *p2 = ros_mem_malloc(512U);
-            void *p3 = ros_mem_malloc(1024U);
-            void *p4 = ros_mem_malloc(2048U);
-
-            ros_printf("probe 64=%p 512=%p 1024=%p 2048=%p total=%u\r\n",
-                       p1, p2, p3, p4, (unsigned)info.total_bytes);
-            ros_mem_free(p1);
-            ros_mem_free(p2);
-            ros_mem_free(p3);
-            ros_mem_free(p4);
-        }
+        ros_printf("shell: task create failed (stack=%u, free=%u)\r\n",
+                   (unsigned)RS_SHELL_STACK, (unsigned)info.free_bytes);
         rs->ctx = NULL;
         rs_destroy(rs);
         s_ctx.rs = NULL;

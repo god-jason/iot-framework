@@ -108,6 +108,8 @@ static void stm32_shell_watch_task(void *arg)
     uint8_t ch;
 
     for (;;) {
+        bool got = false;
+
         if (rs_shell_task_finished()) {
             /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
             (void)rs_shell_shutdown();
@@ -115,14 +117,24 @@ static void stm32_shell_watch_task(void *arg)
             continue;
         }
 
-        if (hal_uart_receive != NULL &&
-            hal_uart_receive(uart, &ch, 1U, 100U) == HAL_OK) {
+        /*
+         * 非阻塞收字节：有数据时连续收完（UART 只有 1 字节硬件缓冲，
+         * 不能每 5ms 只取一个字节，否则会丢字符）；无数据时睡眠让出 CPU，
+         * 避免旧实现的 100ms 忙等占满处理器。
+         */
+        while (hal_uart_receive != NULL &&
+               hal_uart_receive(uart, &ch, 1U, 0U) == HAL_OK) {
+            got = true;
             if (rs_shell_started()) {
                 rs_shell_feed((const char *)&ch, 1U);
             } else if (stm32_open_word_match(ch)) {
                 (void)stm32_shell_write(reply, sizeof(reply) - 1U, NULL);
                 (void)rs_shell_start(s_version);
             }
+        }
+
+        if (!got) {
+            ros_sleep_ms(5U);
         }
     }
 }

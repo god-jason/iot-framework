@@ -29,8 +29,13 @@
 #define TLSF_FL_MAX         38
 #define TLSF_MAX_SIZE       (((size_t)1) << 38)
 #else
-#define TLSF_FL_MAX         32
-#define TLSF_MAX_SIZE       ((size_t)0x7FFFFFFFU)
+/*
+ * 32 位目标（MCU）：堆通常只有几十 KB，一级索引上限 16（单块 64KB）
+ * 足够，可把控制结构从 26*32 个链表头（约 3.4KB）降到 10*32（约 1.3KB），
+ * 为小块堆留出可用空间。
+ */
+#define TLSF_FL_MAX         16
+#define TLSF_MAX_SIZE       (((size_t)1) << 16)
 #endif
 #define TLSF_FL_COUNT       (TLSF_FL_MAX - TLSF_FL_SHIFT + 1)
 #define TLSF_SMALL_BLOCK    ((size_t)1 << TLSF_FL_SHIFT)    /* 128 */
