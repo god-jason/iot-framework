@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
+#include <float.h>
 
 /* ---------------- 比较 / 判断 ---------------- */
 
@@ -233,6 +234,103 @@ bool str_parse_uint(const char *s, uint32_t *out)
         return false;
     }
     *out = (uint32_t)v;
+    return true;
+}
+
+bool str_parse_float(const char *s, float *out)
+{
+    const char *p;
+    uint64_t mant = 0U;
+    uint32_t sig = 0U;                 /* 已累计的有效数字位数（至多 9） */
+    int32_t exp10 = 0;
+    bool neg = false;
+    bool digits = false;
+    float v;
+
+    if (s == NULL || out == NULL || s[0] == '\0') {
+        return false;
+    }
+    p = s;
+    if (*p == '+' || *p == '-') {
+        neg = (*p == '-');
+        p++;
+    }
+    /* 整数部分：前导 0 不计入有效位；超出 9 位的整数位补偿到指数 */
+    while (*p >= '0' && *p <= '9') {
+        digits = true;
+        if (sig < 9U) {
+            if (sig > 0U || *p != '0') {
+                mant = mant * 10U + (uint64_t)(*p - '0');
+                sig++;
+            }
+        } else {
+            exp10++;
+        }
+        p++;
+    }
+    if (*p == '.') {
+        p++;
+        /* 小数位全部计入指数；仅累计前 9 位有效数字 */
+        while (*p >= '0' && *p <= '9') {
+            digits = true;
+            if (sig < 9U) {
+                if (sig > 0U || *p != '0') {
+                    mant = mant * 10U + (uint64_t)(*p - '0');
+                    sig++;
+                }
+                exp10--;
+            }
+            p++;
+        }
+    }
+    if (!digits) {
+        return false;
+    }
+    if (*p == 'e' || *p == 'E') {
+        const char *q = p + 1;
+        int32_t e = 0;
+        bool eneg = false;
+
+        if (*q == '+' || *q == '-') {
+            eneg = (*q == '-');
+            q++;
+        }
+        if (*q < '0' || *q > '9') {
+            return false;
+        }
+        while (*q >= '0' && *q <= '9') {
+            if (e < 1000) {
+                e = e * 10 + (*q - '0');
+            }
+            q++;
+        }
+        exp10 += eneg ? -e : e;
+        p = q;
+    }
+    if (*p != '\0') {
+        return false;
+    }
+    if (mant == 0U) {
+        *out = neg ? -0.0f : 0.0f;
+        return true;
+    }
+    /* 数量级明显越界时提前失败，避免长循环 */
+    if (exp10 > 40 || exp10 < -50) {
+        return false;
+    }
+    v = (float)mant;
+    while (exp10 > 0) {
+        v *= 10.0f;
+        exp10--;
+    }
+    while (exp10 < 0) {
+        v *= 0.1f;
+        exp10++;
+    }
+    if (v > FLT_MAX || v == 0.0f) {
+        return false;
+    }
+    *out = neg ? -v : v;
     return true;
 }
 

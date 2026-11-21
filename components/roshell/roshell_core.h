@@ -13,12 +13,15 @@
 #include "roshell.h"
 #include "roshell_eval.h"
 #include "roshell_interp.h"
+#include "list.h"
 
 struct ros_task;
+struct rs_context;
 
 /* ------------------------------ run 槽位 ------------------------------ */
 
 typedef struct {
+    list_node_t      link;                /* 活跃槽链表节点（rs->active_list） */
     volatile uint8_t state;               /* RS_RUN_* */
     int              code;
     rs_t       *owner;
@@ -34,10 +37,12 @@ typedef struct {
 
 struct roshell {
     rs_ctx_t   top;                       /* 持久顶层执行单元 */
-    rs_slot_t  slots[RS_RUN_MAX];
+    rs_slot_t  slots[RS_RUN_MAX];         /* 按槽号索引（槽号语义不变） */
+    list_t     active_list;               /* 占用中槽位（启动时尾插，回收时摘除） */
     rs_cmd_hook_t cmd_hook;          /* 块内命令路由（规格 §8 / §9） */
     void              *cmd_hook_ctx;
-    rs_prog_t         *top_prog;          /* 最近一次 rs_exec / load 登记的脚本（供 run 查找函数） */
+    struct rs_context *ctx;               /* 会话上下文（未绑定为 NULL） */
+    rs_prog_t         *top_prog;          /* 最近一次 rs_exec 登记的脚本（供 run 查找函数） */
 };
 
 /* ---------------------- 错误 / 程序对象工具 ---------------------- */

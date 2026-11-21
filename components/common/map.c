@@ -223,3 +223,62 @@ const map_item_t *map_at(const map_t *m, uint32_t index)
     }
     return (x != NULL) ? &x->item : NULL;
 }
+
+/*
+ * 迭代开始：游标指向第 0 层首节点（最小键）。
+ * 参数：m - 目标映射表；it - 迭代器
+ * 返回：无；m 为 NULL/已释放或 it 为 NULL 时迭代器保持为空
+ */
+void map_iter_begin(const map_t *m, map_iter_t *it)
+{
+    if (it == NULL) {
+        return;
+    }
+    it->node = NULL;
+    if (m == NULL || m->head == NULL) {
+        return;
+    }
+    it->node = m->head->next[0];
+}
+
+/*
+ * 取当前条目并沿第 0 层前移游标（键升序）。
+ * 参数：it - 迭代器；out - 条目输出（可为 NULL，此时仅前移）
+ * 返回：true 表示取到条目；false 表示已到末尾或参数非法
+ */
+bool map_iter_next(map_iter_t *it, map_item_t *out)
+{
+    if (it == NULL || it->node == NULL) {
+        return false;
+    }
+    if (out != NULL) {
+        *out = it->node->item;
+    }
+    it->node = it->node->next[0];
+    return true;
+}
+
+/*
+ * 按键升序遍历，逐个构造条目副本传入 fn（不修改映射表）。
+ * 参数：m - 目标映射表；fn - 回调；ctx - 透传上下文
+ * 返回：true 表示完整遍历；fn 提前返回 false 或参数非法返回 false
+ * 注意：遍历期间不得增删条目。
+ */
+bool map_foreach(const map_t *m,
+                 bool (*fn)(const map_item_t *item, void *ctx), void *ctx)
+{
+    const map_node_t *x;
+    map_item_t item;
+
+    if (m == NULL || m->head == NULL || fn == NULL) {
+        return false;
+    }
+    for (x = m->head->next[0]; x != NULL; x = x->next[0]) {
+        item.key = x->item.key;
+        item.value = x->item.value;
+        if (!fn(&item, ctx)) {
+            return false;
+        }
+    }
+    return true;
+}

@@ -2,7 +2,7 @@
  * roshell.c - roshell 实例生命周期与公开 API
  *
  * create / destroy、脚本加载扫描（rs_scan：块配对校验 + 函数登记）、
- * 同步执行（rs_exec / exec_line / load）、run 异步任务槽管理、
+ * 同步执行（rs_exec / exec_line）、run 异步任务槽管理、
  * 顶层变量读取与错误 / 程序对象工具。
  * 词法 / 求值 / 语句解释分别在 roshell_lexer.c / roshell_eval.c /
  * roshell_interp.c，内置函数表在 roshell_func.c。
@@ -16,7 +16,6 @@
 #include "common.h"
 
 #include <string.h>
-#include <stdio.h>
 
 static void rs_err(rs_err_t *e, int code, uint16_t line, const char *msg)
 {
@@ -46,6 +45,8 @@ static void rs_prog_free(rs_prog_t *p)
     if (p == NULL) {
         return;
     }
+    vec_deinit(&p->funcs);
+    map_deinit(&p->func_map);
     if (p->text != NULL) {
         ros_mem_free(p->text);
     }
@@ -67,14 +68,19 @@ void rs_prog_release(rs_prog_t *p)
 
 const rs_fn_t *rs_find_func(const rs_prog_t *p, const char *name, uint16_t len)
 {
-    uint16_t i;
-    for (i = 0U; i < p->func_count; i++) {
-        if (strlen(p->funcs[i].name) == (size_t)len &&
-            memcmp(p->funcs[i].name, name, len) == 0) {
-            return &p->funcs[i];
-        }
+    char key[RS_NAME_MAX];
+    intptr_t idx;
+
+    if (p == NULL || name == NULL || len == 0U || len >= RS_NAME_MAX) {
+        return NULL;
     }
-    return NULL;
+    memcpy(key, name, len);
+    key[len] = '\0';
+    idx = (intptr_t)map_get_ptr(&p->func_map, key);
+    if (idx <= 0) {
+        return NULL;
+    }
+    return (const rs_fn_t *)vec_at(&p->funcs, (uint32_t)(idx - 1));
 }
 /* ============================== 加载扫描（轻量校验 + 函数登记） ============================== */
 
@@ -87,13 +93,14 @@ typedef struct {
 rs_prog_t *rs_scan(const char *script, rs_err_t *err)
 {
     rs_prog_t *p;
-    rs_tok_t *toks;
+    vec_t toks;                           /* 行 token 暂存：容量 RS_TOKEN_MAX，逐行复用 */
     rs_pend_t pend[RS_BLOCK_DEPTH];
     uint8_t depth = 0U;
     size_t len;
     size_t i;
     uint16_t nlines = 0U;
     uint16_t k;
+    memset(&toks, 0, sizeof(toks));
     len = strlen(script);
     if (len > RS_SCRIPT_MAX) {
         rs_err(err, RS_ERR_LIMIT, 0U, "script too long");
@@ -111,18 +118,18 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
         }
     }
     p = (rs_prog_t *)ros_mem_calloc(1U, sizeof(*p));
-    toks = (rs_tok_t *)ros_mem_malloc(RS_TOKEN_MAX * sizeof(rs_tok_t));
-    if (p != NULL && toks != NULL) {
+    if (p != NULL) {
         p->text = (char *)ros_mem_malloc(len + 1U);
         p->line_off = (uint16_t *)ros_mem_malloc((size_t)(nlines + 1U) * sizeof(uint16_t));
         p->end_of = (uint16_t *)ros_mem_calloc((size_t)(nlines + 1U), sizeof(uint16_t));
     }
-    if (p == NULL || toks == NULL || p->text == NULL ||
-        p->line_off == NULL || p->end_of == NULL) {
+    if (p == NULL || p->text == NULL ||
+        p->line_off == NULL || p->end_of == NULL ||
+        vec_init(&toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0 ||
+        vec_init(&p->funcs, sizeof(rs_fn_t), 0U) != 0 ||
+        map_init(&p->func_map) != 0) {
         rs_err(err, RS_ERR_RESOURCE, 0U, "out of memory");
-        if (toks != NULL) {
-            ros_mem_free(toks);
-        }
+        vec_deinit(&toks);
         rs_prog_free(p);
         return NULL;
     }
@@ -147,8 +154,8 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
     }
     for (k = 0U; k < nlines; k++) {
         const char *line = p->text + p->line_off[k];
-        int tn = rs_lex(line, toks, RS_TOKEN_MAX);
-        const rs_tok_t *t = toks;
+        int tn = rs_lex(line, &toks);
+        const rs_tok_t *t = (const rs_tok_t *)vec_data(&toks);
         int kind;
         int last = tn - 2;                /* 末个实 token 下标 */
         if (t[0].type == RS_TOK_EOF) {
@@ -257,8 +264,8 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
             uint16_t j;
             uint8_t argc = 0U;
             uint8_t c;
-            uint16_t f;
-            rs_fn_t *fn;
+            uint32_t idx;
+            rs_fn_t fn;
             if (t[1].type != RS_TOK_WORD || t[1].len >= RS_NAME_MAX) {
                 rs_err(err, RS_ERR_LIMIT, (uint16_t)(k + 1U), "bad function name");
                 goto fail;
@@ -295,12 +302,9 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
                 goto fail;
             }
 #endif
-            for (f = 0U; f < p->func_count; f++) {
-                if (strlen(p->funcs[f].name) == (size_t)t[1].len &&
-                    memcmp(p->funcs[f].name, t[1].p, t[1].len) == 0) {
-                    rs_err(err, RS_ERR_DUPLICATE, (uint16_t)(k + 1U), "duplicate function");
-                    goto fail;
-                }
+            if (rs_find_func(p, t[1].p, t[1].len) != NULL) {
+                rs_err(err, RS_ERR_DUPLICATE, (uint16_t)(k + 1U), "duplicate function");
+                goto fail;
             }
 #if RS_ENABLE_MATH
             /* 内置函数 / 常量名保留，不允许被 function 重定义 */
@@ -318,22 +322,28 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
                 goto fail;
             }
 #endif
-            if (p->func_count >= RS_FUNC_MAX) {
+            if (vec_size(&p->funcs) >= RS_FUNC_MAX) {
                 rs_err(err, RS_ERR_LIMIT, (uint16_t)(k + 1U), "too many functions");
                 goto fail;
             }
-            fn = &p->funcs[p->func_count];
-            memcpy(fn->name, t[1].p, t[1].len);
-            fn->name[t[1].len] = '\0';
-            fn->start = k;
-            fn->argc = argc;
+            memset(&fn, 0, sizeof(fn));
+            memcpy(fn.name, t[1].p, t[1].len);
+            fn.name[t[1].len] = '\0';
+            fn.start = k;
+            fn.argc = argc;
             j = 3U;
             for (c = 0U; c < argc; c++) {
-                memcpy(fn->args[c], t[j].p + 1, t[j].len - 1U);
-                fn->args[c][t[j].len - 1U] = '\0';
+                memcpy(fn.args[c], t[j].p + 1, t[j].len - 1U);
+                fn.args[c][t[j].len - 1U] = '\0';
                 j += rs_op(&t[j + 1U], ",") ? 2U : 1U;
             }
-            p->func_count++;
+            idx = vec_size(&p->funcs);
+            if (vec_push(&p->funcs, &fn) != 0 ||
+                !map_put(&p->func_map, fn.name,
+                         (void *)(intptr_t)(idx + 1U))) {
+                rs_err(err, RS_ERR_RESOURCE, (uint16_t)(k + 1U), "out of memory");
+                goto fail;
+            }
             if (depth >= RS_BLOCK_DEPTH) {
                 rs_err(err, RS_ERR_LIMIT, (uint16_t)(k + 1U), "block nesting too deep");
                 goto fail;
@@ -428,17 +438,17 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
         rs_err(err, RS_ERR_BLOCK, (uint16_t)(pend[depth - 1U].line + 1U), "unclosed block");
         goto fail;
     }
-    ros_mem_free(toks);
+    vec_deinit(&toks);
     p->refs = 1U;
     return p;
 fail:
-    ros_mem_free(toks);
+    vec_deinit(&toks);
     rs_prog_free(p);
     return NULL;
 }
 
 /* 把脚本 prog 登记为会话顶层 prog（接管调用方持有的引用）：
- * 函数在 rs_exec / load 结束后仍保留，供 run 命令查找（规格 §9 会话示例）。
+ * 函数在 rs_exec 结束后仍保留，供 run 命令查找（规格 §9 会话示例）。
  * 运行中的 run 任务另持引用，替换不会释放正在使用的脚本。 */
 void rs_hold_top_prog(rs_t *rs, rs_prog_t *prog)
 {
@@ -463,6 +473,7 @@ static void rs_slot_reap(rs_slot_t *s)
         s->task = NULL;
         s->state = RS_RUN_FREE;
         s->fname[0] = '\0';
+        list_remove(&s->link);              /* 归还槽位：摘除活跃表 */
     }
 }
 
@@ -491,15 +502,13 @@ static void rs_run_entry(void *arg)
             rc = rs_call_body(s->owner, s->prog, f, s->args, 0U, NULL, NULL, &e);
         }
     } else {
-        ctx.vars = (rs_var_t *)ros_mem_calloc(RS_VAR_MAX, sizeof(rs_var_t));
-        ctx.toks = (rs_tok_t *)ros_mem_malloc(RS_TOKEN_MAX * sizeof(rs_tok_t));
-        if (ctx.vars == NULL || ctx.toks == NULL) {
+        if (vec_init(&ctx.toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0) {
             rc = RS_ERR_RESOURCE;
         } else {
             rc = rs_exec_unit(&env);
         }
-        ros_mem_free(ctx.vars);
-        ros_mem_free(ctx.toks);
+        rs_vars_release(&ctx);
+        vec_deinit(&ctx.toks);
     }
     s->code = rc;
     s->state = (rc == RS_OK) ? RS_RUN_DONE : RS_RUN_ERROR;
@@ -526,6 +535,7 @@ static int rs_slot_start(rs_t *rs, rs_prog_t *prog, const char *fname,
         return RS_ERR_LIMIT;
     }
     memset(s, 0, sizeof(*s));
+    list_node_init(&s->link);               /* memset 后恢复游离态，待占槽成功后入表 */
     s->owner = rs;
     if (flen > 0U && flen < RS_NAME_MAX) {
         memcpy(s->fname, fname, flen);
@@ -549,37 +559,45 @@ static int rs_slot_start(rs_t *rs, rs_prog_t *prog, const char *fname,
     s->prog = prog;
     prog->refs++;
     s->state = RS_RUN_RUNNING;
+    list_add_tail(&rs->active_list, &s->link);   /* 占槽成功：登记活跃表 */
     return (int)free_idx;
 }
 /* ============================== 公开 API ============================== */
 
 rs_t *rs_create(void)
 {
+    uint32_t i;
     rs_t *rs = (rs_t *)ros_mem_calloc(1U, sizeof(*rs));
     if (rs == NULL) {
         return NULL;
     }
-    rs->top.vars = (rs_var_t *)ros_mem_calloc(RS_VAR_MAX, sizeof(rs_var_t));
-    rs->top.toks = (rs_tok_t *)ros_mem_malloc(RS_TOKEN_MAX * sizeof(rs_tok_t));
-    if (rs->top.vars == NULL || rs->top.toks == NULL) {
+    list_init(&rs->active_list);
+    for (i = 0U; i < RS_RUN_MAX; i++) {
+        list_node_init(&rs->slots[i].link);
+    }
+    if (vec_init(&rs->top.toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0) {
         rs_destroy(rs);
         return NULL;
     }
-    rs->top.own_vars = true;
     return rs;
 }
 
 void rs_destroy(rs_t *rs)
 {
-    uint32_t i;
+    list_node_t *pos;
     if (rs == NULL) {
         return;
     }
-    for (i = 0U; i < RS_RUN_MAX; i++) {
-        rs_slot_t *s = &rs->slots[i];
+    pos = list_first(&rs->active_list);
+    while (pos != NULL && pos != &rs->active_list.head) {
+        rs_slot_t *s = ROS_CONTAINER_OF(pos, rs_slot_t, link);
+        list_node_t *next = list_next(pos);
+
         if (s->state == RS_RUN_RUNNING) {
-            continue;                       /* 运行中任务：跳过，由任务自行释放 */
+            pos = next;                     /* 运行中任务：跳过，由任务自行释放 */
+            continue;
         }
+        list_remove(&s->link);
         if (s->task != NULL) {
             if (s->task->state == ROS_TASK_TERMINATED &&
                 ros_task_destroy(s->task) == ROS_OK) {
@@ -590,13 +608,14 @@ void rs_destroy(rs_t *rs)
             rs_prog_release(s->prog);
             s->prog = NULL;
         }
+        pos = next;
     }
     if (rs->top_prog != NULL) {
         rs_prog_release(rs->top_prog);
         rs->top_prog = NULL;
     }
-    ros_mem_free(rs->top.vars);
-    ros_mem_free(rs->top.toks);
+    rs_vars_release(&rs->top);
+    vec_deinit(&rs->top.toks);
     ros_mem_free(rs);
 }
 
@@ -748,17 +767,10 @@ int rs_run_state(const rs_t *rs, int slot)
 
 int rs_run_count(const rs_t *rs)
 {
-    uint32_t i;
-    int n = 0;
     if (rs == NULL) {
         return 0;
     }
-    for (i = 0U; i < RS_RUN_MAX; i++) {
-        if (rs->slots[i].state != RS_RUN_FREE) {
-            n++;
-        }
-    }
-    return n;
+    return (int)list_size(&rs->active_list);
 }
 
 const char *rs_run_fname(const rs_t *rs, int slot)
@@ -768,26 +780,6 @@ const char *rs_run_fname(const rs_t *rs, int slot)
     }
     return rs->slots[slot].fname;
 }
-
-#if RS_HAS_FS
-int rs_load(rs_t *rs, const char *path, rs_err_t *err)
-{
-    rs_env_t env;
-    if (rs == NULL || path == NULL) {
-        rs_err(err, RS_ERR_PARAM, 0U, "bad parameter");
-        return RS_ERR_PARAM;
-    }
-    env.rs = rs;
-    env.prog = NULL;
-    env.ctx = &rs->top;
-    env.depth = 0U;
-    env.err = err;
-    if (err != NULL) {
-        err->line = 0U;
-    }
-    return rs_do_load(&env, path);
-}
-#endif
 
 /* ============================== 顶层变量读取 ============================== */
 

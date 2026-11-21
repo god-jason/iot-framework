@@ -96,6 +96,14 @@ bool str_parse_int(const char *s, int32_t *out);
 /* 严格解析十进制无符号整数：必须整串匹配，不接受 '-' */
 bool str_parse_uint(const char *s, uint32_t *out);
 
+/*
+ * 严格解析十进制浮点：必须整串匹配。
+ * 语法：可选 '+'/'-'、整数 / 小数、可选 e/E 指数（指数可带符号）。
+ * 允许前导 '.'（如 ".5"）与尾随 '.'（如 "1."），但小数点前后至少有一位数字。
+ * 纯整数运算累加（至多 9 位有效数字），溢出 / 下溢返回 false。
+ */
+bool str_parse_float(const char *s, float *out);
+
 /* 解析布尔文本：1/0、on/off、true/false、yes/no（大小写不敏感） */
 bool str_parse_bool(const char *s, bool *out);
 

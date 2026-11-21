@@ -291,6 +291,13 @@ static const rs_args_t s_req_args[] = {
     { "req", 0, RS_ARGS_TYPE_STR, true, true, "dv", NULL }
 };
 
+/* 浮点参数：位置参数 + 带默认值的短选项 */
+static const rs_args_t s_float_args[] = {
+    { "level", 0,   RS_ARGS_TYPE_FLOAT, true,  true,  NULL,  "level" },
+    { "gain",  'g', RS_ARGS_TYPE_FLOAT, false, false, "1.5", "gain" }
+};
+#define S_FLOAT_COUNT ((uint8_t)(sizeof(s_float_args) / sizeof(s_float_args[0])))
+
 void ut_args(void)
 {
     rs_args_parsed_t p;
@@ -442,6 +449,63 @@ void ut_args(void)
             TF_CHECK_INT(rs_args_parse(s_req_args, 1U, v, 1, &p), RS_ARGS_OK);
             TF_CHECK(rs_args_get_str(&p, 0U, &s) && strcmp(s, "val") == 0);
         }
+    }
+    tf_end();
+
+    /* ---------------- 浮点参数 ---------------- */
+    tf_begin("args/浮点参数");
+    {
+        char *plain[] = { "2.25" };
+        char *opts[] = { "0.5", "--gain=-3.75" };
+        char *expv[] = { "1e2", "-g", "-2.5e-1" };
+        char *bad[] = { "abc" };
+        char *badopt[] = { "1.0", "--gain=x" };
+        char *nolevel[] = { "--gain", "2.5" };
+        char *empty[] = { "" };
+        float f = 0.0f;
+
+        /* 位置参数取值 + 选项默认值回退 */
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, plain, 1, &p),
+                     RS_ARGS_OK);
+        TF_CHECK(rs_args_get_float(&p, 0U, &f) && f == 2.25f);
+        TF_CHECK(rs_args_get_float(&p, 1U, &f) && f == 1.5f);
+
+        /* 负数与 --name=value */
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, opts, 2, &p),
+                     RS_ARGS_OK);
+        TF_CHECK(rs_args_get_float(&p, 0U, &f) && f == 0.5f);
+        TF_CHECK(rs_args_get_float(&p, 1U, &f) && f == -3.75f);
+
+        /* e 指数与指数负号 */
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, expv, 3, &p),
+                     RS_ARGS_OK);
+        TF_CHECK(rs_args_get_float(&p, 0U, &f) && f == 100.0f);
+        TF_CHECK(rs_args_get_float(&p, 1U, &f) && f == -0.25f);
+
+        /* 非法取值（位置参数 / 选项 / 空串） */
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, bad, 1, &p),
+                     RS_ARGS_ERR_TYPE);
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, badopt, 2, &p),
+                     RS_ARGS_ERR_TYPE);
+        TF_CHECK(strcmp(p.err_arg, "gain") == 0);
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, empty, 1, &p),
+                     RS_ARGS_ERR_TYPE);
+
+        /* 必填位置参数缺失 */
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, nolevel, 2, &p),
+                     RS_ARGS_ERR_MISSING_ARG);
+        TF_CHECK(strcmp(p.err_arg, "level") == 0);
+
+        /* 交叉读取：浮点文本不能按整数解析，字符串接口返回原文 */
+        TF_CHECK_INT(rs_args_parse(s_float_args, S_FLOAT_COUNT, plain, 1, &p),
+                     RS_ARGS_OK);
+        TF_CHECK(!rs_args_get_int(&p, 0U, &i));
+        TF_CHECK(rs_args_get_str(&p, 0U, &s) && strcmp(s, "2.25") == 0);
+
+        /* 空输出指针、空 parsed、下标越界 */
+        TF_CHECK(!rs_args_get_float(&p, 0U, NULL));
+        TF_CHECK(!rs_args_get_float(NULL, 0U, &f));
+        TF_CHECK(!rs_args_get_float(&p, 20U, &f));
     }
     tf_end();
 

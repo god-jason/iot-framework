@@ -814,7 +814,7 @@ static void rs_t_errors(void)
     TF_CHECK_INT(rsexec("if true\nelse\nelse\nend"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("if true\nelse\nelseif false\nend"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("break"), RS_ERR_PARSE);
-    TF_CHECK_INT(rsexec("load 5"), RS_ERR_PARSE);
+    TF_CHECK_INT(rsexec("badcmd 5"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("wait time"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("= 5"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("$x = 1 +"), RS_ERR_PARSE);
@@ -920,42 +920,6 @@ static void rs_t_run(void)
     tf_end();
 }
 
-static void rs_t_load(void)
-{
-    rs_err_t e;
-    FILE *fp;
-
-    tf_begin("roshell:load");
-    fp = fopen("roshell_ut.tmp", "w");
-    TF_CHECK(fp != NULL);
-    if (fp != NULL) {
-        fputs("$v = 40 + 2\n; 注释\n", fp);
-        fclose(fp);
-        memset(&e, 0, sizeof(e));
-        TF_CHECK_INT(rs_load(g_rs, "roshell_ut.tmp", &e), RS_OK);
-        TF_CHECK_INT(rsi("v"), 42);
-        /* load 现在是内置命令：需命令 hook（规格 §9） */
-        rs_cmd_install(g_rs);
-        TF_CHECK_INT(rsexec("load \"roshell_ut.tmp\""), RS_OK);
-        TF_CHECK_INT(rsexec("load \"roshell_missing.tmp\""), RS_ERR_NOT_FOUND);
-        rs_set_cmd_hook(g_rs, NULL, NULL);
-        /* 旧 load 语句语法已删除：无 hook 时按未知语句处理 */
-        TF_CHECK_INT(rsexec("load \"roshell_ut.tmp\""), RS_ERR_PARSE);
-        /* 文件内解析错误：行号按文件计 */
-        fclose(fopen("roshell_ut.tmp", "w"));
-        fp = fopen("roshell_ut.tmp", "w");
-        fputs("$a = 1\nif true\n", fp);
-        fclose(fp);
-        memset(&e, 0, sizeof(e));
-        TF_CHECK_INT(rs_load(g_rs, "roshell_ut.tmp", &e), RS_ERR_BLOCK);
-        TF_CHECK_INT(e.line, 2);
-        remove("roshell_ut.tmp");
-    }
-    memset(&e, 0, sizeof(e));
-    TF_CHECK_INT(rs_load(g_rs, "roshell_missing.tmp", &e), RS_ERR_NOT_FOUND);
-    tf_end();
-}
-
 static void rs_t_exec_line(void)
 {
     tf_begin("roshell:exec_line");
@@ -1019,7 +983,6 @@ static void rs_driver_entry(void *arg)
         rs_t_extfunc();
         rs_t_errors();
         rs_t_run();
-        rs_t_load();
         rs_t_exec_line();
         rs_t_cmd();
         ros_sleep_ms(100);       /* 让 run 命令派生的任务全部结束 */

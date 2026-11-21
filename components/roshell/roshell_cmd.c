@@ -4,7 +4,7 @@
  * 命令 usage / help 文本生成、全局命令表注册 / 查找 / 运行、
  * 运行中命令登记与生命周期通知钩子（on_pause / on_resume / on_kill）、
  * argv 分派入口。参数解析在 roshell_args.c，会话与行编辑在
- * roshell_session.c。
+ * roshell_context.c。
  */
 
 #include "roshell.h"
@@ -47,6 +47,8 @@ static const char *rs_cmd_type_placeholder(uint8_t type)
     case RS_ARGS_TYPE_INT:
     case RS_ARGS_TYPE_UINT:
         return "<n>";
+    case RS_ARGS_TYPE_FLOAT:
+        return "<f>";
     default:
         return "<s>";
     }
@@ -163,17 +165,48 @@ int rs_cmd_run(const rs_cmd_t *table, uint32_t count,
 }
 
 /* ============================== 全局命令表 ============================== */
+/*
+ * 内建命令与扩展命令共用一张 map：名称 -> const rs_cmd_t *。
+ * 首次访问时惰性初始化，并把内建静态表一次性登记进来；
+ * 键由 map 拷贝，查找区分大小写（与 roshell.md 的“命令名全小写”一致）。
+ */
 
-vec_t rs_cmd_table;
+map_t rs_cmd_table;
 
 static bool s_commands_ready;
+
+/* 登记一条命令；名称已存在（含内建命令）或参数非法返回 false */
+static bool rs_cmd_add(const rs_cmd_t *def)
+{
+    if (def == NULL || def->name == NULL || def->fn == NULL) {
+        return false;
+    }
+    if (map_contains(&rs_cmd_table, def->name)) {
+        return false;
+    }
+    return map_put(&rs_cmd_table, def->name, (void *)def);
+}
+
+/* 把内建命令全部登记到命令表（调用方持有临界区） */
+static void rs_cmd_add_builtins(void)
+{
+    const rs_cmd_t *builtins;
+    uint32_t count = 0U;
+    uint32_t i;
+
+    builtins = rs_builtin_table(&count);
+    for (i = 0U; i < count; i++) {
+        (void)rs_cmd_add(&builtins[i]);
+    }
+}
 
 static void rs_cmd_commands_ensure(void)
 {
     ros_port_critical_enter();
     if (!s_commands_ready) {
-        if (vec_init(&rs_cmd_table, sizeof(rs_cmd_t), 8U) == 0) {
+        if (map_init(&rs_cmd_table) == 0) {
             s_commands_ready = true;
+            rs_cmd_add_builtins();
         }
     }
     ros_port_critical_exit();
@@ -181,8 +214,7 @@ static void rs_cmd_commands_ensure(void)
 
 int rs_cmd_register(const rs_cmd_t *def)
 {
-    uint32_t i;
-    int rc;
+    bool ok;
 
     if (def == NULL || def->name == NULL || def->fn == NULL) {
         return -1;
@@ -193,18 +225,9 @@ int rs_cmd_register(const rs_cmd_t *def)
     }
     /* 查重 + 入表在同一临界区，避免并发注册产生重复项 */
     ros_port_critical_enter();
-    for (i = 0U; i < vec_size(&rs_cmd_table); i++) {
-        const rs_cmd_t *existed =
-            (const rs_cmd_t *)vec_at(&rs_cmd_table, i);
-
-        if (existed->name != NULL && str_icmp(existed->name, def->name)) {
-            ros_port_critical_exit();
-            return -1;
-        }
-    }
-    rc = vec_push(&rs_cmd_table, def);
+    ok = rs_cmd_add(def);
     ros_port_critical_exit();
-    return rc;
+    return ok ? 0 : -1;
 }
 
 void rs_cmd_unregister_all(void)
@@ -212,46 +235,50 @@ void rs_cmd_unregister_all(void)
     rs_cmd_commands_ensure();
     ros_port_critical_enter();
     if (s_commands_ready) {
-        vec_clear(&rs_cmd_table);
+        map_clear(&rs_cmd_table);
+        rs_cmd_add_builtins();
     }
     ros_port_critical_exit();
 }
 
 const rs_cmd_t *rs_cmd_find_command(const char *name)
 {
-    uint32_t i;
+    const rs_cmd_t *def = NULL;
 
     if (name == NULL) {
         return NULL;
     }
     rs_cmd_commands_ensure();
     ros_port_critical_enter();
-    for (i = 0; i < vec_size(&rs_cmd_table); i++) {
-        const rs_cmd_t *def = (const rs_cmd_t *)vec_at(&rs_cmd_table, i);
-
-        if (def->name != NULL && str_icmp(def->name, name)) {
-            ros_port_critical_exit();
-            return def;
-        }
+    if (s_commands_ready) {
+        def = (const rs_cmd_t *)map_get_ptr(&rs_cmd_table, name);
     }
     ros_port_critical_exit();
-    return NULL;
+    return def;
 }
 
 const rs_cmd_t *rs_cmd_first(void)
 {
-    const rs_cmd_t *def;
+    map_iter_t it;
+    map_item_t item;
+    const rs_cmd_t *def = NULL;
 
     rs_cmd_commands_ensure();
     ros_port_critical_enter();
-    def = (const rs_cmd_t *)vec_at(&rs_cmd_table, 0);
+    if (s_commands_ready) {
+        map_iter_begin(&rs_cmd_table, &it);
+        if (map_iter_next(&it, &item)) {
+            def = (const rs_cmd_t *)item.value;
+        }
+    }
     ros_port_critical_exit();
     return def;
 }
 
 const rs_cmd_t *rs_cmd_next(const rs_cmd_t *def)
 {
-    uint32_t i;
+    map_iter_t it;
+    map_item_t item;
     const rs_cmd_t *next = NULL;
 
     if (def == NULL) {
@@ -259,12 +286,15 @@ const rs_cmd_t *rs_cmd_next(const rs_cmd_t *def)
     }
     rs_cmd_commands_ensure();
     ros_port_critical_enter();
-    for (i = 0; i < vec_size(&rs_cmd_table); i++) {
-        if ((const rs_cmd_t *)vec_at(&rs_cmd_table, i) == def) {
-            next = (i + 1U < vec_size(&rs_cmd_table))
-                       ? (const rs_cmd_t *)vec_at(&rs_cmd_table, i + 1U)
-                       : NULL;
-            break;
+    if (s_commands_ready) {
+        map_iter_begin(&rs_cmd_table, &it);
+        while (map_iter_next(&it, &item)) {
+            if ((const rs_cmd_t *)item.value == def) {
+                if (map_iter_next(&it, &item)) {
+                    next = (const rs_cmd_t *)item.value;
+                }
+                break;
+            }
         }
     }
     ros_port_critical_exit();
@@ -438,7 +468,8 @@ int rs_builtin_dispatch(int argc, char **argv)
         return RS_ARGS_ERR_PARAM;
     }
     def = rs_cmd_find_command(argv[0]);
-    if (def == NULL) {
+    /* 内建命令由会话层以完整 argv（含命令名）调用，此处不重复分派 */
+    if (def == NULL || rs_builtin_is(def)) {
         return RS_ARGS_ERR_UNKNOWN;
     }
     return rs_cmd_run_node(def, argc - 1, &argv[1]);

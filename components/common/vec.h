@@ -97,6 +97,36 @@ int vec_remove(vec_t *v, uint32_t index, void *out);
  */
 int vec_resize(vec_t *v, uint32_t len);
 
+/*
+ * 顺序查找首个与 elem 逐字节相等的元素（memcmp 比较，O(n)）。
+ * 返回元素下标；未找到、v/elem 为 NULL 或 elem_size 为 0 返回 -1。
+ */
+int32_t vec_find(const vec_t *v, const void *elem);
+
+/*
+ * 自下标 start 起顺序查找首个与 elem 逐字节相等的元素，O(n)。
+ * 便于定位重复元素中的后续出现。返回下标；未找到、start 越界或参数非法返回 -1。
+ */
+int32_t vec_find_from(const vec_t *v, uint32_t start, const void *elem);
+
+/*
+ * 条件查找：pred(elem_ptr, ctx) 返回 true 即为命中，O(n)。
+ * 返回首个命中元素的下标；未找到、pred 为 NULL 或参数非法返回 -1。
+ */
+int32_t vec_find_if(const vec_t *v,
+                    bool (*pred)(const void *elem, void *ctx), void *ctx);
+
+/*
+ * 原地堆排序（非稳定）。
+ * cmp 语义同 qsort：a<b 返回负数、相等返回 0、a>b 返回正数。
+ * 使用逐字节交换，不申请临时缓冲区；空/单元素或 cmp 为 NULL 时不做任何事。
+ * 复杂度 O(n log n)。
+ */
+void vec_sort(vec_t *v, int (*cmp)(const void *a, const void *b));
+
+/* 原地反转元素顺序，O(n)；空表或 v 为 NULL 时不做任何事 */
+void vec_reverse(vec_t *v);
+
 #ifdef __cplusplus
 }
 #endif

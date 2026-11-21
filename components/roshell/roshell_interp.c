@@ -13,12 +13,10 @@
 #include "common.h"
 
 #include <string.h>
-#include <stdio.h>
 
 /* ============================== 运行时 ============================== */
 
 int rs_exec_unit(rs_env_t *env);
-int rs_do_load(rs_env_t *env, const char *path);
 
 #if RS_ENABLE_EXPR
 
@@ -197,8 +195,9 @@ static int rs_for_step(rs_env_t *env, const rs_tok_t *t, int tn, uint16_t idx)
     }
     memcpy(ibuf, items[idx].p, items[idx].len);
     ibuf[items[idx].len] = '\0';
-    tn = rs_lex(ibuf, env->ctx->toks, RS_TOKEN_MAX);
-    rc = rs_eval_tokens(env, env->ctx->toks, tn, 0, &v);
+    tn = rs_lex(ibuf, &env->ctx->toks);
+    rc = rs_eval_tokens(env, (const rs_tok_t *)vec_data(&env->ctx->toks),
+                        tn, 0, &v);
     if (rc != RS_OK) {
         return rc;
     }
@@ -297,61 +296,6 @@ static int rs_stmt_call0(rs_env_t *env, const rs_tok_t *t)
 #endif /* !RS_ENABLE_EXPR */
 
 
-int rs_do_load(rs_env_t *env, const char *path)
-{
-#if RS_HAS_FS
-    rs_prog_t *sub;
-    rs_ctx_t child;
-    rs_env_t cenv;
-    char *buf;
-    size_t got;
-    FILE *fp;
-    int rc;
-    fp = fopen(path, "rb");
-    if (fp == NULL) {
-        rs_err0(env->err, RS_ERR_NOT_FOUND, "file not found");
-        return RS_ERR_NOT_FOUND;
-    }
-    buf = (char *)ros_mem_malloc(RS_SCRIPT_MAX + 1U);
-    if (buf == NULL) {
-        fclose(fp);
-        rs_err0(env->err, RS_ERR_RESOURCE, "out of memory");
-        return RS_ERR_RESOURCE;
-    }
-    got = fread(buf, 1U, RS_SCRIPT_MAX, fp);
-    fclose(fp);
-    buf[got] = '\0';
-    sub = rs_scan(buf, env->err);
-    ros_mem_free(buf);
-    if (sub == NULL) {
-        return (env->err != NULL) ? env->err->code : RS_ERR_PARSE;
-    }
-    memset(&child, 0, sizeof(child));
-    child.vars = env->ctx->vars;            /* 共享父变量表（规格 §4.7） */
-    child.toks = (rs_tok_t *)ros_mem_malloc(RS_TOKEN_MAX * sizeof(rs_tok_t));
-    if (child.toks == NULL) {
-        rs_prog_release(sub);
-        rs_err0(env->err, RS_ERR_RESOURCE, "out of memory");
-        return RS_ERR_RESOURCE;
-    }
-    cenv.rs = env->rs;
-    cenv.prog = sub;
-    cenv.ctx = &child;
-    cenv.depth = env->depth;
-    cenv.err = env->err;
-    rs_hold_top_prog(env->rs, sub);     /* load 的函数表保留给 run 命令 */
-    sub->refs++;                        /* 执行帧自持引用：嵌套 load 替换 top_prog 不影响本次执行 */
-    rc = rs_exec_unit(&cenv);
-    ros_mem_free(child.toks);
-    rs_prog_release(sub);
-    return rc;
-#else
-    (void)path;
-    rs_err0(env->err, RS_ERR_UNSUPPORTED, "load unsupported");
-    return RS_ERR_UNSUPPORTED;
-#endif
-}
-
 /* 函数体执行：私有变量表 + token 缓冲；返回字符串拷回 caller 临时槽 */
 int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
                         const rs_value_t *args, uint8_t depth,
@@ -364,22 +308,17 @@ int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
     uint8_t i;
 #endif
     memset(&child, 0, sizeof(child));
-    child.vars = (rs_var_t *)ros_mem_calloc(RS_VAR_MAX, sizeof(rs_var_t));
-    child.toks = (rs_tok_t *)ros_mem_malloc(RS_TOKEN_MAX * sizeof(rs_tok_t));
-    if (child.vars == NULL || child.toks == NULL) {
-        ros_mem_free(child.vars);
-        ros_mem_free(child.toks);
+    if (vec_init(&child.toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0) {
         rs_err0(err, RS_ERR_RESOURCE, "out of memory");
         return RS_ERR_RESOURCE;
     }
 #if RS_ENABLE_EXPR
-    child.own_vars = true;
     for (i = 0U; i < f->argc; i++) {
         rs_var_t *v = rs_var_alloc(&child, f->args[i],
                                    (uint16_t)strlen(f->args[i]));
         if (v == NULL) {
-            ros_mem_free(child.vars);
-            ros_mem_free(child.toks);
+            rs_vars_release(&child);
+            vec_deinit(&child.toks);
             rs_err0(err, RS_ERR_LIMIT, "too many variables");
             return RS_ERR_LIMIT;
         }
@@ -408,12 +347,12 @@ int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
         }
     }
 #endif
-    ros_mem_free(child.vars);
-    ros_mem_free(child.toks);
+    rs_vars_release(&child);
+    vec_deinit(&child.toks);
     return rc;
 }
 
-/* 按行号 PC 解释执行一个执行单元（脚本 / 函数体 / load 子单元） */
+/* 按行号 PC 解释执行一个执行单元（脚本 / 函数体） */
 int rs_exec_unit(rs_env_t *env)
 {
     rs_ctx_t *ctx = env->ctx;
@@ -423,8 +362,8 @@ int rs_exec_unit(rs_env_t *env)
     while (!ctx->returned && ctx->pc < prog->line_count) {
         uint16_t ln = ctx->pc;
         const char *line = prog->text + prog->line_off[ln];
-        rs_tok_t *t = ctx->toks;
-        int tn = rs_lex(line, t, RS_TOKEN_MAX);
+        int tn = rs_lex(line, &ctx->toks);
+        const rs_tok_t *t = (const rs_tok_t *)vec_data(&ctx->toks);
         int kind;
         ctx->pc = (uint16_t)(ln + 1U);
         if (err != NULL) {

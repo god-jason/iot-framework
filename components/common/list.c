@@ -197,3 +197,196 @@ void list_insert_sorted(list_t *list, list_node_t *node)
     }
     list_insert_before(pos, node);
 }
+
+/*
+ * 条件查找首个满足 pred 的节点。
+ * 参数：list - 目标链表；pred - 判定函数；ctx - 透传上下文
+ * 返回：命中的节点；未找到或参数非法返回 NULL
+ * 复杂度：O(n)
+ */
+list_node_t *list_find(const list_t *list,
+                       bool (*pred)(const list_node_t *node, void *ctx),
+                       void *ctx)
+{
+    list_node_t *pos;
+
+    if (list == NULL || pred == NULL) {
+        return NULL;
+    }
+    for (pos = list->head.next; pos != &list->head; pos = pos->next) {
+        if (pred(pos, ctx)) {
+            return pos;
+        }
+    }
+    return NULL;
+}
+
+/*
+ * 按 sort_key 精确匹配查找（键值相同返回首个，O(n)）。
+ * 参数：list - 目标链表；sort_key - 待查键值
+ * 返回：命中的节点；未找到或 list 为 NULL 返回 NULL
+ */
+list_node_t *list_find_key(const list_t *list, uint32_t sort_key)
+{
+    list_node_t *pos;
+
+    if (list == NULL) {
+        return NULL;
+    }
+    for (pos = list->head.next; pos != &list->head; pos = pos->next) {
+        if (pos->sort_key == sort_key) {
+            return pos;
+        }
+    }
+    return NULL;
+}
+
+/*
+ * 归并两段相邻单链（各 na / nb 个节点，按 next 连接）。
+ * 返回合并后的首节点，并通过 tail_out 回传尾节点；调用方保证 na+nb > 0。
+ * 比较结果相等时优先取左段，保证排序稳定。
+ */
+static list_node_t *list_merge_runs(list_node_t *a, uint32_t na,
+                                    list_node_t *b, uint32_t nb,
+                                    int (*cmp)(const list_node_t *,
+                                               const list_node_t *),
+                                    list_node_t **tail_out)
+{
+    list_node_t dummy;
+    list_node_t *tail = &dummy;
+    uint32_t ia = 0U;
+    uint32_t ib = 0U;
+
+    dummy.next = NULL;
+    while (ia < na && ib < nb) {
+        if (cmp(a, b) <= 0) {
+            tail->next = a;
+            a = a->next;
+            ia++;
+        } else {
+            tail->next = b;
+            b = b->next;
+            ib++;
+        }
+        tail = tail->next;
+    }
+    while (ia < na) {
+        tail->next = a;
+        a = a->next;
+        ia++;
+        tail = tail->next;
+    }
+    while (ib < nb) {
+        tail->next = b;
+        b = b->next;
+        ib++;
+        tail = tail->next;
+    }
+    tail->next = NULL;
+    *tail_out = tail;
+    return dummy.next;
+}
+
+/*
+ * 稳定归并排序（自底向上），不分配内存。
+ *
+ * 方案：
+ *   1) 遍历统计节点数并找到尾节点，把尾节点 next 置 NULL，拆成单链；
+ *      同时把哨兵头恢复为自指空环；
+ *   2) 以 width 为段长逐轮把相邻两段归并，每轮段长翻倍，共 O(log n) 轮；
+ *   3) 按排序后的单链重新填好每个节点的 prev/next，并把首尾接回哨兵头，
+ *      恢复双向循环结构（next 正向、prev 反向均可遍历）。
+ *
+ * 复杂度：时间 O(n log n)，空间 O(1)（仅若干指针与栈上哑节点）。
+ */
+void list_sort(list_t *list,
+               int (*cmp)(const list_node_t *a, const list_node_t *b))
+{
+    list_node_t *cur;
+    list_node_t *last;
+    list_node_t *single;
+    list_node_t *prev;
+    uint32_t n = 0U;
+    uint32_t width;
+
+    if (list == NULL || cmp == NULL || list_empty(list)) {
+        return;
+    }
+
+    /* 1) 统计并断环 */
+    last = &list->head;
+    for (cur = list->head.next; cur != &list->head; cur = cur->next) {
+        last = cur;
+        n++;
+    }
+    last->next = NULL;
+    single = list->head.next;
+    list->head.next = &list->head;
+    list->head.prev = &list->head;
+
+    /* 2) 自底向上归并 */
+    for (width = 1U; width < n; width *= 2U) {
+        list_node_t *rest = single;
+        list_node_t *new_head = NULL;
+        list_node_t *new_tail = NULL;
+
+        while (rest != NULL) {
+            list_node_t *left = rest;
+            list_node_t *right;
+            list_node_t *merged;
+            list_node_t *run_tail;
+            uint32_t lc = 0U;
+            uint32_t rc = 0U;
+
+            while (rest != NULL && lc < width) {
+                rest = rest->next;
+                lc++;
+            }
+            right = rest;
+            while (rest != NULL && rc < width) {
+                rest = rest->next;
+                rc++;
+            }
+            merged = list_merge_runs(left, lc, right, rc, cmp, &run_tail);
+            if (new_tail == NULL) {
+                new_head = merged;
+            } else {
+                new_tail->next = merged;
+            }
+            new_tail = run_tail;
+        }
+        single = new_head;
+        if (width > n / 2U) {
+            break;      /* 本轮已覆盖全部元素，避免 width 翻倍溢出 */
+        }
+    }
+
+    /* 3) 重建双向循环结构 */
+    prev = &list->head;
+    for (cur = single; cur != NULL; cur = cur->next) {
+        prev->next = cur;
+        cur->prev = prev;
+        prev = cur;
+    }
+    prev->next = &list->head;
+    list->head.prev = prev;
+}
+
+/*
+ * 顺序遍历并调用 fn(node, ctx)。
+ * 参数：list - 目标链表；fn - 回调；ctx - 透传上下文
+ * 返回：无；fn 为 NULL 或空链表时直接返回
+ * 注意：遍历期间不要增删节点，否则可能提前结束或重复访问。
+ */
+void list_foreach(const list_t *list,
+                  void (*fn)(list_node_t *node, void *ctx), void *ctx)
+{
+    list_node_t *pos;
+
+    if (list == NULL || fn == NULL) {
+        return;
+    }
+    for (pos = list->head.next; pos != &list->head; pos = pos->next) {
+        fn(pos, ctx);
+    }
+}

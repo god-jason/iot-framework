@@ -337,18 +337,28 @@ const rs_const_t *rs_const_find(const char *name, uint16_t len)
  * 常量：内置常量 -> 扩展常量。
  */
 
-static rs_ext_fn_t    s_ext_funcs[RS_EXT_FUNC_MAX];
-static rs_ext_const_t s_ext_consts[RS_EXT_CONST_MAX];
+static vec_t s_ext_funcs;   /* rs_ext_fn_t：惰性初始化，容量上限 RS_EXT_FUNC_MAX */
+static vec_t s_ext_consts;  /* rs_ext_const_t：容量上限 RS_EXT_CONST_MAX */
+
+/* 扩展表惰性初始化：首次注册时建立；elem_size 非 0 表示已就绪 */
+static bool rs_ext_ready(vec_t *v, uint32_t elem_size)
+{
+    if (v->elem_size != 0U) {
+        return true;
+    }
+    return vec_init(v, elem_size, 0U) == 0;
+}
 
 /* 查扩展函数表（大小写敏感）；未命中返回 NULL */
 const rs_ext_fn_t *rs_ext_func_find(const char *name, uint16_t len)
 {
     uint32_t i;
 
-    for (i = 0U; i < RS_EXT_FUNC_MAX; i++) {
-        if (s_ext_funcs[i].used && strlen(s_ext_funcs[i].name) == (size_t)len &&
-            memcmp(s_ext_funcs[i].name, name, len) == 0) {
-            return &s_ext_funcs[i];
+    for (i = 0U; i < vec_size(&s_ext_funcs); i++) {
+        const rs_ext_fn_t *x = (const rs_ext_fn_t *)vec_at(&s_ext_funcs, i);
+
+        if (strlen(x->name) == (size_t)len && memcmp(x->name, name, len) == 0) {
+            return x;
         }
     }
     return NULL;
@@ -359,10 +369,12 @@ const rs_ext_const_t *rs_ext_const_find(const char *name, uint16_t len)
 {
     uint32_t i;
 
-    for (i = 0U; i < RS_EXT_CONST_MAX; i++) {
-        if (s_ext_consts[i].used && strlen(s_ext_consts[i].name) == (size_t)len &&
-            memcmp(s_ext_consts[i].name, name, len) == 0) {
-            return &s_ext_consts[i];
+    for (i = 0U; i < vec_size(&s_ext_consts); i++) {
+        const rs_ext_const_t *x =
+            (const rs_ext_const_t *)vec_at(&s_ext_consts, i);
+
+        if (strlen(x->name) == (size_t)len && memcmp(x->name, name, len) == 0) {
+            return x;
         }
     }
     return NULL;
@@ -425,33 +437,18 @@ static bool rs_ext_name_ok(const char *name, uint16_t *len)
  * 任一命中即视为重名（注册返回 RS_ERR_PARAM） */
 static bool rs_ext_taken(const char *name, uint16_t len)
 {
-    uint32_t i;
-
 #if RS_ENABLE_MATH
     if (rs_func_find(name, len) != NULL || rs_const_find(name, len) != NULL) {
         return true;
     }
 #endif
-    for (i = 0U; i < RS_EXT_FUNC_MAX; i++) {
-        if (s_ext_funcs[i].used &&
-            strlen(s_ext_funcs[i].name) == (size_t)len &&
-            memcmp(s_ext_funcs[i].name, name, len) == 0) {
-            return true;
-        }
-    }
-    for (i = 0U; i < RS_EXT_CONST_MAX; i++) {
-        if (s_ext_consts[i].used &&
-            strlen(s_ext_consts[i].name) == (size_t)len &&
-            memcmp(s_ext_consts[i].name, name, len) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return rs_ext_func_find(name, len) != NULL ||
+           rs_ext_const_find(name, len) != NULL;
 }
 
 int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn)
 {
-    uint32_t i;
+    rs_ext_fn_t x;
     uint16_t len;
 
     if (fn == NULL || argc > RS_FUNC_ARGS_MAX || !rs_ext_name_ok(name, &len)) {
@@ -460,21 +457,25 @@ int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn)
     if (rs_ext_taken(name, len)) {
         return RS_ERR_PARAM;
     }
-    for (i = 0U; i < RS_EXT_FUNC_MAX; i++) {
-        if (!s_ext_funcs[i].used) {
-            memcpy(s_ext_funcs[i].name, name, (size_t)len + 1U);
-            s_ext_funcs[i].argc = argc;
-            s_ext_funcs[i].fn = fn;
-            s_ext_funcs[i].used = true;
-            return RS_OK;
-        }
+    if (!rs_ext_ready(&s_ext_funcs, sizeof(rs_ext_fn_t))) {
+        return RS_ERR_LIMIT;
     }
-    return RS_ERR_LIMIT;
+    if (vec_size(&s_ext_funcs) >= RS_EXT_FUNC_MAX) {
+        return RS_ERR_LIMIT;
+    }
+    memset(&x, 0, sizeof(x));
+    memcpy(x.name, name, (size_t)len + 1U);
+    x.argc = argc;
+    x.fn = fn;
+    if (vec_push(&s_ext_funcs, &x) != 0) {
+        return RS_ERR_LIMIT;
+    }
+    return RS_OK;
 }
 
 int rs_const_register(const char *name, double value)
 {
-    uint32_t i;
+    rs_ext_const_t x;
     uint16_t len;
 
     if (!rs_ext_name_ok(name, &len)) {
@@ -483,15 +484,19 @@ int rs_const_register(const char *name, double value)
     if (rs_ext_taken(name, len)) {
         return RS_ERR_PARAM;
     }
-    for (i = 0U; i < RS_EXT_CONST_MAX; i++) {
-        if (!s_ext_consts[i].used) {
-            memcpy(s_ext_consts[i].name, name, (size_t)len + 1U);
-            s_ext_consts[i].v = value;
-            s_ext_consts[i].used = true;
-            return RS_OK;
-        }
+    if (!rs_ext_ready(&s_ext_consts, sizeof(rs_ext_const_t))) {
+        return RS_ERR_LIMIT;
     }
-    return RS_ERR_LIMIT;
+    if (vec_size(&s_ext_consts) >= RS_EXT_CONST_MAX) {
+        return RS_ERR_LIMIT;
+    }
+    memset(&x, 0, sizeof(x));
+    memcpy(x.name, name, (size_t)len + 1U);
+    x.v = value;
+    if (vec_push(&s_ext_consts, &x) != 0) {
+        return RS_ERR_LIMIT;
+    }
+    return RS_OK;
 }
 
 #else /* !RS_ENABLE_EXPR */

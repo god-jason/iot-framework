@@ -28,6 +28,7 @@ static bool rs_args_value_valid(uint8_t type, const char *s)
 {
     int32_t iv;
     uint32_t uv;
+    float fv;
     bool b;
 
     if (s == NULL || s[0] == '\0') {
@@ -38,6 +39,8 @@ static bool rs_args_value_valid(uint8_t type, const char *s)
         return str_parse_int(s, &iv);
     case RS_ARGS_TYPE_UINT:
         return str_parse_uint(s, &uv);
+    case RS_ARGS_TYPE_FLOAT:
+        return str_parse_float(s, &fv);
     case RS_ARGS_TYPE_BOOL:
         return str_parse_bool(s, &b);
     case RS_ARGS_TYPE_STR:
@@ -298,6 +301,21 @@ bool rs_args_get_uint(const rs_args_parsed_t *parsed, uint8_t index, uint32_t *o
         return false;
     }
     return str_parse_uint(v, out);
+}
+
+bool rs_args_get_float(const rs_args_parsed_t *parsed, uint8_t index, float *out)
+{
+    const char *v;
+
+    if (out == NULL || parsed == NULL || parsed->args == NULL ||
+        index >= parsed->arg_count) {
+        return false;
+    }
+    v = rs_args_value(parsed, index);
+    if (v == NULL) {
+        return false;
+    }
+    return str_parse_float(v, out);
 }
 
 bool rs_args_get_bool(const rs_args_parsed_t *parsed, uint8_t index, bool *out)

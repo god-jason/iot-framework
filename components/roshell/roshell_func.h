@@ -50,13 +50,11 @@ typedef struct rs_ext_fn {
     char              name[RS_NAME_MAX];
     uint8_t           argc;
     rs_func_fn_t fn;
-    bool              used;
 } rs_ext_fn_t;
 
 typedef struct {
     char   name[RS_NAME_MAX];
     double v;
-    bool   used;
 } rs_ext_const_t;
 
 /* 查扩展函数表（大小写敏感）；未命中返回 NULL */

@@ -83,6 +83,36 @@ bool map_remove(map_t *m, const char *key);
 /* 按下标访问（0 .. map_size()-1，O(n)）；越界返回 NULL */
 const map_item_t *map_at(const map_t *m, uint32_t index);
 
+/*
+ * 迭代器：按键升序遍历（跳表第 0 层 next 链）。
+ * node 为内部游标，调用者不要修改；遍历期间不要增删条目。
+ */
+typedef struct {
+    const map_node_t *node;
+} map_iter_t;
+
+/*
+ * 迭代开始：把游标定位到最小键。
+ * m 为 NULL（或已释放）时迭代器为空，后续 map_iter_next 直接返回 false。
+ */
+void map_iter_begin(const map_t *m, map_iter_t *it);
+
+/*
+ * 取下一个条目并前移游标。
+ * 条目 key 为 map 持有的副本，value 可能为 NULL；结束或参数非法返回 false。
+ * 复杂度均摊 O(1)（单次调用）。
+ */
+bool map_iter_next(map_iter_t *it, map_item_t *out);
+
+/*
+ * 按键升序遍历并调用 fn(item, ctx)，O(n)。
+ * fn 返回 false 时提前停止并返回 false；完整遍历结束返回 true。
+ * m 为 NULL、未初始化或 fn 为 NULL 时返回 false。
+ * 注意：遍历期间不允许增删条目（会使迭代失效）。
+ */
+bool map_foreach(const map_t *m,
+                 bool (*fn)(const map_item_t *item, void *ctx), void *ctx);
+
 #ifdef __cplusplus
 }
 #endif

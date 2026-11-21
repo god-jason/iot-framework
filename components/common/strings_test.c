@@ -15,6 +15,7 @@ void ut_strings(void)
     char *items[4];
     int32_t iv;
     uint32_t uv;
+    float fv;
     bool b;
 
     tf_begin("strings/通用字符串处理");
@@ -79,6 +80,19 @@ void ut_strings(void)
     TF_CHECK(str_parse_uint("42", &uv) && uv == 42U);
     TF_CHECK(!str_parse_uint("-1", &uv));
     TF_CHECK(!str_parse_uint("4a", &uv));
+
+    /* 浮点解析 */
+    TF_CHECK(str_parse_float("42", &fv) && fv > 41.99f && fv < 42.01f);
+    TF_CHECK(str_parse_float("-1.5", &fv) && fv > -1.51f && fv < -1.49f);
+    TF_CHECK(str_parse_float("1e3", &fv) && fv > 999.9f && fv < 1000.1f);
+    TF_CHECK(str_parse_float("1.5e-7", &fv) && fv > 0.0f && fv < 1.0f);
+    TF_CHECK(str_parse_float(".5", &fv) && fv > 0.49f && fv < 0.51f);
+    TF_CHECK(str_parse_float("1.", &fv) && fv > 0.99f && fv < 1.01f);
+    TF_CHECK(!str_parse_float("1.5x", &fv));
+    TF_CHECK(!str_parse_float("", &fv));
+    TF_CHECK(!str_parse_float(NULL, &fv));
+    TF_CHECK(!str_parse_float("1e39", &fv));
+    TF_CHECK(!str_parse_float("1e-999", &fv));
 
     /* 布尔解析 */
     TF_CHECK(str_parse_bool("ON", &b) && b);

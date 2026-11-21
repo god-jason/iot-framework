@@ -13,6 +13,43 @@
 
 /* ============================== list ============================== */
 
+/* 遍历回调收集 sort_key 与节点数 */
+typedef struct {
+    uint32_t keys[8];
+    int      count;
+} list_walk_t;
+
+/* 按 sort_key 升序比较 */
+static int list_cmp_key(const list_node_t *a, const list_node_t *b)
+{
+    if (a->sort_key < b->sort_key) {
+        return -1;
+    }
+    if (a->sort_key > b->sort_key) {
+        return 1;
+    }
+    return 0;
+}
+
+/* 命中条件：sort_key >= *(uint32_t *)ctx */
+static bool list_pred_key_ge(const list_node_t *node, void *ctx)
+{
+    uint32_t key = *(const uint32_t *)ctx;
+
+    return node->sort_key >= key;
+}
+
+/* 记录遍历顺序 */
+static void list_collect_cb(list_node_t *node, void *ctx)
+{
+    list_walk_t *walk = (list_walk_t *)ctx;
+
+    if (walk->count < 8) {
+        walk->keys[walk->count] = node->sort_key;
+    }
+    walk->count++;
+}
+
 void ut_list(void)
 {
     list_t list;
@@ -20,6 +57,9 @@ void ut_list(void)
     list_node_t b;
     list_node_t c;
     list_node_t d;
+    list_node_t e;
+    list_walk_t walk;
+    uint32_t key;
 
     tf_begin("list/基本增删与遍历");
 
@@ -106,6 +146,112 @@ void ut_list(void)
     list_node_init(NULL);
     list_insert_sorted(NULL, &a);
     TF_CHECK(1);
+
+    tf_end();
+
+    tf_begin("list/查找");
+
+    list_init(&list);
+    list_node_init(&a);
+    list_node_init(&b);
+    list_node_init(&c);
+    a.sort_key = 10U;
+    b.sort_key = 20U;
+    c.sort_key = 30U;
+    list_add_tail(&list, &a);
+    list_add_tail(&list, &b);
+    list_add_tail(&list, &c);
+
+    key = 15U;
+    TF_CHECK(list_find(&list, list_pred_key_ge, &key) == &b);
+    key = 99U;
+    TF_CHECK(list_find(&list, list_pred_key_ge, &key) == NULL);
+    TF_CHECK(list_find(&list, NULL, NULL) == NULL);
+    TF_CHECK(list_find(NULL, list_pred_key_ge, &key) == NULL);
+
+    TF_CHECK(list_find_key(&list, 10U) == &a);
+    TF_CHECK(list_find_key(&list, 20U) == &b);
+    TF_CHECK(list_find_key(&list, 99U) == NULL);
+    TF_CHECK(list_find_key(NULL, 10U) == NULL);
+
+    /* 空链表查找 */
+    list_init(&list);
+    TF_CHECK(list_find(&list, list_pred_key_ge, &key) == NULL);
+    TF_CHECK(list_find_key(&list, 20U) == NULL);
+
+    tf_end();
+
+    tf_begin("list/排序与遍历");
+
+    list_init(&list);
+    list_node_init(&a);
+    list_node_init(&b);
+    list_node_init(&c);
+    list_node_init(&d);
+    list_node_init(&e);
+    a.sort_key = 50U;
+    b.sort_key = 10U;
+    c.sort_key = 40U;
+    d.sort_key = 20U;
+    e.sort_key = 30U;
+    list_add_tail(&list, &a);
+    list_add_tail(&list, &b);
+    list_add_tail(&list, &c);
+    list_add_tail(&list, &d);
+    list_add_tail(&list, &e);
+
+    list_sort(&list, list_cmp_key);
+
+    /* 正向 10,20,30,40,50；首尾与中间节点 */
+    TF_CHECK_INT(list_size(&list), 5);
+    TF_CHECK(list.head.next == &b && list.head.prev == &a);
+    TF_CHECK(list.head.next->next == &d &&
+             list.head.next->next->next == &e &&
+             list.head.next->next->next->next == &c);
+
+    /* 反向遍历 prev：50,40,30,20,10 且回到哨兵 */
+    TF_CHECK(list.head.prev == &a && a.prev == &c && c.prev == &e &&
+             e.prev == &d && d.prev == &b &&
+             b.prev == &list.head);
+
+    /* 哨兵双向闭合 */
+    TF_CHECK(list.head.next->prev == &list.head &&
+             list.head.prev->next == &list.head);
+
+    /* 遍历：计数与顺序 */
+    walk.count = 0;
+    list_foreach(&list, list_collect_cb, &walk);
+    TF_CHECK_INT(walk.count, 5);
+    TF_CHECK(walk.keys[0] == 10U && walk.keys[1] == 20U &&
+             walk.keys[2] == 30U && walk.keys[3] == 40U &&
+             walk.keys[4] == 50U);
+
+    /* 稳定性：相同 sort_key 保持原有相对顺序 */
+    list_init(&list);
+    list_node_init(&a);
+    list_node_init(&b);
+    list_node_init(&c);
+    a.sort_key = 20U;
+    b.sort_key = 10U;
+    c.sort_key = 20U;
+    list_add_tail(&list, &a);
+    list_add_tail(&list, &b);
+    list_add_tail(&list, &c);
+    list_sort(&list, list_cmp_key);
+    TF_CHECK(list.head.next == &b && list.head.next->next == &a &&
+             list.head.next->next->next == &c);
+
+    /* 空表 / NULL / 空回调安全 */
+    list_init(&list);
+    list_sort(&list, list_cmp_key);
+    TF_CHECK(list_empty(&list));
+    list_sort(NULL, list_cmp_key);
+    list_sort(&list, NULL);
+    list_foreach(&list, NULL, NULL);
+    list_foreach(NULL, list_collect_cb, &walk);
+    walk.count = 0;
+    list_foreach(&list, list_collect_cb, &walk);
+    TF_CHECK_INT(walk.count, 0);
 
     tf_end();
 }

@@ -293,27 +293,37 @@ static const char *pwm_state_name(hal_state_e state)
 /* 占空比：0~10000 原始值，或带 % 的百分比（支持小数：12.5%） */
 static bool pwm_parse_duty(const char *s, uint32_t *duty)
 {
-    char *end = NULL;
-    double v;
+    char num[24];
+    size_t len;
+    bool percent = false;
+    float v;
 
     if (s == NULL || duty == NULL) {
         return false;
     }
-    v = strtod(s, &end);
-    if (end == s || v < 0.0) {
+    len = strlen(s);
+    if (len == 0U || len >= sizeof(num)) {
         return false;
     }
-    if (*end == '%') {
-        end++;
-        v *= 100.0;
+    if (s[len - 1U] == '%') {
+        percent = true;
+        len--;
+        if (len == 0U) {
+            return false;
+        }
     }
-    if (*end != '\0') {
+    (void)memcpy(num, s, len);
+    num[len] = '\0';
+    if (!str_parse_float(num, &v) || v < 0.0f) {
         return false;
     }
-    if (v > 10000.0) {
-        v = 10000.0;
+    if (percent) {
+        v *= 100.0f;
     }
-    *duty = (uint32_t)(v + 0.5);
+    if (v > 10000.0f) {
+        v = 10000.0f;
+    }
+    *duty = (uint32_t)(v + 0.5f);
     return true;
 }
 

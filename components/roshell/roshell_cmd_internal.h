@@ -17,9 +17,18 @@
 void rs_cmd_active_push(struct ros_task *task, const rs_cmd_t *def);
 void rs_cmd_active_pop(struct ros_task *task, const rs_cmd_t *def);
 
-/* ------------------------------ 内建命令表（rs_builtin.c） ------------------------------ */
+/* ------------------------------ 内建命令表（roshell_builtin.c） ------------------------------ */
 
-/* 按名称查找内建命令（大小写敏感），未命中返回 NULL */
+/*
+ * 内建命令静态表（命令表初始化时登记到全局 map）。
+ * 返回首元素地址并写入条目数；count 可为 NULL。
+ */
+const rs_cmd_t *rs_builtin_table(uint32_t *count);
+
+/* def 是否属于内建静态表 */
+bool rs_builtin_is(const rs_cmd_t *def);
+
+/* 按名称查找内建命令（全局命令表中命中且属于内建表，大小写敏感），未命中返回 NULL */
 const rs_cmd_t *rs_builtin_find(const char *name);
 
 /* help 内建命令：输出内建命令与 rs_cmd 全局命令表的用法 */

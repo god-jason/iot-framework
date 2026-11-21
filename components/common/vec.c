@@ -153,3 +153,103 @@ int vec_resize(vec_t *v, uint32_t len)
     v->len = len;
     return 0;
 }
+
+int32_t vec_find_from(const vec_t *v, uint32_t start, const void *elem)
+{
+    uint32_t i;
+
+    if (!vec_valid(v) || elem == NULL || start >= v->len) {
+        return -1;
+    }
+    for (i = start; i < v->len; i++) {
+        if (memcmp(vec_addr(v, i), elem, v->elem_size) == 0) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+int32_t vec_find(const vec_t *v, const void *elem)
+{
+    return vec_find_from(v, 0U, elem);
+}
+
+int32_t vec_find_if(const vec_t *v,
+                    bool (*pred)(const void *elem, void *ctx), void *ctx)
+{
+    uint32_t i;
+
+    if (!vec_valid(v) || pred == NULL) {
+        return -1;
+    }
+    for (i = 0U; i < v->len; i++) {
+        if (pred(vec_addr(v, i), ctx)) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+/* 逐字节交换，避免按 elem_size 申请临时缓冲区 */
+static void vec_swap_bytes(uint8_t *a, uint8_t *b, uint32_t n)
+{
+    uint32_t i;
+    uint8_t t;
+
+    for (i = 0U; i < n; i++) {
+        t = a[i];
+        a[i] = b[i];
+        b[i] = t;
+    }
+}
+
+/* 下沉调整：root 为堆根下标，end 为堆元素个数（不含） */
+static void vec_sift_down(vec_t *v, uint32_t root, uint32_t end,
+                          int (*cmp)(const void *a, const void *b))
+{
+    uint32_t child;
+
+    while ((child = root * 2U + 1U) < end) {
+        /* 取较大子节点 */
+        if (child + 1U < end &&
+            cmp(vec_addr(v, child), vec_addr(v, child + 1U)) < 0) {
+            child++;
+        }
+        if (cmp(vec_addr(v, root), vec_addr(v, child)) >= 0) {
+            break;
+        }
+        vec_swap_bytes(vec_addr(v, root), vec_addr(v, child), v->elem_size);
+        root = child;
+    }
+}
+
+void vec_sort(vec_t *v, int (*cmp)(const void *a, const void *b))
+{
+    uint32_t i;
+
+    if (!vec_valid(v) || cmp == NULL || v->len < 2U) {
+        return;
+    }
+    /* 建大顶堆 */
+    for (i = v->len / 2U; i > 0U; i--) {
+        vec_sift_down(v, i - 1U, v->len, cmp);
+    }
+    /* 依次把堆顶换到末尾并缩小堆范围 */
+    for (i = v->len - 1U; i > 0U; i--) {
+        vec_swap_bytes(vec_addr(v, 0U), vec_addr(v, i), v->elem_size);
+        vec_sift_down(v, 0U, i, cmp);
+    }
+}
+
+void vec_reverse(vec_t *v)
+{
+    uint32_t i;
+    uint32_t j;
+
+    if (!vec_valid(v) || v->len < 2U) {
+        return;
+    }
+    for (i = 0U, j = v->len - 1U; i < j; i++, j--) {
+        vec_swap_bytes(vec_addr(v, i), vec_addr(v, j), v->elem_size);
+    }
+}

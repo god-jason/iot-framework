@@ -9,6 +9,8 @@
 #include "roshell.h"
 #include "roshell_core.h"
 #include "roshell_func.h"
+#include "ros.h"
+#include "map.h"
 
 #include <string.h>
 
@@ -24,50 +26,75 @@ static float rs_inf(bool neg)
 
 #endif /* RS_ENABLE_EXPR */
 
-/* ============================== 值辅助（EXPR） ============================== */
+/* ============================== 变量表（EXPR） ============================== */
+
+/* 释放变量表中的值盒并 deinit；EXPR=0 时变量表未被使用，等价空操作 */
+void rs_vars_release(rs_ctx_t *ctx)
+{
+    map_iter_t it;
+    map_item_t item;
+
+    if (ctx == NULL) {
+        return;
+    }
+    map_iter_begin(&ctx->vars, &it);
+    while (map_iter_next(&it, &item)) {
+        ros_mem_free(item.value);
+    }
+    map_deinit(&ctx->vars);
+}
 
 #if RS_ENABLE_EXPR
 
+/* 变量表惰性初始化（首次分配变量时才建立跳表哨兵） */
+static bool rs_vars_ensure(rs_ctx_t *ctx)
+{
+    if (ctx->vars.head != NULL) {
+        return true;
+    }
+    return map_init(&ctx->vars) == 0;
+}
+
 rs_var_t *rs_var_find(rs_ctx_t *ctx, const char *name, uint16_t len)
 {
-    uint32_t i;
+    char key[RS_VAR_NAME_MAX];
+
     if (len == 0U || len >= RS_VAR_NAME_MAX) {
         return NULL;
     }
-    for (i = 0U; i < RS_VAR_MAX; i++) {
-        rs_var_t *v = &ctx->vars[i];
-        if (v->used && strlen(v->name) == (size_t)len &&
-            memcmp(v->name, name, len) == 0) {
-            return v;
-        }
-    }
-    return NULL;
+    memcpy(key, name, len);
+    key[len] = '\0';
+    return (rs_var_t *)map_get_ptr(&ctx->vars, key);
 }
 
 rs_var_t *rs_var_alloc(rs_ctx_t *ctx, const char *name, uint16_t len)
 {
+    char key[RS_VAR_NAME_MAX];
     rs_var_t *v;
-    uint32_t i;
+
     if (len == 0U || len >= RS_VAR_NAME_MAX) {
         return NULL;
     }
-    v = rs_var_find(ctx, name, len);
+    memcpy(key, name, len);
+    key[len] = '\0';
+    v = (rs_var_t *)map_get_ptr(&ctx->vars, key);
     if (v != NULL) {
         return v;
     }
-    for (i = 0U; i < RS_VAR_MAX; i++) {
-        if (!ctx->vars[i].used) {
-            v = &ctx->vars[i];
-            break;
-        }
-    }
-    if (i >= RS_VAR_MAX) {
+    if (map_size(&ctx->vars) >= RS_VAR_MAX) {
         return NULL;                        /* 变量表满 */
     }
-    memset(v, 0, sizeof(*v));
-    memcpy(v->name, name, len);
-    v->name[len] = '\0';
-    v->used = true;
+    if (!rs_vars_ensure(ctx)) {
+        return NULL;
+    }
+    v = (rs_var_t *)ros_mem_calloc(1U, sizeof(*v));
+    if (v == NULL) {
+        return NULL;
+    }
+    if (!map_put(&ctx->vars, key, v)) {
+        ros_mem_free(v);
+        return NULL;
+    }
     return v;
 }
 

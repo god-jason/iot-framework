@@ -42,8 +42,8 @@ bool rs_kw(const rs_tok_t *t, const char *s);
 /* 运算符 token 匹配 */
 bool rs_op(const rs_tok_t *t, const char *s);
 
-/* 单行词法分析：填充 toks（末尾追加 RS_TOK_EOF），返回 token 数 */
-int rs_lex(const char *text, rs_tok_t *toks, uint16_t max);
+/* 单行词法分析：清空并逐个追加到 toks（末尾追加 RS_TOK_EOF），返回 token 数 */
+int rs_lex(const char *text, vec_t *toks);
 
 /* 取字符串 token 的去转义内容；未闭合返回 false */
 bool rs_str_unescape(const rs_tok_t *t, char *dst, uint16_t cap, uint16_t *out_len);

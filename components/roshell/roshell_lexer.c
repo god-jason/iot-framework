@@ -49,16 +49,19 @@ bool rs_op(const rs_tok_t *t, const char *s)
 }
 /* ============================== 词法 ============================== */
 
-int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
+int rs_lex(const char *text, vec_t *toks)
 {
     uint16_t i = 0U;
-    uint16_t n = 0U;
-    if (text == NULL || toks == NULL || max < 2U) {
+    rs_tok_t tok;
+
+    if (text == NULL || toks == NULL) {
         return 0;
     }
-    while (text[i] != '\0' && n + 1U < max) {
-        rs_tok_t *t = &toks[n];
+    vec_clear(toks);
+    /* 末尾预留 EOF 位；token 总数不超过 RS_TOKEN_MAX（容量预分配，不扩容） */
+    while (text[i] != '\0' && vec_size(toks) + 1U < RS_TOKEN_MAX) {
         char c = text[i];
+
         if (rs_is_space(c)) {
             i++;
             continue;
@@ -69,10 +72,11 @@ int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
         if (c == '/' && text[i + 1U] == '/') {
             break;
         }
-        memset(t, 0, sizeof(*t));
-        t->p = &text[i];
+        memset(&tok, 0, sizeof(tok));
+        tok.p = &text[i];
         if (c == '"') {                     /* 字符串：含引号保存，求值去转义 */
             uint16_t quote = i;
+
             i++;
             while (text[i] != '\0') {
                 if (text[i] == '\\' && text[i + 1U] == '"') {
@@ -84,32 +88,28 @@ int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
                 }
                 i++;
             }
-            t->type = RS_TOK_STRING;
-            t->p = &text[quote];
+            tok.type = RS_TOK_STRING;
+            tok.p = &text[quote];
             if (text[i] == '"') {
-                t->len = (uint16_t)(i - quote + 1U);
+                tok.len = (uint16_t)(i - quote + 1U);
                 i++;
             } else {
-                t->len = 1U;                /* 未闭合：只留开引号，求值报错 */
+                tok.len = 1U;               /* 未闭合：只留开引号，求值报错 */
             }
-            n++;
-            continue;
-        }
-        if (c == '$') {
+        } else if (c == '$') {
             uint16_t start = i;
+
             i++;
             while (rs_is_alpha(text[i]) || rs_is_digit(text[i])) {
                 i++;
             }
-            t->type = RS_TOK_VAR;
-            t->p = &text[start];
-            t->len = (uint16_t)(i - start);
-            n++;
-            continue;
-        }
-        if (rs_is_digit(c) || (c == '.' && rs_is_digit(text[i + 1U]))) {
+            tok.type = RS_TOK_VAR;
+            tok.p = &text[start];
+            tok.len = (uint16_t)(i - start);
+        } else if (rs_is_digit(c) || (c == '.' && rs_is_digit(text[i + 1U]))) {
             uint16_t start = i;
             bool is_float = false;
+
             while (rs_is_digit(text[i])) {
                 i++;
             }
@@ -122,6 +122,7 @@ int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
             }
             if (text[i] == 'e' || text[i] == 'E') {
                 uint16_t save = i;
+
                 i++;
                 if (text[i] == '+' || text[i] == '-') {
                     i++;
@@ -135,9 +136,9 @@ int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
                     i = save;               /* 不是指数，回退 */
                 }
             }
-            t->type = RS_TOK_NUMBER;
-            t->p = &text[start];
-            t->len = (uint16_t)(i - start);
+            tok.type = RS_TOK_NUMBER;
+            tok.p = &text[start];
+            tok.len = (uint16_t)(i - start);
             /* 手工数值转换（裸机可用，不依赖 strtof） */
             {
                 uint32_t ip = 0U;
@@ -145,8 +146,10 @@ int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
                 float scale = 0.1f;
                 bool dot = false;
                 uint16_t k;
-                for (k = 0U; k < t->len; k++) {
-                    char d = t->p[k];
+
+                for (k = 0U; k < tok.len; k++) {
+                    char d = tok.p[k];
+
                     if (d == '.') {
                         dot = true;
                     } else if (d == 'e' || d == 'E') {
@@ -160,66 +163,65 @@ int rs_lex(const char *text, rs_tok_t *toks, uint16_t max)
                         }
                     }
                 }
-                t->ival = (int32_t)ip;
-                t->fval = (float)ip + frac;
-                t->is_float = is_float;
-                for (k = 0U; k < t->len; k++) {
-                    if (t->p[k] == 'e' || t->p[k] == 'E') {
+                tok.ival = (int32_t)ip;
+                tok.fval = (float)ip + frac;
+                tok.is_float = is_float;
+                for (k = 0U; k < tok.len; k++) {
+                    if (tok.p[k] == 'e' || tok.p[k] == 'E') {
                         int32_t exp = 0;
                         bool eneg = false;
                         float escale = 1.0f;
+
                         k++;
-                        if (k < t->len && (t->p[k] == '+' || t->p[k] == '-')) {
-                            eneg = (t->p[k] == '-');
+                        if (k < tok.len && (tok.p[k] == '+' || tok.p[k] == '-')) {
+                            eneg = (tok.p[k] == '-');
                             k++;
                         }
-                        while (k < t->len && rs_is_digit(t->p[k])) {
-                            exp = exp * 10 + (t->p[k] - '0');
+                        while (k < tok.len && rs_is_digit(tok.p[k])) {
+                            exp = exp * 10 + (tok.p[k] - '0');
                             k++;
                         }
                         while (exp-- > 0) {
                             escale *= 10.0f;
                         }
-                        t->fval = eneg ? (t->fval / escale) : (t->fval * escale);
+                        tok.fval = eneg ? (tok.fval / escale) : (tok.fval * escale);
                         break;
                     }
                 }
             }
-            n++;
-            continue;
-        }
-        if (rs_is_alpha(c)) {
+        } else if (rs_is_alpha(c)) {
             uint16_t start = i;
+
             while (rs_is_alpha(text[i]) || rs_is_digit(text[i])) {
                 i++;
             }
-            t->type = RS_TOK_WORD;
-            t->p = &text[start];
-            t->len = (uint16_t)(i - start);
-            n++;
-            continue;
-        }
-        /* 运算符：双字符优先（含 ++ --）；逗号作为独立 token（for/call 分隔） */
-        t->type = RS_TOK_OP;
-        {
+            tok.type = RS_TOK_WORD;
+            tok.p = &text[start];
+            tok.len = (uint16_t)(i - start);
+        } else {
+            /* 运算符：双字符优先（含 ++ --）；逗号作为独立 token（for/call 分隔） */
             char c2 = text[i + 1U];
+
+            tok.type = RS_TOK_OP;
             if ((c == '=' && c2 == '=') || (c == '!' && c2 == '=') ||
                 (c == '<' && c2 == '=') || (c == '>' && c2 == '=') ||
                 (c == '&' && c2 == '&') || (c == '|' && c2 == '|') ||
                 (c == '+' && c2 == '+') || (c == '-' && c2 == '-')) {
-                t->len = 2U;
+                tok.len = 2U;
                 i = (uint16_t)(i + 2U);
-                n++;
-                continue;
+            } else {
+                tok.len = 1U;
+                i++;
             }
         }
-        t->len = 1U;
-        i++;
-        n++;
+        if (vec_push(toks, &tok) != 0) {
+            break;                          /* 预分配容量下不会失败 */
+        }
     }
-    memset(&toks[n], 0, sizeof(toks[n]));
-    toks[n].type = RS_TOK_EOF;
-    return (int)(n + 1U);
+    memset(&tok, 0, sizeof(tok));
+    tok.type = RS_TOK_EOF;
+    (void)vec_push(toks, &tok);
+    return (int)vec_size(toks);
 }
 
 /* 取字符串 token 的去转义内容；未闭合返回 false */

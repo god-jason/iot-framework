@@ -1,21 +1,21 @@
 ﻿/*
  * roshell_builtin.c - roshell 内建命令实现
  *
- * 静态命令表 + 查找入口（rs_builtin_find）+ help 输出。
+ * 内建命令静态表（初始化时登记进全局命令表 map）+ 归属判断 + help 输出。
  * 关键字 / 命令名一律小写、大小写敏感（roshell.md §1）。
- * 会话、行编辑与命令分派在 roshell_session.c；
+ * 会话、行编辑与命令分派在 roshell_context.c；
  * 内置函数 / 常量表在 roshell_func.c。
  */
 
 #include "roshell.h"
+#include "roshell_core.h"
 #include "roshell_cmd_internal.h"
-#include "roshell_session.h"
+#include "roshell_context.h"
 #include "ros.h"
 #include "common.h"
 
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 /* ============================== 小工具（仅内建命令使用） ============================== */
 
@@ -161,9 +161,9 @@ int rs_cmd_ver(const rs_cmd_ctx_t *ctx)
     if (n > 0) {
         (void)ros_io_write(NULL, info, (uint32_t)n);
     }
-    ros_printf("LINE=%u SCRIPT=%u RUN=%u FS=%d\n",
+    ros_printf("LINE=%u SCRIPT=%u RUN=%u\n",
                (unsigned)RS_LINE_MAX, (unsigned)RS_SCRIPT_MAX,
-               (unsigned)RS_RUN_MAX, (int)RS_HAS_FS);
+               (unsigned)RS_RUN_MAX);
     return 0;
 }
 
@@ -222,7 +222,7 @@ int rs_cmd_echo(const rs_cmd_ctx_t *ctx)
 
 static void rs_ps_run_slots(rs_t *rs)
 {
-    uint32_t i;
+    list_node_t *pos;
     bool any = false;
 
     ros_printf("run slots:\n");
@@ -230,17 +230,17 @@ static void rs_ps_run_slots(rs_t *rs)
         ros_printf("  (no instance)\n");
         return;
     }
-    for (i = 0U; i < RS_RUN_MAX; i++) {
-        int st = rs_run_state(rs, (int)i);
-        const char *fn;
+    /* 活跃槽链表：槽号仍按 slots 下标，顺序为启动先后 */
+    for (pos = list_first(&rs->active_list);
+         pos != NULL && pos != &rs->active_list.head;
+         pos = list_next(pos)) {
+        const rs_slot_t *s = ROS_CONTAINER_OF(pos, rs_slot_t, link);
+        uint32_t idx = (uint32_t)(s - &rs->slots[0]);
 
-        if (st != RS_RUN_FREE) {
-            any = true;
-            fn = rs_run_fname(rs, (int)i);
-            ros_printf("  %2u  %-16s %s\n", (unsigned)i,
-                       (fn != NULL && fn[0] != '\0') ? fn : "-",
-                       rs_run_state_name(st));
-        }
+        any = true;
+        ros_printf("  %2u  %-16s %s\n", (unsigned)idx,
+                   (s->fname[0] != '\0') ? s->fname : "-",
+                   rs_run_state_name((int)s->state));
     }
     if (!any) {
         ros_printf("  (none)\n");
@@ -336,12 +336,14 @@ int rs_cmd_waitjob(const rs_cmd_ctx_t *ctx)
 
 /* ---------------- wait 可暂停登记表 ---------------- */
 /*
- * wait <ms> 以 RS_WAIT_SLICE 分片延时并登记到 s_waits：
+ * wait <ms> 以 RS_WAIT_SLICE 分片延时并登记到会话上下文的 waits（vec）：
  *   on_pause  记录剩余时间 remain 并置 paused，任务在分片边界进入停放
  *             循环（暂停期间不推进 deadline，即不消耗 wait 时间）；
  *   on_resume 以 now + remain 重设 deadline 并解除停放；
  *   on_kill   清表项，停放中的任务在下一分片边界退出等待。
  * pause 命令命中停放（rs_wait_is_parked）后不再做 OS 级挂起。
+ * 登记表按 RS_WAIT_SLOTS 预分配、不扩容，保证 pause/kill 侧持有的
+ * 表项指针不会因 realloc 失效。
  */
 #define RS_WAIT_SLOTS   4U
 #define RS_WAIT_SLICE   50U
@@ -354,15 +356,28 @@ typedef struct {
     bool     used;
 } rs_wait_t;
 
-static rs_wait_t s_waits[RS_WAIT_SLOTS];
+/* 会话 wait 登记表（vec 位于 rs_context_t，首次使用时按容量预分配） */
+static vec_t *rs_wait_vec(void)
+{
+    vec_t *v = rs_session_waits();
+
+    if (v->elem_size == 0U &&
+        vec_init(v, sizeof(rs_wait_t), RS_WAIT_SLOTS) != 0) {
+        return NULL;
+    }
+    return v;
+}
 
 static rs_wait_t *rs_wait_find(const ros_task_t *task)
 {
+    vec_t *v = rs_session_waits();
     uint32_t i;
 
-    for (i = 0U; i < RS_WAIT_SLOTS; i++) {
-        if (s_waits[i].used && s_waits[i].task == task) {
-            return &s_waits[i];
+    for (i = 0U; i < vec_size(v); i++) {
+        rs_wait_t *w = (rs_wait_t *)vec_at(v, i);
+
+        if (w != NULL && w->used && w->task == task) {
+            return w;
         }
     }
     return NULL;
@@ -437,10 +452,21 @@ int rs_cmd_wait(const rs_cmd_ctx_t *ctx)
         return -RS_ERR_PARAM;
     }
     if (ros_current_task != NULL) {
-        for (i = 0U; i < RS_WAIT_SLOTS; i++) {
-            if (!s_waits[i].used) {
-                w = &s_waits[i];
-                break;
+        vec_t *v = rs_wait_vec();
+
+        if (v != NULL) {
+            for (i = 0U; i < vec_size(v); i++) {
+                rs_wait_t *e = (rs_wait_t *)vec_at(v, i);
+
+                if (!e->used) {
+                    w = e;
+                    break;
+                }
+            }
+            /* 空槽用尽时追加一个（容量已预分配，不会 realloc） */
+            if (w == NULL && vec_size(v) < RS_WAIT_SLOTS &&
+                vec_resize(v, vec_size(v) + 1U) == 0) {
+                w = (rs_wait_t *)vec_at(v, vec_size(v) - 1U);
             }
         }
     }
@@ -552,20 +578,17 @@ int rs_cmd_runjob(const rs_cmd_ctx_t *ctx)
             out->b = (a[4] == 'u');
         } else {
             int32_t iv;
-            char *endp;
-            double dv;
+            float fv;
 
             if (str_parse_int(a, &iv)) {
                 out->type = RS_ARG_INT;
                 out->i = iv;
-            } else {
-                dv = strtod(a, &endp);
-                if (endp == a || *endp != '\0') {
-                    rs_error(RS_ERR_PARAM, "bad run argument: %s", a);
-                    return -RS_ERR_PARAM;
-                }
+            } else if (str_parse_float(a, &fv)) {
                 out->type = RS_ARG_FLOAT;
-                out->f = (float)dv;
+                out->f = fv;
+            } else {
+                rs_error(RS_ERR_PARAM, "bad run argument: %s", a);
+                return -RS_ERR_PARAM;
             }
         }
     }
@@ -576,58 +599,6 @@ int rs_cmd_runjob(const rs_cmd_ctx_t *ctx)
     }
     ros_printf("job slot %d started\n", slot);
     return 0;
-}
-
-/* load "<path>"：读取文件并同步执行（规格 §9） */
-int rs_cmd_load(const rs_cmd_ctx_t *ctx)
-{
-#if RS_HAS_FS
-    rs_err_t e;
-    char path[RS_LINE_MAX];
-    const char *p;
-    size_t len;
-    int rc;
-#else
-    (void)ctx;
-#endif
-
-    if (ctx->rs == NULL) {
-        rs_error(RS_ERR_PARAM, "no roshell instance");
-        return -RS_ERR_PARAM;
-    }
-#if RS_HAS_FS
-    if (ctx->argc < 2) {
-        rs_error(RS_ERR_PARAM, "usage: load <path>");
-        return -RS_ERR_PARAM;
-    }
-    p = ctx->argv[1];
-    if (p[0] == '"') {
-        p++;
-    }
-    len = strlen(p);
-    if (len > 0U && p[len - 1U] == '"') {
-        len--;
-    }
-    if (len == 0U || len >= sizeof(path)) {
-        rs_error(RS_ERR_PARAM, "usage: load <path>");
-        return -RS_ERR_PARAM;
-    }
-    (void)memcpy(path, p, len);
-    path[len] = '\0';
-    (void)memset(&e, 0, sizeof(e));
-    rc = rs_load(ctx->rs, path, &e);
-    if (rc != RS_OK) {
-        if (e.line > 0U && e.msg[0] != '\0') {
-            rs_error(rc, "%s (line %u)", e.msg, (unsigned)e.line);
-        } else {
-            rs_error(rc, "%s", (e.msg[0] != '\0') ? e.msg : "load failed");
-        }
-    }
-    return rc;
-#else
-    rs_error(RS_ERR_UNSUPPORTED, "load unsupported");
-    return -RS_ERR_UNSUPPORTED;
-#endif
 }
 
 /* 会话任务 / roshell run 任务 / idle / 自身不允许 kill */
@@ -768,7 +739,6 @@ int rs_cmd_state(const rs_cmd_ctx_t *ctx)
     ros_task_t *task;
     uint32_t idle_pm;
     uint32_t busy_pm;
-    uint32_t i;
 
     for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
         if (task->state == ROS_TASK_TERMINATED) {
@@ -801,8 +771,14 @@ int rs_cmd_state(const rs_cmd_ctx_t *ctx)
     rs_mem_line();
 
     if (ctx->rs != NULL) {
-        for (i = 0U; i < RS_RUN_MAX; i++) {
-            if (rs_run_state(ctx->rs, (int)i) == RS_RUN_RUNNING) {
+        list_node_t *pos;
+
+        for (pos = list_first(&ctx->rs->active_list);
+             pos != NULL && pos != &ctx->rs->active_list.head;
+             pos = list_next(pos)) {
+            const rs_slot_t *s = ROS_CONTAINER_OF(pos, rs_slot_t, link);
+
+            if (s->state == RS_RUN_RUNNING) {
                 run_busy++;
             }
         }
@@ -850,27 +826,42 @@ static const rs_cmd_t s_cmds[] = {
     { "wait",    NULL, "wait <ms>",                  "run",     NULL, 0U,
       rs_cmd_wait,    NULL, rs_wait_on_pause, rs_wait_on_resume,
       rs_wait_on_kill },
-    { "load",    NULL, "load <path>",                "run",     NULL, 0U,
-      rs_cmd_load,    NULL, NULL, NULL, NULL },
     { "exit",    NULL, "exit",                       "session", NULL, 0U,
       rs_cmd_exit,    NULL, NULL, NULL, NULL }
 };
 
 #define RS_CMD_COUNT (sizeof(s_cmds) / sizeof(s_cmds[0]))
 
-const rs_cmd_t *rs_builtin_find(const char *name)
+/* 内建命令静态表（命令表初始化时登记到全局 map）与归属判断 */
+const rs_cmd_t *rs_builtin_table(uint32_t *count)
+{
+    if (count != NULL) {
+        *count = (uint32_t)RS_CMD_COUNT;
+    }
+    return s_cmds;
+}
+
+bool rs_builtin_is(const rs_cmd_t *def)
 {
     uint32_t i;
 
-    if (name == NULL) {
-        return NULL;
+    if (def == NULL) {
+        return false;
     }
     for (i = 0U; i < RS_CMD_COUNT; i++) {
-        if (strcmp(s_cmds[i].name, name) == 0) {     /* 大小写敏感 */
-            return &s_cmds[i];
+        if (def == &s_cmds[i]) {
+            return true;
         }
     }
-    return NULL;
+    return false;
+}
+
+/* 内建命令查找（全局命令表中命中且属于内建表），大小写敏感 */
+const rs_cmd_t *rs_builtin_find(const char *name)
+{
+    const rs_cmd_t *def = rs_cmd_find_command(name);
+
+    return rs_builtin_is(def) ? def : NULL;
 }
 
 int rs_builtin_help(const rs_cmd_ctx_t *ctx)
@@ -880,21 +871,19 @@ int rs_builtin_help(const rs_cmd_ctx_t *ctx)
     char **argv = ctx->argv;
 
     if (argc >= 2) {
-        const rs_cmd_t *cmd = rs_builtin_find(argv[1]);
+        const rs_cmd_t *cmd = rs_cmd_find_command(argv[1]);
 
         if (cmd != NULL) {
-            char buf[128];
-
-            if (rs_cmd_usage(cmd, buf, sizeof(buf)) > 0) {
-                ros_printf("%s\n", buf);
-            }
-            return 0;
-        }
-        {
-            const rs_cmd_t *def = rs_cmd_find_command(argv[1]);
             char buf[160];
 
-            if (def != NULL && rs_cmd_help(def, buf, sizeof(buf)) > 0) {
+            /* 内建命令只回显 usage；扩展命令输出完整帮助 */
+            if (rs_builtin_is(cmd)) {
+                if (rs_cmd_usage(cmd, buf, sizeof(buf)) > 0) {
+                    ros_printf("%s\n", buf);
+                }
+                return 0;
+            }
+            if (rs_cmd_help(cmd, buf, sizeof(buf)) > 0) {
                 (void)ros_io_write(NULL, buf, (uint32_t)strlen(buf));
                 return 0;
             }
@@ -917,6 +906,9 @@ int rs_builtin_help(const rs_cmd_ctx_t *ctx)
         for (def = rs_cmd_first(); def != NULL; def = rs_cmd_next(def)) {
             char buf[128];
 
+            if (rs_builtin_is(def)) {
+                continue;               /* 内建命令已按分组输出 */
+            }
             if (rs_cmd_usage(def, buf, sizeof(buf)) > 0) {
                 ros_printf("  %-28s %s\n", buf,
                            def->desc != NULL ? def->desc : "");

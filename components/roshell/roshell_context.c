@@ -1,5 +1,5 @@
 ﻿/*
- * roshell_session.c - roshell 交互会话
+ * roshell_context.c - roshell 会话上下文
  *
  * 接收环形缓冲（feed）、简化行编辑、输入任务（process）、三级分派
  * （内建命令 -> rs_cmd 全局命令表 -> 脚本引擎）与会话生命周期
@@ -7,8 +7,9 @@
  */
 
 #include "roshell.h"
+#include "roshell_core.h"
 #include "roshell_cmd_internal.h"
-#include "roshell_session.h"
+#include "roshell_context.h"
 #include "ros.h"
 #include "common.h"
 
@@ -17,9 +18,6 @@
 #include <stdarg.h>
 
 /* ------------------------------ 会话配置 ------------------------------ */
-#ifndef RS_SHELL_RX_MAX
-#define RS_SHELL_RX_MAX        256U    /* 接收环形缓冲字节数 */
-#endif
 #ifndef RS_SHELL_PRIO
 #define RS_SHELL_PRIO          4U      /* 输入任务优先级（0 最高） */
 #endif
@@ -84,18 +82,7 @@ static int rs_tokenize(char *buf, char **argv, int max)
 
 /* ============================== 会话状态 ============================== */
 
-static rs_t *s_rs;
-static ros_task_t *s_task;
-static const char *s_version;
-static ringbuf_t s_rx;
-static uint8_t s_rx_mem[RS_SHELL_RX_MAX];
-static char s_line[RS_LINE_MAX];
-static uint32_t s_line_len;
-static bool s_last_cr;
-static bool s_last_esc;
-static volatile bool s_started;
-static volatile bool s_finished;
-static volatile bool s_exit_req;
+static rs_context_t s_ctx;
 
 /* ------------------------------ 会话状态访问（供内建命令） ------------------------------ */
 
@@ -105,7 +92,7 @@ bool rs_session_pump_ctrlc(void)
     bool hit = false;
     uint8_t c;
 
-    while (ringbuf_read(&s_rx, &c, 1U) == 1U) {
+    while (ringbuf_read(&s_ctx.rx, &c, 1U) == 1U) {
         if (c == 0x03U) {
             hit = true;
         }
@@ -115,12 +102,17 @@ bool rs_session_pump_ctrlc(void)
 
 ros_task_t *rs_session_task(void)
 {
-    return s_task;
+    return s_ctx.task;
 }
 
 const char *rs_session_version(void)
 {
-    return s_version;
+    return s_ctx.version;
+}
+
+vec_t *rs_session_waits(void)
+{
+    return &s_ctx.waits;
 }
 
 /* ============================== 引擎命令 hook ============================== */
@@ -248,55 +240,55 @@ int rs_cmd_dispatch(rs_t *rs, const char *line)
 static bool rs_edit_byte(uint8_t c)
 {
     if (c == 0x03U) {                       /* Ctrl-C：清行 */
-        s_line_len = 0U;
-        s_last_cr = false;
-        s_line[0] = '\0';
+        s_ctx.line_len = 0U;
+        s_ctx.last_cr = false;
+        s_ctx.line[0] = '\0';
         ros_puts("^C");
         rs_prompt();
         return false;
     }
     if (c == '\r' || c == '\n') {
         /* 终端可能只发 CR、只发 LF 或发 CRLF：都按一次提交处理 */
-        if (c == '\n' && s_last_cr) {
-            s_last_cr = false;
+        if (c == '\n' && s_ctx.last_cr) {
+            s_ctx.last_cr = false;
             return false;
         }
-        s_last_cr = (c == '\r');
+        s_ctx.last_cr = (c == '\r');
         ros_io_write(NULL, "\n", 1U);
-        s_line[s_line_len] = '\0';
-        if (s_line_len > 0U) {
-            (void)rs_cmd_dispatch(s_rs, s_line);
+        s_ctx.line[s_ctx.line_len] = '\0';
+        if (s_ctx.line_len > 0U) {
+            (void)rs_cmd_dispatch(s_ctx.rs, s_ctx.line);
         }
-        s_line_len = 0U;
-        if (!s_exit_req) {
+        s_ctx.line_len = 0U;
+        if (!s_ctx.exit_req) {
             rs_prompt();
         }
         return true;
     }
-    s_last_cr = false;
+    s_ctx.last_cr = false;
     if (c == 0x08U || c == 0x7FU) {         /* 退格 */
-        if (s_line_len > 0U) {
-            s_line_len--;
-            s_line[s_line_len] = '\0';
+        if (s_ctx.line_len > 0U) {
+            s_ctx.line_len--;
+            s_ctx.line[s_ctx.line_len] = '\0';
             ros_io_write(NULL, "\b \b", 3U);
         }
         return false;
     }
     if (c == 0x1BU) {                       /* ESC：吞掉方向键等控制序列 */
-        s_last_esc = true;
+        s_ctx.last_esc = true;
         return false;
     }
-    if (s_last_esc) {
+    if (s_ctx.last_esc) {
         if (c == '[' || (c >= '0' && c <= '9') || c == ';') {
             return false;
         }
-        s_last_esc = false;
+        s_ctx.last_esc = false;
         return false;
     }
     if (c >= 0x20U && c < 0x7FU) {
-        if (s_line_len + 1U < RS_LINE_MAX) {   /* 超长行截断 */
-            s_line[s_line_len++] = (char)c;
-            s_line[s_line_len] = '\0';
+        if (s_ctx.line_len + 1U < RS_LINE_MAX) {   /* 超长行截断 */
+            s_ctx.line[s_ctx.line_len++] = (char)c;
+            s_ctx.line[s_ctx.line_len] = '\0';
             ros_putchar((char)c);
         }
     }
@@ -310,27 +302,27 @@ uint32_t rs_shell_process(void)
     uint32_t lines = 0U;
     uint8_t c;
 
-    if (!s_started) {
+    if (!s_ctx.started) {
         return 0U;
     }
     /* 先排空本轮全部输入（含 EOF 前已到达的行），再响应退出请求 */
-    while (ringbuf_read(&s_rx, &c, 1U) == 1U) {
+    while (ringbuf_read(&s_ctx.rx, &c, 1U) == 1U) {
         if (rs_edit_byte(c)) {
             lines++;
         }
     }
-    if (s_exit_req) {
-        s_finished = true;      /* 输入任务据此退出 */
+    if (s_ctx.exit_req) {
+        s_ctx.finished = true;      /* 输入任务据此退出 */
     }
     return lines;
 }
 
 void rs_shell_feed(const char *data, uint32_t len)
 {
-    if (!s_started || data == NULL || len == 0U) {
+    if (!s_ctx.started || data == NULL || len == 0U) {
         return;
     }
-    (void)ringbuf_write(&s_rx, data, len);
+    (void)ringbuf_write(&s_ctx.rx, data, len);
 }
 
 static void rs_shell_task_entry(void *arg)
@@ -338,10 +330,10 @@ static void rs_shell_task_entry(void *arg)
     (void)arg;
     for (;;) {
         (void)rs_shell_process();
-        if (s_finished) {
+        if (s_ctx.finished) {
             break;
         }
-        if (ringbuf_available(&s_rx) == 0U) {
+        if (ringbuf_available(&s_ctx.rx) == 0U) {
             ros_sleep_ms(5U);
         }
     }
@@ -350,34 +342,39 @@ static void rs_shell_task_entry(void *arg)
 
 int rs_shell_start(const char *version)
 {
-    if (s_started) {
+    rs_t *rs;
+
+    if (s_ctx.started) {
         return 0;
     }
-    s_rs = rs_create();
-    if (s_rs == NULL) {
+    rs = rs_create();
+    if (rs == NULL) {
         return -1;
     }
-    rs_cmd_install(s_rs);            /* 块内命令路由（规格 §8） */
-    (void)ringbuf_init(&s_rx, s_rx_mem, sizeof(s_rx_mem));
-    s_line_len = 0U;
-    s_line[0] = '\0';
-    s_last_cr = false;
-    s_last_esc = false;
-    s_finished = false;
-    s_exit_req = false;
-    s_version = version;
+    rs_cmd_install(rs);              /* 块内命令路由（规格 §8） */
+    s_ctx.rs = rs;
+    rs->ctx = &s_ctx;
+    (void)ringbuf_init(&s_ctx.rx, s_ctx.rx_mem, sizeof(s_ctx.rx_mem));
+    s_ctx.line_len = 0U;
+    s_ctx.line[0] = '\0';
+    s_ctx.last_cr = false;
+    s_ctx.last_esc = false;
+    s_ctx.finished = false;
+    s_ctx.exit_req = false;
+    s_ctx.version = version;
 
-    s_task = ros_task_create_dynamic(RS_SHELL_TASK_NAME,
-                                     RS_SHELL_PRIO,
-                                     rs_shell_task_entry, NULL,
-                                     RS_SHELL_STACK);
-    if (s_task == NULL) {
-        rs_destroy(s_rs);
-        s_rs = NULL;
-        s_version = NULL;
+    s_ctx.task = ros_task_create_dynamic(RS_SHELL_TASK_NAME,
+                                           RS_SHELL_PRIO,
+                                           rs_shell_task_entry, NULL,
+                                           RS_SHELL_STACK);
+    if (s_ctx.task == NULL) {
+        rs->ctx = NULL;
+        rs_destroy(rs);
+        s_ctx.rs = NULL;
+        s_ctx.version = NULL;
         return -1;
     }
-    s_started = true;
+    s_ctx.started = true;
     ros_printf("roshell ready (%s): type 'help'\n",
                version != NULL ? version : "pc");
     rs_prompt();
@@ -386,46 +383,43 @@ int rs_shell_start(const char *version)
 
 bool rs_shell_started(void)
 {
-    return s_started;
+    return s_ctx.started;
 }
 
 bool rs_shell_task_finished(void)
 {
-    return s_finished;
+    return s_ctx.finished;
 }
 
 void rs_shell_request_exit(void)
 {
-    s_exit_req = true;
+    s_ctx.exit_req = true;
 }
 
 int rs_shell_shutdown(void)
 {
-    if (!s_started || !s_finished) {
+    if (!s_ctx.started || !s_ctx.finished) {
         return -1;
     }
-    if (s_task != NULL) {
-        (void)ros_task_destroy(s_task);
-        s_task = NULL;
+    if (s_ctx.task != NULL) {
+        (void)ros_task_destroy(s_ctx.task);
     }
-    rs_destroy(s_rs);
-    s_rs = NULL;
-    s_version = NULL;
-    s_started = false;
-    s_exit_req = false;
-    s_finished = false;
-    s_line_len = 0U;
-    ringbuf_reset(&s_rx);
+    if (s_ctx.rs != NULL) {
+        s_ctx.rs->ctx = NULL;
+        rs_destroy(s_ctx.rs);
+    }
+    vec_deinit(&s_ctx.waits);           /* wait 登记表（惰性初始化，未用则为空） */
+    (void)memset(&s_ctx, 0, sizeof(s_ctx));
     return 0;
 }
 
 rs_t *rs_shell_instance(void)
 {
-    return s_rs;
+    return s_ctx.rs;
 }
 
 uint32_t rs_shell_line_pending(void)
 {
-    return s_line_len;
+    return s_ctx.line_len;
 }
 

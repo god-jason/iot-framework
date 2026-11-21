@@ -8,12 +8,54 @@
 
 #include <stdio.h>
 
+/* 统计遍历条目数 */
+static bool map_count_cb(const map_item_t *item, void *ctx)
+{
+    int *count = (int *)ctx;
+
+    (void)item;
+    (*count)++;
+    return true;
+}
+
+/* 访问一条后立即要求停止 */
+static bool map_stop_cb(const map_item_t *item, void *ctx)
+{
+    int *count = (int *)ctx;
+
+    (void)item;
+    (*count)++;
+    return false;
+}
+
+/* 记录遍历到的键（应按升序） */
+typedef struct {
+    char keys[4][8];
+    int  count;
+} map_walk_t;
+
+static bool map_collect_cb(const map_item_t *item, void *ctx)
+{
+    map_walk_t *walk = (map_walk_t *)ctx;
+
+    if (walk->count < 4) {
+        (void)snprintf(walk->keys[walk->count], sizeof(walk->keys[0]),
+                       "%s", item->key);
+    }
+    walk->count++;
+    return true;
+}
+
 void ut_map(void)
 {
     map_t m;
+    map_iter_t it;
+    map_item_t item;
+    map_walk_t walk;
     int values[64];
     char key[16];
     void *out = NULL;
+    int cnt = 0;
     uint32_t i;
 
     tf_begin("map/跳表键值映射");
@@ -77,6 +119,60 @@ void ut_map(void)
     map_deinit(&m);
     TF_CHECK_INT((int)map_size(&m), 0);
     TF_CHECK(!map_put(&m, "x", &values[0]));
+
+    tf_end();
+
+    tf_begin("map/迭代与遍历");
+
+    TF_CHECK_INT(map_init(&m), 0);
+
+    /* 空表：迭代立即结束 */
+    map_iter_begin(&m, &it);
+    TF_CHECK(!map_iter_next(&it, &item));
+
+    /* 插入 c,a,b 后应按 a,b,c 升序迭代 */
+    (void)map_put(&m, "c", &values[2]);
+    (void)map_put(&m, "a", &values[0]);
+    (void)map_put(&m, "b", &values[1]);
+
+    map_iter_begin(&m, &it);
+    TF_CHECK(map_iter_next(&it, &item));
+    TF_CHECK_STR(item.key, "a");
+    TF_CHECK(item.value == &values[0]);
+    TF_CHECK(map_iter_next(&it, &item));
+    TF_CHECK_STR(item.key, "b");
+    TF_CHECK(map_iter_next(&it, &item));
+    TF_CHECK_STR(item.key, "c");
+    TF_CHECK(!map_iter_next(&it, &item));
+
+    /* foreach 全遍历：计数与顺序 */
+    walk.count = 0;
+    TF_CHECK(map_foreach(&m, map_collect_cb, &walk));
+    TF_CHECK_INT(walk.count, 3);
+    TF_CHECK_STR(walk.keys[0], "a");
+    TF_CHECK_STR(walk.keys[2], "c");
+
+    /* foreach 提前返回 false：只访问 1 条 */
+    cnt = 0;
+    TF_CHECK(!map_foreach(&m, map_stop_cb, &cnt));
+    TF_CHECK_INT(cnt, 1);
+
+    /* 单条目（value 为 NULL） */
+    map_clear(&m);
+    (void)map_put(&m, "only", NULL);
+    map_iter_begin(&m, &it);
+    TF_CHECK(map_iter_next(&it, &item));
+    TF_CHECK_STR(item.key, "only");
+    TF_CHECK(item.value == NULL);
+    TF_CHECK(!map_iter_next(&it, &item));
+
+    /* NULL / 未初始化安全 */
+    map_iter_begin(NULL, &it);
+    TF_CHECK(!map_iter_next(&it, &item));
+    TF_CHECK(!map_foreach(NULL, map_count_cb, &cnt));
+    TF_CHECK(!map_foreach(&m, NULL, NULL));
+
+    map_deinit(&m);
 
     tf_end();
 }

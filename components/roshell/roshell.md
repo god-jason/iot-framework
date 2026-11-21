@@ -21,8 +21,8 @@ roshell 是机器人设备的脚本语言，上位机通过串口发送脚本，
 ### 1.2 内存策略（尽可能节省）
 
 - 常驻内存只有三部分：**源文本缓冲** + **块帧栈** + **变量表**；
-  无 code 数组、无 token 数组缓存（行 token 在栈上临时分配，单行复用）。
-- 源文本按需持有：交互式输入逐行执行不留存全文；`load`/`run` 命令的脚本执行
+  无 code 数组、无逐行指令缓存（行 token 与变量表使用可复用的内部容器，容量按上限固定，单行覆盖）。
+- 源文本按需持有：交互式输入逐行执行不留存全文；`run` 命令的脚本执行
   结束即释放文本内存。
 - 一切上限可编译期裁剪（见 §7），默认配置下 20K RAM 设备可运行。
 
@@ -324,7 +324,7 @@ end
 
 | 宏 | 默认 | =0 时移除 |
 |---|---|---|
-| `RS_ENABLE_EXPR` | 1 | 变量、赋值语句、表达式求值器；`if`/`while`/`for` 的列表求值不可用（解析期报 `unsupported`），函数退化为无参定义与无参隐式调用；内置命令 `wait`/`load`/`run` 不受影响（参数为字面量/变量替换） |
+| `RS_ENABLE_EXPR` | 1 | 变量、赋值语句、表达式求值器；`if`/`while`/`for` 的列表求值不可用（解析期报 `unsupported`），函数退化为无参定义与无参隐式调用；内置命令 `wait`/`run` 不受影响（参数为字面量/变量替换） |
 | `RS_ENABLE_MATH` | =EXPR | 内置 math 函数库（§3.3）；`EXPR=0` 时强制为 0 |
 
 裁剪后预计节省：表达式求值器 + 词法变量分支 + 变量表 ≈ 4-6K Flash（参考现有 shell_expr 实现）。
@@ -358,7 +358,7 @@ statement  := assignment
             | 'function' IDENT '(' [ var { ',' var } ] ')' NEWLINE block 'end'
             | 'return' [ expr ]
             | func_call                       ; 隐式调用语句（丢弃返回值）
-            | command                         ; wait/load/run 等为内置命令，见 §9
+            | command                         ; wait/run 等为内置命令，见 §9
 assignment := var '=' expr | ( '++' | '--' ) var | var ( '++' | '--' )
 expr       := literal | var | func_call | unary | inc_dec | binary | logical | comparison
 func_call  := IDENT '(' [ expr { ',' expr } ] ')'
@@ -370,19 +370,19 @@ block      := { statement NEWLINE }
 命令名同样**全小写、大小写敏感**。每行输入按三级分派：
 
 1. 内置命令（下表）；
-2. 全局命令表（cmd 组件注册的设备命令，现属 roshell，如 `gpio`、`pwm`）；
+2. 全局命令表（内建命令与设备命令共用一张 map：名称 -> 命令定义，
+   设备命令经 `rs_cmd_register` 注册，如 `gpio`、`pwm`）；
 3. 脚本引擎（按 §4 语句执行，即交互模式）。
 
 | 命令 | 用法 | 说明 |
 |---|---|---|
 | `help` | `help [cmd]` | 列出全部命令（按 basic/task/sys/run/session 分组）；带参数显示单条详情 |
-| `ver` | `ver` | 固件版本与 roshell 配置（行/脚本/run 槽上限、HAS_FS） |
+| `ver` | `ver` | 固件版本与 roshell 配置（行/脚本/run 槽上限） |
 | `echo` | `echo <text\|$var>...` | 回显参数；`$var` 替换为变量值（需 `RS_ENABLE_EXPR=1`） |
 | `ps` | `ps` | 任务列表 + run 槽位状态表 |
 | `jobs` | `jobs` | 列出 `run` 命令派生的脚本任务（槽号、函数名、状态） |
 | `run` | `run <fn> [args...]` | 异步执行：新建任务运行已登记函数，立即返回槽号；实参为字面量或 `$var`（命令层替换，不做表达式求值），个数须与形参一致 |
 | `wait` | `wait <ms>` | 当前任务延时指定毫秒 |
-| `load` | `load <path>` | 从文件系统读取脚本源码并**同步执行**；解析失败或文件不可读报告错误行号；`RS_HAS_FS=0` 时返回不支持 |
 | `waitjob` | `waitjob <n> [timeout <ms>]` | 等待槽 n 结束，默认超时 30000ms；期间 Ctrl-C 可中断 |
 | `kill` | `kill <name\|#tid>` | 挂起并回收任务（拒绝操作 `roshell_io` 自身） |
 | `pause` | `pause <name\|#tid>` | 挂起任务 |
@@ -402,8 +402,7 @@ block      := { statement NEWLINE }
 > $cal = 45
 > echo 校准值 $cal 开始
 校准值 45 开始
-> load "home.rs"             ; 先加载脚本，登记 home_seq 函数
-> run home_seq $cal 3        ; 异步执行函数 home_seq($a,$b)
+> run home_seq $cal 3        ; 异步执行已通过 rs_exec 登记的函数 home_seq($a,$b)
 job slot 0 started
 > jobs
 0  home_seq  running
@@ -434,23 +433,21 @@ job 0 done
 
 ### 10.3 脚本执行
 
-- 同步：`load <path>` 命令（需 `RS_HAS_FS=1`）或
-  API `rs_exec(rs, text)`；脚本内函数用隐式调用语句同步执行。
+- 同步：API `rs_exec(rs, text)`；脚本内函数用隐式调用语句同步执行。
 - 异步：`run <fn> [args...]` 命令新建任务执行函数，槽位上限 16
   （`RS_RUN_MAX`，小内存平台建议收紧到 4）；用 `jobs` 查看、
-  `waitjob <n>` 等待。函数表不跨脚本持久，`load` 的脚本结束即释放。
-- 顶层变量表在会话内持久（跨行、跨 `load` 可见），便于交互调试。
+  `waitjob <n>` 等待。函数表取自最近一次 `rs_exec` 登记的脚本。
+- 顶层变量表在会话内持久（跨行可见），便于交互调试。
 
 ### 10.4 低端平台裁剪
 
 - `ROS_STM32_F1` 系列默认 `RS_ENABLE_EXPR=0`：无变量/表达式，
   `echo $var` 按原文输出，if/while/for/函数参数不可用；
   会话与内置命令、顺序执行脚本仍可用。
-- 无文件系统平台加 `-D RS_HAS_FS=0` 裁掉 `load` 及 stdio 依赖。
 
 ## 11. 完整脚本示例
 
-上位机通过串口一次性下发（或存为文件后 `load`）：
+上位机通过串口一次性下发（或通过 API `rs_exec` 执行）：
 
 ```
 ; selfcheck.rs - 开机自检

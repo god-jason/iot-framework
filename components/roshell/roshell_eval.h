@@ -11,6 +11,7 @@
 
 #include "roshell.h"
 #include "roshell_lexer.h"
+#include "map.h"
 
 /* 求值器与语句解释器共享的类型（后置定义，供跨模块原型前置声明） */
 struct rs_env;
@@ -38,14 +39,13 @@ typedef struct {
 
 /* ------------------------------ 执行单元 ------------------------------ */
 
+/* 变量值盒：变量名由 map 作为键持有，值指向本结构的堆分配盒 */
 typedef struct {
-    char    name[RS_VAR_NAME_MAX];   /* 不含 $ */
-    uint8_t type;
-    bool    used;
-    int32_t i;
-    float   f;
-    bool    b;
-    char    str[RS_STR_MAX];
+    uint8_t  type;
+    int32_t  i;
+    float    f;
+    bool     b;
+    char     str[RS_STR_MAX];
     uint16_t slen;
 } rs_var_t;
 
@@ -63,9 +63,9 @@ typedef struct {
 #define RS_TMP_SLOTS 4
 
 typedef struct rs_ctx {
-    rs_var_t   *vars;                     /* [RS_VAR_MAX]，堆 */
-    bool        own_vars;
-    rs_tok_t   *toks;                     /* [RS_TOKEN_MAX]，堆 */
+    map_t       vars;                     /* 变量表：键=变量名，值=rs_var_t* 堆盒 */
+    vec_t       toks;                     /* 单行 token 序列（容量 RS_TOKEN_MAX） */
+    /* 块帧栈：栈语义、深度受 RS_BLOCK_DEPTH 约束，保留定长数组 */
     rs_frame_t  frames[RS_BLOCK_DEPTH];
     uint8_t     depth;
     uint16_t    pc;
@@ -75,6 +75,9 @@ typedef struct rs_ctx {
     char        sbuf[RS_TMP_SLOTS][RS_STR_MAX];
     uint8_t     sflip;
 } rs_ctx_t;
+
+/* 释放变量表中的值盒并 deinit（执行单元销毁时调用；可重复调用） */
+void rs_vars_release(rs_ctx_t *ctx);
 
 /* 表达式解析游标（求值器与隐式调用语句共用） */
 typedef struct {

@@ -15,7 +15,7 @@
  *   rs_destroy(rs);
  *
  * 变量作用域：每个执行单元（脚本 / 函数调用）私有；实例保留一个
- * 顶层执行单元，rs_exec / rs_exec_line / load 共用其变量表，
+ * 顶层执行单元，rs_exec / rs_exec_line 共用其变量表，
  * 便于交互式逐行执行与测试观察（rs_get_* 读取顶层变量）。
  * run 派生任务拥有独立执行单元。
  *
@@ -28,6 +28,7 @@
 #include <stddef.h>
 
 #include "vec.h"
+#include "map.h"
 #include "roshell_config.h"
 
 #ifdef __cplusplus
@@ -129,7 +130,7 @@ typedef struct {
 
 /*
  * 异步执行已登记函数（内置命令 run 的实现）：新建任务立即返回槽位号。
- * 函数在会话最近一次 rs_exec / rs_load 登记的脚本中查找；
+ * 函数在会话最近一次 rs_exec 登记的脚本中查找；
  * 实参个数须与形参一致（RS_ENABLE_EXPR=0 时仅支持 0 个实参）。
  * 返回槽位号（>=0）；负值为错误码（RS_ERR_UNDEF_FUNC / RS_ERR_ARG_COUNT /
  * RS_ERR_LIMIT / RS_ERR_RESOURCE 等）。
@@ -148,11 +149,6 @@ int rs_run_count(const rs_t *rs);
 
 /* 槽位正在运行的函数名；空闲 / 整脚本槽 / 槽位号非法返回 "" */
 const char *rs_run_fname(const rs_t *rs, int slot);
-
-#if RS_HAS_FS
-/* 读取文件并同步执行（解析失败报告文件内行号）。返回同 rs_exec */
-int rs_load(rs_t *rs, const char *path, rs_err_t *err);
-#endif
 
 /* ============================== 顶层变量读取 ============================== */
 /* 供上位机 / 测试观察顶层执行单元变量；name 可带 $ 前缀。
@@ -196,7 +192,7 @@ int rs_const_register(const char *name, double value);
 
 /*
  * 形态：在 roshell 脚本引擎之上提供一组小写、大小写敏感的内建命令
- * （help/ver/echo/ps/kill/pause/resume/mem/state/jobs/waitjob/run/wait/load/exit），
+ * （help/ver/echo/ps/kill/pause/resume/mem/state/jobs/waitjob/run/wait/exit），
  * 并把串口（STM32）或标准输入输出（PC）的字节流组装成行驱动会话。
  *
  * 分派规则（rs_cmd_dispatch）：
@@ -225,7 +221,7 @@ int rs_cmd_dispatch(rs_t *rs, const char *line);
 
 /*
  * 给实例安装命令 hook（rs_set_cmd_hook）：脚本块内的命令行
- * （wait / load / run / echo 等，规格 §8 statement -> command）经
+ * （wait / run / echo 等，规格 §8 statement -> command）经
  * 内建命令表 -> rs_cmd 全局命令表分派，不进入脚本引擎语句解释。
  */
 void rs_cmd_install(rs_t *rs);
@@ -290,6 +286,7 @@ int rs_platform_start(const char *version);
  *   - positional=true 为位置参数（按声明顺序绑定，name 仅作显示标签）；
  *   - positional=false 为选项：--name / -x（short_name 非 0 时）；
  *   - RS_ARGS_TYPE_BOOL 为开关，不带值（也接受 --flag=0/1/on/off）；
+ *   - RS_ARGS_TYPE_FLOAT 按浮点解析（支持小数与 e/E 指数）；
  *   - required=true 的参数必须出现（默认值不会满足 required）。
  *
  * 所有文本均为只读引用，不分配内存。
@@ -316,6 +313,7 @@ typedef enum {
     RS_ARGS_TYPE_STR = 0,      /* 字符串 */
     RS_ARGS_TYPE_INT,          /* 有符号整数 */
     RS_ARGS_TYPE_UINT,         /* 无符号整数 */
+    RS_ARGS_TYPE_FLOAT,        /* 浮点数 */
     RS_ARGS_TYPE_BOOL          /* 布尔开关 */
 } rs_args_type_t;
 
@@ -366,6 +364,7 @@ int rs_args_find_short(const rs_args_t *args, uint8_t arg_count,
 bool rs_args_get_str(const rs_args_parsed_t *parsed, uint8_t index, const char **out);
 bool rs_args_get_int(const rs_args_parsed_t *parsed, uint8_t index, int *out);
 bool rs_args_get_uint(const rs_args_parsed_t *parsed, uint8_t index, uint32_t *out);
+bool rs_args_get_float(const rs_args_parsed_t *parsed, uint8_t index, float *out);
 bool rs_args_get_bool(const rs_args_parsed_t *parsed, uint8_t index, bool *out);
 
 /* 错误码转文本 */
@@ -441,22 +440,27 @@ int rs_cmd_run(const rs_cmd_t *table, uint32_t count,
 
 /* ============================== 全局命令表 ============================== */
 
-/* 全局命令表（定义在 rs_cmd.c；按注册顺序追加，存 rs_cmd_t 值拷贝） */
-extern vec_t rs_cmd_table;
+/*
+ * 全局命令表（定义在 roshell_cmd.c）：名称 -> const rs_cmd_t *，
+ * 内建命令与扩展命令共用一张表，首次使用时惰性初始化并登记内建命令。
+ * 键为命令名副本，比较区分大小写。
+ */
+extern map_t rs_cmd_table;
 
 /*
- * 注册命令到全局命令表（入表为 def 的值拷贝）。
- * def->name / def->fn 为空、名称重复（不区分大小写）时返回 -1；成功返回 0。
+ * 注册扩展命令到全局命令表（入表保存 def 指针，调用者需保证其生命周期）。
+ * def->name / def->fn 为空、名称与已有命令（含内建命令）相同时返回 -1；
+ * 成功返回 0。
  */
 int rs_cmd_register(const rs_cmd_t *def);
 
-/* 清空并释放全局命令表（测试 / 反初始化用） */
+/* 清空扩展命令并重新登记内建命令（测试 / 反初始化用） */
 void rs_cmd_unregister_all(void);
 
-/* 在全局命令表中查找（名称不区分大小写），未找到返回 NULL */
+/* 在全局命令表中查找（含内建命令，名称区分大小写），未找到返回 NULL */
 const rs_cmd_t *rs_cmd_find_command(const char *name);
 
-/* 遍历全局命令表：首个命令 / 后继命令（到尾部返回 NULL） */
+/* 遍历全局命令表（含内建命令，按键名升序）：首个命令 / 后继命令 */
 const rs_cmd_t *rs_cmd_first(void);
 const rs_cmd_t *rs_cmd_next(const rs_cmd_t *def);
 

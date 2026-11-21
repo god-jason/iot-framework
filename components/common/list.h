@@ -107,6 +107,33 @@ static inline list_node_t *list_next(const list_node_t *node)
     return (node != NULL) ? node->next : NULL;
 }
 
+/*
+ * 条件查找：返回首个 pred(node, ctx) 为 true 的节点，O(n)。
+ * 未找到或 pred/list 为 NULL 时返回 NULL。
+ */
+list_node_t *list_find(const list_t *list,
+                       bool (*pred)(const list_node_t *node, void *ctx),
+                       void *ctx);
+
+/* 按 node->sort_key 精确查找首个匹配节点，O(n)；未找到或 list 为 NULL 返回 NULL */
+list_node_t *list_find_key(const list_t *list, uint32_t sort_key);
+
+/*
+ * 稳定归并排序（自底向上），cmp(a, b) < 0 表示 a 排在 b 前。
+ * 时间复杂度 O(n log n)，不使用任何动态内存；排序后哨兵头的
+ * next/prev 双向环保持完整，可正向或反向遍历。
+ * list 或 cmp 为 NULL 时不做任何事。
+ */
+void list_sort(list_t *list,
+               int (*cmp)(const list_node_t *a, const list_node_t *b));
+
+/*
+ * 顺序遍历并调用 fn(node, ctx)，O(n)。
+ * fn 为 NULL 或链表为空时直接返回；遍历期间不要增删节点。
+ */
+void list_foreach(const list_t *list,
+                  void (*fn)(list_node_t *node, void *ctx), void *ctx);
+
 #ifdef __cplusplus
 }
 #endif
