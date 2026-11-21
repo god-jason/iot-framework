@@ -222,6 +222,17 @@ void ros_port_start_first(ros_task_t *task)
 __attribute__((weak, naked)) void SVC_Handler(void)
 {
     __asm volatile(
+        "tst   lr, #4                       \n"   /* bit2=0：来自 MSP（首个任务启动） */
+        "beq   1f                           \n"
+        /* 任务上下文切换：r0=from，r1=to（ros_port_switch 入参，硬件未破坏） */
+        "mrs   r2, psp                      \n"
+        "stmdb r2!, {r4-r11}                \n"   /* 补存旧任务 r4-r11 */
+        "str   r2, [r0]                     \n"   /* from->stack_ptr = r2 */
+        "ldr   r2, [r1]                     \n"   /* r2 = to->stack_ptr */
+        "ldmia r2!, {r4-r11}                \n"
+        "msr   psp, r2                      \n"   /* PSP 指向目标任务硬件帧 */
+        "bx    lr                           \n"   /* EXC_RETURN 弹出目标任务上下文 */
+        "1:                                 \n"
         "movw  r0, #:lower16:ros_first_task_sp \n"
         "movt  r0, #:upper16:ros_first_task_sp \n"
         "ldr   r0, [r0]                       \n"
@@ -239,24 +250,16 @@ __attribute__((weak, naked)) void SVC_Handler(void)
 
 /*
  * 任务上下文主动切换。
- * 进入时关中断，避免 ISR 在 PSP 切换过程中压栈；切到目标任务后开中断。
- * 所有调用点都在临界区之外，因此 PRIMASK 在每个任务内是平衡的。
+ * 线程模式无法用 EXC_RETURN 弹栈，因此统一走 SVC：
+ * SVC 入口已由硬件把 r0-r3/r12/lr/pc/xPSR 压到当前任务（PSP）栈上，
+ * 处理函数再补存 r4-r11，即与 PendSV 保存的上下文完全一致；
+ * 恢复目标任务后直接 bx lr（EXC_RETURN=0xFFFFFFFD）弹其硬件帧。
  */
 __attribute__((naked)) void ros_port_switch(ros_task_t *from, ros_task_t *to)
 {
     (void)from;
     (void)to;
-    __asm volatile(
-        "cpsid i              \n"
-        "mrs   r2, psp         \n"   /* r2 = 当前 PSP */
-        "stmdb r2!, {r4-r11}   \n"   /* 保存 r4-r11，r2 递减 */
-        "str   r2, [r0]        \n"   /* from->stack_ptr = r2 */
-        "ldr   r2, [r1]        \n"   /* r2 = to->stack_ptr */
-        "ldmia r2!, {r4-r11}   \n"   /* 恢复 r4-r11 */
-        "msr   psp, r2         \n"
-        "cpsie i              \n"   /* 新任务从这里恢复并开中断 */
-        "bx    lr              \n"
-    );
+    __asm volatile("svc #0" ::: "memory");
 }
 
 void ros_port_return(void)
@@ -283,6 +286,8 @@ void ros_port_request_switch(void)
 __attribute__((weak, naked)) void PendSV_Handler(void)
 {
     __asm volatile(
+        "tst   lr, #4                       \n"   /* EXC_RETURN bit2=0：被打断的是 MSP 上下文 */
+        "beq   2f                           \n"   /* 首个任务尚未启动（PSP 未建立）：忽略切换 */
         "cpsid i                            \n"
         "mrs   r1, psp                      \n"
         "stmdb r1!, {r4-r11}                \n"   /* 保存到被打断任务的栈 */
@@ -304,6 +309,7 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
         "ldmia r0!, {r4-r11}                \n"
         "msr   psp, r0                      \n"
         "cpsie i                            \n"
+        "2:                                 \n"
         "bx    lr                           \n"
     );
 }

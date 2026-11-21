@@ -76,13 +76,22 @@
 
 /* ------------------------------ run 任务 ------------------------------ */
 #ifndef RS_RUN_MAX
+#if defined(ROS_STM32_F1)
+/* F103C8 仅 8KB TLSF 堆：槽位结构较大（约 630B/槽），需收紧 */
+#define RS_RUN_MAX       2U
+#else
 #define RS_RUN_MAX       16U     /* 并发 run 任务槽数 */
+#endif
 #endif
 #ifndef RS_RUN_PRIO
 #define RS_RUN_PRIO      5U      /* run 任务默认优先级（0 最高） */
 #endif
 #ifndef RS_RUN_STACK
+#if defined(ROS_STM32_F1)
+#define RS_RUN_STACK     1024U   /* F1 堆受限，run 任务栈相应减小 */
+#else
 #define RS_RUN_STACK     4096U   /* run 任务默认栈字节数 */
+#endif
 #endif
 
 /* ------------------------------ 扩展注册 ------------------------------ */

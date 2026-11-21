@@ -22,7 +22,11 @@
 #define RS_SHELL_PRIO          4U      /* 输入任务优先级（0 最高） */
 #endif
 #ifndef RS_SHELL_STACK
+#if defined(ROS_STM32_F1)
+#define RS_SHELL_STACK         2048U   /* F1 仅 8KB 堆，输入任务栈相应收紧 */
+#else
 #define RS_SHELL_STACK         3072U   /* 输入任务栈字节数 */
+#endif
 #endif
 
 #define RS_CMD_ARGC_MAX        16U     /* 单行最多 token 数 */
@@ -349,6 +353,7 @@ int rs_shell_start(const char *version)
     }
     rs = rs_create();
     if (rs == NULL) {
+        ros_printf("shell: out of memory\r\n");
         return -1;
     }
     rs_cmd_install(rs);              /* 块内命令路由（规格 §8） */
@@ -368,6 +373,26 @@ int rs_shell_start(const char *version)
                                            rs_shell_task_entry, NULL,
                                            RS_SHELL_STACK);
     if (s_ctx.task == NULL) {
+        ros_mem_info_t info;
+
+        (void)memset(&info, 0, sizeof(info));
+        (void)ros_mem_get_info(&info);
+        ros_printf("shell: task create failed (stack=%u, free=%u, max=%u)\r\n",
+                   (unsigned)RS_SHELL_STACK, (unsigned)info.free_bytes,
+                   (unsigned)info.max_free_bytes);
+        {
+            void *p1 = ros_mem_malloc(64U);
+            void *p2 = ros_mem_malloc(512U);
+            void *p3 = ros_mem_malloc(1024U);
+            void *p4 = ros_mem_malloc(2048U);
+
+            ros_printf("probe 64=%p 512=%p 1024=%p 2048=%p total=%u\r\n",
+                       p1, p2, p3, p4, (unsigned)info.total_bytes);
+            ros_mem_free(p1);
+            ros_mem_free(p2);
+            ros_mem_free(p3);
+            ros_mem_free(p4);
+        }
         rs->ctx = NULL;
         rs_destroy(rs);
         s_ctx.rs = NULL;

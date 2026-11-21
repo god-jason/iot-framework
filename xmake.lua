@@ -356,8 +356,8 @@ if is_plat("cross") then
         -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
         if family == "f1" then
             add_defines("ROS_USE_TRACE=0")
-            -- F103C8 仅 20KB SRAM，默认 32KB TLSF 堆无法容纳，收紧到 8KB
-            add_defines("ROS_MEM_HEAP_SIZE=8192")
+            -- F103C8 仅 20KB SRAM，默认 32KB TLSF 堆无法容纳；10KB 可供 shell + 动态任务
+            add_defines("ROS_MEM_HEAP_SIZE=10240")
         end
         ros_trace_defines()
 

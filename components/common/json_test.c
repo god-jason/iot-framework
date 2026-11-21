@@ -106,6 +106,7 @@ void ut_json(void)
                 TF_CHECK(strstr(output, "\"id\"") != NULL);
                 TF_CHECK(strstr(output, "arm01") != NULL);
                 TF_CHECK(strstr(output, "\"values\"") != NULL);
+                TF_CHECK(strstr(output, "-1.5") != NULL);   /* 浮点定点输出 */
                 JSON_FREE_STRING(output);
             }
             JSON_DELETE(root);

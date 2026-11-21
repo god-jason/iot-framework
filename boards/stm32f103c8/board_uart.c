@@ -39,9 +39,9 @@ static void board_usart1_init(uint32_t baud)
     GPIOA->CRH &= ~(0x0FUL << 4);
     GPIOA->CRH |=  (0x0BUL << 4);
 
-    /* PA10 -> 上拉输入（CRL bits[11:8] = 1000），用于 Shell 接收 */
-    GPIOA->CRL &= ~(0x0FUL << 8);
-    GPIOA->CRL |=  (0x08UL << 8);
+    /* PA10 -> 上拉输入（CRH bits[11:8] = 1000），用于 Shell 接收 */
+    GPIOA->CRH &= ~(0x0FUL << 8);
+    GPIOA->CRH |=  (0x08UL << 8);
     GPIOA->ODR |=  (1UL << 10);
 
     USART1->BRR = BOARD_USART_CLK_HZ / baud;

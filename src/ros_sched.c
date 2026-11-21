@@ -331,13 +331,16 @@ ros_task_t *ros_sched_from_isr(void)
     ros_stack_guard(prev);      /* 抢占路径同样校验栈底魔数 */
 #endif
 
-    /* 时间片到期：把被打断的任务放回同优先级队尾，实现轮转 */
-    if (s_slice_expired) {
-        s_slice_expired = false;
-        if (prev != NULL && prev != ros_idle_task &&
-            prev->state == ROS_TASK_RUNNING) {
-            ros_make_ready(prev);
-        }
+    /*
+     * 被抢占的 RUNNING 任务必须回到就绪表：
+     * 否则高优先级任务唤醒触发抢占时，prev 会停在 RUNNING 状态
+     * 却既不在就绪表也不再运行，被永久“丢掉”。
+     * 时间片到期同样走这里（放回同优先级队尾实现轮转）。
+     */
+    s_slice_expired = false;
+    if (prev != NULL && prev != ros_idle_task &&
+        prev->state == ROS_TASK_RUNNING) {
+        ros_make_ready(prev);
     }
 
     next = ros_sched_pick();
