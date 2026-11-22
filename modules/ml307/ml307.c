@@ -2,7 +2,6 @@
 #include "ros.h"
 #include "common.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 
 static ml307_state_t s_state = ML307_STATE_OFF;
@@ -134,6 +133,59 @@ int ml307_get_imsi(char *buffer, uint32_t size)
     return extract_digits(resp, buffer, size, 10);
 }
 
+/*
+ * 解析 "+CSQ: <rssi>[,<ber>]"。
+ * 返回解析到的字段数（0 表示无有效数据）；不引入 libc scanf，省 Flash。
+ */
+static int ml307_parse_csq(const char *resp, int *rssi, int *ber)
+{
+    const char *p;
+    int n;
+
+    if (resp == NULL || rssi == NULL) {
+        return 0;
+    }
+    p = strstr(resp, "+CSQ:");
+    if (p == NULL) {
+        return 0;
+    }
+    p += 5;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p < '0' || *p > '9') {
+        return 0;
+    }
+    *rssi = 0;
+    while (*p >= '0' && *p <= '9') {
+        *rssi = *rssi * 10 + (*p - '0');
+        p++;
+    }
+    n = 1;
+
+    if (ber != NULL) {
+        *ber = -1;
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p == ',') {
+            p++;
+            while (*p == ' ' || *p == '\t') {
+                p++;
+            }
+            if (*p >= '0' && *p <= '9') {
+                *ber = 0;
+                while (*p >= '0' && *p <= '9') {
+                    *ber = *ber * 10 + (*p - '0');
+                    p++;
+                }
+                n = 2;
+            }
+        }
+    }
+    return n;
+}
+
 int ml307_get_signal(ml307_info_t *info)
 {
     const char *resp;
@@ -146,7 +198,7 @@ int ml307_get_signal(ml307_info_t *info)
         return -1;
     }
     resp = at_get_response();
-    if (resp != NULL && sscanf(resp, "+CSQ: %d", &rssi) == 1) {
+    if (ml307_parse_csq(resp, &rssi, NULL) >= 1) {
         /* 0..31 映射到 dBm（约 -113 + rssi*2） */
         info->rssi = (int16_t)(-113 + rssi * 2);
         return 0;
@@ -167,7 +219,7 @@ int ml307_get_csq(int16_t *csq, int16_t *ber)
         return -1;
     }
     resp = at_get_response();
-    if (resp == NULL || sscanf(resp, "+CSQ: %d,%d", &c, &b) < 1) {
+    if (ml307_parse_csq(resp, &c, &b) < 1) {
         return -1;
     }
     if (c < 0 || (c > 31 && c != 99)) {

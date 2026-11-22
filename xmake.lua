@@ -492,6 +492,12 @@ if is_plat("cross") then
         add_cflags("-g", { force = true })
         ros_cross_defines()
         ros_cross_flags()
+        if family == "f1" then
+            add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
+        end
+        if ROS_HAL_ROOT ~= "" then
+            add_defines("USE_HAL_DRIVER", chip, "ROS_TRACE_CLOCK_HZ=168000000")
+        end
         add_files("src/**.c")
         add_files("components/**.c")
         add_files("drivers/**.c")
