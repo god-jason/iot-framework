@@ -1,5 +1,5 @@
 /*
- * bootloader.ld - STM32F407VE A/B/C OTA Bootloader 链接脚本
+ * bootloader.ld - STM32F407VE APP/BACKUP/OTA Bootloader 链接脚本
  *
  * 仅使用 S0（16KB @0x08000000）；S1 为 Boot Meta，S2-S3 为配置，S4 为错误日志，
  * App 区从 0x08020000 开始，备份/升级包区各 128KB 位于 0x08040000 / 0x08060000。

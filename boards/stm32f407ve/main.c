@@ -6,7 +6,7 @@
  *   -> HAL_Init() -> SystemClock_Config(168MHz)
  *   -> ros_init() -> 板级外设/命令 -> 创建 blink 任务 -> ros_sched_start()
  *
- * 与 stm32f103cb 一致：A/B/C OTA（A 主程序 / B 备份 / C 升级包）、
+ * 与 stm32f103cb 一致：APP/BACKUP/OTA（APP 主程序 / BACKUP 备份 / OTA 升级包）、
  * PWM/风扇/步进/RTC/date 命令、HardFault 崩溃记录与 boot_confirm()。
  */
 
@@ -21,7 +21,7 @@
 #include "boot_meta.h"
 #include "ros_rtc.h"
 
-/* 本固件运行在 A 区，向量表基址固定为 0x08020000（B/C 区不直接运行） */
+/* 本固件运行在 APP 区，向量表基址固定为 0x08020000（BACKUP/OTA 不直接运行） */
 #ifndef APP_VECTOR_BASE
 #define APP_VECTOR_BASE 0x08020000U
 #endif
@@ -50,7 +50,7 @@ int main(void)
     board_led_init();
     board_trace_start(115200U); /* trace 经 USART1/PA9 输出 */
 
-    /* A 区固件：向量表重定位到 A 区基址 */
+    /* APP 区固件：向量表重定位到 APP 区基址 */
     SCB->VTOR = APP_VECTOR_BASE;
 
     /* roshell 与 printf 复用同一个 UART1 句柄（PA9 发送 / PA10 接收） */
@@ -87,7 +87,7 @@ int main(void)
 
 /*
  * HardFault：提取异常栈帧并写入 Flash 崩溃日志，随后复位。
- * Bootloader 下次启动打印现场；试运行期 crash 超过上限时用 B 区回滚 A 区。
+ * Bootloader 下次启动打印现场；crash 超过上限时用 BACKUP 恢复 APP 区。
  */
 void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp);
 

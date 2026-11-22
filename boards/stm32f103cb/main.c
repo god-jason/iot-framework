@@ -79,6 +79,9 @@ int main(void)
         }
     }
 
+    /* 初始化完成：向 Bootloader 确认启动成功，tries/crash 清零 */
+    boot_confirm();
+
     ros_sched_start();
 
     for (;;) {
@@ -87,8 +90,8 @@ int main(void)
 }
 
 /*
- * HardFault：提取异常栈帧（PC/LR 等）并带 Unix 时间追加到错误日志，
- * 随后复位。单 App 槽方案不做回滚。
+ * HardFault：crash 累计并写回状态，异常栈帧（PC/LR 等）带 Unix 时间追加到
+ * 错误日志，随后复位。单 App 槽方案不做回滚。
  */
 void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp);
 

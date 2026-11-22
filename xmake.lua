@@ -41,7 +41,7 @@
         ros-shell     Shell 交互示例（stdin/stdout）
         ros-stm32     STM32 交叉编译静态库（仅 -p cross 时可见）
         ros-fw-f407ve STM32F407VE 可烧录固件（PA6/PA7 LED，USART1）
-        ros-boot-f407ve STM32F407VE A/B/C OTA Bootloader
+        ros-boot-f407ve STM32F407VE APP/BACKUP/OTA Bootloader
         ros-fw-f103cb STM32F1 128KB Flash 可烧录固件（PC13 LED，USART1）
 ]]
 
@@ -675,7 +675,7 @@ if is_plat("cross") then
             ros_fw_objcopy()
         target_end()
 
-        -- A/B/C OTA Bootloader：S0 16KB，不依赖 HAL/RTOS/libc
+        -- APP/BACKUP/OTA Bootloader：S0 16KB，不依赖 HAL/RTOS/libc
         target("ros-boot-f407ve")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")

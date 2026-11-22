@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import crash_decode as cd  # noqa: E402
 
 REASON_RE = re.compile(r"reason=([A-Z_]+)")
-SLOT_RE = re.compile(r"\bslot=([AB])\b")
+SLOT_RE = re.compile(r"\bslot=([A-Za-z]+)\b")
 CRASH_RE = re.compile(r"\bcrash=(\d+)\b")
 PC_RE = re.compile(r"\bpc=([0-9A-Fa-f]{8})\b")
 LR_RE = re.compile(r"\blr=([0-9A-Fa-f]{8})\b")
@@ -139,7 +139,7 @@ def bits_text(value: int, table) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="解析 A/B OTA 崩溃日志并用 ELF 还原崩溃现场",
+        description="解析 OTA 崩溃日志并用 ELF 还原崩溃现场",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ap.add_argument("text", nargs="?", help="日志文本文件；省略则读 stdin")
     ap.add_argument("--dump", help="日志区原始 Flash 转储（F1 0x08005000/4KB，F4 0x08010000/64KB）")

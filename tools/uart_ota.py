@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""uart_ota.py - robotos Bootloader 串口 OTA 上位机（F1 A/B、F4 A/B/C）
+"""uart_ota.py - robotos Bootloader 串口 OTA 上位机（F1 App/OTA、F4 APP/BACKUP/OTA）
 
 与 boards/stm32f103cb/bootloader.c 的升级协议保持一致：
 
@@ -21,7 +21,7 @@
     # 指定串口 / 波特率
     python tools/uart_ota.py -p COM5 -b 115200 --bin xxx.bin
 
-    # STM32F407VE（A/B/C）：镜像写入 C 区升级包，需放大单槽容量
+    # STM32F407VE（APP/BACKUP/OTA）：镜像写入 OTA 区，需放大单槽容量
     python tools/uart_ota.py --slot-size 131072 --bin build/cross/arm/release/ros-fw-f407ve.bin
 
     # 不用 ST-LINK（板子没接调试器）：脚本持续敲门，期间手动按复位键
@@ -270,7 +270,7 @@ def main() -> int:
     dump_log(log)
 
     if ok:
-        print("UPGRADE OK：升级包已写入 C 区，MCU 复位后由 Bootloader 升级到 A 区")
+        print("UPGRADE OK：升级包已写入 OTA 区，MCU 复位后由 Bootloader 升级到 APP 区")
         return 0
 
     return 6

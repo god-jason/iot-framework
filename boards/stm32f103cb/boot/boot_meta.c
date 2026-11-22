@@ -168,16 +168,10 @@ int boot_flash_write(uint32_t addr, const void *data, uint32_t len)
 }
 
 /* ==========================================================================
- * 三、Boot Meta（数据 meta + 追加升级日志，掉电后从最后一条记录继续）
+ * 三、启动状态与升级历史（Boot Meta 区）
  * ========================================================================== */
 
-static const boot_meta_rec_t *meta_record(uint32_t index)
-{
-    return (const boot_meta_rec_t *)(uintptr_t)
-           (BOOT_META_BASE + index * BOOT_META_SLOT);
-}
-
-static void meta_rec_copy(boot_meta_rec_t *dst, const boot_meta_rec_t *src)
+static void state_copy(boot_state_t *dst, const boot_state_t *src)
 {
     const uint8_t *s = (const uint8_t *)src;
     uint8_t *d = (uint8_t *)dst;
@@ -188,83 +182,145 @@ static void meta_rec_copy(boot_meta_rec_t *dst, const boot_meta_rec_t *src)
     }
 }
 
-bool boot_meta_rec_valid(const boot_meta_rec_t *r)
+bool boot_state_valid(const boot_state_t *s)
 {
-    if (r->magic != BOOT_META_MAGIC) {
+    if (s->magic != BOOT_STATE_MAGIC) {
         return false;
     }
-    if (r->rec_crc != boot_crc32(r, (uint32_t)sizeof(*r) - 4U)) {
+    if (s->crc != boot_crc32(s, (uint32_t)sizeof(*s) - 4U)) {
         return false;
     }
-    return (r->state == BOOT_META_STATE_READY) ||
-           (r->state == BOOT_META_STATE_APPLYING);
+    return s->ota_valid <= 1U;
 }
 
-/* 扫描 Boot Meta 区，取 seq 最大且 CRC 有效的记录 */
-bool boot_meta_rec_load(boot_meta_rec_t *r)
+void boot_state_load(boot_state_t *s)
 {
-    const boot_meta_rec_t *best = NULL;
-    uint32_t i;
+    const boot_state_t *p = (const boot_state_t *)(uintptr_t)BOOT_META_BASE;
 
-    if (r == NULL) {
-        return false;
+    if (s == NULL) {
+        return;
     }
-    for (i = 0U; i < BOOT_META_RECORDS; i++) {
-        const boot_meta_rec_t *p = meta_record(i);
-
-        if (!boot_meta_rec_valid(p)) {
-            continue;
-        }
-        if (best == NULL || (int32_t)(p->seq - best->seq) > 0) {
-            best = p;
-        }
+    if (boot_state_valid(p)) {
+        state_copy(s, p);
+        return;
     }
-    if (best == NULL) {
-        return false;
-    }
-    meta_rec_copy(r, best);
-    return true;
+    s->magic = BOOT_STATE_MAGIC;
+    s->tries = 0U;
+    s->crash = 0U;
+    s->ota_valid = 0U;
+    s->ota_len = 0U;
+    s->ota_crc = 0U;
+    s->reserved = 0U;
+    s->crc = 0U;
 }
 
-/* 追加一条记录；日志区写满时整区擦除后写入首条 */
-int boot_meta_rec_save(boot_meta_rec_t *r)
+/* 擦除整个 Meta 区后写入状态；升级历史随之清空 */
+int boot_state_save(boot_state_t *s)
 {
     const uint8_t *src;
     const uint8_t *verify;
-    uint32_t addr = 0U;
     uint32_t i;
 
-    if (r == NULL) {
+    if (s == NULL) {
         return -1;
     }
-    r->magic = BOOT_META_MAGIC;
-    r->seq++;
-    r->rec_crc = boot_crc32(r, (uint32_t)sizeof(*r) - 4U);
+    s->magic = BOOT_STATE_MAGIC;
+    s->crc = boot_crc32(s, (uint32_t)sizeof(*s) - 4U);
 
-    for (i = 0U; i < BOOT_META_RECORDS; i++) {
-        if (meta_record(i)->magic != BOOT_META_MAGIC) {
-            addr = BOOT_META_BASE + i * BOOT_META_SLOT;
-            break;
-        }
+    if (boot_flash_erase(BOOT_META_BASE, BOOT_META_SIZE) != 0) {
+        return -1;
     }
-    if (addr == 0U) {
-        if (boot_flash_erase(BOOT_META_BASE, BOOT_META_SIZE) != 0) {
-            return -1;
-        }
-        addr = BOOT_META_BASE;
-    }
-    if (boot_flash_write(addr, r, (uint32_t)sizeof(*r)) != 0) {
+    if (boot_flash_write(BOOT_META_BASE, s, (uint32_t)sizeof(*s)) != 0) {
         return -1;
     }
 
-    src = (const uint8_t *)r;
-    verify = (const uint8_t *)(uintptr_t)addr;
-    for (i = 0U; i < (uint32_t)sizeof(*r); i++) {
+    src = (const uint8_t *)s;
+    verify = (const uint8_t *)(uintptr_t)BOOT_META_BASE;
+    for (i = 0U; i < (uint32_t)sizeof(*s); i++) {
         if (verify[i] != src[i]) {
             return -1;
         }
     }
     return 0;
+}
+
+static const boot_ota_history_t *history_at(uint32_t index)
+{
+    return (const boot_ota_history_t *)(uintptr_t)
+           (BOOT_HISTORY_BASE + index * BOOT_HISTORY_SLOT);
+}
+
+static bool history_valid(const boot_ota_history_t *h)
+{
+    if (h->magic != BOOT_HISTORY_MAGIC) {
+        return false;
+    }
+    return h->crc == boot_crc32(h, (uint32_t)sizeof(*h) - 4U);
+}
+
+/* 取最后一条有效历史记录的进度 */
+bool boot_history_last_length(uint32_t *length)
+{
+    uint32_t i;
+
+    if (length == NULL) {
+        return false;
+    }
+    for (i = BOOT_HISTORY_COUNT; i > 0U; i--) {
+        const boot_ota_history_t *h = history_at(i - 1U);
+
+        if (history_valid(h)) {
+            *length = h->length;
+            return true;
+        }
+    }
+    return false;
+}
+
+/*
+ * 追加一条升级进度记录。
+ * 历史区写满时先擦除整个 Meta 区并重写当前状态（保留 ota 标识），
+ * 再写入这一条，保证升级仍可从当前进度继续。
+ */
+int boot_history_append(const boot_state_t *s, uint32_t length)
+{
+    boot_ota_history_t h;
+    boot_state_t tmp;
+    uint32_t addr = 0U;
+    uint32_t i;
+
+    h.magic = BOOT_HISTORY_MAGIC;
+    h.length = length;
+    h.reserved = 0U;
+    h.crc = boot_crc32(&h, (uint32_t)sizeof(h) - 4U);
+
+    for (i = 0U; i < BOOT_HISTORY_COUNT; i++) {
+        if (history_at(i)->magic != BOOT_HISTORY_MAGIC) {
+            addr = BOOT_HISTORY_BASE + i * BOOT_HISTORY_SLOT;
+            break;
+        }
+    }
+    if (addr == 0U) {
+        state_copy(&tmp, s);
+        if (boot_state_save(&tmp) != 0) {
+            return -1;
+        }
+        addr = BOOT_HISTORY_BASE;
+    }
+    return boot_flash_write(addr, &h, (uint32_t)sizeof(h));
+}
+
+/* App 启动确认：tries/crash 清零 */
+void boot_confirm(void)
+{
+    boot_state_t s;
+
+    boot_state_load(&s);
+    if (s.tries != 0U || s.crash != 0U) {
+        s.tries = 0U;
+        s.crash = 0U;
+        (void)boot_state_save(&s);
+    }
 }
 
 /* ==========================================================================
@@ -368,6 +424,7 @@ void boot_log_append(uint32_t unix_time, const char *text)
 void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return,
                     uint32_t unix_time)
 {
+    boot_state_t s;
     char *p;
     uint32_t addr;
     uint32_t words;
@@ -377,9 +434,17 @@ void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return,
         return;
     }
 
+    /* crash 累计并写回状态（Bootloader 在 407 上据此恢复备份区） */
+    boot_state_load(&s);
+    if (s.crash < 0xFFFFFFFFU) {
+        s.crash++;
+    }
+    (void)boot_state_save(&s);
+
     /* 1) 摘要行 */
     p = s_log_line;
-    p = log_put_str(p, "reason=HARDFAULT");
+    p = log_put_str(p, "reason=HARDFAULT crash=");
+    p = log_put_dec(p, s.crash);
     *p = '\0';
     boot_log_append(unix_time, s_log_line);
 
