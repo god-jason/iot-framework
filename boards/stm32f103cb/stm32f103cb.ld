@@ -1,15 +1,16 @@
 /*
- * stm32f108cb_b.ld - STM32F1 128KB Flash 板 B 区固件链接脚本（GNU ld）
+ * stm32f103cb.ld - STM32F1 128KB Flash 板 App 固件链接脚本（GNU ld）
  *
- * B 区：FLASH 0x08010000 起 56KB；SRAM 20KB @ 0x20000000。
- * 与 A 区脚本仅链接基址不同，用于生成 OTA 升级包（写入 B 区后启动）。
+ * App 区：FLASH 0x08008000 起 52KB；SRAM 20KB @ 0x20000000。
+ * Bootloader 占用 0x08000000..0x08001FFF（8KB），配置/日志在前部，
+ * 升级包区在 0x08015000（52KB）。App 启动时把 SCB->VTOR 指向 App 区基址。
  */
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08010000, LENGTH = 56K
+    FLASH (rx)  : ORIGIN = 0x08008000, LENGTH = 52K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 
@@ -60,6 +61,11 @@ SECTIONS
         _ebss = .;
     } > RAM
 
+    /*
+     * 复位不清零段：崩溃现场记录（ros_crash）放在这里，
+     * HardFault/断言后复位，下次启动仍能读到现场并上报。
+     * 必须位于 .bss 之后、堆栈保留区之前，且不能被 _sbrk 覆盖。
+     */
     .noinit (NOLOAD) :
     {
         . = ALIGN(4);
@@ -77,6 +83,7 @@ SECTIONS
         . = ALIGN(8);
     } > RAM
 
+    /* 未使用的 newlib 元数据，避免把 C++ 异常表塞进 Flash */
     /DISCARD/ :
     {
         *(.ARM.exidx*)

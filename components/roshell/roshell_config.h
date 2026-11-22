@@ -77,7 +77,7 @@
 /* ------------------------------ run 任务 ------------------------------ */
 #ifndef RS_RUN_MAX
 #if defined(ROS_STM32_F1)
-/* F103C8 仅 8KB TLSF 堆：槽位结构较大（约 630B/槽），需收紧 */
+/* F103CB 仅 8KB TLSF 堆：槽位结构较大（约 630B/槽），需收紧 */
 #define RS_RUN_MAX       2U
 #else
 #define RS_RUN_MAX       16U     /* 并发 run 任务槽数 */

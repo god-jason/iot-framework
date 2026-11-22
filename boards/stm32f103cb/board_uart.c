@@ -1,5 +1,5 @@
 /*
- * board_uart.c - STM32F103C8 板级 trace 串口（USART1 / PA9）
+ * board_uart.c - STM32F103CBT6 板级 trace 串口（USART1 / PA9）
  *
  * 提供 hal_uart_transmit() 的板级轮询实现，供 platforms/stm32/stm32_trace.c
  * 的 weak 引用解析；接收侧使用 USART1 中断 + 128 字节环形缓冲，

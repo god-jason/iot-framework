@@ -23,9 +23,9 @@
 static void rs_fmt_float(char *buf, uint32_t cap, float f)
 {
     bool neg = (f < 0.0f);
-    double d = neg ? (double)(-f) : (double)f;
-    long ip = (long)d;
-    uint32_t fp = (uint32_t)(((d - (double)ip) * 100.0) + 0.5);
+    float v = neg ? -f : f;
+    long ip = (long)v;
+    uint32_t fp = (uint32_t)(((v - (float)ip) * 100.0f) + 0.5f);
 
     if (fp >= 100U) {
         fp -= 100U;

@@ -6,19 +6,21 @@
 （addr2line / nm）解析 PC、LR 与栈快照，输出寄存器、故障状态与源码位置。
 
 输入二选一：
-    --dump <file>   0x0801E800 起 2KB 的原始 Flash 转储（二进制）
+    --dump <file>   日志区原始 Flash 转储（二进制）：
+                    F1 0x08006000 起 4KB；F4 0x08010000 起 64KB
     位置参数        文本文件（串口捕获的 Bootloader 输出或日志文本），省略读 stdin
 
 典型用法：
-    # 1) 从板子上导出日志区（2KB）
-    ST-LINK_CLI.exe -c SWD HotPlug -Dump 0x0801E800 0x800 crashlog.bin
+    # 1) 从板子上导出日志区（F1 4KB / F4 64KB）
+    ST-LINK_CLI.exe -c SWD HotPlug -Dump 0x08006000 0x1000 crashlog.bin
+    ST-LINK_CLI.exe -c SWD HotPlug -Dump 0x08010000 0x10000 crashlog_f4.bin
     python tools/crash_log.py --dump crashlog.bin
 
     # 2) 直接解析串口抓到的启动日志
     python tools/crash_log.py serial.txt
 
-    # 3) 指定 ELF（默认按日志中的 slot 自动选择 build/cross/arm/release）
-    python tools/crash_log.py --elf build/cross/arm/release/ros-fw-f108cb.elf serial.txt
+    # 3) 指定 ELF（默认 build/cross/arm/release/ros-fw-f103cb.elf）
+    python tools/crash_log.py --elf build/cross/arm/release/ros-fw-f103cb.elf serial.txt
 
 依赖：arm-none-eabi-addr2line / arm-none-eabi-nm（自动探测 PATH 与 xpack 默认目录）
 """
@@ -126,8 +128,8 @@ def find_addr2line(explicit: str | None) -> str:
 
 
 def default_elf(slot: str | None) -> str:
-    name = "ros-fw-f108cb-b.elf" if slot == "B" else "ros-fw-f108cb.elf"
-    return os.path.join(DEFAULT_BUILD_DIR, name)
+    _ = slot
+    return os.path.join(DEFAULT_BUILD_DIR, "ros-fw-f103cb.elf")
 
 
 def bits_text(value: int, table) -> str:
@@ -140,8 +142,8 @@ def main() -> int:
         description="解析 A/B OTA 崩溃日志并用 ELF 还原崩溃现场",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ap.add_argument("text", nargs="?", help="日志文本文件；省略则读 stdin")
-    ap.add_argument("--dump", help="0x0801E800 起 2KB 的原始 Flash 转储")
-    ap.add_argument("--elf", help="固件 ELF；默认按 slot 选择 ros-fw-f108cb[-b].elf")
+    ap.add_argument("--dump", help="日志区原始 Flash 转储（F1 0x08006000/4KB，F4 0x08010000/64KB）")
+    ap.add_argument("--elf", help="固件 ELF；默认 build/cross/arm/release/ros-fw-f103cb.elf")
     ap.add_argument("--addr2line", help="arm-none-eabi-addr2line 路径")
     ap.add_argument("--code-range", default="0x08000000-0x10000000",
                     help="栈扫描的代码地址范围")

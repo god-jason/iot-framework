@@ -1,8 +1,8 @@
-#ifndef BOARD_STM32F103C8_H
-#define BOARD_STM32F103C8_H
+#ifndef BOARD_STM32F103CBT6_H
+#define BOARD_STM32F103CBT6_H
 
 /*
- * board.h - STM32F103C8T6 最小板级支持
+ * board.h - STM32F103CBT6 最小板级支持
  *
  * SystemInit() 由启动汇编在 main() 之前调用，负责时钟与 SysTick；
  * 板载 LED 接在 PC13（低电平点亮）。
@@ -46,4 +46,4 @@ void board_stepper_init(void);
 }
 #endif
 
-#endif /* BOARD_STM32F103C8_H */
+#endif /* BOARD_STM32F103CBT6_H */

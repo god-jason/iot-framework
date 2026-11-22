@@ -1,9 +1,12 @@
 /*
- * boot_meta.c - A/B OTA 启动元数据、CRC32、Flash 驱动与启动确认
+ * boot_meta.c - STM32F103 升级进度日志、CRC32、Flash 驱动与系统日志
+ *
+ * 单 App 槽方案：升级包写入 OTA 区后，Bootloader 按进度日志分块拷入
+ * App 区，掉电后从最后一条记录继续，避免半写入的 App 被启动。
  *
  * 该文件同时编入 Bootloader 与 App：
  *   - Bootloader 构建使用 -nostdlib，因此这里不调用任何 libc 函数；
- *   - App 只用到 boot_confirm() / boot_crash_count()，链接器会按
+ *   - App 只用到 boot_crash_log()，链接器会按
  *     -ffunction-sections --gc-sections 丢弃未使用的 Flash 函数。
  */
 
@@ -96,7 +99,7 @@ int boot_flash_erase(uint32_t addr, uint32_t len)
     uint32_t count;
     int rc = 0;
 
-    if (len == 0U || addr < BOOT_SLOT_BASE0 ||
+    if (len == 0U || addr < BOOT_CONFIG_BASE0 ||
         (addr % BOOT_FLASH_PAGE) != 0U) {
         return -1;
     }
@@ -134,7 +137,7 @@ int boot_flash_write(uint32_t addr, const void *data, uint32_t len)
     uint32_t i;
     int rc = 0;
 
-    if (data == NULL || len == 0U || addr < BOOT_SLOT_BASE0 ||
+    if (data == NULL || len == 0U || addr < BOOT_CONFIG_BASE0 ||
         (addr & 1U) != 0U) {
         return -1;
     }
@@ -165,127 +168,114 @@ int boot_flash_write(uint32_t addr, const void *data, uint32_t len)
 }
 
 /* ==========================================================================
- * 三、启动元数据（校验 / 加载 / 保存）
+ * 三、升级进度日志（追加写，掉电后从最后一条记录继续）
  * ========================================================================== */
 
-/* 检查一份元数据副本是否合法 */
-bool boot_meta_valid(const boot_meta_t *m)
+static const boot_ota_rec_t *ota_record(uint32_t index)
 {
-    if (m->magic != BOOT_META_MAGIC) {
-        return false;
-    }
-    if (m->meta_crc != boot_crc32(m, (uint32_t)sizeof(*m) - 4U)) {
-        return false;
-    }
-    if (m->active > 1U) {
-        return false;
-    }
-    return (m->pending == BOOT_SLOT_NONE) || (m->pending <= 1U);
+    return (const boot_ota_rec_t *)(uintptr_t)
+           (BOOT_OTA_LOG_BASE + index * BOOT_OTA_LOG_SLOT);
 }
 
-/*
- * 读取最新有效元数据。
- * 两页都无效（首次上电）时返回默认值：active=A、pending=NONE、crash=0。
- */
-void boot_meta_load(boot_meta_t *m)
+static void ota_rec_copy(boot_ota_rec_t *dst, const boot_ota_rec_t *src)
 {
-    const boot_meta_t *p0 = (const boot_meta_t *)(uintptr_t)BOOT_META_PAGE0;
-    const boot_meta_t *p1 = (const boot_meta_t *)(uintptr_t)BOOT_META_PAGE1;
-    bool v0 = boot_meta_valid(p0);
-    bool v1 = boot_meta_valid(p1);
-
-    if (m == NULL) {
-        return;
-    }
-    /* seq 用有符号差值比较，允许回绕 */
-    if (v0 && (!v1 || (int32_t)(p0->seq - p1->seq) >= 0)) {
-        *m = *p0;
-        return;
-    }
-    if (v1) {
-        *m = *p1;
-        return;
-    }
-
-    /* 逐字段赋默认值（不调用 memset，便于 -nostdlib 链接） */
-    m->magic = BOOT_META_MAGIC;
-    m->seq = 0U;
-    m->active = 0U;
-    m->pending = BOOT_SLOT_NONE;
-    m->tries = 0U;
-    m->crash = 0U;
-    m->len[0] = 0U;
-    m->len[1] = 0U;
-    m->crc[0] = 0U;
-    m->crc[1] = 0U;
-    m->meta_crc = 0U;
-}
-
-/*
- * 保存元数据：seq 自增后写入与奇偶对应的页（两页轮换），写完回读校验。
- * 轮换写保证任一时刻至少有一页是完整的旧副本。
- */
-int boot_meta_save(boot_meta_t *m)
-{
-    uint32_t page;
+    const uint8_t *s = (const uint8_t *)src;
+    uint8_t *d = (uint8_t *)dst;
     uint32_t i;
-    const uint16_t *hw;
-    const uint16_t *verify;
 
-    if (m == NULL) {
-        return -1;
+    for (i = 0U; i < (uint32_t)sizeof(*dst); i++) {
+        d[i] = s[i];
     }
-    /* 注意：seq 必须先自增再算 CRC，否则 CRC 覆盖的是旧 seq，写回的副本永远校验失败 */
-    m->magic = BOOT_META_MAGIC;
-    m->seq++;
-    m->meta_crc = boot_crc32(m, (uint32_t)sizeof(*m) - 4U);
+}
 
-    page = ((m->seq & 1U) != 0U) ? BOOT_META_PAGE0 : BOOT_META_PAGE1;
-    if (boot_flash_erase(page, BOOT_FLASH_PAGE) != 0) {
-        return -1;
+bool boot_ota_rec_valid(const boot_ota_rec_t *r)
+{
+    if (r->magic != BOOT_OTA_LOG_MAGIC) {
+        return false;
     }
-    hw = (const uint16_t *)m;
-    for (i = 0U; i < (uint32_t)(sizeof(*m) / 2U); i++) {
-        if (boot_flash_write(page + i * 2U, &hw[i], 2U) != 0) {
-            return -1;
+    if (r->rec_crc != boot_crc32(r, (uint32_t)sizeof(*r) - 4U)) {
+        return false;
+    }
+    return (r->state == BOOT_OTA_STATE_READY) ||
+           (r->state == BOOT_OTA_STATE_APPLYING);
+}
+
+/* 扫描升级日志区，取 seq 最大且 CRC 有效的记录 */
+bool boot_ota_load(boot_ota_rec_t *r)
+{
+    const boot_ota_rec_t *best = NULL;
+    uint32_t i;
+
+    if (r == NULL) {
+        return false;
+    }
+    for (i = 0U; i < BOOT_OTA_LOG_RECORDS; i++) {
+        const boot_ota_rec_t *p = ota_record(i);
+
+        if (!boot_ota_rec_valid(p)) {
+            continue;
+        }
+        if (best == NULL || (int32_t)(p->seq - best->seq) > 0) {
+            best = p;
         }
     }
+    if (best == NULL) {
+        return false;
+    }
+    ota_rec_copy(r, best);
+    return true;
+}
 
-    verify = (const uint16_t *)(uintptr_t)page;
-    for (i = 0U; i < (uint32_t)(sizeof(*m) / 2U); i++) {
-        if (verify[i] != hw[i]) {
-            return -1;                      /* 回读不一致：视为失败 */
+/* 追加一条记录；日志区写满时整区擦除后写入首条 */
+int boot_ota_save(boot_ota_rec_t *r)
+{
+    const uint8_t *src;
+    const uint8_t *verify;
+    uint32_t addr = 0U;
+    uint32_t i;
+
+    if (r == NULL) {
+        return -1;
+    }
+    r->magic = BOOT_OTA_LOG_MAGIC;
+    r->seq++;
+    r->rec_crc = boot_crc32(r, (uint32_t)sizeof(*r) - 4U);
+
+    for (i = 0U; i < BOOT_OTA_LOG_RECORDS; i++) {
+        if (ota_record(i)->magic != BOOT_OTA_LOG_MAGIC) {
+            addr = BOOT_OTA_LOG_BASE + i * BOOT_OTA_LOG_SLOT;
+            break;
+        }
+    }
+    if (addr == 0U) {
+        if (boot_flash_erase(BOOT_OTA_LOG_BASE, BOOT_OTA_LOG_SIZE) != 0) {
+            return -1;
+        }
+        addr = BOOT_OTA_LOG_BASE;
+    }
+    if (boot_flash_write(addr, r, (uint32_t)sizeof(*r)) != 0) {
+        return -1;
+    }
+
+    src = (const uint8_t *)r;
+    verify = (const uint8_t *)(uintptr_t)addr;
+    for (i = 0U; i < (uint32_t)sizeof(*r); i++) {
+        if (verify[i] != src[i]) {
+            return -1;
         }
     }
     return 0;
 }
 
 /* ==========================================================================
- * 四、App 侧接口
- * ========================================================================== */
-
-void boot_confirm(void)
-{
-    boot_meta_t m;
-
-    boot_meta_load(&m);
-    if (m.pending != BOOT_SLOT_NONE || m.tries != 0U || m.crash != 0U) {
-        if (m.pending != BOOT_SLOT_NONE) {
-            m.active = m.pending;
-            m.pending = BOOT_SLOT_NONE;
-        }
-        m.tries = 0U;
-        m.crash = 0U;
-        (void)boot_meta_save(&m);
-    }
-}
-
-/* ==========================================================================
- * 五、崩溃日志（BOOT_LOG_BASE 起 2KB 文本区，只保留最近一次崩溃）
+ * 五、系统日志（BOOT_LOG_BASE 起 4KB 文本，追加写入，带 Unix 时间）
+ *
+ * 每条格式：[<unix>] <text>\r\n
+ * 空间不足时整区擦除后从头部重新追加；掉电最多丢失正在写的一行。
  * ========================================================================== */
 
 #define BOOT_LOG_STACK_WORDS    128U    /* 栈快照字数（512 字节） */
-#define BOOT_LOG_LINE_SIZE      128U    /* 单行文本缓冲 */
+#define BOOT_LOG_LINE_SIZE      160U    /* 单行文本缓冲 */
 
 static char s_log_line[BOOT_LOG_LINE_SIZE];   /* 静态缓冲，异常上下文不占栈 */
 
@@ -329,33 +319,56 @@ static char *log_put_dec(char *p, uint32_t v)
     return p;
 }
 
-/*
- * 写一行文本到日志区：必要时补一个空格使长度成为偶数（半字编程要求），
- * 返回新的写入偏移。空间不足时停止后续写入。
- */
-static void log_emit(uint32_t *off, char *text)
+/* 第一条未写入（0xFF）的位置，即当前追加末尾 */
+static uint32_t log_end(void)
 {
-    uint32_t n = 0U;
+    const volatile uint8_t *p = (const volatile uint8_t *)(uintptr_t)BOOT_LOG_BASE;
+    uint32_t i;
 
-    while (text[n] != '\0') {
-        n++;
+    for (i = 0U; i < BOOT_LOG_SIZE; i++) {
+        if (p[i] == 0xFFU) {
+            break;
+        }
     }
-    if ((n & 1U) != 0U) {
-        text[n++] = ' ';
-        text[n] = '\0';
-    }
-    if (*off + n > BOOT_LOG_SIZE) {
-        return;
-    }
-    (void)boot_flash_write(BOOT_LOG_BASE + *off, text, n);
-    *off += n;
+    return i;
 }
 
-void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
+/* 追加一行 "[unix] text\r\n"；长度补齐为偶数（半字编程），写满后整区擦除 */
+void boot_log_append(uint32_t unix_time, const char *text)
 {
-    boot_meta_t m;
+    char line[BOOT_LOG_LINE_SIZE];
+    char *p = line;
+    uint32_t n;
+    uint32_t off;
+
+    p = log_put_str(p, "[");
+    p = log_put_dec(p, unix_time);
+    p = log_put_str(p, "] ");
+    while (*text != '\0' && (uint32_t)(p - line) < (BOOT_LOG_LINE_SIZE - 4U)) {
+        *p++ = *text++;
+    }
+    *p++ = '\r';
+    *p++ = '\n';
+    n = (uint32_t)(p - line);
+    if ((n & 1U) != 0U) {
+        *p++ = ' ';
+        n++;
+    }
+
+    off = log_end();
+    if ((off + n) > BOOT_LOG_SIZE) {
+        if (boot_flash_erase(BOOT_LOG_BASE, BOOT_LOG_SIZE) != 0) {
+            return;
+        }
+        off = 0U;
+    }
+    (void)boot_flash_write(BOOT_LOG_BASE + off, line, n);
+}
+
+void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return,
+                    uint32_t unix_time)
+{
     char *p;
-    uint32_t off = 0U;
     uint32_t addr;
     uint32_t words;
     uint32_t i;
@@ -364,27 +377,13 @@ void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
         return;
     }
 
-    /* 1) 崩溃计数 +1 并保存（Bootloader 据此判断是否回滚分区） */
-    boot_meta_load(&m);
-    if (m.crash < 0xFFFFFFFFU) {
-        m.crash++;
-    }
-    (void)boot_meta_save(&m);
-
-    /* 2) 整区擦除：只保留本次崩溃记录，不做追加 */
-    (void)boot_flash_erase(BOOT_LOG_BASE, BOOT_LOG_SIZE);
-
-    /* 3) 摘要行：原因、所在槽、崩溃次数 */
+    /* 1) 摘要行 */
     p = s_log_line;
-    p = log_put_str(p, "reason=HARDFAULT slot=");
-    *p++ = (SCB->VTOR == BOOT_SLOT_BASE1) ? 'B' : 'A';
-    p = log_put_str(p, " crash=");
-    p = log_put_dec(p, m.crash);
-    p = log_put_str(p, "\r\n");
+    p = log_put_str(p, "reason=HARDFAULT");
     *p = '\0';
-    log_emit(&off, s_log_line);
+    boot_log_append(unix_time, s_log_line);
 
-    /* 4) 异常栈帧：PC/LR/SP/xPSR */
+    /* 2) 异常栈帧：PC/LR/SP/xPSR */
     p = s_log_line;
     p = log_put_str(p, "pc=");
     p = log_put_hex(p, frame[6]);
@@ -394,11 +393,10 @@ void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
     p = log_put_hex(p, sp);
     p = log_put_str(p, " xpsr=");
     p = log_put_hex(p, frame[7]);
-    p = log_put_str(p, "\r\n");
     *p = '\0';
-    log_emit(&off, s_log_line);
+    boot_log_append(unix_time, s_log_line);
 
-    /* 5) 通用寄存器 */
+    /* 3) 通用寄存器 */
     p = s_log_line;
     p = log_put_str(p, "r0=");
     p = log_put_hex(p, frame[0]);
@@ -410,11 +408,10 @@ void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
     p = log_put_hex(p, frame[3]);
     p = log_put_str(p, " r12=");
     p = log_put_hex(p, frame[4]);
-    p = log_put_str(p, "\r\n");
     *p = '\0';
-    log_emit(&off, s_log_line);
+    boot_log_append(unix_time, s_log_line);
 
-    /* 6) 故障状态寄存器 */
+    /* 4) 故障状态寄存器 */
     p = s_log_line;
     p = log_put_str(p, "cfsr=");
     p = log_put_hex(p, SCB->CFSR);
@@ -422,20 +419,18 @@ void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
     p = log_put_hex(p, SCB->HFSR);
     p = log_put_str(p, " excr=");
     p = log_put_hex(p, exc_return);
-    p = log_put_str(p, "\r\n");
     *p = '\0';
-    log_emit(&off, s_log_line);
+    boot_log_append(unix_time, s_log_line);
 
     p = s_log_line;
     p = log_put_str(p, "mmfar=");
     p = log_put_hex(p, SCB->MMFAR);
     p = log_put_str(p, " bfar=");
     p = log_put_hex(p, SCB->BFAR);
-    p = log_put_str(p, "\r\n");
     *p = '\0';
-    log_emit(&off, s_log_line);
+    boot_log_append(unix_time, s_log_line);
 
-    /* 7) 栈快照：从异常栈指针起 128 字，每行 8 字（crash_decode.py 可扫描） */
+    /* 5) 栈快照：从异常栈指针起 128 字，每行 8 字（crash_decode.py 可扫描） */
     addr = sp & ~3U;
     if (addr > 0x20005000U) {
         addr = 0x20005000U;
@@ -458,8 +453,84 @@ void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return)
             *p++ = ' ';
             p = log_put_hex(p, v);
         }
-        p = log_put_str(p, "\r\n");
         *p = '\0';
-        log_emit(&off, s_log_line);
+        boot_log_append(unix_time, s_log_line);
     }
+}
+
+/* ==========================================================================
+ * 六、配置区（主区 + 备份区，启动时校验并还原）
+ * ========================================================================== */
+
+bool boot_config_valid_at(uint32_t base)
+{
+    const boot_config_hdr_t *h = (const boot_config_hdr_t *)(uintptr_t)base;
+    uint32_t max_len = BOOT_CONFIG_SIZE - (uint32_t)sizeof(*h);
+
+    if (h->magic != BOOT_CONFIG_MAGIC || h->len > max_len) {
+        return false;
+    }
+    return boot_crc32((const uint8_t *)(uintptr_t)base + sizeof(*h), h->len)
+           == h->crc;
+}
+
+static int boot_config_write_area(uint32_t base, const void *data, uint32_t len)
+{
+    boot_config_hdr_t h;
+
+    h.magic = BOOT_CONFIG_MAGIC;
+    h.len = len;
+    h.crc = boot_crc32(data, len);
+
+    if (boot_flash_erase(base, BOOT_CONFIG_SIZE) != 0) {
+        return -1;
+    }
+    if (boot_flash_write(base, &h, (uint32_t)sizeof(h)) != 0) {
+        return -1;
+    }
+    if (len != 0U &&
+        boot_flash_write(base + (uint32_t)sizeof(h), data, len) != 0) {
+        return -1;
+    }
+    return boot_config_valid_at(base) ? 0 : -1;
+}
+
+int boot_config_save(const void *data, uint32_t len)
+{
+    if ((data == NULL && len != 0U) ||
+        len > BOOT_CONFIG_SIZE - (uint32_t)sizeof(boot_config_hdr_t)) {
+        return -1;
+    }
+
+    /* 先写备份区，再写主区：主区写失败时启动可从备份还原 */
+    if (boot_config_write_area(BOOT_CONFIG_BASE1, data, len) != 0) {
+        return -1;
+    }
+    if (boot_config_write_area(BOOT_CONFIG_BASE0, data, len) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+int boot_config_restore(void)
+{
+    const boot_config_hdr_t *h;
+    uint32_t total;
+
+    if (boot_config_valid_at(BOOT_CONFIG_BASE0)) {
+        return 0;                           /* 主区有效 */
+    }
+    if (!boot_config_valid_at(BOOT_CONFIG_BASE1)) {
+        return -2;                          /* 两份都无效 */
+    }
+
+    h = (const boot_config_hdr_t *)(uintptr_t)BOOT_CONFIG_BASE1;
+    total = (uint32_t)sizeof(*h) + h->len;
+    if (boot_flash_erase(BOOT_CONFIG_BASE0, BOOT_CONFIG_SIZE) != 0) {
+        return -1;
+    }
+    if (boot_flash_write(BOOT_CONFIG_BASE0, h, total) != 0) {
+        return -1;
+    }
+    return boot_config_valid_at(BOOT_CONFIG_BASE0) ? 1 : -1;
 }

@@ -37,6 +37,22 @@ void board_trace_start(uint32_t baudrate);
 /* 平台层钩子：Shell 使用同一个 UART1 句柄（platforms/stm32/stm32_shell.c 弱引用） */
 hal_uart_t *board_shell_uart(void);
 
+/* 注册 12 路 PWM（编号 0~11，按注册顺序）：
+ *   0~3   TIM2_CH1~4 (PA0~PA3)，默认 1kHz
+ *   4~7   TIM4_CH1~4 (PB6~PB9)，默认 2kHz
+ *   8~9   TIM3_CH3~4 (PB0/PB1)，默认 3kHz（PA6/PA7 为 LED，避开）
+ *   10~11 TIM12_CH1~2 (PB14/PB15)，默认 4kHz */
+void board_pwm_register(void);
+
+/* 注册板级 RTC 后端（1Hz 软件计时，默认 ROS_RTC_DEFAULT_UNIX） */
+void board_rtc_init(void);
+
+/* 风扇：复用 PWM 编号 0（TIM2_CH1 / PA0）输出，25kHz */
+void board_fan_init(void);
+
+/* 步进电机：STEP=PB12，DIR=PB13 */
+void board_stepper_init(void);
+
 #ifdef __cplusplus
 }
 #endif

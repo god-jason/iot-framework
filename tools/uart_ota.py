@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""uart_ota.py - robotos A/B Bootloader 串口 OTA 上位机
+"""uart_ota.py - robotos Bootloader 串口 OTA 上位机（F1 A/B、F4 A/B/C）
 
-与 boards/stm32f108cb/bootloader.c 的升级协议保持一致：
+与 boards/stm32f103cb/bootloader.c 的升级协议保持一致：
 
     Boot -> Host : ACK(0x06)                （就绪，可发长度/CRC）
     Host -> Boot : u32 len + u32 crc32(LE)  （crc32 覆盖后 len 字节）
@@ -16,10 +16,13 @@
 
 典型用法：
     # 默认 COM3、自动用 ST-LINK 复位目标后进入 Bootloader 窗口
-    python tools/uart_ota.py --bin build/cross/arm/release/ros-fw-f108cb-b.bin
+    python tools/uart_ota.py --bin build/cross/arm/release/ros-fw-f103cb.bin
 
     # 指定串口 / 波特率
     python tools/uart_ota.py -p COM5 -b 115200 --bin xxx.bin
+
+    # STM32F407VE（A/B/C）：镜像写入 C 区升级包，需放大单槽容量
+    python tools/uart_ota.py --slot-size 131072 --bin build/cross/arm/release/ros-fw-f407ve.bin
 
     # 不用 ST-LINK（板子没接调试器）：脚本持续敲门，期间手动按复位键
     python tools/uart_ota.py --no-reset --bin xxx.bin
@@ -42,7 +45,7 @@ REQ = b"R"          # Host -> Boot：请求升级
 ACK = b"\x06"       # Boot -> Host：就绪 / 擦除完成 / 升级成功
 ERR = b"\x15"       # Boot -> Host：升级失败（NAK）
 
-DEFAULT_SLOT_SIZE = 56 * 1024       # 与 bootloader.c 的 BOOT_SLOT_SIZE 一致
+DEFAULT_SLOT_SIZE = 52 * 1024       # 与 F1 bootloader.c 的 BOOT_OTA_SIZE 一致
 STLINK_CANDIDATES = [
     r"C:\Program Files (x86)\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\ST-LINK_CLI.exe",
     r"C:\Program Files\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\ST-LINK_CLI.exe",
@@ -267,7 +270,7 @@ def main() -> int:
     dump_log(log)
 
     if ok:
-        print("UPGRADE OK：已写入非活动槽，MCU 复位后启动新固件")
+        print("UPGRADE OK：升级包已写入 C 区，MCU 复位后由 Bootloader 升级到 A 区")
         return 0
 
     return 6

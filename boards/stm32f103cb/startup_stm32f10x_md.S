@@ -1,5 +1,5 @@
 /*
- * startup_stm32f10x_md.S - STM32F103C8 (Medium Density) GCC 启动文件
+ * startup_stm32f10x_md.S - STM32F103CBT6 (Medium Density) GCC 启动文件
  *
  * Keil STM32F1xx_DFP 只提供 ARMASM 格式的启动文件，本文件为等价的
  * GNU as 版本，供 arm-none-eabi-gcc 使用：

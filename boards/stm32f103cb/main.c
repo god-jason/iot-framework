@@ -1,5 +1,5 @@
 /*
- * main.c - STM32F103C8T6 可烧录固件入口
+ * main.c - STM32F103CBT6 可烧录固件入口
  *
  * 上电流程：
  *   Reset_Handler -> SystemInit(时钟 + 1ms SysTick) -> main()
@@ -18,10 +18,11 @@
 
 #include "stm32f10x.h"
 #include "boot_meta.h"
+#include "ros_rtc.h"
 
-/* 本固件所在 A/B 槽的向量表基址；B 槽构建时由 -DAPP_VECTOR_BASE=0x08010000U 覆盖 */
+/* 本固件运行在 App 区，向量表基址固定为 0x08008000 */
 #ifndef APP_VECTOR_BASE
-#define APP_VECTOR_BASE 0x08002000U
+#define APP_VECTOR_BASE 0x08008000U
 #endif
 
 static ros_task_t s_blink_task;
@@ -45,12 +46,12 @@ int main(void)
     board_led_init();
     board_trace_start(115200U);   /* trace 经 USART1/PA9 输出，串口助手 115200 8N1 */
 
-    /* A/B 槽固件：向量表重定位到本槽基址 */
+    /* App 区固件：向量表重定位到 App 区基址 */
     SCB->VTOR = APP_VECTOR_BASE;
 
     /* roshell 默认绑定 UART1（PA9 发送 / PA10 接收）；
      * log 的 printf 由 syscalls.c 的 _write 同样走 UART1 */
-    (void)rs_platform_start("f108cb");
+    (void)rs_platform_start("f103cb");
 
     /* 注册板级 RTC 后端（本板无硬件时钟，用 1Hz 软件计时） */
     board_rtc_init();
@@ -78,10 +79,6 @@ int main(void)
         }
     }
 
-    /* 初始化完成：向 Bootloader 确认本次启动成功。
-     * 升级后的新槽若连续 3 次未确认，Bootloader 会自动回滚到旧槽。 */
-    boot_confirm();
-
     ros_sched_start();
 
     for (;;) {
@@ -90,8 +87,8 @@ int main(void)
 }
 
 /*
- * HardFault：提取异常栈帧（PC/LR），把崩溃日志写入 Flash 文本区并累加计数，
- * 随后复位。Bootloader 下次启动发现 crash > BOOT_MAX_CRASH 时回退到另一分区。
+ * HardFault：提取异常栈帧（PC/LR 等）并带 Unix 时间追加到系统日志，
+ * 随后复位。单 App 槽方案不做回滚。
  */
 void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp);
 
@@ -116,8 +113,8 @@ void HardFault_Handler(void)
 
 void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp)
 {
-    /* 记录崩溃现场（寄存器/故障状态/栈快照）并累加计数，然后复位 */
-    boot_crash_log(frame, sp, exc_return);
+    /* 记录崩溃现场（寄存器/故障状态/栈快照，带 Unix 时间），然后复位 */
+    boot_crash_log(frame, sp, exc_return, ros_rtc_get_timestamp());
     NVIC_SystemReset();
 
     for (;;) {

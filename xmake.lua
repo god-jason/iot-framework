@@ -22,11 +22,11 @@
         xmake f -p cross --stm32_family=f4 --stm32_chip=STM32F407xx ^
                 --cube_hal_dir=C:\path\to\STM32F4xx_HAL_Driver ^
                 --sdk=... --bin=... -c
-        xmake b ros-fw-f407
+        xmake b ros-fw-f407ve
 
         # 可烧录固件：STM32F1 / 128KB Flash（纯寄存器实现，不需要 Cube HAL）
         xmake f -p cross --stm32_family=f1 --cube_hal_dir="" ... -c
-        xmake b ros-fw-f108cb
+        xmake b ros-fw-f103cb
 
         # Linux 下换成 --sdk=/opt/xpack-arm-none-eabi-gcc-15.2.1-1.1 等安装路径
         # --cube_hal_dir 可传 .../STM32F4xx_HAL_Driver 或其 Inc 子目录
@@ -40,8 +40,9 @@
         ros-demo      综合示例可执行文件
         ros-shell     Shell 交互示例（stdin/stdout）
         ros-stm32     STM32 交叉编译静态库（仅 -p cross 时可见）
-        ros-fw-f407   STM32F407VET6 可烧录固件（PA6/PA7 LED，USART1）
-        ros-fw-f108cb STM32F1 128KB Flash 可烧录固件（PC13 LED，USART1）
+        ros-fw-f407ve STM32F407VE 可烧录固件（PA6/PA7 LED，USART1）
+        ros-boot-f407ve STM32F407VE A/B/C OTA Bootloader
+        ros-fw-f103cb STM32F1 128KB Flash 可烧录固件（PC13 LED，USART1）
 ]]
 
 add_rules("mode.debug", "mode.release")
@@ -198,7 +199,7 @@ local function ros_extra_warnings()
     add_cflags("-Wextra", "-Wshadow", "-Wformat=2", {force = true})
 end
 
--- 固件构建后导出 hex/bin 并打印 map 路径（f108cb / f407 共用）
+-- 固件构建后导出 hex/bin 并打印 map 路径（f103cb / f407 共用）
 local function ros_fw_objcopy()
     after_build(function (target)
         local elf = target:targetfile()
@@ -361,8 +362,11 @@ if is_plat("cross") then
         -- STM32F1 资源受限：trace 与崩溃记录固定裁剪（需要时删除这两行）
         if family == "f1" then
             add_defines("ROS_USE_TRACE=0")
-            -- F103C8 仅 20KB SRAM，默认 32KB TLSF 堆无法容纳；10KB 可供 shell + 动态任务
+            -- F103CB 仅 20KB SRAM，默认 32KB TLSF 堆无法容纳；10KB 可供 shell + 动态任务
             add_defines("ROS_MEM_HEAP_SIZE=10240")
+        elseif family == "f4" then
+            -- F4 资源充足：开放 shell 表达式求值与 math 函数（需链接 libm）
+            add_defines("RS_ENABLE_EXPR=1", "RS_ENABLE_MATH=1")
         end
         ros_trace_defines()
 
@@ -410,7 +414,7 @@ if is_plat("cross") then
         else
             -- 无 Cube HAL：stm32_os.c / 其它系列实现直接 include Cube 头，跳过；
             -- F1 保留 stm32_f1.c —— 其内部用 __has_include 选择极简寄存器实现
-            -- （GPIO / PWM），供 boards/stm32f108cb 等纯寄存器固件使用。
+            -- （GPIO / PWM），供 boards/stm32f103cb 等纯寄存器固件使用。
             remove_files("platforms/stm32/stm32_os.c",
                          "platforms/stm32/stm32_f4.c",
                          "platforms/stm32/stm32_h7.c")
@@ -463,7 +467,7 @@ if is_plat("cross") then
     -- 链接 libros-stm32-f1.a + 板级启动代码，产出 .elf/.hex/.bin
     -- ========================================================================
     if family == "f1" then
-        local board_dir = "boards/stm32f108cb"
+        local board_dir = "boards/stm32f103cb"
         local dfp       = ros_find_pack_version("Keil/STM32F1xx_DFP")
         local cmsis     = ros_find_pack_version("ARM/CMSIS")
         local dfp_inc   = get_config("dfp_inc") or ""
@@ -475,7 +479,7 @@ if is_plat("cross") then
             cmsis_inc = cmsis and path.join(cmsis, "CMSIS", "Core", "Include") or nil
         end
 
-        target("ros-fw-f108cb")
+        target("ros-fw-f103cb")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
@@ -503,7 +507,7 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
-            -- Bootloader 的元数据/Flash 实现（App 侧用于 boot_confirm / 崩溃计数）
+            -- Bootloader 的 Flash/日志实现（App 侧用于崩溃日志与系统日志）
             add_files(path.join(board_dir, "boot", "boot_meta.c"))
             add_includedirs(board_dir)
             add_includedirs(path.join(board_dir, "boot"))
@@ -517,7 +521,7 @@ if is_plat("cross") then
 
             -- 自定义启动文件与向量表，禁用 crt0；nano newlib 减小体积
             add_ldflags("-nostartfiles",
-                        "-T" .. path.join(board_dir, "stm32f108cb.ld"),
+                        "-T" .. path.join(board_dir, "stm32f103cb.ld"),
                         "--specs=nano.specs",
                         "-Wl,--gc-sections",
                         {force = true})
@@ -536,62 +540,11 @@ if is_plat("cross") then
         target_end()
 
         -- ====================================================================
-        -- B 区固件（OTA 升级包）：链接到 0x08010000，其余配置与 A 区一致
+        -- 单 App 槽 + OTA 进度日志 Bootloader（F1 / 128KB Flash，8KB）
+        -- 产物：ros-boot-f103cb.elf/.hex/.bin（烧录到 0x08000000）
+        -- App 链接到 0x08008000；升级包写入 0x08015000，不单独构建 B 区镜像
         -- ====================================================================
-        target("ros-fw-f108cb-b")
-            set_kind("binary")
-            set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
-            set_languages("c99")
-            set_warnings("all")
-            set_optimize("smallest")
-            set_strip("none")            -- 保留 DWARF 调试信息，用于 addr2line 还原崩溃现场
-            add_cflags("-g", {force = true})
-            ros_enable_mapfile()
-            add_deps("ros-stm32")
-
-            add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F1")
-            add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
-            add_defines("ROS_USE_TRACE=0")
-            ros_trace_defines()
-            add_defines("LOG_LEVEL=LOG_LEVEL_NONE")
-            add_defines("APP_VECTOR_BASE=0x08010000U")
-
-            for _, flag in ipairs(cpuflags) do
-                add_cflags(flag, {force = true})
-                add_asflags(flag, {force = true})
-                add_ldflags(flag, {force = true})
-            end
-            add_cflags("-ffunction-sections", "-fdata-sections", {force = true})
-
-            add_files(path.join(board_dir, "*.c"))
-            add_files(path.join(board_dir, "*.S"))
-            -- Bootloader 的元数据/Flash 实现（App 侧用于 boot_confirm / 崩溃计数）
-            add_files(path.join(board_dir, "boot", "boot_meta.c"))
-            add_includedirs(board_dir)
-            add_includedirs(path.join(board_dir, "boot"))
-            ros_includedirs()
-            if dfp_inc then
-                add_includedirs(dfp_inc)
-            end
-            if cmsis_inc then
-                add_includedirs(cmsis_inc)
-            end
-
-            add_ldflags("-nostartfiles",
-                        "-T" .. path.join(board_dir, "stm32f108cb_b.ld"),
-                        "--specs=nano.specs",
-                        "-Wl,--gc-sections",
-                        {force = true})
-
-            ros_fw_objcopy()
-        target_end()
-
-        -- ====================================================================
-        -- A/B OTA Bootloader（F1 / 128KB Flash，8KB，独立于 App，不依赖 RTOS/HAL/libc）
-        -- 产物：ros-boot-f108cb.elf/.hex/.bin（烧录到 0x08000000）
-        -- App 需链接到 A 区 0x08002000（或目标槽基址），不参与启动确认
-        -- ====================================================================
-        target("ros-boot-f108cb")
+        target("ros-boot-f103cb")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
@@ -633,12 +586,12 @@ if is_plat("cross") then
     end
 
     -- ========================================================================
-    -- 可烧录固件（STM32F407VET6 / Cortex-M4 / PA6+PA7 LED / USART1）
+    -- 可烧录固件（STM32F407VE / Cortex-M4 / PA6+PA7 LED / USART1）
     -- 链接 ros-stm32 + Cube HAL 子集 + 板级启动代码，产出 .elf/.hex/.bin
     -- 需要 --cube_hal_dir 指向 STM32F4xx_HAL_Driver
     -- ========================================================================
     if family == "f4" then
-        local board_dir = "boards/stm32f407"
+        local board_dir = "boards/stm32f407ve"
         local sys_src   = (hal_drivers ~= "")
             and path.join(hal_drivers, "CMSIS", "Device", "ST", "STM32F4xx",
                           "Source", "Templates", "system_stm32f4xx.c") or ""
@@ -648,25 +601,35 @@ if is_plat("cross") then
             "stm32f4xx_hal_gpio.c", "stm32f4xx_hal_uart.c",
             "stm32f4xx_hal_dma.c", "stm32f4xx_hal_dma_ex.c",
             "stm32f4xx_hal_pwr.c", "stm32f4xx_hal_pwr_ex.c",
-            "stm32f4xx_hal_flash.c", "stm32f4xx_hal_flash_ex.c"
+            "stm32f4xx_hal_flash.c", "stm32f4xx_hal_flash_ex.c",
+            "stm32f4xx_hal_tim.c", "stm32f4xx_hal_tim_ex.c",
+            "stm32f4xx_hal_rtc.c", "stm32f4xx_hal_rtc_ex.c"
         }
 
-        target("ros-fw-f407")
+        local dfp      = ros_find_pack_version("Keil/STM32F4xx_DFP")
+        local dfp_inc  = get_config("dfp_inc") or ""
+        if dfp_inc == "" then
+            dfp_inc = dfp and path.join(dfp, "Device", "Include") or ""
+        end
+
+        target("ros-fw-f407ve")
             set_kind("binary")
             set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
             set_languages("c99")
             set_warnings("all")
-            set_optimize("smallest")     -- 固件按体积优化（-Os）
+            set_optimize("smallest")
             ros_extra_warnings()
-            set_strip("none")           -- 保留 ELF 符号表，便于 ST-Link/GDB 调试
-            add_cflags("-g", {force = true})  -- 板级文件也带 DWARF（行号/局部变量）
+            set_strip("none")
+            add_cflags("-g", {force = true})
             ros_enable_mapfile()
             add_deps("ros-stm32")
 
             add_defines("ROS_PLATFORM_STM32", "ROS_STM32_F4",
                         "USE_HAL_DRIVER", chip, "HSE_VALUE=8000000")
+            add_defines("APP_VECTOR_BASE=0x08020000U")
             ros_trace_defines()
             add_defines("LOG_LEVEL=LOG_LEVEL_INFO")
+            add_ldflags("-lm", {force = true})
 
             for _, flag in ipairs(cpuflags) do
                 add_cflags(flag, {force = true})
@@ -677,7 +640,9 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
+            add_files(path.join(board_dir, "boot", "boot_meta.c"))
             add_includedirs(board_dir)
+            add_includedirs(path.join(board_dir, "boot"))
             ros_includedirs()
 
             if hal_src ~= "" then
@@ -694,7 +659,6 @@ if is_plat("cross") then
                 end
             end
 
-            -- 自定义启动文件与向量表，禁用 crt0；nano newlib 减小体积
             add_ldflags("-nostartfiles",
                         "-T" .. path.join(board_dir, "stm32f407ve.ld"),
                         "--specs=nano.specs",
@@ -703,16 +667,53 @@ if is_plat("cross") then
 
             on_load(function (target)
                 if hal_src == "" or not os.isdir(hal_src) then
-                    cprint("${yellow}[f407] 未找到 Cube HAL 源码，请用 " ..
+                    cprint("${yellow}[f407ve] 未找到 Cube HAL 源码，请用 " ..
                            "--cube_hal_dir=<.../STM32F4xx_HAL_Driver> 指定${clear}")
                 end
-                if cmsis_dev_inc ~= "" and not os.isdir(cmsis_dev_inc) then
-                    cprint("${yellow}[f407] 未找到 CMSIS Device 头文件目录: %s${clear}",
-                           cmsis_dev_inc)
-                end
-                cprint("${dim}[f407] chip=%s${clear}", chip)
+                cprint("${dim}[f407ve] chip=%s${clear}", chip)
             end)
+            ros_fw_objcopy()
+        target_end()
 
+        -- A/B/C OTA Bootloader：S0 16KB，不依赖 HAL/RTOS/libc
+        target("ros-boot-f407ve")
+            set_kind("binary")
+            set_toolchains(get_config("stm32_toolchain") or "arm-none-eabi-gcc")
+            set_languages("c99")
+            set_warnings("all")
+            set_optimize("smallest")
+            set_strip("none")
+            add_cflags("-g", {force = true})
+            ros_enable_mapfile()
+
+            add_defines(chip, "HSE_VALUE=8000000")
+            for _, flag in ipairs(cpuflags) do
+                add_cflags(flag, {force = true})
+                add_asflags(flag, {force = true})
+                add_ldflags(flag, {force = true})
+            end
+            add_cflags("-ffreestanding", "-ffunction-sections",
+                       "-fdata-sections", {force = true})
+
+            add_files(path.join(board_dir, "startup_stm32f407.S"))
+            add_files(path.join(board_dir, "boot", "bootloader.c"))
+            add_files(path.join(board_dir, "boot", "boot_meta.c"))
+            add_includedirs(board_dir)
+            add_includedirs(path.join(board_dir, "boot"))
+            if cmsis_dev_inc ~= "" then
+                add_includedirs(cmsis_dev_inc)
+            elseif dfp_inc ~= "" then
+                add_includedirs(dfp_inc)
+            end
+            if cmsis_core ~= "" then
+                add_includedirs(cmsis_core)
+            end
+
+            add_ldflags("-nostartfiles",
+                        "-nostdlib",
+                        "-T" .. path.join(board_dir, "boot", "bootloader.ld"),
+                        "-Wl,--gc-sections",
+                        {force = true})
             ros_fw_objcopy()
         target_end()
     end

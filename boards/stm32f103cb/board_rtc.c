@@ -1,5 +1,5 @@
 /*
- * board_rtc.c - STM32F103C8 板级 RTC 后端
+ * board_rtc.c - STM32F103CBT6 板级 RTC 后端
  *
  * 首选：LSE 32.768kHz 低速晶振 + 片上 RTC 计数器。
  *   - RTC 预分频 32767，计数器 1Hz 递增，直接作为 Unix 秒；

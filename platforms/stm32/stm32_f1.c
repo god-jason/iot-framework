@@ -3,7 +3,7 @@
 /*
  * 构建方式选择：
  *   包含目录中能找到 stm32f1xx_hal.h  → 编译下面的 Cube HAL 适配层；
- *   找不到（如 boards/stm32f108cb 纯寄存器固件）→ 只编译文件末尾的极简
+ *   找不到（如 boards/stm32f103cb 纯寄存器固件）→ 只编译文件末尾的极简
  *   寄存器实现（GPIO / PWM），不引入任何 Cube 依赖。
  */
 #if defined(__has_include)

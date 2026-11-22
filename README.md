@@ -67,7 +67,7 @@ xmake build ros-pc
 ```
 
 所有可执行目标（含 STM32 固件）在链接时都会生成 map 文件，与 ELF/EXE 同目录：
-主机为 `.../ros-test.exe.map`，STM32 为 `.../ros-fw-f407.map`（ELF 无扩展名）。
+主机为 `.../ros-test.exe.map`，STM32 为 `.../ros-fw-f407ve.map`（ELF 无扩展名）。
 STM32 固件 ELF 同时带 DWARF 调试信息（`-g`），可直接解析源码行号与局部变量。
 
 ### 崩溃回溯
@@ -76,16 +76,16 @@ STM32 固件 ELF 同时带 DWARF 调试信息（`-g`），可直接解析源码�
 崩溃文本交给脚本即可得到函数名、源码行与疑似调用栈：
 
 ```bash
-python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407 crash.txt
+python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407ve crash.txt
 # 或直接管道输入
-type crash.txt | python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407
+type crash.txt | python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407ve
 ```
 
 脚本自动调用 `arm-none-eabi-addr2line` / `nm`；工具不在 PATH 时用
 `--addr2line <路径>` 指定。地址也可手工解析：
 
 ```
-arm-none-eabi-addr2line -e ros-fw-f407 -f -C 0x0800xxxx
+arm-none-eabi-addr2line -e ros-fw-f407ve -f -C 0x0800xxxx
 ```
 
 ### 目标一览
@@ -96,7 +96,7 @@ arm-none-eabi-addr2line -e ros-fw-f407 -f -C 0x0800xxxx
 | `ros-test` | binary | 单元测试入口 `src/test_main.c` |
 | `ros-demo` | binary | 示例程序（日志 + LED） |
 | `ros-stm32` | static | STM32 交叉编译库 |
-| `ros-fw-f108cb` | binary | 可烧录固件（elf/hex/bin） |
+| `ros-fw-f103cb` | binary | 可烧录固件（elf/hex/bin） |
 
 ---
 
@@ -214,7 +214,7 @@ xmake build ros-stm32
 xmake f -p cross --stm32_family=f1 \
         --dfp_inc=<STM32F1xx_DFP>/Device/Include \
         --cmsis_inc=<CMSIS>/Core/Include -c
-xmake build ros-fw-f108cb
+xmake build ros-fw-f103cb
 ```
 
 `stm32_family` 支持 `f1` / `f4` / `h7`。

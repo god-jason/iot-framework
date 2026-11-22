@@ -1,5 +1,5 @@
 /*
- * board.c - STM32F103C8T6 最小板级支持实现
+ * board.c - STM32F103CBT6 最小板级支持实现
  *
  * 使用 Keil STM32F1xx_DFP 提供的器件头 stm32f10x.h（寄存器结构体）
  * 与 CMSIS 5.8.0 的 core_cm3.h（SysTick_Config），不依赖 STM32Cube HAL。

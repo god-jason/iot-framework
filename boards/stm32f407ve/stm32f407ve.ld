@@ -1,22 +1,21 @@
 /*
- * stm32f407ve.ld - STM32F407VET6 链接脚本（GNU ld）
+ * stm32f407ve.ld - STM32F407VE A 区固件链接脚本（GNU ld）
  *
- * FLASH 512KB @ 0x08000000, SRAM 128KB @ 0x20000000。
- * F407 另有 64KB CCM RAM（0x10000000），本脚本未使用。
+ * A 区：FLASH 0x08020000 起 128KB（S5）；SRAM 128KB @0x20000000。
+ * Bootloader/配置/日志/Meta 在前部，B 区 0x08040000 为备份，
+ * C 区 0x08060000 存放升级包；B/C 区内容均为按本地址链接的镜像副本。
  */
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
+    FLASH (rx)  : ORIGIN = 0x08020000, LENGTH = 128K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }
 
-/* 主栈（MSP）从 SRAM 顶端向下增长 */
 _estack = ORIGIN(RAM) + LENGTH(RAM);
 
-/* 给 newlib 的 _sbrk 留堆空间，栈顶预留 2KB 主栈 */
 _Min_Heap_Size  = 0x400;
 _Min_Stack_Size = 0x800;
 
@@ -38,7 +37,7 @@ SECTIONS
         *(.eh_frame)
         . = ALIGN(4);
         _etext  = .;
-        _sidata = _etext;          /* .data 的 LMA */
+        _sidata = _etext;
     } > FLASH
 
     .data : AT (_sidata)
@@ -60,11 +59,6 @@ SECTIONS
         _ebss = .;
     } > RAM
 
-    /*
-     * 复位不清零段：崩溃现场记录（ros_crash）放在这里，
-     * HardFault/断言后复位，下次启动仍能读到现场并上报。
-     * 必须位于 .bss 之后、堆栈保留区之前，且不能被 _sbrk 覆盖。
-     */
     .noinit (NOLOAD) :
     {
         . = ALIGN(4);
@@ -82,7 +76,6 @@ SECTIONS
         . = ALIGN(8);
     } > RAM
 
-    /* 未使用的 newlib 元数据，避免把 C++ 异常表塞进 Flash */
     /DISCARD/ :
     {
         *(.ARM.exidx*)
