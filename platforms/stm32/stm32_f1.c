@@ -1,5 +1,19 @@
 #if defined(ROS_STM32_F1)
 
+/*
+ * 构建方式选择：
+ *   包含目录中能找到 stm32f1xx_hal.h  → 编译下面的 Cube HAL 适配层；
+ *   找不到（如 boards/stm32f108cb 纯寄存器固件）→ 只编译文件末尾的极简
+ *   寄存器实现（GPIO / PWM），不引入任何 Cube 依赖。
+ */
+#if defined(__has_include)
+#  if __has_include("stm32f1xx_hal.h")
+#    define ROS_F1_HAVE_CUBE 1
+#  endif
+#endif
+
+#if defined(ROS_F1_HAVE_CUBE)
+
 /* STM32F1 平台实现：新 PORT 公共 API -> STM32CubeF1 HAL。
  *
  * 依赖约定：
@@ -4944,5 +4958,498 @@ int hal_get_info(hal_mcu_info_t *info)
     info->sram_size = 20U * 1024U;
     return HAL_OK;
 }
+
+#else /* !ROS_F1_HAVE_CUBE：无 Cube HAL 的极简寄存器实现 */
+
+/*
+ * 极简 GPIO / PWM 实现（纯寄存器，适用于不带 Cube HAL 的板级固件）：
+ *   - GPIO：PA/PB/PC/PD，输入（浮空/上拉/下拉）、推挽/开漏输出、模拟、复用；
+ *   - PWM ：TIM2_CH1~4(PA0~PA3)、TIM3_CH1~4(PA6/PA7/PB0/PB1)，
+ *           定时器计数时钟 72MHz（APB1 二分频后 x2），16 位分辨率。
+ * 句柄约定：hal_pwm_t.base.instance = TIMx 指针，handle->channel = 1..4。
+ */
+
+#include "hal.h"
+#include "stm32f10x.h"
+
+#define F1_RCC_APB2ENR_IOPAEN   (1UL << 2)
+#define F1_RCC_APB2ENR_IOPBEN   (1UL << 3)
+#define F1_RCC_APB2ENR_IOPCEN   (1UL << 4)
+#define F1_RCC_APB2ENR_IOPDEN   (1UL << 5)
+#define F1_RCC_APB1ENR_TIM2EN   (1UL << 0)
+#define F1_RCC_APB1ENR_TIM3EN   (1UL << 1)
+#define F1_RCC_APB1ENR_TIM4EN   (1UL << 2)
+#define F1_RCC_APB1ENR_TIM5EN   (1UL << 3)
+
+static GPIO_TypeDef *f1_min_gpio_port(hal_pin_t pin)
+{
+    switch (HAL_PIN_GET_PORT(pin)) {
+    case 0U:
+        RCC->APB2ENR |= F1_RCC_APB2ENR_IOPAEN;
+        return GPIOA;
+    case 1U:
+        RCC->APB2ENR |= F1_RCC_APB2ENR_IOPBEN;
+        return GPIOB;
+    case 2U:
+        RCC->APB2ENR |= F1_RCC_APB2ENR_IOPCEN;
+        return GPIOC;
+    case 3U:
+        RCC->APB2ENR |= F1_RCC_APB2ENR_IOPDEN;
+        return GPIOD;
+    default:
+        return NULL;
+    }
+}
+
+/* 写 CRL/CRH 中某个引脚的 4 位配置（MODE[1:0] + CNF[1:0]） */
+static void f1_min_gpio_nibble(GPIO_TypeDef *port, uint32_t index,
+                               uint32_t nibble)
+{
+    if (index < 8U) {
+        uint32_t shift = index * 4U;
+
+        port->CRL = (port->CRL & ~(0x0FUL << shift)) | (nibble << shift);
+    } else {
+        uint32_t shift = (index - 8U) * 4U;
+
+        port->CRH = (port->CRH & ~(0x0FUL << shift)) | (nibble << shift);
+    }
+}
+
+/* 输出速度 -> F1 MODE：10MHz=01，2MHz=10，50MHz=11 */
+static uint32_t f1_min_gpio_speed(hal_gpio_speed_e speed)
+{
+    switch (speed) {
+    case HAL_GPIO_SPEED_LOW:      return 0x2U;
+    case HAL_GPIO_SPEED_MEDIUM:   return 0x1U;
+    case HAL_GPIO_SPEED_HIGH:
+    case HAL_GPIO_SPEED_VERY_HIGH:
+    default:                      return 0x3U;
+    }
+}
+
+int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
+{
+    GPIO_TypeDef *port = f1_min_gpio_port(pin);
+    uint32_t index = HAL_PIN_GET_INDEX(pin);
+    uint32_t nibble;
+
+    if (port == NULL || config == NULL || index > 15U) {
+        return HAL_INVALID_PARAM;
+    }
+
+    switch (config->mode) {
+    case HAL_GPIO_MODE_INPUT:
+        if (config->pull == HAL_GPIO_PULLUP) {
+            port->ODR |= (1UL << index);            /* ODR=1 -> 上拉 */
+            nibble = 0x8U;
+        } else if (config->pull == HAL_GPIO_PULLDOWN) {
+            port->ODR &= ~(1UL << index);           /* ODR=0 -> 下拉 */
+            nibble = 0x8U;
+        } else {
+            nibble = 0x4U;                          /* 浮空输入 */
+        }
+        break;
+
+    case HAL_GPIO_MODE_OUTPUT:
+        nibble = f1_min_gpio_speed(config->speed) |
+                 ((config->output == HAL_GPIO_OUTPUT_OD) ? 0x4U : 0x0U);
+        if (config->initial_level == HAL_GPIO_HIGH) {
+            port->BSRR = (1UL << index);
+        } else {
+            port->BSRR = (1UL << (index + 16U));
+        }
+        break;
+
+    case HAL_GPIO_MODE_AF:
+        nibble = f1_min_gpio_speed(config->speed) | 0x8U;  /* 复用推挽 */
+        break;
+
+    case HAL_GPIO_MODE_ANALOG:
+    default:
+        nibble = 0x0U;                              /* 模拟输入 */
+        break;
+    }
+
+    f1_min_gpio_nibble(port, index, nibble);
+    return HAL_OK;
+}
+
+int hal_gpio_deinit(hal_pin_t pin)
+{
+    GPIO_TypeDef *port = f1_min_gpio_port(pin);
+    uint32_t index = HAL_PIN_GET_INDEX(pin);
+
+    if (port == NULL || index > 15U) {
+        return HAL_INVALID_PARAM;
+    }
+    f1_min_gpio_nibble(port, index, 0x4U);          /* 浮空输入 */
+    return HAL_OK;
+}
+
+int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
+{
+    GPIO_TypeDef *port = f1_min_gpio_port(pin);
+    uint32_t index = HAL_PIN_GET_INDEX(pin);
+
+    if (port == NULL || index > 15U) {
+        return HAL_INVALID_PARAM;
+    }
+    port->BSRR = (level == HAL_GPIO_HIGH) ? (1UL << index)
+                                          : (1UL << (index + 16U));
+    return HAL_OK;
+}
+
+int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
+{
+    GPIO_TypeDef *port = f1_min_gpio_port(pin);
+    uint32_t index = HAL_PIN_GET_INDEX(pin);
+
+    if (port == NULL || level == NULL || index > 15U) {
+        return HAL_INVALID_PARAM;
+    }
+    *level = ((port->IDR & (1UL << index)) != 0U) ? HAL_GPIO_HIGH
+                                                  : HAL_GPIO_LOW;
+    return HAL_OK;
+}
+
+int hal_gpio_toggle(hal_pin_t pin)
+{
+    GPIO_TypeDef *port = f1_min_gpio_port(pin);
+    uint32_t index = HAL_PIN_GET_INDEX(pin);
+
+    if (port == NULL || index > 15U) {
+        return HAL_INVALID_PARAM;
+    }
+    port->ODR ^= (1UL << index);
+    return HAL_OK;
+}
+
+int hal_gpio_set(hal_pin_t pin)
+{
+    return hal_gpio_write(pin, HAL_GPIO_HIGH);
+}
+
+int hal_gpio_reset(hal_pin_t pin)
+{
+    return hal_gpio_write(pin, HAL_GPIO_LOW);
+}
+
+/* ---------------------------- PWM ---------------------------- */
+
+typedef struct {
+    void    *tim;
+    uint8_t  channel;           /* 1..4 */
+    uint8_t  port;
+    uint8_t  pin;
+} f1_min_pwm_map_t;
+
+/*
+ * STM32F103 定时器 PWM 通道与默认引脚（未做重映射）：
+ *   TIM2  CH1=PA0  CH2=PA1  CH3=PA2  CH4=PA3    重映射：PA15/PB3/PB10/PB11
+ *   TIM3  CH1=PA6  CH2=PA7  CH3=PB0  CH4=PB1    重映射：PC6/PC7/PC8/PC9
+ *   TIM4  CH1=PB6  CH2=PB7  CH3=PB8  CH4=PB9    重映射：PD12/PD13/PD14/PD15
+ *   TIM5  CH1=PA0  CH2=PA1  CH3=PA2  CH4=PA3    重映射：PH10/PH11/PH12/PH13
+ *         （TIM5 仅大容量 F103 有；与 TIM2 默认通道共用 PA0~PA3，不能同时使用）
+ *   另：PA9/PA10 已用于 USART1，PA13/PA14 为 SWD，请勿占用。
+ */
+static const f1_min_pwm_map_t s_f1_min_pwm[] = {
+    /* TIM2：PA0 / PA1 / PA2 / PA3 */
+    { TIM2, 1U, 0U, 0U }, { TIM2, 2U, 0U, 1U },
+    { TIM2, 3U, 0U, 2U }, { TIM2, 4U, 0U, 3U },
+    /* TIM3：PA6 / PA7 / PB0 / PB1 */
+    { TIM3, 1U, 0U, 6U }, { TIM3, 2U, 0U, 7U },
+    { TIM3, 3U, 1U, 0U }, { TIM3, 4U, 1U, 1U },
+#ifdef TIM4
+    /* TIM4：PB6 / PB7 / PB8 / PB9 */
+    { TIM4, 1U, 1U, 6U }, { TIM4, 2U, 1U, 7U },
+    { TIM4, 3U, 1U, 8U }, { TIM4, 4U, 1U, 9U },
+#endif
+#ifdef TIM5
+    /* TIM5：PA0 / PA1 / PA2 / PA3（与 TIM2 冲突，仅大容量芯片） */
+    { TIM5, 1U, 0U, 0U }, { TIM5, 2U, 0U, 1U },
+    { TIM5, 3U, 0U, 2U }, { TIM5, 4U, 0U, 3U },
+#endif
+};
+
+#define F1_MIN_PWM_CLOCK_HZ  72000000UL     /* APB1 x2 */
+#define F1_MIN_PWM_PSC       71UL           /* /72 -> 1MHz */
+
+/* 定时器是否已配置过时基：同组通道初始化时不再重置 ARR/PSC，避免打断运行 */
+static uint8_t s_f1_min_tim_ready[4];       /* TIM2 / TIM3 / TIM4 / TIM5 */
+
+static uint32_t f1_min_tim_slot(TIM_TypeDef *tim)
+{
+    if (tim == TIM2) {
+        return 0U;
+    }
+#ifdef TIM3
+    if (tim == TIM3) {
+        return 1U;
+    }
+#endif
+#ifdef TIM4
+    if (tim == TIM4) {
+        return 2U;
+    }
+#endif
+#ifdef TIM5
+    if (tim == TIM5) {
+        return 3U;
+    }
+#endif
+    return 0xFFU;
+}
+
+static const f1_min_pwm_map_t *f1_min_pwm_find(const hal_pwm_t *handle)
+{
+    uint32_t i;
+
+    for (i = 0U; i < sizeof(s_f1_min_pwm) / sizeof(s_f1_min_pwm[0]); i++) {
+        if (s_f1_min_pwm[i].tim == handle->base.instance &&
+            s_f1_min_pwm[i].channel == handle->channel) {
+            return &s_f1_min_pwm[i];
+        }
+    }
+    return NULL;
+}
+
+static uint32_t f1_min_pwm_arr(uint32_t freq)
+{
+    uint32_t ticks = (F1_MIN_PWM_CLOCK_HZ / (F1_MIN_PWM_PSC + 1U)) / freq;
+
+    if (ticks == 0U) {
+        ticks = 1U;
+    }
+    if (ticks > 65536U) {
+        ticks = 65536U;
+    }
+    return ticks - 1U;
+}
+
+static uint32_t f1_min_pwm_ccr(uint32_t arr, uint32_t duty)
+{
+    if (duty > 10000U) {
+        duty = 10000U;
+    }
+    return ((arr + 1U) * duty) / 10000U;
+}
+
+static void f1_min_pwm_apply(hal_pwm_t *handle, TIM_TypeDef *tim)
+{
+    uint32_t ccr = f1_min_pwm_ccr(tim->ARR, handle->config.duty);
+    uint32_t pol = (handle->config.polarity == HAL_PWM_POLARITY_LOW) ? 1U : 0U;
+
+    switch (handle->channel) {
+    case 1U:
+        tim->CCMR1 = (tim->CCMR1 & ~0x00FFUL) | 0x0068UL;
+        tim->CCR1 = ccr;
+        tim->CCER = (tim->CCER & ~0x0003UL) | 0x0001UL | (pol << 1);
+        break;
+    case 2U:
+        tim->CCMR1 = (tim->CCMR1 & ~0xFF00UL) | 0x6800UL;
+        tim->CCR2 = ccr;
+        tim->CCER = (tim->CCER & ~0x0030UL) | 0x0010UL | (pol << 5);
+        break;
+    case 3U:
+        tim->CCMR2 = (tim->CCMR2 & ~0x00FFUL) | 0x0068UL;
+        tim->CCR3 = ccr;
+        tim->CCER = (tim->CCER & ~0x0300UL) | 0x0100UL | (pol << 9);
+        break;
+    default:
+        tim->CCMR2 = (tim->CCMR2 & ~0xFF00UL) | 0x6800UL;
+        tim->CCR4 = ccr;
+        tim->CCER = (tim->CCER & ~0x3000UL) | 0x1000UL | (pol << 13);
+        break;
+    }
+}
+
+int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
+{
+    const f1_min_pwm_map_t *map;
+    TIM_TypeDef *tim;
+    hal_gpio_config_t gpio;
+    uint32_t slot;
+
+    if (handle == NULL || config == NULL || config->frequency == 0U) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state != HAL_STATE_RESET) {
+        return HAL_ALREADY_INIT;
+    }
+    map = f1_min_pwm_find(handle);
+    if (map == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    tim = (TIM_TypeDef *)handle->base.instance;
+
+    /* 使能对应定时器时钟（TIM2~TIM5 均在 APB1） */
+    if (tim == TIM2) {
+        RCC->APB1ENR |= F1_RCC_APB1ENR_TIM2EN;
+#ifdef TIM3
+    } else if (tim == TIM3) {
+        RCC->APB1ENR |= F1_RCC_APB1ENR_TIM3EN;
+#endif
+#ifdef TIM4
+    } else if (tim == TIM4) {
+        RCC->APB1ENR |= F1_RCC_APB1ENR_TIM4EN;
+#endif
+#ifdef TIM5
+    } else if (tim == TIM5) {
+        RCC->APB1ENR |= F1_RCC_APB1ENR_TIM5EN;
+#endif
+    }
+    gpio.mode = HAL_GPIO_MODE_AF;
+    gpio.output = HAL_GPIO_OUTPUT_PP;
+    gpio.pull = HAL_GPIO_NOPULL;
+    gpio.speed = HAL_GPIO_SPEED_HIGH;
+    gpio.alternate = 0U;
+    gpio.initial_level = HAL_GPIO_LOW;
+    (void)hal_gpio_init(HAL_PIN(map->port, map->pin), &gpio);
+
+    handle->config = *config;
+    if (handle->config.duty > 10000U) {
+        handle->config.duty = 10000U;
+    }
+
+    slot = f1_min_tim_slot(tim);
+    if (slot >= 4U) {
+        return HAL_INVALID_PARAM;
+    }
+    if (s_f1_min_tim_ready[slot] == 0U) {
+        /* 该定时器首次被某个通道使用：配置时基 */
+        tim->CR1 = 0U;
+        tim->PSC = F1_MIN_PWM_PSC;
+        tim->ARR = f1_min_pwm_arr(config->frequency);
+        tim->CNT = 0U;
+        tim->EGR = 1U;                              /* UG：装载 PSC/ARR */
+        tim->SR = 0U;
+        s_f1_min_tim_ready[slot] = 1U;
+        tim->CR1 = 0x0080U;                         /* ARPE，等待 start */
+    } else {
+        /* 同组已有通道初始化过：沿用现有 PSC/ARR，不打断正在运行的通道 */
+        handle->config.frequency =
+            (F1_MIN_PWM_CLOCK_HZ / (F1_MIN_PWM_PSC + 1U)) / (tim->ARR + 1U);
+    }
+
+    f1_min_pwm_apply(handle, tim);
+    handle->base.error = HAL_OK;
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
+}
+
+int hal_pwm_deinit(hal_pwm_t *handle)
+{
+    const f1_min_pwm_map_t *map;
+    TIM_TypeDef *tim;
+
+    if (handle == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_OK;
+    }
+    tim = (TIM_TypeDef *)handle->base.instance;
+    tim->CR1 = 0U;
+    tim->CCER = 0U;
+    map = f1_min_pwm_find(handle);
+    if (map != NULL) {
+        (void)hal_gpio_deinit(HAL_PIN(map->port, map->pin));
+    }
+    handle->base.state = HAL_STATE_RESET;
+    return HAL_OK;
+}
+
+int hal_pwm_start(hal_pwm_t *handle)
+{
+    TIM_TypeDef *tim;
+
+    if (handle == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state != HAL_STATE_READY &&
+        handle->base.state != HAL_STATE_BUSY) {
+        return HAL_NOT_READY;
+    }
+    tim = (TIM_TypeDef *)handle->base.instance;
+    tim->CR1 |= 0x0001U;                            /* CEN（同一定时器共用） */
+    f1_min_pwm_apply(handle, tim);                  /* 恢复本通道占空比 */
+    handle->base.state = HAL_STATE_BUSY;
+    return HAL_OK;
+}
+
+int hal_pwm_stop(hal_pwm_t *handle)
+{
+    TIM_TypeDef *tim;
+
+    if (handle == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
+    }
+    tim = (TIM_TypeDef *)handle->base.instance;
+    /* 只清本通道 CCR，保持同一定时器的其它通道继续输出 */
+    switch (handle->channel) {
+    case 1U: tim->CCR1 = 0U; break;
+    case 2U: tim->CCR2 = 0U; break;
+    case 3U: tim->CCR3 = 0U; break;
+    default: tim->CCR4 = 0U; break;
+    }
+    handle->base.state = HAL_STATE_READY;
+    return HAL_OK;
+}
+
+int hal_pwm_set_frequency(hal_pwm_t *handle, uint32_t frequency)
+{
+    TIM_TypeDef *tim;
+
+    if (handle == NULL || frequency == 0U) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
+    }
+    tim = (TIM_TypeDef *)handle->base.instance;
+    handle->config.frequency = frequency;
+    tim->ARR = f1_min_pwm_arr(frequency);
+    tim->EGR = 1U;
+    f1_min_pwm_apply(handle, tim);
+    return HAL_OK;
+}
+
+int hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
+{
+    TIM_TypeDef *tim;
+
+    if (handle == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
+    }
+    if (duty > 10000U) {
+        duty = 10000U;
+    }
+    tim = (TIM_TypeDef *)handle->base.instance;
+    handle->config.duty = duty;
+    f1_min_pwm_apply(handle, tim);
+    return HAL_OK;
+}
+
+int hal_pwm_set_polarity(hal_pwm_t *handle, hal_pwm_polarity_e polarity)
+{
+    if (handle == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state == HAL_STATE_RESET) {
+        return HAL_NOT_READY;
+    }
+    handle->config.polarity = polarity;
+    f1_min_pwm_apply(handle, (TIM_TypeDef *)handle->base.instance);
+    return HAL_OK;
+}
+
+#endif /* ROS_F1_HAVE_CUBE */
 
 #endif /* ROS_STM32_F1 */

@@ -339,6 +339,25 @@ static void pwm_print_info(const device_pwm_slot_t *slot)
                pwm_state_name(h->base.state));
 }
 
+/*
+ * 首次真正使用（freq / duty / start）时才初始化硬件：
+ * 板级注册只绑定句柄与默认配置，不占用定时器/引脚。
+ * 返回 0 表示已就绪，-1 失败。
+ */
+static int pwm_ensure_ready(device_pwm_slot_t *slot)
+{
+    if (slot == NULL || slot->handle == NULL) {
+        return -1;
+    }
+    if (slot->handle->base.state != HAL_STATE_RESET) {
+        return 0;
+    }
+    if (slot->handle->config.frequency == 0U) {
+        slot->handle->config.frequency = 1000U;     /* 兜底默认频率 */
+    }
+    return (hal_pwm_init(slot->handle, &slot->handle->config) == HAL_OK) ? 0 : -1;
+}
+
 static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
 {
     const char *target = NULL;
@@ -380,8 +399,16 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
     }
 
     if (str_icmp(action, "start")) {
+        if (pwm_ensure_ready(slot) != 0) {
+            ros_printf("ERR %d: pwm %s init failed\n", -1, slot->name);
+            return -1;
+        }
         rc = hal_pwm_start(slot->handle);
     } else if (str_icmp(action, "stop")) {
+        if (slot->handle->base.state == HAL_STATE_RESET) {
+            pwm_print_info(slot);                   /* 未初始化：无需停止 */
+            return 0;
+        }
         rc = hal_pwm_stop(slot->handle);
     } else if (str_icmp(action, "info")) {
         pwm_print_info(slot);
@@ -392,11 +419,33 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
         if (value == NULL || !str_parse_uint(value, &hz) || hz == 0U) {
             return -1;
         }
+        slot->handle->config.frequency = hz;         /* 首次 init 直接采用该频率 */
+        if (pwm_ensure_ready(slot) != 0) {
+            ros_printf("ERR %d: pwm %s init failed\n", -1, slot->name);
+            return -1;
+        }
         rc = hal_pwm_set_frequency(slot->handle, hz);
+        if (rc == HAL_OK) {
+            /* 同一定时器的通道共用 ARR/PSC：同步同组通道的配置显示值 */
+            uint32_t i;
+
+            for (i = 0U; i < DEVICE_PWM_MAX; i++) {
+                if (s_pwm[i].used && s_pwm[i].handle != NULL &&
+                    s_pwm[i].handle->base.instance ==
+                        slot->handle->base.instance) {
+                    s_pwm[i].handle->config.frequency = hz;
+                }
+            }
+        }
     } else if (str_icmp(action, "duty")) {
         uint32_t duty;
 
         if (value == NULL || !pwm_parse_duty(value, &duty)) {
+            return -1;
+        }
+        slot->handle->config.duty = duty;            /* 首次 init 直接采用该占空比 */
+        if (pwm_ensure_ready(slot) != 0) {
+            ros_printf("ERR %d: pwm %s init failed\n", -1, slot->name);
             return -1;
         }
         rc = hal_pwm_set_duty(slot->handle, duty);

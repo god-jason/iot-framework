@@ -408,11 +408,33 @@ if is_plat("cross") then
                 end
             end
         else
-            -- 这些文件直接 include stm32fxxx_hal.h，无 Cube HAL 时跳过
+            -- 无 Cube HAL：stm32_os.c / 其它系列实现直接 include Cube 头，跳过；
+            -- F1 保留 stm32_f1.c —— 其内部用 __has_include 选择极简寄存器实现
+            -- （GPIO / PWM），供 boards/stm32f108cb 等纯寄存器固件使用。
             remove_files("platforms/stm32/stm32_os.c",
-                         "platforms/stm32/stm32_f1.c",
                          "platforms/stm32/stm32_f4.c",
                          "platforms/stm32/stm32_h7.c")
+            if family == "f1" then
+                local dfp   = ros_find_pack_version("Keil/STM32F1xx_DFP")
+                local cmsis = ros_find_pack_version("ARM/CMSIS")
+                local dfp_inc   = get_config("dfp_inc") or ""
+                local cmsis_inc = get_config("cmsis_inc") or ""
+                if dfp_inc == "" then
+                    dfp_inc = dfp and path.join(dfp, "Device", "Include") or ""
+                end
+                if cmsis_inc == "" then
+                    cmsis_inc = cmsis and path.join(cmsis, "CMSIS", "Core", "Include") or ""
+                end
+                add_defines("STM32F10X_MD", "HSE_VALUE=8000000")
+                if dfp_inc ~= "" then
+                    add_includedirs(dfp_inc)
+                end
+                if cmsis_inc ~= "" then
+                    add_includedirs(cmsis_inc)
+                end
+            else
+                remove_files("platforms/stm32/stm32_f1.c")
+            end
         end
 
         ros_includedirs()

@@ -24,6 +24,12 @@ void SystemInit(void);
 void board_led_init(void);
 void board_led_toggle(void);
 
+/* 向 device 组件注册本板 PWM（只绑定句柄，首次使用时才初始化硬件）：
+ *   pwm0~3 = TIM2_CH1~4 (PA0~PA3, 默认 1kHz)
+ *   pwm4~7 = TIM3_CH1~4 (PA6/PA7/PB0/PB1, 默认 2kHz)
+ *   pwm8~11 = TIM4_CH1~4 (PB6/PB7/PB8/PB9, 默认 3kHz) */
+void board_pwm_register(void);
+
 /* 初始化 USART1(PA9) 并把 trace 输出注册到该串口 */
 void board_trace_start(uint32_t baud);
 

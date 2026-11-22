@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define DEVICE_PWM_MAX       8U
+#define DEVICE_PWM_MAX       12U
 #define DEVICE_PWM_NAME_MAX  16U
 
 /* 注册 gpio / pwm 命令（幂等）；返回 0 成功，-1 失败 */

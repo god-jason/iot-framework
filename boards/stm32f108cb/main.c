@@ -13,6 +13,7 @@
 #include "ros.h"
 #include "common.h"
 #include "roshell.h"
+#include "device.h"
 
 #include "stm32f10x.h"
 #include "boot_meta.h"
@@ -49,6 +50,11 @@ int main(void)
     /* roshell 默认绑定 UART1（PA9 发送 / PA10 接收）；
      * log 的 printf 由 syscalls.c 的 _write 同样走 UART1 */
     (void)rs_platform_start("f108cb");
+
+    /* 注册 gpio / pwm 命令，并由板级注册 pwm0（TIM2_CH1 / PA0） */
+    if (device_init() == 0) {
+        board_pwm_register();
+    }
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));
