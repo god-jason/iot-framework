@@ -599,3 +599,5 @@ int boot_config_restore(void)
     }
     return boot_config_valid_at(BOOT_CONFIG_BASE0) ? 1 : -1;
 }
+
+

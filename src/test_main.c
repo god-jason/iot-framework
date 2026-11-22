@@ -101,6 +101,8 @@ void ut_roshell_cmd(void);
 void ut_net(void);
 void ut_http(void);
 void ut_mqtt(void);
+void ut_fota(void);
+void ut_config(void);
 
 /* ---------------- 内核 ---------------- */
 void ut_version(void);
@@ -187,6 +189,8 @@ int main(void)
     ut_net();
     ut_http();
     ut_mqtt();
+    ut_fota();
+    ut_config();
 
     printf("\n--- 内核 ---\n");
     ut_version();

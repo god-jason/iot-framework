@@ -1,185 +1,149 @@
 /*
- * FOTA 远程固件升级模块实现。
+ * fota.c - FOTA 会话管理
  *
- * 职责：
- *   把「下载固件 -> 写入升级分区 -> 校验 -> 请求重启应用」串成一次
- *   可调用的升级流程，下载源与重启动作均通过回调解耦。
- *
- * 数据流：
- *   fota_run(version, size) 初始化 upgrade 会话 -> 循环调用 s_read 拉取
- *   数据 -> upgrade_write 按偏移写入 -> upgrade_verify 校验 ->
- *   upgrade_finish 标记就绪 -> s_apply() 或 boot_request_upgrade()。
- *
- * 依赖：
- *   bootloader.h（分区读写/镜像校验/请求进入 Bootloader）、
- *   log.h（日志）。
- *
- * 静态状态与边界：
- *   - s_read/s_read_user/s_apply 为模块级回调，同一时刻只支持一个升级任务；
- *   - 读取使用 256 字节栈缓冲，单次最多搬运 256 字节；
- *   - size 必须大于 0 且已设置读取回调，否则直接失败；
- *   - 读到 0 字节视为数据源提前结束，跳出循环后仍会进入校验（可能失败）；
- *   - 写入/校验/完成失败时不自动 abort（写入失败路径会 abort）。
+ * 只做参数校验与进度跟踪，Flash 操作全部转交板级 board_ota.c：
+ *   begin  -> board_ota_begin（擦除 OTA 区）
+ *   write  -> board_ota_write（按偏移写入原始 bin）
+ *   finish -> board_ota_finish（校验并更新启动状态）
+ *   abort  -> board_ota_abort（清除未完成的 ota 标识）
  */
+
 #include "fota.h"
-#include "bootloader.h"
-#include "ros.h"
-#include "common.h"
-#include "roshell.h"
-#include <string.h>
 
-/* 固件读取回调，由 fota_set_read() 注册 */
-static fota_read_fn s_read = NULL;
-/* 读取回调的用户参数，原样透传 */
-static void *s_read_user = NULL;
-/* 升级完成后的应用钩子（可选），为空时使用默认 boot_request_upgrade() */
-static fota_apply_fn s_apply = NULL;
-static bool s_fota_cmd_ready;
+#include <stddef.h>
 
-static int fota_cmd_handler(const rs_cmd_ctx_t *ctx)
-{
-    uint32_t version = 0U;
-    uint32_t size = 0U;
-
-    if (!rs_args_get_uint(ctx->parsed, 0U, &version) ||
-        !rs_args_get_uint(ctx->parsed, 1U, &size)) {
-        ros_puts("usage: fota <version> <size>");
-        return -1;
-    }
-    if (fota_run(version, size) != 0) {
-        ros_puts("fota: upgrade failed");
-        return -1;
-    }
-    return 0;
-}
-
-static const rs_args_t s_fota_args[] = {
-    { "version", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "firmware version" },
-    { "size", 0, RS_ARGS_TYPE_UINT, true, true, NULL, "firmware bytes" }
-};
-
-static const rs_cmd_t s_fota_def = {
-    "fota", "remote firmware upgrade", NULL, NULL,
-    s_fota_args, 2U, fota_cmd_handler, NULL
-};
+#if defined(__GNUC__)
+#define FOTA_WEAK   __attribute__((weak))
+#else
+#define FOTA_WEAK
+#endif
 
 /*
- * 初始化 FOTA 模块。
- * 返回：upgrade_init() 的返回值。
- * 说明：清空全部回调，避免复用上一次升级残留的函数指针。
+ * 板级后端缺省实现：没有 board_ota.c 的构建（如主机演示目标）
+ * 调用时统一返回错误，避免链接失败。
  */
-int fota_init(void)
+FOTA_WEAK int board_ota_begin(uint32_t image_size, uint32_t image_crc)
 {
-    s_read = NULL;
-    s_read_user = NULL;
-    s_apply = NULL;
-    if (!s_fota_cmd_ready) {
-        s_fota_cmd_ready = true;
-        (void)rs_cmd_register(&s_fota_def);
+    (void)image_size;
+    (void)image_crc;
+    return FOTA_ERR;
+}
+
+FOTA_WEAK int board_ota_write(uint32_t offset, const void *data, uint32_t len)
+{
+    (void)offset;
+    (void)data;
+    (void)len;
+    return FOTA_ERR;
+}
+
+FOTA_WEAK int board_ota_finish(void)
+{
+    return FOTA_ERR;
+}
+
+FOTA_WEAK void board_ota_abort(void)
+{
+}
+
+FOTA_WEAK int board_ota_state(fota_state_t *state)
+{
+    (void)state;
+    return FOTA_ERR;
+}
+
+static bool     s_busy;
+static uint32_t s_size;
+static uint32_t s_written;
+
+void fota_abort(void)
+{
+    if (s_busy) {
+        board_ota_abort();
     }
-    return upgrade_init();
+    s_busy = false;
+    s_written = 0U;
 }
 
-/*
- * 注册固件数据读取回调。
- * 参数：fn 读取函数（非 NULL）；user 透传给 fn 的用户指针。
- * 返回：0 成功；fn 为 NULL 返回 -1。
- */
-int fota_set_read(fota_read_fn fn, void *user)
+int fota_begin(uint32_t image_size, uint32_t image_crc)
 {
-    if (fn == NULL) {
-        return -1;
+    if (s_busy || image_size == 0U) {
+        return FOTA_ERR;
     }
-    s_read = fn;
-    s_read_user = user;
-    return 0;
+    if (board_ota_begin(image_size, image_crc) != FOTA_OK) {
+        return FOTA_ERR;
+    }
+    s_busy = true;
+    s_size = image_size;
+    s_written = 0U;
+    return FOTA_OK;
 }
 
-/*
- * 注册升级完成后的应用钩子。
- * 参数：fn 钩子函数，可为 NULL（表示使用默认 boot_request_upgrade()）。
- * 返回：恒为 0。
- */
-int fota_set_apply(fota_apply_fn fn)
+int fota_write(uint32_t offset, const void *data, uint32_t len)
 {
-    s_apply = fn;
-    return 0;
+    if (!s_busy || data == NULL || len == 0U) {
+        return FOTA_ERR;
+    }
+    if (offset != s_written || len > (s_size - s_written)) {
+        return FOTA_ERR;
+    }
+    if (board_ota_write(offset, data, len) != FOTA_OK) {
+        return FOTA_ERR;
+    }
+    s_written += len;
+    return FOTA_OK;
 }
 
-/*
- * 执行一次完整升级。
- * 参数：version 新固件版本号；size 固件总字节数（必须 > 0）。
- * 返回：0 成功；读取源缺失、任一步骤失败返回 -1。
- * 说明：
- *   - 每轮按 min(256, size - offset) 请求数据，读取回调返回 0 表示
- *     数据源结束，返回负值表示错误；
- *   - 校验或完成失败时直接返回，调用者可再次发起升级；
- *   - 成功后优先调用 s_apply，否则请求 Bootloader 复位升级。
- */
-int fota_run(uint32_t version, uint32_t size)
+int fota_finish(void)
 {
-    upgrade_info_t info;
+    int rc;
+
+    if (!s_busy || s_written != s_size) {
+        return FOTA_ERR;
+    }
+    rc = board_ota_finish();
+    s_busy = false;
+    return (rc == FOTA_OK) ? FOTA_OK : FOTA_ERR;
+}
+
+int fota_get_state(fota_state_t *state)
+{
+    if (state == NULL) {
+        return FOTA_ERR;
+    }
+    return board_ota_state(state);
+}
+
+int fota_run(uint32_t image_size, uint32_t image_crc,
+             fota_read_fn read, void *user)
+{
     uint8_t buf[256];
-    uint32_t offset = 0;
+    uint32_t offset = 0U;
     int n;
 
-    if (s_read == NULL || size == 0) {
-        LOG_E("fota", "invalid read source");   /* 失败：未配置数据源或长度为 0 */
-        return -1;
+    if (read == NULL || image_size == 0U) {
+        return FOTA_ERR;
+    }
+    if (fota_begin(image_size, image_crc) != FOTA_OK) {
+        return FOTA_ERR;
     }
 
-    memset(&info, 0, sizeof(info));
-    info.version = version;
-    info.size = size;
+    while (offset < image_size) {
+        uint32_t max = (uint32_t)sizeof(buf);
 
-    if (upgrade_begin(&info) != 0) {
-        LOG_E("fota", "upgrade begin failed");   /* 失败：升级会话初始化失败 */
-        return -1;
-    }
-    LOG_I("fota", "downloading %u bytes", (unsigned)size);   /* 开始下载 */
-
-    while (offset < size) {
-        uint32_t max = sizeof(buf);
-        /* 最后一块按剩余长度裁剪，避免越界请求 */
-        if (size - offset < max) {
-            max = size - offset;
+        if ((image_size - offset) < max) {
+            max = image_size - offset;
         }
-        n = s_read(buf, max, s_read_user);
-        if (n < 0) {
-            LOG_E("fota", "read error at %u", (unsigned)offset);   /* 失败：读取数据出错 */
-            upgrade_abort();
-            return -1;
+        n = read(buf, max, user);
+        if (n <= 0 || (uint32_t)n > max) {
+            fota_abort();
+            return FOTA_ERR;
         }
-        if (n == 0) {
-            /* 数据源提前结束：镜像不完整，绝不能继续走校验/升级 */
-            LOG_E("fota", "source ended early at %u/%u",
-                  (unsigned)offset, (unsigned)size);
-            upgrade_abort();
-            return -1;
-        }
-        if (upgrade_write(offset, buf, (uint32_t)n) != 0) {
-            LOG_E("fota", "write error at %u", (unsigned)offset);   /* 失败：写入升级分区出错 */
-            upgrade_abort();
-            return -1;
+        if (fota_write(offset, buf, (uint32_t)n) != FOTA_OK) {
+            fota_abort();
+            return FOTA_ERR;
         }
         offset += (uint32_t)n;
     }
-
-    if (upgrade_verify() != 0) {
-        LOG_E("fota", "verify failed");   /* 失败：固件校验不通过 */
-        return -1;
-    }
-    if (upgrade_finish() != 0) {
-        LOG_E("fota", "finish failed");   /* 失败：升级收尾失败 */
-        return -1;
-    }
-
-    LOG_I("fota", "upgrade ready, apply");   /* 升级就绪，准备应用 */
-    if (s_apply != NULL) {
-        s_apply();
-    } else {
-        /* 默认路径：请求 Bootloader 在重启时完成镜像切换 */
-        boot_request_upgrade();
-    }
-    return 0;
+    return fota_finish();
 }

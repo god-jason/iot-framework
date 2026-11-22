@@ -131,8 +131,6 @@ end
 local function ros_framework_sources()
     add_files("src/**.c")
     add_files("components/**.c")
-    -- fota 依赖已移除的通用 bootloader 框架，待基于新 A/B 协议重写
-    remove_files("components/fota/**.c")
     add_files("vendor/**.c")
     add_files("drivers/**.c")
 end
@@ -382,8 +380,6 @@ if is_plat("cross") then
         -- 内核 + 组件 + 驱动 + 平台层 + 内存后端 + 蜂窝模组
         add_files("src/**.c")
         add_files("components/**.c")
-        -- fota 依赖已移除的通用 bootloader 框架，待基于新 A/B 协议重写
-        remove_files("components/fota/**.c")
         add_files("drivers/**.c")
         add_files("platforms/stm32/**.c")
         add_files("modules/**.c")
@@ -507,10 +503,9 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
-            -- Bootloader 的 Flash/日志实现（App 侧用于崩溃日志与系统日志）
-            add_files(path.join(board_dir, "boot", "boot_meta.c"))
+            -- bootloader.c 只属于 Bootloader 目标，避免与 App 的 main 冲突
+            remove_files(path.join(board_dir, "bootloader.c"))
             add_includedirs(board_dir)
-            add_includedirs(path.join(board_dir, "boot"))
             ros_includedirs()
             if dfp_inc then
                 add_includedirs(dfp_inc)
@@ -542,7 +537,7 @@ if is_plat("cross") then
         -- ====================================================================
         -- 单 App 槽 + OTA 进度日志 Bootloader（F1 / 128KB Flash，8KB）
         -- 产物：ros-boot-f103cb.elf/.hex/.bin（烧录到 0x08000000）
-        -- App 链接到 0x08008000；升级包写入 0x08015000，不单独构建 B 区镜像
+        -- App 链接到 0x08006000；升级包写入 0x08013000
         -- ====================================================================
         target("ros-boot-f103cb")
             set_kind("binary")
@@ -564,10 +559,9 @@ if is_plat("cross") then
                        "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "startup_stm32f10x_md.S"))
-            add_files(path.join(board_dir, "boot", "bootloader.c"))
-            add_files(path.join(board_dir, "boot", "boot_meta.c"))
+            add_files(path.join(board_dir, "bootloader.c"))
+            add_files(path.join(board_dir, "boot_meta.c"))
             add_includedirs(board_dir)
-            add_includedirs(path.join(board_dir, "boot"))
             if dfp_inc then
                 add_includedirs(dfp_inc)
             end
@@ -577,7 +571,7 @@ if is_plat("cross") then
 
             add_ldflags("-nostartfiles",
                         "-nostdlib",
-                        "-T" .. path.join(board_dir, "boot", "bootloader.ld"),
+                        "-T" .. path.join(board_dir, "bootloader.ld"),
                         "-Wl,--gc-sections",
                         {force = true})
 
@@ -640,9 +634,9 @@ if is_plat("cross") then
 
             add_files(path.join(board_dir, "*.c"))
             add_files(path.join(board_dir, "*.S"))
-            add_files(path.join(board_dir, "boot", "boot_meta.c"))
+            -- bootloader.c 只属于 Bootloader 目标，避免与 App 的 main 冲突
+            remove_files(path.join(board_dir, "bootloader.c"))
             add_includedirs(board_dir)
-            add_includedirs(path.join(board_dir, "boot"))
             ros_includedirs()
 
             if hal_src ~= "" then
@@ -696,10 +690,9 @@ if is_plat("cross") then
                        "-fdata-sections", {force = true})
 
             add_files(path.join(board_dir, "startup_stm32f407.S"))
-            add_files(path.join(board_dir, "boot", "bootloader.c"))
-            add_files(path.join(board_dir, "boot", "boot_meta.c"))
+            add_files(path.join(board_dir, "bootloader.c"))
+            add_files(path.join(board_dir, "boot_meta.c"))
             add_includedirs(board_dir)
-            add_includedirs(path.join(board_dir, "boot"))
             if cmsis_dev_inc ~= "" then
                 add_includedirs(cmsis_dev_inc)
             elseif dfp_inc ~= "" then
@@ -711,7 +704,7 @@ if is_plat("cross") then
 
             add_ldflags("-nostartfiles",
                         "-nostdlib",
-                        "-T" .. path.join(board_dir, "boot", "bootloader.ld"),
+                        "-T" .. path.join(board_dir, "bootloader.ld"),
                         "-Wl,--gc-sections",
                         {force = true})
             ros_fw_objcopy()
