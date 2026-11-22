@@ -19,14 +19,21 @@
 #include "stm32f10x.h"
 #include "boot_meta.h"
 #include "ros_rtc.h"
+#include "app.h"
 
 /* 本固件运行在 App 区，向量表基址固定为 0x08006000 */
 #ifndef APP_VECTOR_BASE
 #define APP_VECTOR_BASE 0x08006000U
 #endif
 
+/* 20KB SRAM 紧张：blink 与应用任务栈均取最小可用值；
+ * 链接实际应用时按需调大 s_app_stack */
 static ros_task_t s_blink_task;
-static uint8_t    s_blink_stack[1024];
+static uint8_t    s_blink_stack[512];
+
+/* 应用任务：入口为弱符号 app_main，可链接 apps/<name> 覆盖实现 */
+static ros_task_t s_app_task;
+static uint8_t    s_app_stack[512];
 
 static void blink_entry(void *arg)
 {
@@ -68,8 +75,10 @@ int main(void)
     /* date 命令：读写系统时间（ros_rtc，硬件优先，否则 1Hz 软件计时） */
     (void)datetime_cmd_register();
 
-    /* ML307（UART2）与 mqtt 测试命令 */
-    board_net_init();
+    /* 应用级入口：作为独立任务运行（弱定义默认打印提示，apps/<name> 提供强定义）；
+     * 优先级低于板级基础任务（blink=2），不抢占 LED/串口等基础功能 */
+    (void)ros_task_create(&s_app_task, "app", 6U, app_main, NULL,
+                          s_app_stack, sizeof(s_app_stack));
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

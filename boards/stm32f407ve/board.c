@@ -19,10 +19,12 @@
 
 #include <string.h>
 
-/* USART1 的 HAL 句柄与框架句柄（全局，便于调试器查看） */
+/* USART1 / USART2 的 HAL 句柄与框架句柄（全局，便于调试器查看） */
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 
 static hal_uart_t s_uart1;
+static hal_uart_t s_uart2;
 
 /* 时钟/串口初始化失败时停机，保留现场便于调试器连接 */
 static void board_halt(void)
@@ -95,42 +97,49 @@ void board_led_toggle(void)
 
 /* ----------------------------- UART ----------------------------- */
 
-/* Cube UART 初始化钩子：USART1 = PA9(TX) / PA10(RX)，复用功能 AF7 */
+/* Cube UART 初始化钩子：USART1 = PA9/PA10，USART2 = PA2/PA3，复用功能 AF7 */
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
     GPIO_InitTypeDef gpio;
 
-    if (huart->Instance != USART1) {
-        return;
+    if (huart->Instance == USART1) {
+        __HAL_RCC_USART1_CLK_ENABLE();
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+
+        memset(&gpio, 0, sizeof(gpio));
+        gpio.Pin = GPIO_PIN_9 | GPIO_PIN_10;
+        gpio.Mode = GPIO_MODE_AF_PP;
+        gpio.Pull = GPIO_PULLUP;
+        gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        gpio.Alternate = GPIO_AF7_USART1;
+        HAL_GPIO_Init(GPIOA, &gpio);
+    } else if (huart->Instance == USART2) {
+        __HAL_RCC_USART2_CLK_ENABLE();
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+
+        memset(&gpio, 0, sizeof(gpio));
+        gpio.Pin = GPIO_PIN_2 | GPIO_PIN_3;
+        gpio.Mode = GPIO_MODE_AF_PP;
+        gpio.Pull = GPIO_PULLUP;
+        gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        gpio.Alternate = GPIO_AF7_USART2;
+        HAL_GPIO_Init(GPIOA, &gpio);
     }
-
-    __HAL_RCC_USART1_CLK_ENABLE();
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-
-    memset(&gpio, 0, sizeof(gpio));
-    gpio.Pin = GPIO_PIN_9 | GPIO_PIN_10;
-    gpio.Mode = GPIO_MODE_AF_PP;
-    gpio.Pull = GPIO_PULLUP;
-    gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    gpio.Alternate = GPIO_AF7_USART1;
-    HAL_GPIO_Init(GPIOA, &gpio);
 }
 
-void board_uart_init(uint32_t baudrate)
+/* 初始化一个 USART 句柄（USART1 / USART2 共用） */
+static void board_uart_setup(UART_HandleTypeDef *huart, hal_uart_t *handle,
+                             USART_TypeDef *instance, uint32_t baudrate)
 {
     hal_uart_config_t cfg;
 
-    if (baudrate == 0U) {
-        baudrate = 115200U;
-    }
-
-    memset(&s_uart1, 0, sizeof(s_uart1));
-    memset(&huart1, 0, sizeof(huart1));
-    huart1.Instance = USART1;
-    s_uart1.base.instance = &huart1;
+    memset(handle, 0, sizeof(*handle));
+    memset(huart, 0, sizeof(*huart));
+    huart->Instance = instance;
+    handle->base.instance = huart;
 
     memset(&cfg, 0, sizeof(cfg));
-    cfg.baudrate = baudrate;
+    cfg.baudrate = (baudrate != 0U) ? baudrate : 115200U;
     cfg.word_length = HAL_UART_WORD_8BIT;
     cfg.parity = HAL_UART_PARITY_NONE;
     cfg.stop_bits = HAL_UART_STOP_1;
@@ -138,14 +147,31 @@ void board_uart_init(uint32_t baudrate)
     cfg.mode = HAL_UART_MODE_TX_RX;
     cfg.oversampling = false;       /* 16 倍过采样 */
 
-    if (hal_uart_init(&s_uart1, &cfg) != HAL_OK) {
+    if (hal_uart_init(handle, &cfg) != HAL_OK) {
         board_halt();
     }
+}
+
+void board_uart_init(uint32_t baudrate)
+{
+    board_uart_setup(&huart1, &s_uart1, USART1, baudrate);
 }
 
 hal_uart_t *board_uart1(void)
 {
     return &s_uart1;
+}
+
+/* USART2：ML307 模组 AT 通道，首次获取句柄时初始化 */
+hal_uart_t *board_uart2(void)
+{
+    static bool inited;
+
+    if (!inited) {
+        board_uart_setup(&huart2, &s_uart2, USART2, 115200U);
+        inited = true;
+    }
+    return &s_uart2;
 }
 
 hal_uart_t *board_shell_uart(void)

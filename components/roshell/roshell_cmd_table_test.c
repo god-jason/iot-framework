@@ -217,6 +217,7 @@ void ut_cmd(void)
     {
         const rs_cmd_t *node;
         ros_task_t fake;
+        ros_task_t *saved;
         char *hook_argv[] = { "hookcmd" };
         char *deny_argv[] = { "denycmd" };
 
@@ -238,7 +239,8 @@ void ut_cmd(void)
         TF_CHECK_INT(rs_cmd_notify_resume(NULL), 0);
         TF_CHECK_INT(rs_cmd_notify_kill(NULL), 0);
 
-        /* 用一个假任务模拟“命令正在执行” */
+        /* 用一个假任务模拟“命令正在执行”（结束后恢复真实当前任务） */
+        saved = ros_current_task;
         memset(&fake, 0, sizeof(fake));
         s_hook_pause_calls = 0;
         s_hook_resume_calls = 0;
@@ -255,7 +257,7 @@ void ut_cmd(void)
         /* 钩子拒绝暂停：返回负错误码 */
         TF_CHECK_INT(rs_builtin_dispatch(1, deny_argv), 0);
 
-        ros_current_task = NULL;
+        ros_current_task = saved;
         rs_cmd_unregister_all();
     }
     tf_end();

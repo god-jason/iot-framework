@@ -1,7 +1,8 @@
 /*
  * stm32f103cb.ld - STM32F1 128KB Flash 板 App 固件链接脚本（GNU ld）
  *
- * App 区：FLASH 0x08006000 起 52KB；SRAM 20KB @ 0x20000000。
+ * App 区：FLASH 0x08006000 起 52KB（带 ML307 全量测试的 demo 放宽到 60KB，
+ * 与 OTA 区重叠，仅用于功能验证）；SRAM 20KB @ 0x20000000。
  * Bootloader 占 0x08000000..0x08001FFF（8KB），Boot Meta/配置/错误日志在前部，
  * 升级包区在 0x08013000（52KB）。App 启动时把 SCB->VTOR 指向 App 区基址。
  */
@@ -10,16 +11,17 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08006000, LENGTH = 52K
+    FLASH (rx)  : ORIGIN = 0x08006000, LENGTH = 60K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 
 /* 主栈（MSP）从 SRAM 顶端向下增长 */
 _estack = ORIGIN(RAM) + LENGTH(RAM);
 
-/* 给 newlib 的 _sbrk 留堆空间，栈顶预留 2KB 主栈 */
-_Min_Heap_Size  = 0x400;
-_Min_Stack_Size = 0x800;
+/* 给 newlib 的 _sbrk 留堆空间（固件不使用 newlib malloc），栈顶预留 1.5KB 主栈
+ * （任务上下文在 PSP，MSP 仅中断使用） */
+_Min_Heap_Size  = 0x200;
+_Min_Stack_Size = 0x600;
 
 SECTIONS
 {

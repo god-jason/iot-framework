@@ -7,6 +7,57 @@
 
 #include "test.h"
 #include "stepper.h"
+#include "ros.h"
+
+/*
+ * 定时器加减速路径会阻塞在 ramp_done 信号量上，所以由低优先级任务发起移动，
+ * 测试任务手动触发定时器回调逐拍驱动（PC 平台的 start_it 只同步触发一次）。
+ */
+static ros_task_t s_tim_task;
+static uint8_t    s_tim_stack[1024];
+static stepper_t *s_tim_owner;
+static int32_t    s_tim_steps;
+static int        s_tim_rc;
+static uint32_t   s_tim_min_period;
+static volatile bool s_tim_done;
+
+static void tim_move_entry(void *arg)
+{
+    (void)arg;
+    s_tim_rc = stepper_move(s_tim_owner, s_tim_steps);
+    s_tim_done = true;
+}
+
+/* 发起一次定时器驱动的移动并泵脉冲；返回 stepper_move 的结果 */
+static int tim_drive(stepper_t *st, hal_tim_t *tim, int32_t steps,
+                     uint32_t max_pump)
+{
+    uint32_t i;
+
+    s_tim_owner = st;
+    s_tim_steps = steps;
+    s_tim_rc = -1000;
+    s_tim_min_period = 0xFFFFFFFFU;
+    s_tim_done = false;
+    if (ros_task_create(&s_tim_task, "stp_tim", 5U, tim_move_entry, NULL,
+                        s_tim_stack, sizeof(s_tim_stack)) != ROS_OK) {
+        return -1000;
+    }
+    for (i = 0U; i < max_pump && !s_tim_done; i++) {
+        if (st->ramp_remaining != 0U) {
+            if (tim->config.period < s_tim_min_period) {
+                s_tim_min_period = tim->config.period;
+            }
+            stepper_tim_irq(tim, HAL_EVENT_COMPLETE, st);
+        } else {
+            ros_sleep_ms(1U);      /* 让出 CPU：等待任务启动/收尾 */
+        }
+    }
+    if (s_tim_done) {
+        ros_sleep_ms(2U);      /* 等待移动任务真正退出，再复用任务控制块 */
+    }
+    return s_tim_done ? s_tim_rc : -1001;
+}
 
 typedef struct {
     int steps;
@@ -190,7 +241,6 @@ void ut_stepper(void)
         stepper_ops_t tops;
         hal_tim_t tim;
         hal_tim_config_t tcfg;
-        uint32_t i;
         uint32_t min_period;
 
         memset(&ts, 0, sizeof(ts));
@@ -220,44 +270,25 @@ void ut_stepper(void)
         TF_CHECK_INT(tst.ramp_interval_us, 10000U);
 
         /*
-         * 主机测试跑在未启动内核的主线程：stepper_move 启动定时器后
-         * 无法阻塞等待会立即返回（主机 start_it 已同步触发一次回调），
-         * 其余脉冲直接调 stepper_tim_irq() 模拟定时器中断逐拍驱动。
-         */
-        TF_CHECK_INT(stepper_move(&tst, 200), 0);
-        TF_CHECK_INT(ts.steps, 1);
-        TF_CHECK_INT(tst.ramp_remaining, 199);
-        /*
+         * 定时器路径会阻塞等待 ramp_done：由低优先级任务发起移动，
+         * 本任务手动触发定时器回调逐拍驱动（PC 平台 start_it 只同步触发一次）。
          * 1MHz 计数时钟、10ms 更新间隔：起步 100 步/秒（周期 10000，
-         * 每区间 1 个脉冲）。S 曲线 27 档从 100 爬到 640（三角形曲线
-         * 峰值），第一档 v=100+540*4/1000=102 → 周期 9803。
+         * 每区间 1 个脉冲）。S 曲线 27 档从 100 爬到 640（三角形曲线峰值）。
          */
-        TF_CHECK_INT(tim.config.period, 9803U);
-        TF_CHECK_INT(tst.ramp_speed, 102);
-        TF_CHECK_INT(tst.ramp_phase, 0);   /* 加速段 */
-
-        min_period = tim.config.period;
-        for (i = 0U; i < 199U && tst.ramp_remaining != 0U; i++) {
-            stepper_tim_irq(&tim, HAL_EVENT_COMPLETE, &tst);
-            if (tim.config.period < min_period) {
-                min_period = tim.config.period;
-            }
-        }
+        TF_CHECK_INT(tim_drive(&tst, &tim, 200, 400U), 0);
         TF_CHECK_INT(ts.steps, 200);
         TF_CHECK_INT(tst.position, 200);
         TF_CHECK_INT(tst.ramp_remaining, 0);
         TF_CHECK_INT(tst.ramp_status, 0);
         TF_CHECK_INT(tim.base.state, HAL_STATE_READY);   /* 结束由回调停表 */
         /* 减速提前起减：峰值约 500+ 步/秒（周期 <2000），结束已减回起步速度 */
+        min_period = s_tim_min_period;
         TF_CHECK(min_period < 2500U);
         TF_CHECK(min_period >= 1000U);
         TF_CHECK_INT(tim.config.period, 10000U);
 
         /* 反向：同样由定时器驱动，位置回退 */
-        TF_CHECK_INT(stepper_move(&tst, -100), 0);
-        for (i = 0U; i < 100U && tst.ramp_remaining != 0U; i++) {
-            stepper_tim_irq(&tim, HAL_EVENT_COMPLETE, &tst);
-        }
+        TF_CHECK_INT(tim_drive(&tst, &tim, -100, 300U), 0);
         TF_CHECK_INT(ts.steps, 300);
         TF_CHECK_INT(tst.position, 100);
         TF_CHECK_INT(tst.direction, 1);
@@ -265,7 +296,7 @@ void ut_stepper(void)
 
         /* 底层发脉冲失败：回调内立即停表结束并返回错误 */
         ts.step_fail = 1;
-        TF_CHECK_INT(stepper_move(&tst, 10), -1);
+        TF_CHECK_INT(tim_drive(&tst, &tim, 10, 200U), -1);
         ts.step_fail = 0;
         TF_CHECK_INT(tst.ramp_remaining, 0);
         TF_CHECK_INT(ts.steps, 300);
@@ -273,10 +304,7 @@ void ut_stepper(void)
 
         /* 1ms 更新间隔：曲线档数更细，同样完整走完 */
         TF_CHECK_INT(stepper_set_ramp_interval(&tst, 1000U), 0);
-        TF_CHECK_INT(stepper_move(&tst, 150), 0);
-        for (i = 0U; i < 2000U && tst.ramp_remaining != 0U; i++) {
-            stepper_tim_irq(&tim, HAL_EVENT_COMPLETE, &tst);
-        }
+        TF_CHECK_INT(tim_drive(&tst, &tim, 150, 4000U), 0);
         TF_CHECK_INT(ts.steps, 450);
         TF_CHECK_INT(tst.position, 250);
         TF_CHECK_INT(tst.ramp_remaining, 0);

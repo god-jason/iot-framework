@@ -23,7 +23,7 @@
 #endif
 #ifndef RS_SHELL_STACK
 #if defined(ROS_STM32_F1)
-#define RS_SHELL_STACK         2048U   /* F1 仅 8KB 堆，输入任务栈相应收紧 */
+#define RS_SHELL_STACK         2048U   /* F1 仅 10KB 堆：命令处理（http/mqtt）需要该栈深度 */
 #else
 #define RS_SHELL_STACK         3072U   /* 输入任务栈字节数 */
 #endif

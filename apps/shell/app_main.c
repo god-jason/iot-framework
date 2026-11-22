@@ -1,6 +1,7 @@
-﻿/*
- * shell_demo.c - PC 平台 roshell 交互示例
+/*
+ * app_main.c - PC 平台 roshell 交互示例
  *
+ * 本文件实现 app_main()，由 boards/pc/main.c 创建为独立任务。
  * rs_platform_start() 完成默认绑定：
  *   - 输出：stdout（与 log 的 printf 同一路）
  *   - 输入：监听任务逐字节读 stdin；未激活时只匹配 hello 口令，
@@ -40,10 +41,10 @@
 
 #include "roshell.h"
 #include "device.h"
-#include "roshell.h"
 #include "fan.h"
 #include "ros.h"
 #include "common.h"
+#include "app.h"
 
 #include <stdio.h>
 
@@ -56,7 +57,8 @@ static int cmd_quit(const rs_cmd_ctx_t *ctx)
 }
 
 static const rs_cmd_t s_quit_def = {
-    "quit", "stop the shell demo", NULL, NULL, NULL, 0U, cmd_quit, NULL
+    "quit", "stop the shell demo", NULL, NULL, NULL, 0U, cmd_quit, NULL,
+    NULL, NULL, NULL
 };
 
 /* ------------------------------ 测试任务 ------------------------------ */
@@ -118,12 +120,14 @@ static void mem_load_entry(void *arg)
     }
 }
 
-int main(void)
+void app_main(void *arg)
 {
-    ros_init();
+    (void)arg;
+
     if (rs_platform_start("pc-demo") != 0) {
         printf("roshell start failed\n");
-        return 1;
+        app_set_exit_code(1);
+        return;
     }
     (void)device_init();
     if (rs_cmd_register(&s_quit_def) != 0) {
@@ -155,9 +159,4 @@ int main(void)
                           s_cpu_stack, sizeof(s_cpu_stack));
     (void)ros_task_create(&s_mem_task, "mem_load", 5U, mem_load_entry, NULL,
                           s_mem_stack, sizeof(s_mem_stack));
-
-    ros_sched_start();          /* ros_stop() 后返回 */
-
-    printf("shell demo finished\n");
-    return 0;
 }

@@ -20,6 +20,7 @@
 #include "stm32_cube.h"
 #include "boot_meta.h"
 #include "ros_rtc.h"
+#include "app.h"
 
 /* 本固件运行在 APP 区，向量表基址固定为 0x08020000（BACKUP/OTA 不直接运行） */
 #ifndef APP_VECTOR_BASE
@@ -28,6 +29,10 @@
 
 static ros_task_t s_blink_task;
 static uint8_t    s_blink_stack[1024];
+
+/* 应用任务：入口为弱符号 app_main，可链接 apps/<name> 覆盖实现 */
+static ros_task_t s_app_task;
+static uint8_t    s_app_stack[2048];
 
 static void blink_entry(void *arg)
 {
@@ -64,6 +69,11 @@ int main(void)
     board_stepper_init();
     board_rtc_init();
     (void)datetime_cmd_register();
+
+    /* 应用级入口：作为独立任务运行（弱定义默认为空任务体，可链接 apps/<name> 覆盖）；
+     * 优先级低于板级基础任务（blink=2），不抢占 LED/串口等基础功能 */
+    (void)ros_task_create(&s_app_task, "app", 6U, app_main, NULL,
+                          s_app_stack, sizeof(s_app_stack));
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

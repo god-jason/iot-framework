@@ -1,8 +1,17 @@
 ﻿/*
- * ml307_net.c - ML307 网络后端：实现 components/net 的原始接口
+ * ml307_net.c - ML307R 网络后端：实现 components/net 的原始接口
  *
- * 通过 MIP 系列 AT 指令提供 TCP/UDP 客户端连接、收发、DNS 解析与 ping；
- * 流式接口（net_stream_* / net_io_bind）直接复用 components/net 的通用实现。
+ * 通过 MIP 系列 AT 指令提供 TCP/UDP 客户端连接、收发与 DNS 解析
+ * （ping 见 ml307_ping.c），流式接口复用 components/net 的通用实现。
+ *
+ * 指令序列（ML307R，TCP/IP 用户手册 V5.0.0）：
+ *   AT+MIPOPEN=<id>,"TCP"|"UDP","<host>",<port>   -> OK，连接结果异步上报
+ *   +MIPOPEN: <id>,<result>                        result=0 表示连接成功
+ *   AT+MIPSEND=<id>,<len>                          -> '>' -> 原始数据 -> OK
+ *   AT+MIPCLOSE=<id>
+ *   +MIPURC: "rtcp"|"rudp",<id>,<len>,<data>       数据接收
+ *   +MIPURC: "disconn",<id>,<state>                连接断开
+ *   AT+MDNSGIP="<host>"                           -> +MDNSGIP: "<host>","<ip>"
  *
  * 本文件仅在 ML307 目标参与编译（构建系统排除 components/net/net_bsd.c）。
  */
@@ -17,8 +26,12 @@
 
 #include <stdio.h>
 
+#ifndef ML307_NET_MAX_SOCKETS
 #define ML307_NET_MAX_SOCKETS   6
+#endif
+#ifndef ML307_NET_RX_MAX
 #define ML307_NET_RX_MAX        512
+#endif
 #define ML307_NET_HOST_MAX      128
 #define ML307_NET_DEFAULT_WAIT  30000U
 
@@ -33,6 +46,15 @@ typedef struct {
 static ml307_net_socket_t s_sockets[ML307_NET_MAX_SOCKETS];
 static bool s_urc_registered;
 
+/* AT+MIPOPEN 的连接结果以 URC 异步上报，net_open 需等它 */
+static volatile bool s_open_done;
+static volatile int s_open_id;
+static volatile int s_open_result;
+
+/* AT+MDNSGIP 先回 OK，随后 +MDNSGIP: 才带解析结果，按 URC 收 */
+static volatile bool s_dns_done;
+static char s_dns_ip[48];
+
 /* 解析十进制字段，p 向前推进 */
 static int ml307_net_int(const char **p, const char *end)
 {
@@ -46,6 +68,29 @@ static int ml307_net_int(const char **p, const char *end)
         (*p)++;
     }
     return v;
+}
+
+/* +MIPOPEN: <id>,<result>，result=0 表示连接成功，其余为失败 */
+static void ml307_net_open_urc(const char *line, uint32_t len, void *user)
+{
+    const char *p;
+    const char *end = line + len;
+    int id;
+    int result;
+
+    (void)user;
+    if (len < 10U || !str_starts_with(line, "+MIPOPEN:")) {
+        return;
+    }
+    p = line + 9;
+    id = ml307_net_int(&p, end);
+    if (p < end && *p == ',') {
+        p++;
+    }
+    result = ml307_net_int(&p, end);
+    s_open_id = id;
+    s_open_result = result;
+    s_open_done = true;
 }
 
 /* +MIPURC: "rtcp"|"rudp",<id>,<len>,<data> 或 "disconn",<id>,<code> */
@@ -168,12 +213,51 @@ static bool ml307_net_ipv4(const char *s, size_t len)
     return dots == 3 && digit;
 }
 
+/* +MDNSGIP: "<domain>","<ip4>"[,"<ip6>"]，取第一个 IPv4 */
+static void ml307_net_dns_urc(const char *line, uint32_t len, void *user)
+{
+    const char *p = line;
+    const char *end = line + len;
+
+    (void)user;
+    if (len < 9U || !str_starts_with(line, "+MDNSGIP:")) {
+        return;
+    }
+    p = line + 9;
+    while (p < end) {
+        const char *q;
+
+        if (*p != '"') {
+            p++;
+            continue;
+        }
+        p++;
+        q = p;
+        while (q < end && *q != '"') {
+            q++;
+        }
+        if (q >= end) {
+            break;
+        }
+        if (ml307_net_ipv4(p, (size_t)(q - p)) &&
+            (size_t)(q - p) < sizeof(s_dns_ip)) {
+            memcpy(s_dns_ip, p, (size_t)(q - p));
+            s_dns_ip[q - p] = '\0';
+            s_dns_done = true;
+            return;
+        }
+        p = q + 1;
+    }
+}
+
 /* ---------------- net 原始接口 ---------------- */
 
 int net_init(void)
 {
     if (!s_urc_registered) {
-        if (at_urc_register("+MIPURC:", ml307_net_urc, NULL) != 0) {
+        if (at_urc_register("+MIPURC:", ml307_net_urc, NULL) != 0 ||
+            at_urc_register("+MIPOPEN:", ml307_net_open_urc, NULL) != 0 ||
+            at_urc_register("+MDNSGIP:", ml307_net_dns_urc, NULL) != 0) {
             return NET_ERR_NOMEM;
         }
         s_urc_registered = true;
@@ -201,6 +285,8 @@ int net_deinit(void)
     }
     if (s_urc_registered) {
         (void)at_urc_unregister("+MIPURC:");
+        (void)at_urc_unregister("+MIPOPEN:");
+        (void)at_urc_unregister("+MDNSGIP:");
         s_urc_registered = false;
     }
     return NET_OK;
@@ -212,6 +298,7 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     char cmd[320];
     const char *proto;
     uint32_t wait = (timeout_ms != 0U) ? timeout_ms : ML307_NET_DEFAULT_WAIT;
+    uint32_t start;
     int id;
 
     if (sock == NULL || !ml307_net_host_valid(host)) {
@@ -226,9 +313,32 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
         return NET_ERR_NOMEM;
     }
 
+    /* 先清结果，避免把上一条连接的 URC 当成这次的结果 */
+    s_open_done = false;
+    s_open_id = -1;
+    s_open_result = -1;
+
+    /* 模组可能残留同 id 的连接（例如上次异常退出），先关掉 */
+    (void)str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", id);
+    (void)at_exec(cmd, 3000U);
+
     str_printf(cmd, sizeof(cmd), "AT+MIPOPEN=%d,\"%s\",\"%s\",%u",
              id, proto, host, (unsigned)port);
     if (at_exec(cmd, wait) != AT_RESULT_OK) {
+        return NET_ERR_IO;
+    }
+
+    /* OK 只表示命令被接受，真正连上要等 +MIPOPEN: <id>,0 */
+    start = hal_tick_get();
+    while (!(s_open_done && s_open_id == id) &&
+           (uint32_t)(hal_tick_get() - start) < wait) {
+        (void)at_process();
+        hal_delay_ms(5U);
+    }
+    if (!s_open_done || s_open_id != id || s_open_result != 0) {
+        /* 清掉模组侧半开连接 */
+        (void)str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", id);
+        (void)at_exec(cmd, 3000U);
         return NET_ERR_IO;
     }
 
@@ -355,8 +465,8 @@ int net_close(net_sock_t *sock)
 int net_dns_resolve(const char *host, char *ip, uint32_t size)
 {
     char cmd[192];
-    const char *resp;
-    const char *p;
+    uint32_t start;
+    size_t len;
 
     if (host == NULL || ip == NULL || size == 0U) {
         return NET_ERR_PARAM;
@@ -366,39 +476,28 @@ int net_dns_resolve(const char *host, char *ip, uint32_t size)
         return NET_OK;
     }
 
+    s_dns_done = false;
+    s_dns_ip[0] = '\0';
+
     str_printf(cmd, sizeof(cmd), "AT+MDNSGIP=\"%s\"", host);
     if (at_exec(cmd, 30000U) != AT_RESULT_OK) {
         return NET_ERR_IO;
     }
 
-    resp = at_get_response();
-    p = (resp != NULL) ? strchr(resp, '"') : NULL;
-    if (p == NULL) {
+    /* OK 之后才上报 +MDNSGIP:，等 URC 带出 IPv4 */
+    start = hal_tick_get();
+    while (!s_dns_done && (uint32_t)(hal_tick_get() - start) < 30000U) {
+        (void)at_process();
+        hal_delay_ms(5U);
+    }
+    if (!s_dns_done) {
         return NET_ERR_IO;
     }
-    while (*p != '\0') {
-        const char *q;
-
-        p = strchr(p, '"');
-        if (p == NULL) {
-            break;
-        }
-        p++;
-        q = strchr(p, '"');
-        if (q == NULL) {
-            break;
-        }
-        if (ml307_net_ipv4(p, (size_t)(q - p))) {
-            size_t n = (size_t)(q - p);
-
-            if (n >= size) {
-                n = size - 1U;
-            }
-            memcpy(ip, p, n);
-            ip[n] = '\0';
-            return NET_OK;
-        }
-        p = q + 1;
+    len = strlen(s_dns_ip);
+    if (len >= size) {
+        len = size - 1U;
     }
-    return NET_ERR_IO;
+    memcpy(ip, s_dns_ip, len);
+    ip[len] = '\0';
+    return NET_OK;
 }

@@ -17,14 +17,10 @@
 #include "ros.h"
 #include "common.h"
 #include "roshell.h"
-#include "roshell.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-static ros_task_t s_rcmd_driver;
-static uint8_t s_rcmd_stack[8192];
 
 /* ---------------- rs_cmd 全局表回退验证 ---------------- */
 
@@ -74,7 +70,13 @@ static void rs_t_dispatch(rs_t *rs)
 
     /* 任务查找：不存在 / 保护当前任务 */
     TF_CHECK_INT(rs_cmd_dispatch(rs, "kill nosuch_task"), -RS_ERR_NOT_FOUND);
-    TF_CHECK_INT(rs_cmd_dispatch(rs, "kill rosh_ut_cmd"), -RS_ERR_PARAM);
+    {
+        char killcmd[64];
+        const char *cur_name = (ros_current() != NULL) ? ros_current()->name : "app";
+
+        (void)str_printf(killcmd, sizeof(killcmd), "kill %s", cur_name);
+        TF_CHECK_INT(rs_cmd_dispatch(rs, killcmd), -RS_ERR_PARAM);
+    }
 
     /* 脚本路径：赋值 / 表达式语句 / 语法错误 */
     TF_CHECK_INT(rs_cmd_dispatch(rs, "$x = 40 + 2"), RS_OK);
@@ -330,13 +332,10 @@ static void rs_t_wait_pause_10s(void)
 
 /* ---------------- driver ---------------- */
 
-static void rs_cmd_driver_entry(void *arg)
+void ut_roshell_cmd(void)
 {
-    rs_t *rs;
+    rs_t *rs = rs_create();
 
-    (void)arg;
-
-    rs = rs_create();
     TF_CHECK(rs != NULL);
     if (rs != NULL) {
         rs_t_dispatch(rs);
@@ -347,17 +346,4 @@ static void rs_cmd_driver_entry(void *arg)
     rs_t_session();
     rs_t_wait_pause();
     rs_t_wait_pause_10s();
-    ros_stop();
-}
-
-void ut_roshell_cmd(void)
-{
-    ros_init();
-
-    TF_CHECK_INT(ros_task_create(&s_rcmd_driver, "rosh_ut_cmd", 0,
-                                 rs_cmd_driver_entry, NULL,
-                                 s_rcmd_stack, sizeof(s_rcmd_stack)),
-                 ROS_OK);
-
-    ros_sched_start();
 }

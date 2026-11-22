@@ -13,8 +13,6 @@
 #include <stdio.h>
 #include <string.h>
 
-static ros_task_t s_roshell_driver;
-static uint8_t s_roshell_stack[8192];
 static rs_t *g_rs;
 
 /* ---------- 辅助 ---------- */
@@ -961,10 +959,8 @@ static void rs_t_cmd(void)
     tf_end();
 }
 
-static void rs_driver_entry(void *arg)
+void ut_roshell(void)
 {
-    (void)arg;
-
     g_rs = rs_create();
     TF_CHECK(g_rs != NULL);
     if (g_rs != NULL) {
@@ -989,17 +985,4 @@ static void rs_driver_entry(void *arg)
         rs_destroy(g_rs);
         g_rs = NULL;
     }
-    ros_stop();
-}
-
-void ut_roshell(void)
-{
-    ros_init();
-
-    TF_CHECK_INT(ros_task_create(&s_roshell_driver, "rosh_ut", 0,
-                                 rs_driver_entry, NULL,
-                                 s_roshell_stack, sizeof(s_roshell_stack)),
-                 ROS_OK);
-
-    ros_sched_start();
 }

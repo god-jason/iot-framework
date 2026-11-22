@@ -47,7 +47,7 @@ extern hal_uart_t *board_shell_uart(void) __attribute__((weak));
 #define STM32_OPEN_WORD  "hello"
 #define STM32_OPEN_LEN   5U
 #define STM32_WATCH_PRIO  6U            /* 低于会话任务，高于 idle */
-#define STM32_WATCH_STACK 1536U
+#define STM32_WATCH_STACK 1024U
 
 static hal_uart_t *stm32_shell_uart(void)
 {

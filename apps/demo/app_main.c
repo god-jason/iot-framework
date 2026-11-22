@@ -1,13 +1,14 @@
 /* robotos 综合示例：LED 闪烁 + roshell 命令行。
  *
- * 上电只运行 LED 任务和监听任务，输入 hello 后创建 roshell 会话；
- * 支持 exit（退回监听）与 quit（结束进程）。
+ * 本文件实现 app_main()，由 boards/pc/main.c 创建为独立任务；
+ * 创建 LED 任务与 roshell 会话后返回（任务结束），应用靠这些任务继续运行；
+ * 支持 exit（退回监听）与 quit（结束进程，ros_stop 返回 main）。
  */
 #include "ros.h"
 #include "common.h"
 #include "roshell.h"
-#include "roshell.h"
 #include "led.h"
+#include "app.h"
 
 #include <stdio.h>
 
@@ -35,12 +36,14 @@ static int demo_quit(const rs_cmd_ctx_t *ctx)
 }
 
 static const rs_cmd_t s_quit_def = {
-    "quit", "stop demo", NULL, NULL, NULL, 0U, demo_quit, NULL
+    "quit", "stop demo", NULL, NULL, NULL, 0U, demo_quit, NULL,
+    NULL, NULL, NULL
 };
 
-int main(void)
+void app_main(void *arg)
 {
-    ros_init();
+    (void)arg;
+
     led_init(&s_led, 0, 1);
 
     printf("robotos demo ready\n");
@@ -48,14 +51,10 @@ int main(void)
     (void)rs_cmd_register(&s_quit_def);
     if (rs_platform_start("pc-demo") != 0) {
         printf("roshell start failed\n");
-        return 1;
+        app_set_exit_code(1);
+        return;
     }
 
     (void)ros_task_create(&s_led_task, "led", 5U, led_entry, NULL,
                           s_led_stack, sizeof(s_led_stack));
-
-    ros_sched_start();          /* ros_stop() 后返回 */
-
-    printf("\ndemo finished\n");
-    return 0;
 }

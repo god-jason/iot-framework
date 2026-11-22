@@ -475,6 +475,20 @@ int at_process(void)
             at_input(s_cfg.rx_buffer, chunk);
             n = (uint32_t)hal_uart_get_rx_count(s_cfg.uart);
         }
+
+        /*
+         * 轮询型串口后端（如 Cube HAL）没有接收环形缓冲，
+         * hal_uart_get_rx_count() 恒为 0，这里用非阻塞单字节读兜底。
+         * 环形缓冲后端（STM32F1 / PC）在无数据时这一轮调用立即返回，开销可忽略。
+         */
+        {
+            uint32_t guard = 0U;
+
+            while (guard++ < s_cfg.rx_buffer_size &&
+                   hal_uart_receive(s_cfg.uart, s_cfg.rx_buffer, 1U, 0U) == HAL_OK) {
+                at_input(s_cfg.rx_buffer, 1U);
+            }
+        }
     }
 
     /* 超时 / 重试检测 */

@@ -31,6 +31,10 @@ void board_led_toggle(void);
 void board_uart_init(uint32_t baudrate);
 hal_uart_t *board_uart1(void);
 
+/* USART2（PA2 TX / PA3 RX）：ML307 4G 模组 AT 通道，首次调用时初始化（115200）。
+ * 注意：PA2/PA3 与 PWM 编号 2/3（TIM2_CH3/CH4）冲突，接模组时这两路 PWM 不可用。 */
+hal_uart_t *board_uart2(void);
+
 /* 初始化 USART1 并把 trace 输出注册到该串口 */
 void board_trace_start(uint32_t baudrate);
 

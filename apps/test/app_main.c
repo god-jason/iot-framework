@@ -1,11 +1,14 @@
 /*
- * test.c - 单元测试入口（PC 板）
+ * app_main.c - 单元测试入口（PC 应用）
  *
- * 依次运行各模块测试套件并汇总结果：
- *   返回 0 表示全部通过，非 0 表示存在失败。
+ * 本文件实现 app_main()，由 boards/pc/main.c 创建为独立任务；
+ * 依次运行各模块测试套件并汇总结果，结束后 ros_stop() 返回 main，
+ * 失败与否通过 app_set_exit_code() 传给进程退出码。
  */
 
 #include "test.h"
+#include "ros.h"
+#include "app.h"
 
 int tf_checks = 0;
 int tf_failures = 0;
@@ -114,9 +117,11 @@ void ut_sbuf(void);
 void ut_msgq(void);
 void ut_rtc(void);
 
-/* 测试入口：依次运行各模块套件，全部通过返回 0，否则返回 1。 */
-int main(void)
+/* 测试入口：依次运行各模块套件，失败码交给板级 main。 */
+void app_main(void *arg)
 {
+    (void)arg;
+
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("=== robotos 单元测试 ===\n\n");
 
@@ -203,5 +208,7 @@ int main(void)
     ut_rtc();
 
     printf("\n=== 结果：%d 项检查，%d 项失败 ===\n", tf_checks, tf_failures);
-    return (tf_failures == 0) ? 0 : 1;
+
+    app_set_exit_code((tf_failures == 0) ? 0 : 1);
+    ros_stop();                 /* 结束调度，返回板级 main */
 }
