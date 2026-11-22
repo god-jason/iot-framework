@@ -25,9 +25,9 @@ void board_led_init(void);
 void board_led_toggle(void);
 
 /* 向 device 组件注册本板 PWM（只绑定句柄，首次使用时才初始化硬件）：
- *   pwm0~3 = TIM2_CH1~4 (PA0~PA3, 默认 1kHz)
- *   pwm4~7 = TIM3_CH1~4 (PA6/PA7/PB0/PB1, 默认 2kHz)
- *   pwm8~11 = TIM4_CH1~4 (PB6/PB7/PB8/PB9, 默认 3kHz) */
+ *   编号 0~3   = TIM2_CH1~4 (PA0~PA3, 默认 1kHz)
+ *   编号 4~7   = TIM3_CH1~4 (PA6/PA7/PB0/PB1, 默认 2kHz)
+ *   编号 8~11  = TIM4_CH1~4 (PB6/PB7/PB8/PB9, 默认 3kHz) */
 void board_pwm_register(void);
 
 /* 初始化 USART1(PA9) 并把 trace 输出注册到该串口 */
@@ -36,7 +36,7 @@ void board_trace_start(uint32_t baud);
 /* 注册板级 RTC 后端：优先 LSE 32.768kHz 硬件 RTC，失败退回 1Hz 软件计时 */
 void board_rtc_init(void);
 
-/* 风扇：复用 pwm0（TIM2_CH1 / PA0）输出，25kHz；注册 roshell 的 fan 命令 */
+/* 风扇：复用 PWM 编号 0（TIM2_CH1 / PA0）输出，25kHz；注册 roshell 的 fan 命令 */
 void board_fan_init(void);
 
 /* 步进电机：STEP=PA4，DIR=PA5；注册 roshell 的 stepper 命令 */

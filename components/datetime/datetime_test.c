@@ -163,12 +163,11 @@ void ut_datetime(void)
     /* 按 Unix 秒设置 */
     TF_CHECK_INT(rs_cmd_dispatch(NULL, "date set 1700000000"), 0);
     TF_CHECK((int64_t)ros_rtc_get_timestamp() == 1700000000LL);
-
-    /* 按日期时间设置（2026-12-01 12:34:56 UTC） */
-    TF_CHECK_INT(rs_cmd_dispatch(NULL, "date set 2026-12-01 12:34:56"), 0);
+    TF_CHECK_INT(rs_cmd_dispatch(NULL, "date set 1796128496"), 0);
     TF_CHECK((int64_t)ros_rtc_get_timestamp() == 1796128496LL);
 
-    /* 非法日期 / 非法参数 */
+    /* 非法参数 */
+    TF_CHECK(rs_cmd_dispatch(NULL, "date set 2026-12-01 12:34:56") < 0);
     TF_CHECK(rs_cmd_dispatch(NULL, "date set 2024-02-30") < 0);
     TF_CHECK(rs_cmd_dispatch(NULL, "date set") < 0);
     TF_CHECK(rs_cmd_dispatch(NULL, "date foo") < 0);

@@ -47,8 +47,6 @@
 
 #include <stdio.h>
 
-#define DEMO_PWM_NAME_MAX 16U
-
 static int cmd_quit(const rs_cmd_ctx_t *ctx)
 {
     (void)ctx;
@@ -69,7 +67,7 @@ static uint8_t    s_cpu_stack[1024];
 static ros_task_t s_mem_task;
 static uint8_t    s_mem_stack[1024];
 
-/* 演示用 PWM 通道：由应用准备句柄并绑定名字，pwm 命令里用 pwm1/pwm2 或 0/1 操作 */
+/* 演示用 PWM 通道：由应用准备句柄并绑定，pwm 命令里用编号 0/1 操作 */
 static hal_pwm_t s_demo_pwm[2];
 
 /* 演示用风扇：把 PWM 通道包装成 fan 实例，fan 命令里用 fan 0 / fan 1 操作 */
@@ -140,14 +138,11 @@ int main(void)
         uint32_t i;
 
         for (i = 0U; i < 2U; i++) {
-            char name[DEMO_PWM_NAME_MAX];
-
             s_demo_pwm[i].channel = (uint8_t)(i + 1U);
             if (hal_pwm_init(&s_demo_pwm[i], &pcfg) != HAL_OK) {
                 continue;
             }
-            (void)str_printf(name, sizeof(name), "pwm%u", (unsigned)(i + 1U));
-            (void)device_pwm_bind(name, &s_demo_pwm[i]);
+            (void)device_pwm_bind(&s_demo_pwm[i]);
 
             /* 同一个 PWM 通道再包装成风扇实例（fan_init 会注册 fan 命令） */
             s_demo_fan_ops[i].set_duty = demo_fan_duty;

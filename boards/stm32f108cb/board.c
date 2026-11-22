@@ -95,33 +95,32 @@ void board_led_toggle(void)
 }
 
 /* 向 device 组件注册本板 PWM 通道（只绑定句柄，不做硬件初始化）
- *   pwm0~pwm3  = TIM2_CH1~4（PA0~PA3），默认 1kHz
- *   pwm4~pwm7  = TIM3_CH1~4（PA6/PA7/PB0/PB1），默认 2kHz
- *   pwm8~pwm11 = TIM4_CH1~4（PB6/PB7/PB8/PB9），默认 3kHz
+ *   编号 0~3   = TIM2_CH1~4（PA0~PA3），默认 1kHz
+ *   编号 4~7   = TIM3_CH1~4（PA6/PA7/PB0/PB1），默认 2kHz
+ *   编号 8~11  = TIM4_CH1~4（PB6/PB7/PB8/PB9），默认 3kHz
  * 首次执行 pwm 命令（freq/duty/start）时才调用 hal_pwm_init() 初始化硬件；
  * 同一 TIM 的通道共用频率（ARR/PSC），占空比各自独立。
  */
 typedef struct {
     hal_pwm_t    pwm;
-    const char  *name;
     TIM_TypeDef *tim;
     uint8_t      channel;
     uint32_t     frequency;
 } board_pwm_def_t;
 
 static board_pwm_def_t s_pwms[] = {
-    { .name = "pwm0",  .tim = TIM2, .channel = 1U, .frequency = 1000U },
-    { .name = "pwm1",  .tim = TIM2, .channel = 2U, .frequency = 1000U },
-    { .name = "pwm2",  .tim = TIM2, .channel = 3U, .frequency = 1000U },
-    { .name = "pwm3",  .tim = TIM2, .channel = 4U, .frequency = 1000U },
-    { .name = "pwm4",  .tim = TIM3, .channel = 1U, .frequency = 2000U },
-    { .name = "pwm5",  .tim = TIM3, .channel = 2U, .frequency = 2000U },
-    { .name = "pwm6",  .tim = TIM3, .channel = 3U, .frequency = 2000U },
-    { .name = "pwm7",  .tim = TIM3, .channel = 4U, .frequency = 2000U },
-    { .name = "pwm8",  .tim = TIM4, .channel = 1U, .frequency = 3000U },
-    { .name = "pwm9",  .tim = TIM4, .channel = 2U, .frequency = 3000U },
-    { .name = "pwm10", .tim = TIM4, .channel = 3U, .frequency = 3000U },
-    { .name = "pwm11", .tim = TIM4, .channel = 4U, .frequency = 3000U },
+    { .tim = TIM2, .channel = 1U, .frequency = 1000U },
+    { .tim = TIM2, .channel = 2U, .frequency = 1000U },
+    { .tim = TIM2, .channel = 3U, .frequency = 1000U },
+    { .tim = TIM2, .channel = 4U, .frequency = 1000U },
+    { .tim = TIM3, .channel = 1U, .frequency = 2000U },
+    { .tim = TIM3, .channel = 2U, .frequency = 2000U },
+    { .tim = TIM3, .channel = 3U, .frequency = 2000U },
+    { .tim = TIM3, .channel = 4U, .frequency = 2000U },
+    { .tim = TIM4, .channel = 1U, .frequency = 3000U },
+    { .tim = TIM4, .channel = 2U, .frequency = 3000U },
+    { .tim = TIM4, .channel = 3U, .frequency = 3000U },
+    { .tim = TIM4, .channel = 4U, .frequency = 3000U },
 };
 
 void board_pwm_register(void)
@@ -137,15 +136,15 @@ void board_pwm_register(void)
         def->pwm.config.frequency = def->frequency;
         def->pwm.config.duty = 0U;
         def->pwm.config.polarity = HAL_PWM_POLARITY_HIGH;
-        (void)device_pwm_bind(def->name, &def->pwm);
+        (void)device_pwm_bind(&def->pwm);
     }
 }
 
 /* ---------------------------- 风扇 ---------------------------- */
 
-/* 风扇调速复用 pwm0（TIM2_CH1 / PA0），25kHz 为常见 4 线风扇 PWM 频率。
+/* 风扇调速复用编号 0（TIM2_CH1 / PA0），25kHz 为常见 4 线风扇 PWM 频率。
  * 档位 0 停止输出；1~1000 映射到 0.1%~100% 占空比。
- * 注意：该通道同时暴露为 pwm0，用 pwm 命令改它会影响风扇输出。 */
+ * 注意：该通道同时暴露为 PWM 编号 0，用 pwm 命令改它会影响风扇输出。 */
 #define FAN_PWM_SLOT  0U
 #define FAN_PWM_FREQ  25000U
 

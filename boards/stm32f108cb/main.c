@@ -55,10 +55,10 @@ int main(void)
     /* 注册板级 RTC 后端（本板无硬件时钟，用 1Hz 软件计时） */
     board_rtc_init();
 
-    /* 注册 gpio / pwm 命令，并由板级注册 pwm0（TIM2_CH1 / PA0） */
+    /* 注册 gpio / pwm 命令；板级注册 12 路 PWM（编号 0 = TIM2_CH1 / PA0） */
     if (device_init() == 0) {
         board_pwm_register();
-        board_fan_init();          /* 风扇复用 pwm0（TIM2_CH1 / PA0） */
+        board_fan_init();          /* 风扇复用 PWM 编号 0（TIM2_CH1 / PA0） */
     }
 
     /* 步进电机（STEP=PA4 / DIR=PA5），注册 stepper 命令 */

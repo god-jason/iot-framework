@@ -194,45 +194,21 @@ static const rs_cmd_t s_gpio_def = {
 
 typedef struct {
     bool       used;
-    char       name[DEVICE_PWM_NAME_MAX];
     hal_pwm_t *handle;
 } device_pwm_slot_t;
 
 static device_pwm_slot_t s_pwm[DEVICE_PWM_MAX];
 
-static device_pwm_slot_t *pwm_find(const char *name)
+int device_pwm_bind(hal_pwm_t *handle)
 {
     uint32_t i;
 
-    for (i = 0U; i < DEVICE_PWM_MAX; i++) {
-        if (s_pwm[i].used && strcmp(s_pwm[i].name, name) == 0) {
-            return &s_pwm[i];
-        }
-    }
-    return NULL;
-}
-
-int device_pwm_bind(const char *name, hal_pwm_t *handle)
-{
-    size_t len;
-    uint32_t i;
-
-    if (name == NULL || handle == NULL) {
+    if (handle == NULL) {
         return -1;
-    }
-    len = strlen(name);
-    if (len == 0U || len >= DEVICE_PWM_NAME_MAX) {
-        return -1;
-    }
-
-    if (pwm_find(name) != NULL) {
-        pwm_find(name)->handle = handle;
-        return 0;
     }
     for (i = 0U; i < DEVICE_PWM_MAX; i++) {
         if (!s_pwm[i].used) {
             s_pwm[i].used = true;
-            memcpy(s_pwm[i].name, name, len + 1U);
             s_pwm[i].handle = handle;
             return 0;
         }
@@ -240,39 +216,31 @@ int device_pwm_bind(const char *name, hal_pwm_t *handle)
     return -1;
 }
 
-int device_pwm_unbind(const char *name)
+int device_pwm_unbind(uint32_t index)
 {
-    device_pwm_slot_t *slot;
-
-    if (name == NULL) {
+    if (index >= DEVICE_PWM_MAX || !s_pwm[index].used) {
         return -1;
     }
-    slot = pwm_find(name);
-    if (slot == NULL) {
-        return -1;
-    }
-    slot->used = false;
-    slot->name[0] = '\0';
-    slot->handle = NULL;
+    s_pwm[index].used = false;
+    s_pwm[index].handle = NULL;
     return 0;
 }
 
-/* 支持绑定名（如 pwm1）或槽位序号（如 0） */
+/* 仅支持编号（0..DEVICE_PWM_MAX-1） */
 static device_pwm_slot_t *pwm_lookup(const char *arg)
 {
-    device_pwm_slot_t *slot = pwm_find(arg);
     char *end = NULL;
     unsigned long idx;
 
-    if (slot != NULL) {
-        return slot;
+    if (arg == NULL) {
+        return NULL;
     }
     idx = strtoul(arg, &end, 10);
-    if (end != arg && *end == '\0' && idx < DEVICE_PWM_MAX &&
-        s_pwm[idx].used) {
-        return &s_pwm[idx];
+    if (end == arg || *end != '\0' || idx >= DEVICE_PWM_MAX ||
+        !s_pwm[idx].used) {
+        return NULL;
     }
-    return NULL;
+    return &s_pwm[idx];
 }
 
 static const char *pwm_state_name(hal_state_e state)
@@ -327,12 +295,12 @@ static bool pwm_parse_duty(const char *s, uint32_t *duty)
     return true;
 }
 
-static void pwm_print_info(const device_pwm_slot_t *slot)
+static void pwm_print_info(uint32_t index)
 {
-    const hal_pwm_t *h = slot->handle;
+    const hal_pwm_t *h = s_pwm[index].handle;
 
-    ros_printf("%-6s freq=%u Hz duty=%u.%02u%% pol=%s state=%s\n",
-               slot->name, (unsigned)h->config.frequency,
+    ros_printf("[%u] freq=%u Hz duty=%u.%02u%% pol=%s state=%s\n",
+               (unsigned)index, (unsigned)h->config.frequency,
                (unsigned)(h->config.duty / 100U),
                (unsigned)(h->config.duty % 100U),
                (h->config.polarity == HAL_PWM_POLARITY_LOW) ? "low" : "high",
@@ -364,10 +332,11 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
     const char *action = NULL;
     const char *value = NULL;
     device_pwm_slot_t *slot;
+    uint32_t index;
     int rc;
 
     if (!rs_args_get_str(ctx->parsed, 0U, &target) || target == NULL) {
-        ros_puts("usage: pwm list | pwm <name|index> start|stop|freq|duty|info");
+        ros_puts("usage: pwm list | pwm <index> start|stop|freq|duty|info");
         return -1;
     }
     if (str_icmp(target, "list")) {
@@ -377,8 +346,7 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
         for (i = 0U; i < DEVICE_PWM_MAX; i++) {
             if (s_pwm[i].used) {
                 any = true;
-                ros_printf("[%u] ", (unsigned)i);
-                pwm_print_info(&s_pwm[i]);
+                pwm_print_info(i);
             }
         }
         if (!any) {
@@ -394,24 +362,25 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
     }
     slot = pwm_lookup(target);
     if (slot == NULL) {
-        ros_printf("ERR %d: pwm %s not bound\n", -1, target);
+        ros_printf("ERR %d: pwm index %s invalid\n", -1, target);
         return -1;
     }
+    index = (uint32_t)(slot - s_pwm);
 
     if (str_icmp(action, "start")) {
         if (pwm_ensure_ready(slot) != 0) {
-            ros_printf("ERR %d: pwm %s init failed\n", -1, slot->name);
+            ros_printf("ERR %d: pwm %u init failed\n", -1, (unsigned)index);
             return -1;
         }
         rc = hal_pwm_start(slot->handle);
     } else if (str_icmp(action, "stop")) {
         if (slot->handle->base.state == HAL_STATE_RESET) {
-            pwm_print_info(slot);                   /* 未初始化：无需停止 */
+            pwm_print_info(index);                  /* 未初始化：无需停止 */
             return 0;
         }
         rc = hal_pwm_stop(slot->handle);
     } else if (str_icmp(action, "info")) {
-        pwm_print_info(slot);
+        pwm_print_info(index);
         return 0;
     } else if (str_icmp(action, "freq")) {
         uint32_t hz = 0U;
@@ -421,7 +390,7 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
         }
         slot->handle->config.frequency = hz;         /* 首次 init 直接采用该频率 */
         if (pwm_ensure_ready(slot) != 0) {
-            ros_printf("ERR %d: pwm %s init failed\n", -1, slot->name);
+            ros_printf("ERR %d: pwm %u init failed\n", -1, (unsigned)index);
             return -1;
         }
         rc = hal_pwm_set_frequency(slot->handle, hz);
@@ -445,7 +414,7 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
         }
         slot->handle->config.duty = duty;            /* 首次 init 直接采用该占空比 */
         if (pwm_ensure_ready(slot) != 0) {
-            ros_printf("ERR %d: pwm %s init failed\n", -1, slot->name);
+            ros_printf("ERR %d: pwm %u init failed\n", -1, (unsigned)index);
             return -1;
         }
         rc = hal_pwm_set_duty(slot->handle, duty);
@@ -454,15 +423,16 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
     }
 
     if (rc != HAL_OK) {
-        ros_printf("ERR %d: pwm %s %s failed: %d\n", -1, slot->name, action, rc);
+        ros_printf("ERR %d: pwm %u %s failed: %d\n", -1, (unsigned)index,
+                   action, rc);
         return -1;
     }
-    pwm_print_info(slot);
+    pwm_print_info(index);
     return 0;
 }
 
 static const rs_args_t s_pwm_args[] = {
-    { "target", 0, RS_ARGS_TYPE_STR, true, true, NULL, "list / name / index" },
+    { "target", 0, RS_ARGS_TYPE_STR, true, true, NULL, "list / index" },
     { "action", 0, RS_ARGS_TYPE_STR, true, false, NULL,
       "start|stop|freq|duty|info" },
     { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL, "hz / duty" }

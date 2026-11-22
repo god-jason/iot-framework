@@ -73,7 +73,6 @@ int datetime_add_seconds(datetime_t *dt, int32_t seconds);
  *   date                         显示系统时间
  *   date get                     显示系统时间
  *   date set <unix>              按 Unix 秒设置
- *   date set <YYYY-MM-DD> [HH:MM:SS]
  * 返回 0 成功；-1 注册失败。
  */
 int datetime_cmd_register(void);
