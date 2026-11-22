@@ -33,8 +33,7 @@ import re
 import shutil
 import sys
 
-# 复用 scripts/crash_decode.py 中的符号解析逻辑
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+# 复用同目录 crash_decode.py 中的符号解析逻辑
 import crash_decode as cd  # noqa: E402
 
 REASON_RE = re.compile(r"reason=([A-Z_]+)")

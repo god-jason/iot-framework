@@ -15,6 +15,7 @@
 #include "ros.h"
 #include "common.h"
 #include "hal.h"
+#include "hal_mcu.h"
 
 #include "stm32f10x.h"
 
@@ -144,8 +145,13 @@ static int usart_transmit(USART_TypeDef *u, const uint8_t *data, size_t length)
     size_t i;
 
     for (i = 0U; i < length; i++) {
+        uint32_t spin = 2000000U;
+
+        /* 有界等待，USART 时钟/引脚异常时不至于死等 */
         while ((u->SR & BOARD_SR_TXE) == 0U) {
-            /* 等待发送寄存器空 */
+            if (--spin == 0U) {
+                return -1;
+            }
         }
         u->DR = data[i];
     }
@@ -155,16 +161,15 @@ static int usart_transmit(USART_TypeDef *u, const uint8_t *data, size_t length)
 static int usart_receive(ringbuf_t *rb, uint8_t *data, size_t length,
                          uint32_t timeout)
 {
+    uint32_t start = hal_tick_get();
     size_t i;
 
     for (i = 0U; i < length; i++) {
-        uint32_t budget = timeout * (BOARD_APB2_CLK_HZ / 1000U / 4U);
-
         while (ringbuf_read(rb, &data[i], 1U) != 1U) {
             if (timeout == 0U) {
                 return -1;              /* 非阻塞：无数据 */
             }
-            if (budget-- == 0U) {
+            if ((uint32_t)(hal_tick_get() - start) >= timeout) {
                 return -1;              /* 超时 */
             }
         }

@@ -4,13 +4,13 @@ crash_decode.py - 把 ros_crash 崩溃记录解码为函数名 / 源码行 / 疑
 
 用法：
     # 串口/日志里的崩溃文本直接管道传入
-    type crash.txt | python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407
+    type crash.txt | python tools/crash_decode.py --elf build/cross/arm/release/ros-fw-f407
 
     # 或指定文件
-    python scripts/crash_decode.py --elf ros-fw-f407 crash.txt
+    python tools/crash_decode.py --elf ros-fw-f407 crash.txt
 
     # 指定工具链前缀（未加入 PATH 时）
-    python scripts/crash_decode.py --elf ros-fw-f407 --addr2line \\
+    python tools/crash_decode.py --elf ros-fw-f407 --addr2line \\
         C:/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin/arm-none-eabi-addr2line crash.txt
 
 原理：

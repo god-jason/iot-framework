@@ -14,6 +14,7 @@
 #include "fan.h"
 #include "stepper.h"
 #include "ros.h"
+#include "ros_port.h"
 
 #include "stm32f10x.h"
 
@@ -254,7 +255,8 @@ void board_stepper_init(void)
 
 uint32_t hal_tick_get(void)
 {
-    return ros_tick_get();
+    /* 用 DWT 微秒时基换算：不依赖内核 tickless 的空闲推进 */
+    return ros_port_trace_time_us() / 1000U;
 }
 
 void hal_delay_ms(uint32_t ms)

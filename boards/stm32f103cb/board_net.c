@@ -18,7 +18,7 @@
 
 #include <string.h>
 
-#define ML307_RX_BUF_SIZE       512U
+#define ML307_RX_BUF_SIZE       128U    /* 与 USART2 环形缓冲容量一致 */
 #define ML307_LINE_BUF_SIZE     256U
 
 #define MQTT_TEST_HOST          "broker.emqx.io"
@@ -39,6 +39,36 @@ static void mqtt_on_message(const char *topic, const uint8_t *payload,
     ros_printf("mqtt: %s = %.*s\n", topic, (int)len, (const char *)payload);
 }
 
+/* 首次使用前初始化 ML307 的 AT 引擎（UART2 + 收发缓冲） */
+static int net_at_ensure(void)
+{
+    at_config_t cfg;
+
+    if (s_at_ready) {
+        return 0;
+    }
+    ros_puts("ml307: init uart2");
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.uart = board_uart2();
+    cfg.rx_buffer = s_rx_buf;
+    cfg.rx_buffer_size = (uint32_t)sizeof(s_rx_buf);
+    cfg.line_buffer = s_line_buf;
+    cfg.line_buffer_size = (uint32_t)sizeof(s_line_buf);
+    cfg.default_timeout = 500U;
+    cfg.default_retry = 0U;
+    cfg.echo_enabled = 0U;
+    if (ml307_init(&cfg) != 0) {
+        ros_puts("ml307: init failed");
+        return -1;
+    }
+    if (at_start() != 0) {
+        ros_puts("ml307: at start failed");
+        return -1;
+    }
+    s_at_ready = true;
+    return 0;
+}
+
 static int mqtt_cmd_handler(const rs_cmd_ctx_t *ctx)
 {
     const char *host = NULL;
@@ -57,29 +87,17 @@ static int mqtt_cmd_handler(const rs_cmd_ctx_t *ctx)
 
     ros_printf("ml307: test %s:%u\n", host, (unsigned)port);
 
-    if (!s_at_ready) {
-        at_config_t cfg;
-
-        memset(&cfg, 0, sizeof(cfg));
-        cfg.uart = board_uart2();
-        cfg.rx_buffer = s_rx_buf;
-        cfg.rx_buffer_size = (uint32_t)sizeof(s_rx_buf);
-        cfg.line_buffer = s_line_buf;
-        cfg.line_buffer_size = (uint32_t)sizeof(s_line_buf);
-        cfg.default_timeout = 500U;
-        cfg.default_retry = 0U;
-        cfg.echo_enabled = 0U;
-        if (ml307_init(&cfg) != 0) {
-            ros_puts("ml307: init failed");
-            return -1;
-        }
-        s_at_ready = true;
-    }
-
-    if (ml307_start() != 0) {
-        ros_puts("ml307: no AT response (module not connected?)");
+    if (net_at_ensure() != 0) {
         return -1;
     }
+
+    ros_puts("ml307: send AT");
+    if (at_exec("AT", 300U) != AT_RESULT_OK) {
+        ros_printf("ml307: no AT response, resp=[%s]\n", at_get_response());
+        return -1;
+    }
+    ros_puts("ml307: AT ok");
+    (void)at_exec("ATE0", 300U);
 
     memset(&opt, 0, sizeof(opt));
     opt.client_id = MQTT_TEST_CLIENT_ID;
@@ -88,14 +106,18 @@ static int mqtt_cmd_handler(const rs_cmd_ctx_t *ctx)
 
     (void)mqtt_client_init(&s_mqtt, mqtt_on_message, NULL);
     ros_puts("mqtt: connecting...");
-    rc = mqtt_connect(&s_mqtt, host, (uint16_t)port, &opt, 8000U);
+    rc = mqtt_connect(&s_mqtt, host, (uint16_t)port, &opt, 20000U);
     if (rc != NET_OK) {
         ros_printf("mqtt: connect failed (%d)\n", rc);
         return -1;
     }
     ros_puts("mqtt: connected");
 
-    (void)mqtt_subscribe(&s_mqtt, MQTT_TEST_TOPIC, 0U);
+    if (mqtt_subscribe(&s_mqtt, MQTT_TEST_TOPIC, 0U) == NET_OK) {
+        ros_puts("mqtt: subscribe ok");
+    } else {
+        ros_puts("mqtt: subscribe failed");
+    }
     if (mqtt_publish(&s_mqtt, MQTT_TEST_TOPIC, "hello", 5U, 0U, false) == NET_OK) {
         ros_puts("mqtt: publish ok");
     } else {
@@ -105,7 +127,7 @@ static int mqtt_cmd_handler(const rs_cmd_ctx_t *ctx)
     {
         int i;
 
-        for (i = 0; i < 20; i++) {
+        for (i = 0; i < 50; i++) {
             (void)mqtt_poll(&s_mqtt, 100U);
         }
     }

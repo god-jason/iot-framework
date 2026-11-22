@@ -23,6 +23,7 @@
  *   - 成功/失败终止符使用子串匹配，数据行若包含 "OK" 等字样会被误判。
  */
 #include "at.h"
+#include "hal_mcu.h"
 #include "at_parser.h"
 #include "at_urc.h"
 #include "ros.h"
@@ -389,6 +390,8 @@ at_result_e at_transact(const at_request_t *request)
     /* 阻塞等待：接收泵取与超时由 at_process() 完成 */
     while (s_req_pending) {
         at_process();
+        /* 每次轮询间隔 1ms，使 timeout 的逻辑 tick 接近真实毫秒 */
+        hal_delay_ms(1U);
     }
     return s_result;
 }
@@ -464,7 +467,8 @@ int at_process(void)
         while (n > 0) {
             uint32_t chunk = (n > s_cfg.rx_buffer_size)
                              ? s_cfg.rx_buffer_size : n;
-            r = hal_uart_receive(s_cfg.uart, s_cfg.rx_buffer, chunk, 100);
+            /* 非阻塞读取：本函数每次调用只处理已到达的数据，超时由逻辑 tick 控制 */
+            r = hal_uart_receive(s_cfg.uart, s_cfg.rx_buffer, chunk, 0);
             if (r != HAL_OK) {
                 break;   /* 读取失败：本轮放弃，等待下次轮询 */
             }

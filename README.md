@@ -35,8 +35,8 @@ robotos/
 ├── modules/        模组后端（ml307：net 原始接口 + 原生 HTTP/MQTT）
 ├── platforms/      pc / stm32 / avr 平台实现
 ├── boards/         板级工程（启动文件、链接脚本、main）
+│   └── pc/         PC 示例（demo / shell_demo）与单测入口 test.c
 ├── vendor/         cjson、tlsf、arena
-├── boards/pc/      PC 示例与单元测试入口
 ├── docs/           设计文档
 └── xmake.lua       构建脚本
 ```
@@ -76,9 +76,9 @@ STM32 固件 ELF 同时带 DWARF 调试信息（`-g`），可直接解析源码�
 崩溃文本交给脚本即可得到函数名、源码行与疑似调用栈：
 
 ```bash
-python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407ve crash.txt
+python tools/crash_decode.py --elf build/cross/arm/release/ros-fw-f407ve crash.txt
 # 或直接管道输入
-type crash.txt | python scripts/crash_decode.py --elf build/cross/arm/release/ros-fw-f407ve
+type crash.txt | python tools/crash_decode.py --elf build/cross/arm/release/ros-fw-f407ve
 ```
 
 脚本自动调用 `arm-none-eabi-addr2line` / `nm`；工具不在 PATH 时用
