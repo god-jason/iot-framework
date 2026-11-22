@@ -2,11 +2,32 @@
  * datetime_test.c - 日期时间测试（对应 datetime.c）
  *
  * 覆盖：闰年与天数、字段校验、Unix 时间戳往返、星期推导、
- *       比较、秒级偏移、软件时钟读写。
+ *       比较、秒级偏移、软件时钟读写、date 命令获取与修改。
  */
 
 #include "test.h"
 #include "datetime.h"
+#include "roshell.h"
+#include "ros_rtc.h"
+
+/* date 命令测试用 RTC 后端 */
+static uint32_t s_dt_rtc_unix;
+
+static int dt_test_get(uint32_t *timestamp)
+{
+    *timestamp = s_dt_rtc_unix;
+    return ROS_OK;
+}
+
+static int dt_test_set(uint32_t timestamp)
+{
+    s_dt_rtc_unix = timestamp;
+    return ROS_OK;
+}
+
+static const ros_rtc_ops_t s_dt_test_ops = {
+    "dt-test", ROS_RTC_SOURCE_TICK, dt_test_get, dt_test_set
+};
 
 void ut_datetime(void)
 {
@@ -121,5 +142,37 @@ void ut_datetime(void)
     TF_CHECK_INT(datetime_get(NULL), -1);
     TF_CHECK_INT(datetime_set(NULL), -1);
 
+    tf_end();
+
+    tf_begin("datetime/date 命令获取与修改");
+
+    TF_CHECK_INT(datetime_cmd_register(), 0);
+
+    /* 未注册 RTC 后端时写入失败 */
+    ros_rtc_unregister();
+    TF_CHECK(rs_cmd_dispatch(NULL, "date set 1700000000") < 0);
+
+    /* 注册测试后端 */
+    s_dt_rtc_unix = 0U;
+    TF_CHECK_INT(ros_rtc_register(&s_dt_test_ops), ROS_OK);
+
+    /* 获取：返回 0（输出到 stdio，测试只校验返回码） */
+    TF_CHECK_INT(rs_cmd_dispatch(NULL, "date"), 0);
+    TF_CHECK_INT(rs_cmd_dispatch(NULL, "date get"), 0);
+
+    /* 按 Unix 秒设置 */
+    TF_CHECK_INT(rs_cmd_dispatch(NULL, "date set 1700000000"), 0);
+    TF_CHECK((int64_t)ros_rtc_get_timestamp() == 1700000000LL);
+
+    /* 按日期时间设置（2026-12-01 12:34:56 UTC） */
+    TF_CHECK_INT(rs_cmd_dispatch(NULL, "date set 2026-12-01 12:34:56"), 0);
+    TF_CHECK((int64_t)ros_rtc_get_timestamp() == 1796128496LL);
+
+    /* 非法日期 / 非法参数 */
+    TF_CHECK(rs_cmd_dispatch(NULL, "date set 2024-02-30") < 0);
+    TF_CHECK(rs_cmd_dispatch(NULL, "date set") < 0);
+    TF_CHECK(rs_cmd_dispatch(NULL, "date foo") < 0);
+
+    ros_rtc_unregister();
     tf_end();
 }

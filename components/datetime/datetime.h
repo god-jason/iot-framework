@@ -1,8 +1,10 @@
 /*
  * datetime.h - 日期时间与 Unix 时间戳换算接口
  *
- * 纯软件时钟，按 UTC 处理，不含时区/夏令时；不依赖硬件 RTC。
- * 内部维护一个静态“当前时间”，由 datetime_get/set 访问。
+ * 换算按 UTC 处理，不含时区/夏令时。
+ * 内部维护一个静态“当前时间”，由 datetime_get/set 访问；
+ * date 命令读写内核 ros_rtc 的系统时间（硬件 RTC 优先，否则 1Hz 软件计时），
+ * 并用本模块完成格式化与解析。
  */
 
 #ifndef DATETIME_H
@@ -65,6 +67,16 @@ uint8_t datetime_weekday(uint16_t year, uint8_t month, uint8_t day);
 int datetime_compare(const datetime_t *a, const datetime_t *b);
 /* 秒级偏移（可为负），会正确处理跨月跨年并保留毫秒；返回 0，-1 表示失败 */
 int datetime_add_seconds(datetime_t *dt, int32_t seconds);
+
+/*
+ * 注册 roshell 的 date 命令（幂等）：
+ *   date                         显示系统时间
+ *   date get                     显示系统时间
+ *   date set <unix>              按 Unix 秒设置
+ *   date set <YYYY-MM-DD> [HH:MM:SS]
+ * 返回 0 成功；-1 注册失败。
+ */
+int datetime_cmd_register(void);
 
 #ifdef __cplusplus
 }

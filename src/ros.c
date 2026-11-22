@@ -6,7 +6,7 @@
  *   ros_tick.c    tick 与延时链表    ros_timers.c  软件定时器
  *   ros_task.c    任务/通知/注册表   ros_idle.c    空闲任务
  *   ros_sem.c / ros_mutex.c / ros_queue.c / ros_event.c
- *   ros_stats.c / ros_isr.c
+ *   ros_stats.c / ros_isr.c / ros_rtc.c（抽象层，后端由 boards 注册）
  */
 
 #include "ros.h"

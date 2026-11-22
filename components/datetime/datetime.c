@@ -7,7 +7,8 @@
  *   模块内维护一个软件“当前时间”（s_now），无 RTC 时作为系统时间来源。
  *
  * 数据流与依赖：
- *   仅依赖 标准头文件，无平台接口与动态内存。
+ *   历法换算只依赖标准头文件，无平台接口与动态内存；
+ *   date 命令额外依赖内核 ros_rtc（系统时间）与 roshell（命令注册）。
  *   历法换算采用 Howard Hinnant 的 civil_from_days / days_from_civil 算法，
  *   以 1970-01-01 为纪元，按 400 年 = 146097 天的周期处理闰年规则。
  *
@@ -19,6 +20,9 @@
  */
 
 #include "datetime.h"
+#include "ros.h"
+#include "common.h"
+#include "roshell.h"
 
 /* 软件时钟：无 RTC 时的当前日期时间，可由 datetime_set() 更新 */
 static datetime_t s_now;
@@ -319,5 +323,217 @@ int datetime_add_seconds(datetime_t *dt, int32_t seconds)
         return -1;
     }
     dt->millisecond = ms;
+    return 0;
+}
+
+/* ============================== date 命令 ============================== */
+
+static const char *const s_weekday_name[] = {
+    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+};
+
+/* 解析连续十进制数字 */
+static bool cmd_parse_num(const char **pp, uint32_t *out)
+{
+    const char *p = *pp;
+    uint32_t v = 0U;
+
+    if (*p < '0' || *p > '9') {
+        return false;
+    }
+    while (*p >= '0' && *p <= '9') {
+        v = v * 10U + (uint32_t)(*p - '0');
+        p++;
+    }
+    *pp = p;
+    *out = v;
+    return true;
+}
+
+/* 解析 YYYY-MM-DD，rest 指向日期之后（'\0' 或空格） */
+static bool cmd_parse_date(const char *s, uint32_t *y, uint32_t *mo,
+                           uint32_t *d, const char **rest)
+{
+    const char *p = s;
+
+    if (!cmd_parse_num(&p, y) || *p++ != '-') {
+        return false;
+    }
+    if (!cmd_parse_num(&p, mo) || *p++ != '-') {
+        return false;
+    }
+    if (!cmd_parse_num(&p, d)) {
+        return false;
+    }
+    *rest = p;
+    return true;
+}
+
+/* 解析 HH:MM:SS，要求整串恰好结束 */
+static bool cmd_parse_time(const char *s, uint32_t *h, uint32_t *mi,
+                           uint32_t *se)
+{
+    const char *p = s;
+
+    if (!cmd_parse_num(&p, h) || *p++ != ':') {
+        return false;
+    }
+    if (!cmd_parse_num(&p, mi) || *p++ != ':') {
+        return false;
+    }
+    if (!cmd_parse_num(&p, se)) {
+        return false;
+    }
+    return *p == '\0';
+}
+
+/*
+ * 解析日期时间：date 为 "YYYY-MM-DD"，time 可为 NULL。
+ * time 为 NULL 时允许 date 内含 "YYYY-MM-DD HH:MM:SS"（带引号输入）。
+ */
+static bool cmd_parse_datetime(const char *date, const char *time,
+                               datetime_t *dt)
+{
+    uint32_t y, mo, d;
+    uint32_t h = 0U, mi = 0U, se = 0U;
+    const char *rest;
+
+    if (!cmd_parse_date(date, &y, &mo, &d, &rest)) {
+        return false;
+    }
+    if (time != NULL) {
+        if (*rest != '\0' || !cmd_parse_time(time, &h, &mi, &se)) {
+            return false;
+        }
+    } else if (*rest == ' ') {
+        if (!cmd_parse_time(rest + 1, &h, &mi, &se)) {
+            return false;
+        }
+    } else if (*rest != '\0') {
+        return false;
+    }
+    if (y > 65535U) {
+        return false;
+    }
+
+    dt->year = (uint16_t)y;
+    dt->month = (uint8_t)mo;
+    dt->day = (uint8_t)d;
+    dt->hour = (uint8_t)h;
+    dt->minute = (uint8_t)mi;
+    dt->second = (uint8_t)se;
+    dt->millisecond = 0U;
+    return datetime_is_valid(dt);
+}
+
+/* 日期时间 -> 非负 32 位 Unix 秒 */
+static bool cmd_to_unix(const datetime_t *dt, uint32_t *out)
+{
+    int64_t ts;
+
+    if (datetime_to_timestamp(dt, &ts) != 0 || ts < 0 ||
+        (uint64_t)ts > (uint64_t)UINT32_MAX) {
+        return false;
+    }
+    *out = (uint32_t)ts;
+    return true;
+}
+
+/* 打印系统时间，并同步模块内的软件时钟 */
+static void cmd_show(uint32_t ts)
+{
+    datetime_t dt;
+    const char *src;
+    const char *wd;
+
+    if (timestamp_to_datetime((int64_t)ts, &dt) != 0) {
+        return;
+    }
+    (void)datetime_set(&dt);
+
+    wd = (dt.weekday < 7U) ? s_weekday_name[dt.weekday] : "?";
+    switch (ros_rtc_source()) {
+    case ROS_RTC_SOURCE_HW:   src = "hw";   break;
+    case ROS_RTC_SOURCE_TICK: src = "tick"; break;
+    default:                  src = "none"; break;
+    }
+    ros_printf("%04u-%02u-%02u %02u:%02u:%02u %s unix=%lu src=%s\n",
+               (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day,
+               (unsigned)dt.hour, (unsigned)dt.minute, (unsigned)dt.second,
+               wd, (unsigned long)ts, src);
+}
+
+static int date_cmd_handler(const rs_cmd_ctx_t *ctx)
+{
+    const char *action = NULL;
+    const char *v1 = NULL;
+    const char *v2 = NULL;
+    datetime_t dt;
+    uint32_t ts;
+    int rc;
+
+    (void)rs_args_get_str(ctx->parsed, 0U, &action);
+    (void)rs_args_get_str(ctx->parsed, 1U, &v1);
+    (void)rs_args_get_str(ctx->parsed, 2U, &v2);
+
+    if (action == NULL || str_icmp(action, "get")) {
+        cmd_show(ros_rtc_get_timestamp());
+        return 0;
+    }
+    if (!str_icmp(action, "set") || v1 == NULL) {
+        ros_puts("usage: date [get] | date set <unix> | "
+                 "date set <YYYY-MM-DD> [HH:MM:SS]");
+        return -1;
+    }
+
+    if (v2 != NULL) {
+        if (!cmd_parse_datetime(v1, v2, &dt) || !cmd_to_unix(&dt, &ts)) {
+            ros_printf("ERR: invalid datetime '%s %s'\n", v1, v2);
+            return -1;
+        }
+    } else if (str_parse_uint(v1, &ts)) {
+        if (timestamp_to_datetime((int64_t)ts, &dt) != 0) {
+            ros_printf("ERR: invalid unix time '%s'\n", v1);
+            return -1;
+        }
+    } else if (!cmd_parse_datetime(v1, NULL, &dt) ||
+               !cmd_to_unix(&dt, &ts)) {
+        ros_printf("ERR: invalid time '%s'\n", v1);
+        return -1;
+    }
+
+    rc = ros_rtc_set_timestamp(ts);
+    if (rc != ROS_OK) {
+        ros_printf("ERR: rtc backend unavailable (%d)\n", rc);
+        return -1;
+    }
+    cmd_show(ts);
+    return 0;
+}
+
+static const rs_args_t s_date_args[] = {
+    { "action", 0, RS_ARGS_TYPE_STR, true, false, NULL, "get|set" },
+    { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL,
+      "unix / YYYY-MM-DD" },
+    { "time", 0, RS_ARGS_TYPE_STR, true, false, NULL, "HH:MM:SS" }
+};
+
+static const rs_cmd_t s_date_def = {
+    "date", "get / set system time",
+    "date [get] | date set <unix> | date set <YYYY-MM-DD> [HH:MM:SS]",
+    NULL, s_date_args, 3U, date_cmd_handler, NULL, NULL, NULL, NULL
+};
+
+int datetime_cmd_register(void)
+{
+    static bool registered;
+
+    if (registered) {
+        return 0;
+    }
+    if (rs_cmd_register(&s_date_def) != 0) {
+        return -1;
+    }
+    registered = true;
     return 0;
 }

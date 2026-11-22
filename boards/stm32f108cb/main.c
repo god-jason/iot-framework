@@ -14,6 +14,7 @@
 #include "common.h"
 #include "roshell.h"
 #include "device.h"
+#include "datetime.h"
 
 #include "stm32f10x.h"
 #include "boot_meta.h"
@@ -51,6 +52,9 @@ int main(void)
      * log 的 printf 由 syscalls.c 的 _write 同样走 UART1 */
     (void)rs_platform_start("f108cb");
 
+    /* 注册板级 RTC 后端（本板无硬件时钟，用 1Hz 软件计时） */
+    board_rtc_init();
+
     /* 注册 gpio / pwm 命令，并由板级注册 pwm0（TIM2_CH1 / PA0） */
     if (device_init() == 0) {
         board_pwm_register();
@@ -59,6 +63,9 @@ int main(void)
 
     /* 步进电机（STEP=PA4 / DIR=PA5），注册 stepper 命令 */
     board_stepper_init();
+
+    /* date 命令：读写系统时间（ros_rtc，硬件优先，否则 1Hz 软件计时） */
+    (void)datetime_cmd_register();
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

@@ -110,6 +110,7 @@ void ut_dynamic(void);
 void ut_io(void);
 void ut_sbuf(void);
 void ut_msgq(void);
+void ut_rtc(void);
 
 /* 测试入口：依次运行各模块套件，全部通过返回 0，否则返回 1。 */
 int main(void)
@@ -195,6 +196,7 @@ int main(void)
     ut_io();
     ut_sbuf();
     ut_msgq();
+    ut_rtc();
 
     printf("\n=== 结果：%d 项检查，%d 项失败 ===\n", tf_checks, tf_failures);
     return (tf_failures == 0) ? 0 : 1;

@@ -25,6 +25,7 @@
  *   ros_isr.h     中断上下文 API                         ros_port.h    移植层接口
  *   ros_mem.h     内存分配
  *   ros_trace.h   事件跟踪宏    ros_types.h   公共常量/状态码/前向声明
+ *   ros_rtc.h     实时时钟/Unix 时间
  *   ros_version.h 版本/构建时间/编译配置/许可证
  *   ros_config.h  编译期裁剪开关
  *
@@ -52,6 +53,7 @@
 #include "ros_stats.h"
 #include "ros_isr.h"
 #include "ros_trace.h"
+#include "ros_rtc.h"
 #include "ros_version.h"
 #include "ros_port.h"
 
