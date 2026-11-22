@@ -46,8 +46,8 @@ static at_request_t s_req;
 /* 是否有事务正在等待响应 */
 static bool s_req_pending = false;
 
-/* 响应累积缓冲：多行以 '\n' 连接，始终以 '\0' 结尾；由 ros_mem 分配 */
-static char *s_response = NULL;
+/* 响应累积缓冲：多行以 '\n' 连接，始终以 '\0' 结尾；静态分配避免依赖堆 */
+static char s_response[AT_RESPONSE_SIZE];
 /* 已写入响应缓冲的字节数（不含结尾 '\0'） */
 static uint32_t s_response_len;
 
@@ -102,22 +102,11 @@ static void at_tx_command(const char *cmd)
 
 /* ---- 响应缓冲 ---- */
 
-/* 确保响应缓冲已分配；失败返回 false（再次调用会重试） */
-static bool at_response_ensure(void)
-{
-    if (s_response == NULL) {
-        s_response = (char *)ros_mem_calloc(AT_RESPONSE_SIZE, sizeof(char));
-    }
-    return (s_response != NULL);
-}
-
 /* 清空响应缓冲并写入结尾 '\0' */
 static void at_response_reset(void)
 {
     s_response_len = 0;
-    if (s_response != NULL) {
-        s_response[0] = '\0';
-    }
+    s_response[0] = '\0';
 }
 
 /*
@@ -131,9 +120,6 @@ static void at_response_append(const char *line)
 {
     uint32_t l = (uint32_t)strlen(line);
 
-    if (s_response == NULL) {
-        return;   /* 缓冲不可用：丢弃数据 */
-    }
     if (s_response_len > 0 && (s_response_len + 1) < AT_RESPONSE_SIZE) {
         s_response[s_response_len++] = '\n';
     }
@@ -160,7 +146,7 @@ static void at_complete(at_result_e result)
     s_result = result;
 
     if (s_req.callback != NULL) {
-        const char *response = (s_response != NULL) ? s_response : "";
+        const char *response = s_response;
         s_req.callback(result, response, s_response_len, s_req.user);
     }
     s_req_pending = false;
@@ -264,13 +250,6 @@ int at_init(const at_config_t *config)
 {
     if (config == NULL || config->uart == NULL) {
         return -1;
-    }
-    /* 重复初始化时先释放旧响应缓冲，再重新分配 */
-    ros_mem_free(s_response);
-    s_response = NULL;
-    if (!at_response_ensure()) {
-        s_inited = false;
-        return -1;   /* 内存分配失败 */
     }
     s_cfg = *config;
     s_inited = true;
@@ -537,8 +516,5 @@ at_state_e at_get_state(void)
  */
 const char *at_get_response(void)
 {
-    if (!at_response_ensure()) {
-        return NULL;   /* 内存分配失败 */
-    }
     return s_response;
 }

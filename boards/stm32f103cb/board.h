@@ -33,6 +33,13 @@ void board_pwm_register(void);
 /* 初始化 USART1(PA9) 并把 trace 输出注册到该串口 */
 void board_trace_start(uint32_t baud);
 
+/* USART2(PA2/PA3)：ML307 4G 模组 AT 通道；首次调用时初始化硬件 */
+struct hal_uart;
+struct hal_uart *board_uart2(void);
+
+/* 初始化 ML307（UART2）并注册 mqtt 测试命令；模块未接时命令返回失败 */
+void board_net_init(void);
+
 /* 注册板级 RTC 后端：优先 LSE 32.768kHz 硬件 RTC，失败退回 1Hz 软件计时 */
 void board_rtc_init(void);
 

@@ -68,6 +68,9 @@ int main(void)
     /* date 命令：读写系统时间（ros_rtc，硬件优先，否则 1Hz 软件计时） */
     (void)datetime_cmd_register();
 
+    /* ML307（UART2）与 mqtt 测试命令 */
+    board_net_init();
+
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));
     if (rc != ROS_OK) {

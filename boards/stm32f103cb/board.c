@@ -13,6 +13,7 @@
 #include "device.h"
 #include "fan.h"
 #include "stepper.h"
+#include "ros.h"
 
 #include "stm32f10x.h"
 
@@ -244,5 +245,23 @@ void board_stepper_init(void)
     if (stepper_init(&s_stepper, &s_stepper_ops) == 0) {
         /* 默认加减速：最高 400 步/s，起停 100，加速度 800 步/s² */
         (void)stepper_set_ramp(&s_stepper, 400U, 100U, 800U, 800U);
+    }
+}
+
+/* ==========================================================================
+ * HAL 毫秒时基（AT/ML307 等驱动使用；ROS_TICK_HZ=1000，tick 即毫秒）
+ * ========================================================================== */
+
+uint32_t hal_tick_get(void)
+{
+    return ros_tick_get();
+}
+
+void hal_delay_ms(uint32_t ms)
+{
+    uint32_t start = hal_tick_get();
+
+    while ((uint32_t)(hal_tick_get() - start) < ms) {
+        /* 忙等，sys 由 SysTick 中断推进 */
     }
 }

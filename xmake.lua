@@ -119,7 +119,7 @@ local function ros_includedirs()
     add_includedirs(
         "src", "hal", "vendor", "vendor/cjson",
         "vendor/tlsf", "vendor/arena",
-        "modules",
+        "modules", "modules/ml307",
         "drivers", "platforms", "platforms/pc", "platforms/stm32"
     )
     for _, dir in ipairs(os.dirs("components/*")) do
@@ -284,10 +284,11 @@ if not is_plat("cross") then
         ros_host_common(false)
     target_end()
 
-    -- 单元测试：保留框架内嵌的 *_test.c（src/test_main.c 会调用其 ut_xxx）
+    -- 单元测试：保留框架内嵌的 *_test.c，由 boards/pc/test.c 汇总调用 ut_xxx
     target("ros-test")
         set_kind("binary")
         ros_host_common(true)
+        add_files("boards/pc/test.c")
         ros_host_links()
     target_end()
 
@@ -296,7 +297,7 @@ if not is_plat("cross") then
         set_kind("binary")
         ros_host_common(false)
         add_defines("ROS_PC_REAL_DELAY")
-        add_files("examples/demo.c")
+        add_files("boards/pc/demo.c")
         ros_host_links()
     target_end()
 
@@ -307,7 +308,7 @@ if not is_plat("cross") then
         add_defines("SHELL_SHELL_STACK=8192", "SHELL_JOB_STACK=4096")
         -- 交互演示：模拟时间跟随墙钟（1 tick = 1ms），便于观察 ps/state 变化
         add_defines("ROS_PC_REAL_TIME")
-        add_files("examples/shell_demo.c")
+        add_files("boards/pc/shell_demo.c")
         ros_host_links()
     target_end()
 
