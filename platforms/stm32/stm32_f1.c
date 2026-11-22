@@ -5450,6 +5450,62 @@ int hal_pwm_set_polarity(hal_pwm_t *handle, hal_pwm_polarity_e polarity)
     return HAL_OK;
 }
 
+/* ---------------------------- TIM（最小实现） ----------------------------
+ * 无 Cube HAL 的构建不提供硬件定时器/中断加减速：
+ * 步进电机请使用软件延时（不调用 stepper_set_timer）。
+ * 这些接口存在只为满足链接，运行时返回 HAL_NOT_SUPPORTED。
+ */
+int hal_tim_init(hal_tim_t *handle, const hal_tim_config_t *config)
+{
+    (void)handle;
+    (void)config;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_deinit(hal_tim_t *handle)
+{
+    (void)handle;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_start(hal_tim_t *handle)
+{
+    (void)handle;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_stop(hal_tim_t *handle)
+{
+    (void)handle;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_start_it(hal_tim_t *handle)
+{
+    (void)handle;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_stop_it(hal_tim_t *handle)
+{
+    (void)handle;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_set_period(hal_tim_t *handle, uint32_t period)
+{
+    (void)handle;
+    (void)period;
+    return HAL_NOT_SUPPORTED;
+}
+
+int hal_tim_set_counter(hal_tim_t *handle, uint32_t counter)
+{
+    (void)handle;
+    (void)counter;
+    return HAL_NOT_SUPPORTED;
+}
+
 #endif /* ROS_F1_HAVE_CUBE */
 
 #endif /* ROS_STM32_F1 */

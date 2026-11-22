@@ -57,14 +57,16 @@ static int fan_cmd_handler(const rs_cmd_ctx_t *ctx)
     fan = s_fans[id];
 
     if (!rs_args_get_uint(ctx->parsed, 1U, &duty)) {
-        LOG_I("fan", "fan[%u] duty=%u rpm=%u", (unsigned)id,
-              (unsigned)fan->duty, (unsigned)fan->rpm);
+        ros_printf("fan[%u] duty=%u rpm=%u\n", (unsigned)id,
+                   (unsigned)fan->duty, (unsigned)fan->rpm);
         return 0;
     }
     if (fan_set_speed(fan, (uint16_t)duty) != 0) {
         ros_printf("fan[%u] set duty failed\n", (unsigned)id);
         return -1;
     }
+    ros_printf("fan[%u] duty=%u rpm=%u\n", (unsigned)id,
+               (unsigned)fan->duty, (unsigned)fan->rpm);
     return 0;
 }
 
@@ -74,7 +76,8 @@ static const rs_args_t s_fan_args[] = {
 };
 
 static const rs_cmd_t s_fan_def = {
-    "fan", "fan duty / rpm", NULL, NULL, s_fan_args, 2U, fan_cmd_handler, NULL
+    "fan", "fan duty / rpm", NULL, NULL, s_fan_args, 2U, fan_cmd_handler, NULL,
+    NULL, NULL, NULL
 };
 
 static void fan_cmd_add(fan_t *fan)

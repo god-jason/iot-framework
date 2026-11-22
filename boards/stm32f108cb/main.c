@@ -54,7 +54,11 @@ int main(void)
     /* 注册 gpio / pwm 命令，并由板级注册 pwm0（TIM2_CH1 / PA0） */
     if (device_init() == 0) {
         board_pwm_register();
+        board_fan_init();          /* 风扇复用 pwm0（TIM2_CH1 / PA0） */
     }
+
+    /* 步进电机（STEP=PA4 / DIR=PA5），注册 stepper 命令 */
+    board_stepper_init();
 
     rc = ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,
                          s_blink_stack, sizeof(s_blink_stack));

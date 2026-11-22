@@ -66,12 +66,12 @@ static int stepper_cmd_handler(const rs_cmd_ctx_t *ctx)
         int32_t pos = 0;
 
         (void)stepper_get_position(st, &pos);
-        LOG_I("stepper", "stepper[%u] pos=%ld", (unsigned)id, (long)pos);
+        ros_printf("stepper[%u] pos=%ld\n", (unsigned)id, (long)pos);
         return 0;
     }
     if (str_icmp(action, "info")) {
-        LOG_I("stepper", "stepper[%u] pos=%ld dir=%u", (unsigned)id,
-              (long)st->position, (unsigned)st->direction);
+        ros_printf("stepper[%u] pos=%ld dir=%u\n", (unsigned)id,
+                   (long)st->position, (unsigned)st->direction);
         return 0;
     }
     if (value == NULL || !str_parse_int(value, &v)) {

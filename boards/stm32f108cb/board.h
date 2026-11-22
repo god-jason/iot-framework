@@ -33,6 +33,12 @@ void board_pwm_register(void);
 /* 初始化 USART1(PA9) 并把 trace 输出注册到该串口 */
 void board_trace_start(uint32_t baud);
 
+/* 风扇：复用 pwm0（TIM2_CH1 / PA0）输出，25kHz；注册 roshell 的 fan 命令 */
+void board_fan_init(void);
+
+/* 步进电机：STEP=PA4，DIR=PA5；注册 roshell 的 stepper 命令 */
+void board_stepper_init(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -11,6 +11,8 @@
 
 #include "board.h"
 #include "device.h"
+#include "fan.h"
+#include "stepper.h"
 
 #include "stm32f10x.h"
 
@@ -136,5 +138,112 @@ void board_pwm_register(void)
         def->pwm.config.duty = 0U;
         def->pwm.config.polarity = HAL_PWM_POLARITY_HIGH;
         (void)device_pwm_bind(def->name, &def->pwm);
+    }
+}
+
+/* ---------------------------- 风扇 ---------------------------- */
+
+/* 风扇调速复用 pwm0（TIM2_CH1 / PA0），25kHz 为常见 4 线风扇 PWM 频率。
+ * 档位 0 停止输出；1~1000 映射到 0.1%~100% 占空比。
+ * 注意：该通道同时暴露为 pwm0，用 pwm 命令改它会影响风扇输出。 */
+#define FAN_PWM_SLOT  0U
+#define FAN_PWM_FREQ  25000U
+
+static fan_t s_fan;
+
+static int fan_set_duty(void *ctx, uint16_t duty)
+{
+    hal_pwm_t *pwm = (hal_pwm_t *)ctx;
+
+    if (duty == 0U) {
+        if (pwm->base.state == HAL_STATE_RESET) {
+            return 0;                               /* 未初始化：无需停止 */
+        }
+        (void)hal_pwm_set_duty(pwm, 0U);            /* 同步配置里的占空比 */
+        return (hal_pwm_stop(pwm) == HAL_OK) ? 0 : -1;
+    }
+    if (pwm->base.state == HAL_STATE_RESET) {
+        pwm->config.frequency = FAN_PWM_FREQ;
+        pwm->config.duty = 0U;
+        if (hal_pwm_init(pwm, &pwm->config) != HAL_OK) {
+            return -1;
+        }
+    }
+    if (hal_pwm_set_duty(pwm, (uint32_t)duty * 10U) != HAL_OK) {
+        return -1;
+    }
+    return (hal_pwm_start(pwm) == HAL_OK) ? 0 : -1;
+}
+
+void board_fan_init(void)
+{
+    static const fan_ops_t ops = { fan_set_duty, &s_pwms[FAN_PWM_SLOT].pwm };
+
+    (void)fan_init(&s_fan, &ops);
+}
+
+/* ---------------------------- 步进电机 ---------------------------- */
+
+#define STEPPER_STEP_PIN   HAL_PIN(0, 4)    /* PA4: STEP 脉冲 */
+#define STEPPER_DIR_PIN    HAL_PIN(0, 5)    /* PA5: DIR 方向 */
+
+static stepper_t s_stepper;
+
+/* DWT 周期计数器用于微秒延时（SysTick 已被内核占用） */
+static void dwt_init(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0U;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+static void dwt_delay_us(uint32_t us)
+{
+    uint32_t start = DWT->CYCCNT;
+    uint32_t cycles = us * (SystemCoreClock / 1000000U);
+
+    while ((DWT->CYCCNT - start) < cycles) {
+    }
+}
+
+static int stepper_set_dir(void *ctx, uint8_t dir)
+{
+    (void)ctx;
+    return (hal_gpio_write(STEPPER_DIR_PIN,
+                           (dir != 0U) ? HAL_GPIO_HIGH : HAL_GPIO_LOW) == HAL_OK)
+               ? 0 : -1;
+}
+
+static void stepper_delay_us(void *ctx, uint32_t us)
+{
+    (void)ctx;
+    dwt_delay_us(us);
+}
+
+static int stepper_step(void *ctx)
+{
+    (void)ctx;
+    (void)hal_gpio_write(STEPPER_STEP_PIN, HAL_GPIO_HIGH);
+    dwt_delay_us(2U);                               /* 2us 脉冲宽度 */
+    (void)hal_gpio_write(STEPPER_STEP_PIN, HAL_GPIO_LOW);
+    return 0;
+}
+
+static const stepper_ops_t s_stepper_ops = {
+    .set_dir = stepper_set_dir,
+    .step = stepper_step,
+    .delay_us = stepper_delay_us,
+    .ctx = NULL
+};
+
+void board_stepper_init(void)
+{
+    dwt_init();
+    (void)hal_gpio_config_output(STEPPER_STEP_PIN, HAL_GPIO_LOW);
+    (void)hal_gpio_config_output(STEPPER_DIR_PIN, HAL_GPIO_LOW);
+
+    if (stepper_init(&s_stepper, &s_stepper_ops) == 0) {
+        /* 默认加减速：最高 400 步/s，起停 100，加速度 800 步/s² */
+        (void)stepper_set_ramp(&s_stepper, 400U, 100U, 800U, 800U);
     }
 }
