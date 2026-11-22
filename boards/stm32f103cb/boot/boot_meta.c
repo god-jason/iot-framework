@@ -1,5 +1,5 @@
 /*
- * boot_meta.c - STM32F103 升级进度日志、CRC32、Flash 驱动与系统日志
+ * boot_meta.c - STM32F103 Boot Meta（数据 meta + 升级日志）、CRC32、Flash 与错误日志
  *
  * 单 App 槽方案：升级包写入 OTA 区后，Bootloader 按进度日志分块拷入
  * App 区，掉电后从最后一条记录继续，避免半写入的 App 被启动。
@@ -99,7 +99,7 @@ int boot_flash_erase(uint32_t addr, uint32_t len)
     uint32_t count;
     int rc = 0;
 
-    if (len == 0U || addr < BOOT_CONFIG_BASE0 ||
+    if (len == 0U || addr < BOOT_META_BASE ||
         (addr % BOOT_FLASH_PAGE) != 0U) {
         return -1;
     }
@@ -137,7 +137,7 @@ int boot_flash_write(uint32_t addr, const void *data, uint32_t len)
     uint32_t i;
     int rc = 0;
 
-    if (data == NULL || len == 0U || addr < BOOT_CONFIG_BASE0 ||
+    if (data == NULL || len == 0U || addr < BOOT_META_BASE ||
         (addr & 1U) != 0U) {
         return -1;
     }
@@ -168,16 +168,16 @@ int boot_flash_write(uint32_t addr, const void *data, uint32_t len)
 }
 
 /* ==========================================================================
- * 三、升级进度日志（追加写，掉电后从最后一条记录继续）
+ * 三、Boot Meta（数据 meta + 追加升级日志，掉电后从最后一条记录继续）
  * ========================================================================== */
 
-static const boot_ota_rec_t *ota_record(uint32_t index)
+static const boot_meta_rec_t *meta_record(uint32_t index)
 {
-    return (const boot_ota_rec_t *)(uintptr_t)
-           (BOOT_OTA_LOG_BASE + index * BOOT_OTA_LOG_SLOT);
+    return (const boot_meta_rec_t *)(uintptr_t)
+           (BOOT_META_BASE + index * BOOT_META_SLOT);
 }
 
-static void ota_rec_copy(boot_ota_rec_t *dst, const boot_ota_rec_t *src)
+static void meta_rec_copy(boot_meta_rec_t *dst, const boot_meta_rec_t *src)
 {
     const uint8_t *s = (const uint8_t *)src;
     uint8_t *d = (uint8_t *)dst;
@@ -188,31 +188,31 @@ static void ota_rec_copy(boot_ota_rec_t *dst, const boot_ota_rec_t *src)
     }
 }
 
-bool boot_ota_rec_valid(const boot_ota_rec_t *r)
+bool boot_meta_rec_valid(const boot_meta_rec_t *r)
 {
-    if (r->magic != BOOT_OTA_LOG_MAGIC) {
+    if (r->magic != BOOT_META_MAGIC) {
         return false;
     }
     if (r->rec_crc != boot_crc32(r, (uint32_t)sizeof(*r) - 4U)) {
         return false;
     }
-    return (r->state == BOOT_OTA_STATE_READY) ||
-           (r->state == BOOT_OTA_STATE_APPLYING);
+    return (r->state == BOOT_META_STATE_READY) ||
+           (r->state == BOOT_META_STATE_APPLYING);
 }
 
-/* 扫描升级日志区，取 seq 最大且 CRC 有效的记录 */
-bool boot_ota_load(boot_ota_rec_t *r)
+/* 扫描 Boot Meta 区，取 seq 最大且 CRC 有效的记录 */
+bool boot_meta_rec_load(boot_meta_rec_t *r)
 {
-    const boot_ota_rec_t *best = NULL;
+    const boot_meta_rec_t *best = NULL;
     uint32_t i;
 
     if (r == NULL) {
         return false;
     }
-    for (i = 0U; i < BOOT_OTA_LOG_RECORDS; i++) {
-        const boot_ota_rec_t *p = ota_record(i);
+    for (i = 0U; i < BOOT_META_RECORDS; i++) {
+        const boot_meta_rec_t *p = meta_record(i);
 
-        if (!boot_ota_rec_valid(p)) {
+        if (!boot_meta_rec_valid(p)) {
             continue;
         }
         if (best == NULL || (int32_t)(p->seq - best->seq) > 0) {
@@ -222,12 +222,12 @@ bool boot_ota_load(boot_ota_rec_t *r)
     if (best == NULL) {
         return false;
     }
-    ota_rec_copy(r, best);
+    meta_rec_copy(r, best);
     return true;
 }
 
 /* 追加一条记录；日志区写满时整区擦除后写入首条 */
-int boot_ota_save(boot_ota_rec_t *r)
+int boot_meta_rec_save(boot_meta_rec_t *r)
 {
     const uint8_t *src;
     const uint8_t *verify;
@@ -237,21 +237,21 @@ int boot_ota_save(boot_ota_rec_t *r)
     if (r == NULL) {
         return -1;
     }
-    r->magic = BOOT_OTA_LOG_MAGIC;
+    r->magic = BOOT_META_MAGIC;
     r->seq++;
     r->rec_crc = boot_crc32(r, (uint32_t)sizeof(*r) - 4U);
 
-    for (i = 0U; i < BOOT_OTA_LOG_RECORDS; i++) {
-        if (ota_record(i)->magic != BOOT_OTA_LOG_MAGIC) {
-            addr = BOOT_OTA_LOG_BASE + i * BOOT_OTA_LOG_SLOT;
+    for (i = 0U; i < BOOT_META_RECORDS; i++) {
+        if (meta_record(i)->magic != BOOT_META_MAGIC) {
+            addr = BOOT_META_BASE + i * BOOT_META_SLOT;
             break;
         }
     }
     if (addr == 0U) {
-        if (boot_flash_erase(BOOT_OTA_LOG_BASE, BOOT_OTA_LOG_SIZE) != 0) {
+        if (boot_flash_erase(BOOT_META_BASE, BOOT_META_SIZE) != 0) {
             return -1;
         }
-        addr = BOOT_OTA_LOG_BASE;
+        addr = BOOT_META_BASE;
     }
     if (boot_flash_write(addr, r, (uint32_t)sizeof(*r)) != 0) {
         return -1;
@@ -268,7 +268,7 @@ int boot_ota_save(boot_ota_rec_t *r)
 }
 
 /* ==========================================================================
- * 五、系统日志（BOOT_LOG_BASE 起 4KB 文本，追加写入，带 Unix 时间）
+ * 五、错误日志（BOOT_LOG_BASE 起 4KB 文本，追加写入，带 Unix 时间）
  *
  * 每条格式：[<unix>] <text>\r\n
  * 空间不足时整区擦除后从头部重新追加；掉电最多丢失正在写的一行。

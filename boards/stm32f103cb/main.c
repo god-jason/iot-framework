@@ -20,9 +20,9 @@
 #include "boot_meta.h"
 #include "ros_rtc.h"
 
-/* 本固件运行在 App 区，向量表基址固定为 0x08008000 */
+/* 本固件运行在 App 区，向量表基址固定为 0x08006000 */
 #ifndef APP_VECTOR_BASE
-#define APP_VECTOR_BASE 0x08008000U
+#define APP_VECTOR_BASE 0x08006000U
 #endif
 
 static ros_task_t s_blink_task;
@@ -87,7 +87,7 @@ int main(void)
 }
 
 /*
- * HardFault：提取异常栈帧（PC/LR 等）并带 Unix 时间追加到系统日志，
+ * HardFault：提取异常栈帧（PC/LR 等）并带 Unix 时间追加到错误日志，
  * 随后复位。单 App 槽方案不做回滚。
  */
 void hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp);

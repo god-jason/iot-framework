@@ -1,21 +1,21 @@
 /*
- * bootloader.c - STM32F1（128KB Flash）单 App 槽 + OTA 进度日志 Bootloader
+ * bootloader.c - STM32F1（128KB Flash）单 App 槽 Bootloader
  *
  * 分区（详见 partition.h）：
- *   Boot 8K / 配置 4K×2 / 系统日志 4K / 升级日志 4K / App 52K / 升级包 52K
+ *   Boot 8K / Boot Meta 4K / 配置 4K×2 / 错误日志 4K / App 52K / 升级包 52K
  *
  * 升级流程：
- *   1. 上位机经 UART1 发送新固件（按 App 区 0x08008000 链接），Bootloader
- *      写入升级包区，校验 CRC 后在升级日志区追加 READY 记录（升级有效标识），
- *      随后复位；
- *   2. 下次启动读取最后一条进度记录：READY 则先擦除 App 区并置 APPLYING，
+ *   1. 上位机经 UART1 发送新固件（按 App 区 0x08006000 链接），Bootloader
+ *      写入升级包区，校验 CRC 后在 Boot Meta 区追加 READY 记录（升级有效
+ *      标识），随后复位；
+ *   2. 下次启动读取最后一条记录：READY 则先擦除 App 区并置 APPLYING，
  *      再按 1KB 分块把升级包拷入 App 区；
  *   3. 每拷完一块追加一条进度记录（已写字节数）；掉电重启后从该偏移继续，
  *      保证 App 区最终是完整镜像（不会启动半写入的程序）；
- *   4. 全部写完并整段 CRC 校验通过后，擦除升级日志分区（清除有效标识），
+ *   4. 全部写完并整段 CRC 校验通过后，擦除 Boot Meta 区（清除有效标识），
  *      再启动 App。
  *
- * 不再使用 A/B 双槽，也没有回滚：唯一保障是“进度日志 + CRC 校验”。
+ * 不再使用 A/B 双槽，也没有回滚：唯一保障是“Boot Meta + 进度记录 + CRC 校验”。
  *
  * 不依赖 HAL / RTOS / libc，限制在 Flash 前 8KB 内。
  */
@@ -144,7 +144,7 @@ static void uart_put_dec(uint32_t v)
     }
 }
 
-/* 打印系统日志尾部（最多 1KB） */
+/* 打印错误日志尾部（最多 1KB） */
 static void print_system_log(void)
 {
     const uint8_t *p = (const uint8_t *)(uintptr_t)BOOT_LOG_BASE;
@@ -166,7 +166,7 @@ static void print_system_log(void)
         start++;
     }
 
-    uart_puts("\r\n[BOOT] system log (tail):\r\n");
+    uart_puts("\r\n[BOOT] error log (tail):\r\n");
     for (i = start; i < end; i++) {
         uint8_t c = p[i];
 
@@ -224,7 +224,7 @@ static bool image_valid(uint32_t base)
     return (pc >= base) && (pc < (base + BOOT_APP_SIZE));
 }
 
-static bool ota_image_crc_ok(const boot_ota_rec_t *r)
+static bool ota_image_crc_ok(const boot_meta_rec_t *r)
 {
     if (r->len == 0U || r->len > BOOT_OTA_SIZE) {
         return false;
@@ -246,25 +246,45 @@ static int copy_chunk(uint32_t off, uint32_t n)
  * 把升级包写入 App 区。
  * READY：先整区擦除 App 区，再置 APPLYING/offset=0；
  * APPLYING：从 offset 继续拷贝（掉电恢复点）。
- * 每块拷完保存进度；全部完成后校验整段 CRC，成功则擦除升级日志分区。
+ * 每块拷完保存进度；全部完成后校验整段 CRC，成功则擦除 Boot Meta 区。
  */
-static bool ota_apply(boot_ota_rec_t *r)
+/* 应用失败：回到 READY，下次启动整区擦除后重来 */
+static bool ota_retry_later(boot_meta_rec_t *r)
+{
+    r->state = BOOT_META_STATE_READY;
+    r->offset = 0U;
+    (void)boot_meta_rec_save(r);
+    return false;
+}
+
+static bool ota_apply(boot_meta_rec_t *r)
 {
     uint32_t attempt;
     uint32_t off;
     uint32_t n;
 
     for (attempt = 0U; attempt < OTA_APPLY_RETRY; attempt++) {
-        if (r->state != BOOT_OTA_STATE_APPLYING || r->offset > r->len ||
+        if (r->state != BOOT_META_STATE_APPLYING || r->offset > r->len ||
             (r->offset % BOOT_FLASH_PAGE) != 0U) {
             uart_puts("[BOOT] erase app area\r\n");
             if (boot_flash_erase(BOOT_APP_BASE, BOOT_APP_SIZE) != 0) {
-                return false;
+                return ota_retry_later(r);
             }
-            r->state = BOOT_OTA_STATE_APPLYING;
+            r->state = BOOT_META_STATE_APPLYING;
             r->offset = 0U;
-            if (boot_ota_save(r) != 0) {
-                return false;
+            if (boot_meta_rec_save(r) != 0) {
+                return ota_retry_later(r);
+            }
+        } else if (r->offset != 0U && r->offset < BOOT_APP_SIZE) {
+            /*
+             * 掉电时最后一块可能只写了一部分，而进度记录还停在上一个块：
+             * 先把 offset 之后的页全部擦除，再续写，避免对非擦除态编程
+             * （F1 对非 0xFFFF 半字编程会置 PGERR）。
+             */
+            uart_puts("[BOOT] erase unconfirmed tail\r\n");
+            if (boot_flash_erase(BOOT_APP_BASE + r->offset,
+                                 BOOT_APP_SIZE - r->offset) != 0) {
+                return ota_retry_later(r);
             }
         }
 
@@ -277,12 +297,12 @@ static bool ota_apply(boot_ota_rec_t *r)
             }
             if (copy_chunk(off, n) != 0) {
                 uart_puts("\r\n[BOOT] copy failed\r\n");
-                return false;
+                return ota_retry_later(r);
             }
             off += n;
             r->offset = off;
-            if (boot_ota_save(r) != 0) {
-                return false;
+            if (boot_meta_rec_save(r) != 0) {
+                return ota_retry_later(r);
             }
             if ((off % (8U * 1024U)) == 0U) {
                 uart_putc('.');
@@ -291,16 +311,16 @@ static bool ota_apply(boot_ota_rec_t *r)
         uart_puts("\r\n");
 
         if (boot_crc32((const void *)(uintptr_t)BOOT_APP_BASE, r->len) == r->crc) {
-            (void)boot_flash_erase(BOOT_OTA_LOG_BASE, BOOT_OTA_LOG_SIZE);
+            (void)boot_flash_erase(BOOT_META_BASE, BOOT_META_SIZE);
             uart_puts("[BOOT] upgrade complete\r\n");
             return true;
         }
         uart_puts("[BOOT] verify failed, retry\r\n");
-        r->state = BOOT_OTA_STATE_READY;
+        r->state = BOOT_META_STATE_READY;
         r->offset = 0U;
-        (void)boot_ota_save(r);
+        (void)boot_meta_rec_save(r);
     }
-    return false;
+    return ota_retry_later(r);
 }
 
 static void jump_to(uint32_t base)
@@ -336,7 +356,7 @@ static void do_update(void)
     uint8_t buf[64];
     uint32_t n = 0U;
     uint32_t next_dot = 4096U;
-    boot_ota_rec_t rec;
+    boot_meta_rec_t rec;
 
     uart_puts("[BOOT] OTA request, target area OTA\r\n");
     uart_putc(BOOT_ACK_CHAR);
@@ -354,7 +374,7 @@ static void do_update(void)
     uart_puts("\r\n");
 
     /* 先清掉旧的升级标识，避免旧记录指向正在擦除的镜像 */
-    (void)boot_flash_erase(BOOT_OTA_LOG_BASE, BOOT_OTA_LOG_SIZE);
+    (void)boot_flash_erase(BOOT_META_BASE, BOOT_META_SIZE);
     if (boot_flash_erase(BOOT_OTA_BASE, len) != 0) {
         uart_puts("[BOOT] OTA error: erase failed\r\n");
         uart_putc(BOOT_NAK_CHAR);
@@ -396,16 +416,16 @@ static void do_update(void)
     }
 
     /* 升级有效标识：READY 记录，下次启动据此开始/继续写入 App 区 */
-    rec.magic = BOOT_OTA_LOG_MAGIC;
+    rec.magic = BOOT_META_MAGIC;
     rec.seq = 0U;
-    rec.state = BOOT_OTA_STATE_READY;
+    rec.state = BOOT_META_STATE_READY;
     rec.offset = 0U;
     rec.len = len;
     rec.crc = crc;
     rec.reserved = 0U;
     rec.rec_crc = 0U;
-    if (boot_ota_save(&rec) != 0) {
-        uart_puts("[BOOT] OTA error: log save\r\n");
+    if (boot_meta_rec_save(&rec) != 0) {
+        uart_puts("[BOOT] OTA error: meta save\r\n");
         uart_putc(BOOT_NAK_CHAR);
         return;
     }
@@ -421,7 +441,7 @@ static void do_update(void)
 
 int main(void)
 {
-    boot_ota_rec_t rec;
+    boot_meta_rec_t rec;
 
     (void)SysTick_Config(8000U);                    /* 8MHz / 1000 = 1ms */
     uart_init();
@@ -448,8 +468,8 @@ int main(void)
     }
 
     /* 有升级进度记录：升级包完整则继续/开始写入 App 区 */
-    if (boot_ota_load(&rec)) {
-        uart_puts("[BOOT] OTA log: state=");
+    if (boot_meta_rec_load(&rec)) {
+        uart_puts("[BOOT] boot meta: state=");
         uart_put_dec(rec.state);
         uart_puts(" offset=");
         uart_put_hex32(rec.offset);
@@ -459,7 +479,7 @@ int main(void)
 
         if (!ota_image_crc_ok(&rec)) {
             uart_puts("[BOOT] OTA image invalid, clear flag\r\n");
-            (void)boot_flash_erase(BOOT_OTA_LOG_BASE, BOOT_OTA_LOG_SIZE);
+            (void)boot_flash_erase(BOOT_META_BASE, BOOT_META_SIZE);
         } else if (!ota_apply(&rec)) {
             uart_puts("[BOOT] apply failed, wait OTA\r\n");
             for (;;) {

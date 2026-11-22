@@ -7,12 +7,12 @@
 
 输入二选一：
     --dump <file>   日志区原始 Flash 转储（二进制）：
-                    F1 0x08006000 起 4KB；F4 0x08010000 起 64KB
+                    F1 0x08005000 起 4KB；F4 0x08010000 起 64KB
     位置参数        文本文件（串口捕获的 Bootloader 输出或日志文本），省略读 stdin
 
 典型用法：
     # 1) 从板子上导出日志区（F1 4KB / F4 64KB）
-    ST-LINK_CLI.exe -c SWD HotPlug -Dump 0x08006000 0x1000 crashlog.bin
+    ST-LINK_CLI.exe -c SWD HotPlug -Dump 0x08005000 0x1000 crashlog.bin
     ST-LINK_CLI.exe -c SWD HotPlug -Dump 0x08010000 0x10000 crashlog_f4.bin
     python tools/crash_log.py --dump crashlog.bin
 
@@ -142,7 +142,7 @@ def main() -> int:
         description="解析 A/B OTA 崩溃日志并用 ELF 还原崩溃现场",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ap.add_argument("text", nargs="?", help="日志文本文件；省略则读 stdin")
-    ap.add_argument("--dump", help="日志区原始 Flash 转储（F1 0x08006000/4KB，F4 0x08010000/64KB）")
+    ap.add_argument("--dump", help="日志区原始 Flash 转储（F1 0x08005000/4KB，F4 0x08010000/64KB）")
     ap.add_argument("--elf", help="固件 ELF；默认 build/cross/arm/release/ros-fw-f103cb.elf")
     ap.add_argument("--addr2line", help="arm-none-eabi-addr2line 路径")
     ap.add_argument("--code-range", default="0x08000000-0x10000000",

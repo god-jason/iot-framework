@@ -2,11 +2,11 @@
  * bootloader.c - STM32F407VE（512KB Flash）A/B/C OTA Bootloader
  *
  * 分区（详见 partition.h）：
- *   S0 Bootloader / S1 Boot Meta / S2-S3 配置 /
- *   S4 系统日志 / S5 App 主程序 / S6 App 备份 / S7 App 升级包
+ *   S0 Bootloader / S1 Boot Meta（数据 meta + 升级日志）/ S2-S3 配置 /
+ *   S4 错误日志 / S5 App 主程序 / S6 App 备份 / S7 App 升级包
  *
  * 启动流程：
- *   1. 打印系统日志尾部；
+ *   1. 打印错误日志尾部；
  *   2. C 区有有效升级包时：A -> B 备份，C -> A，擦除 C，进入试运行；
  *   3. 试运行期崩溃次数超限或启动次数用尽：B -> A 回滚，运行旧程序；
  *   4. A 区校验通过后跳转，App 初始化完成调用 boot_confirm() 确认。
@@ -145,7 +145,7 @@ static void uart_put_dec(uint32_t v)
     }
 }
 
-/* 打印系统日志尾部（最多 1KB，避免 64KB 全文打印拖慢启动） */
+/* 打印错误日志尾部（最多 1KB，避免 64KB 全文打印拖慢启动） */
 static void print_crash_log(void)
 {
     const uint8_t *p = (const uint8_t *)(uintptr_t)BOOT_LOG_BASE;
@@ -167,7 +167,7 @@ static void print_crash_log(void)
         start++;
     }
 
-    uart_puts("\r\n[BOOT] system log (tail):\r\n");
+    uart_puts("\r\n[BOOT] error log (tail):\r\n");
     for (i = start; i < end; i++) {
         uint8_t c = p[i];
 

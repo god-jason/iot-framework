@@ -1,16 +1,16 @@
 /*
  * stm32f103cb.ld - STM32F1 128KB Flash 板 App 固件链接脚本（GNU ld）
  *
- * App 区：FLASH 0x08008000 起 52KB；SRAM 20KB @ 0x20000000。
- * Bootloader 占用 0x08000000..0x08001FFF（8KB），配置/日志在前部，
- * 升级包区在 0x08015000（52KB）。App 启动时把 SCB->VTOR 指向 App 区基址。
+ * App 区：FLASH 0x08006000 起 52KB；SRAM 20KB @ 0x20000000。
+ * Bootloader 占 0x08000000..0x08001FFF（8KB），Boot Meta/配置/错误日志在前部，
+ * 升级包区在 0x08013000（52KB）。App 启动时把 SCB->VTOR 指向 App 区基址。
  */
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08008000, LENGTH = 52K
+    FLASH (rx)  : ORIGIN = 0x08006000, LENGTH = 52K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 

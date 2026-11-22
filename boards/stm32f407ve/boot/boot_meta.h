@@ -3,10 +3,10 @@
  *
  * Flash 布局（512KB，F407 扇区：4x16K + 1x64K + 3x128K，详见 partition.h）：
  *   1 Bootloader  0x08000000 16K（S0）
- *   2 Boot Meta   0x08004000 16K（S1，追加记录，写满擦除）
+ *   2 Boot Meta   0x08004000 16K（S1，数据 meta + 追加升级日志）
  *   3 配置主区    0x08008000 16K（S2）
  *   4 配置备份    0x0800C000 16K（S3）
- *   5 系统日志    0x08010000 64K（S4，文本追加，带 Unix 时间）
+ *   5 错误日志    0x08010000 64K（S4，文本追加，带 Unix 时间）
  *   6 App 主程序  0x08020000 128K（S5）
  *   7 App 备份    0x08040000 128K（S6）
  *   8 App 升级包  0x08060000 128K（S7）
@@ -77,10 +77,10 @@ int boot_meta_save(boot_meta_t *m);
 
 void boot_confirm(void);
 
-/* 系统日志：追加一行 "[unix] text\\r\\n"，空间不足时整区擦除重写 */
+/* 错误日志：追加一行 "[unix] text\\r\\n"，空间不足时整区擦除重写 */
 void boot_log_append(uint32_t unix_time, const char *text);
 
-/* 崩溃日志：写系统日志并累加崩溃计数 */
+/* 崩溃日志：写错误日志并累加崩溃计数 */
 void boot_crash_log(const uint32_t *frame, uint32_t sp, uint32_t exc_return,
                     uint32_t unix_time);
 
