@@ -19,8 +19,10 @@
 #include "ros.h"
 #include "common.h"
 
-/* 任务表初始容量（按需扩容） */
+/* 任务表初始容量（按需扩容）；资源受限平台可用 -D 覆盖 */
+#ifndef SCHEDULER_MAX_ENTRIES
 #define SCHEDULER_MAX_ENTRIES 8
+#endif
 /* cron 表达式最大长度（字符数，不含结尾 '\0'） */
 #define SCHEDULER_EXPR_MAX    128
 

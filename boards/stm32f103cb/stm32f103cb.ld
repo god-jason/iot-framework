@@ -18,10 +18,10 @@ MEMORY
 /* 主栈（MSP）从 SRAM 顶端向下增长 */
 _estack = ORIGIN(RAM) + LENGTH(RAM);
 
-/* 给 newlib 的 _sbrk 留堆空间（固件不使用 newlib malloc），栈顶预留 1.5KB 主栈
- * （任务上下文在 PSP，MSP 仅中断使用） */
+/* 给 newlib 的 _sbrk 留堆空间（固件不使用 newlib malloc），栈顶预留 1KB 主栈
+ * （任务上下文在 PSP，MSP 仅中断使用；省出的 512B 给 TLSF 任务堆） */
 _Min_Heap_Size  = 0x200;
-_Min_Stack_Size = 0x600;
+_Min_Stack_Size = 0x400;
 
 SECTIONS
 {

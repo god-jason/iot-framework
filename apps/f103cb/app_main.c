@@ -11,6 +11,9 @@
  *   http [url]           HTTP GET，默认 http://www.example.com/
  *   net [host] [port]    TCP 连接/发送/接收，默认 www.baidu.com:80
  *   mqtt [host] [port]   MQTT 连接/订阅/发布/收消息，默认 broker.emqx.io:1883
+ *
+ * 另外 app 任务每秒把 RTC 时间喂给 scheduler_process()，内置 3 个演示任务：
+ *   每天 10:30、每天 10:50、每 30 分钟，各自打印一条日志。
  */
 
 #include "board.h"
@@ -25,6 +28,7 @@
 #include "common.h"
 #include "ros_rtc.h"
 #include "datetime.h"
+#include "scheduler.h"
 
 #include <string.h>
 
@@ -303,6 +307,39 @@ static int run_mqtt(const char *host, uint16_t port)
     return 0;
 }
 
+/* ------------------------------------------------------------ 定时任务演示 */
+
+static void sched_task_1030(void *user)
+{
+    (void)user;
+    ros_puts("[sched] task 10:30 fired");
+}
+
+static void sched_task_1050(void *user)
+{
+    (void)user;
+    ros_puts("[sched] task 10:50 fired");
+}
+
+static void sched_task_30min(void *user)
+{
+    (void)user;
+    ros_puts("[sched] task every 30 min fired");
+}
+
+/* 注册 3 个演示任务：每天 10:30、每天 10:50、每 30 分钟 */
+static void sched_demo_register(void)
+{
+    (void)scheduler_init();
+    if (scheduler_add("30 10 * * *", sched_task_1030, NULL, NULL) != 0 ||
+        scheduler_add("50 10 * * *", sched_task_1050, NULL, NULL) != 0 ||
+        scheduler_add("*/30 * * * *", sched_task_30min, NULL, NULL) != 0) {
+        ros_puts("sched: add demo tasks failed");
+        return;
+    }
+    ros_puts("sched: 10:30 / 10:50 / every-30min tasks registered");
+}
+
 /* ------------------------------------------------------------------ 命令 */
 
 static int cmd_all(const rs_cmd_ctx_t *ctx)
@@ -450,4 +487,17 @@ void app_main(void *arg)
     (void)rs_cmd_register(&s_http_def);
     (void)rs_cmd_register(&s_net_def);
     (void)rs_cmd_register(&s_mqtt_def);
+
+    /* 定时任务演示：10:30、10:50、每 30 分钟 */
+    sched_demo_register();
+
+    /* app 任务常驻：每秒用 RTC 时间驱动调度器 */
+    for (;;) {
+        datetime_t now;
+
+        if (timestamp_to_datetime((int64_t)ros_rtc_get_timestamp(), &now) == 0) {
+            (void)scheduler_process(&now);
+        }
+        ros_sleep_ms(1000U);
+    }
 }

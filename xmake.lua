@@ -200,9 +200,11 @@ local function ros_cross_defines(extra)
     add_defines("ROS_PLATFORM_STM32", "ROS_STM32_" .. family:upper(), "ROS_MEM_PORT")
     if family == "f1" then
         add_defines("ROS_USE_TRACE=0")
-        add_defines("ROS_MEM_HEAP_SIZE=10240")
+        add_defines("ROS_MEM_HEAP_SIZE=10752")
         add_defines("ML307_NET_MAX_SOCKETS=1", "ML307_NET_RX_MAX=256")
         add_defines("NET_STREAM_TX_MAX=64", "NET_STREAM_RX_MAX=64")
+        -- F1 堆紧张：调度器任务表只需 3 个槽位，减半降低堆占用
+        add_defines("SCHEDULER_MAX_ENTRIES=4")
         add_cflags("-Oz", { force = true })
     elseif family == "f4" then
         add_defines("RS_ENABLE_EXPR=1", "RS_ENABLE_MATH=1")
