@@ -5,10 +5,8 @@
  * HAL 基础定义入口。
  *
  * 为兼容各外设头文件统一包含 "hal_def.h" 的习惯，本文件聚合以下子模块：
- *   - hal_status.h : 状态码、外设状态、传输方式、通用事件
- *   - hal_handle.h : 句柄基类、事件回调、超时常量
- *   - hal_macro.h  : 通用宏、逻辑引脚编码
- *   - hal_mcu.h    : MCU 信息、能力查询、平台生命周期与系统级原语（时基/延时/中断/复位/低功耗）
+ *   - hal_base.h : 状态码、外设状态、传输方式、通用事件、句柄基类、通用宏
+ *   - hal_mcu.h  : MCU 信息、能力查询、平台生命周期与系统级原语（时基/延时/中断/复位/低功耗）
  *
  * 通用约定：
  *   - 所有返回 int 的接口，HAL_OK(0) 表示成功，负值表示失败；
@@ -21,9 +19,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "hal_status.h"
-#include "hal_handle.h"
-#include "hal_macro.h"
+#include "hal_base.h"
 #include "hal_mcu.h"
 
 #endif /* HAL_DEF_H */

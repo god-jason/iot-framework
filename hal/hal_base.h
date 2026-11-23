@@ -1,10 +1,15 @@
-#ifndef HAL_STATUS_H
-#define HAL_STATUS_H
+#ifndef HAL_BASE_H
+#define HAL_BASE_H
 
 /*
- * HAL 通用状态定义：状态码、外设运行状态、传输方式与通用事件。
- * 本文件不依赖任何 OS 或厂商 HAL。
+ * HAL 基础定义：状态码、外设状态、传输方式、通用事件、句柄基类、
+ * 超时常量与通用宏。
+ *
+ * 本文件不依赖任何 OS 或厂商 HAL，各外设头文件只需包含 hal_def.h 即可。
  */
+
+#include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,8 +71,43 @@ typedef enum {
     HAL_EVENT_TIMEOUT          /* 传输超时 */
 } hal_event_e;
 
+/* ---------------- 通用句柄 ---------------- */
+/*
+ * 通用句柄基类。
+ * 各外设句柄（hal_xxx_t）的第一个成员必须是本结构，
+ * 以便平台层通过强制转换统一处理生命周期与错误上报。
+ */
+typedef struct {
+    void *instance;             /* 平台外设实例（寄存器基址 / HAL 句柄指针 / 平台槽位） */
+    hal_state_e state;         /* 当前运行状态，HAL_STATE_RESET 表示未初始化 */
+    int error;        /* 最近一次错误码，成功时为 HAL_OK */
+} hal_handle_base_t;
+
+/* ---------------- 通用回调 ---------------- */
+
+/*
+ * 通用事件回调。
+ * handle    : 触发事件的句柄（由实现传入，可能是具体外设句柄指针）；
+ * event     : 事件类型；
+ * user_data : 注册回调时绑定的用户上下文，可为 NULL。
+ * 注意：回调通常在中断上下文执行，禁止阻塞或耗时操作。
+ */
+typedef void (*hal_callback_t)(void *handle, hal_event_e event, void *user_data);
+
+/* ---------------- 超时 ---------------- */
+#define HAL_TIMEOUT_FOREVER    UINT32_MAX  /* 无限等待 */
+#define HAL_TIMEOUT_NONE       0U          /* 不等待，立即返回 */
+
+/* ---------------- 通用宏 ---------------- */
+#define HAL_BIT(n)             (1UL << (n))                    /* 第 n 位置 1 */
+#define HAL_ARRAY_SIZE(a)      (sizeof(a) / sizeof((a)[0]))    /* 数组元素个数 */
+#define HAL_MIN(a, b)          ((a) < (b) ? (a) : (b))         /* 取较小值 */
+#define HAL_MAX(a, b)          ((a) > (b) ? (a) : (b))         /* 取较大值 */
+#define HAL_ALIGN_UP(v, a)     (((v) + (a) - 1U) & ~((a) - 1U))/* 向上对齐到 a 的整数倍，a 必须为 2 的幂 */
+#define HAL_UNUSED(x)          ((void)(x))                     /* 显式忽略未使用参数，避免编译告警 */
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* HAL_STATUS_H */
+#endif /* HAL_BASE_H */

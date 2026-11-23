@@ -8,13 +8,11 @@
  *
  * 说明：
  *   - 公共 API 不依赖任何 RTOS 头或厂商 HAL 头；
- *   - 各模块是否可用由 hal_config.h 中的 HAL_USING_* 开关裁剪，
- *     被裁剪的模块仍可编译，但运行时返回 HAL_NOT_SUPPORTED；
+ *   - 平台未实现的外设仍可编译，但运行时返回 HAL_NOT_SUPPORTED；
  *   - 包含顺序仅影响编译期可见性，无运行期副作用。
  */
 
 #include "hal_def.h"
-#include "hal_config.h"
 
 #include "hal_clock.h"
 #include "hal_util.h"

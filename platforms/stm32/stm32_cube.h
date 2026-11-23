@@ -5,7 +5,7 @@
  * stm32_cube.h - STM32Cube HAL 统一包含入口（F1 / F4 / H7）
  *
  * 名称冲突说明：
- *   框架 hal/hal_status.h 用匿名枚举定义了 HAL_OK / HAL_ERROR / HAL_BUSY /
+ *   框架 hal/hal_base.h 用匿名枚举定义了 HAL_OK / HAL_ERROR / HAL_BUSY /
  *   HAL_TIMEOUT（成功为 0，错误为负值）；STM32Cube 的 stm32fxxxx_hal_def.h
  *   用同名枚举定义了 HAL_StatusTypeDef（0..3）。两者出现在同一编译单元会
  *   触发 "redeclaration of enumerator"。

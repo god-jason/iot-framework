@@ -11,8 +11,7 @@
 
 #include <stdint.h>
 
-#include "hal_status.h"
-#include "hal_macro.h"
+#include "hal_base.h"
 
 #ifdef __cplusplus
 extern "C" {

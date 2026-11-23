@@ -245,7 +245,7 @@ xmake build ros-test && xmake run ros-test
 | 命名前缀 | 内核 `ros_`、HAL `hal_`、组件用模块名前缀 |
 | tick 回绕 | 时间比较统一使用 `ROS_TICK_AFTER/BEFORE` |
 | ISR 限制 | 中断内禁止阻塞 API，只能使用 `*_from_isr` |
-| 裁剪 | 内核开关 `src/ros_config.h`，外设开关 `hal/hal_config.h` |
+| 裁剪 | 内核开关 `src/ros_config.h`；外设由平台按需实现，未实现返回 `HAL_NOT_SUPPORTED` |
 
 ---
 
