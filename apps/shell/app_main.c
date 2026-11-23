@@ -45,12 +45,14 @@
 #include "ros.h"
 #include "common.h"
 #include "app.h"
+#include "app_fs.h"
 
 #include <stdio.h>
 
 static int cmd_quit(const rs_cmd_ctx_t *ctx)
 {
     (void)ctx;
+    app_fs_deinit();
     ros_puts("bye");
     ros_stop();
     return 0;
@@ -130,6 +132,7 @@ void app_main(void *arg)
         return;
     }
     (void)device_init();
+    (void)app_fs_init(APP_FS_IMG_PATH);
     if (rs_cmd_register(&s_quit_def) != 0) {
         printf("register quit failed\n");
     }

@@ -15,7 +15,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
 
     ros_object("app-f407ve", {
         scope = "none",
-        files = { "app_main.c" },
+        files = { "app_main.c", "app_device.c", "app_fs.c", "app_ml307.c" },
         defines = { "USE_HAL_DRIVER", ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
     })
@@ -25,8 +25,6 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     for _, dep in ipairs(ROS_OBJ_CROSS) do table.insert(fw_deps, dep) end
     table.insert(fw_deps, "board-f407ve")
     table.insert(fw_deps, "app-f407ve")
-    table.insert(fw_deps, "ros-vendor-littlefs")
-    table.insert(fw_deps, "ros-cmp-fs")
 
     ros_firmware("f407ve", {
         deps = fw_deps,
