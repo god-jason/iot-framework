@@ -30,7 +30,7 @@ static void mock_reset(void)
 
 /* ---- 板级后端模拟（强符号覆盖 weak 默认实现） ---- */
 
-int board_ota_begin(uint32_t image_size, uint32_t image_crc)
+int port_ota_begin(uint32_t image_size, uint32_t image_crc)
 {
     if (image_size == 0U || image_size > OTA_CAP) {
         return FOTA_ERR;
@@ -42,7 +42,7 @@ int board_ota_begin(uint32_t image_size, uint32_t image_crc)
     return FOTA_OK;
 }
 
-int board_ota_write(uint32_t offset, const void *data, uint32_t len)
+int port_ota_write(uint32_t offset, const void *data, uint32_t len)
 {
     if ((offset + len) > OTA_CAP) {
         return FOTA_ERR;
@@ -51,7 +51,7 @@ int board_ota_write(uint32_t offset, const void *data, uint32_t len)
     return FOTA_OK;
 }
 
-int board_ota_finish(void)
+int port_ota_finish(void)
 {
     s_finished = true;
     s_state.ota_valid = true;
@@ -60,12 +60,12 @@ int board_ota_finish(void)
     return FOTA_OK;
 }
 
-void board_ota_abort(void)
+void port_ota_abort(void)
 {
     s_abort_calls++;
 }
 
-int board_ota_state(fota_state_t *state)
+int port_ota_state(fota_state_t *state)
 {
     *state = s_state;
     return FOTA_OK;

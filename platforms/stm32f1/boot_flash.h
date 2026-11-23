@@ -4,7 +4,7 @@
 /*
  * boot_flash.h - STM32F103CBT6 Flash 原语接口
  *
- * 供 stm32_meta.c 的 Meta/配置/日志/OTA 写入使用；
+ * 供 boot_meta/boot_config/boot_crash 的 Meta/配置/日志/OTA 写入使用；
  * 实现见 boot_flash.c（按页擦除、半字编程）。
  */
 

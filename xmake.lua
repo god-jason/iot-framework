@@ -517,7 +517,9 @@ if is_plat("cross") then
                      "platforms/stm32" .. family .. "/boot_flash.c",
                      "platforms/stm32" .. family .. "/board_rtc.c")
         -- 依赖板级 partition.h 的共享实现由各 board 目标编译（静态库无板级头文件路径）
-        remove_files("platforms/stm32/stm32_meta.c",
+        remove_files("platforms/stm32/boot_meta.c",
+                     "platforms/stm32/boot_crash.c",
+                     "platforms/stm32/boot_config.c",
                      "platforms/stm32/stm32_config.c",
                      "platforms/stm32/stm32_ota.c",
                      "platforms/stm32/bootloader.c",

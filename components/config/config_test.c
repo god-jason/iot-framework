@@ -1,7 +1,7 @@
 /*
  * config_test.c - 配置抽象层测试
  *
- * 用 RAM 模拟板级 board_config_xxx（强符号覆盖 config.c 的 weak 默认值），
+ * 用 RAM 模拟板级 port_config_xxx（强符号覆盖 config.c 的 weak 默认值），
  * 覆盖有效性、读写、容量限制与擦除。
  */
 
@@ -23,7 +23,7 @@ static void mock_reset(void)
 
 /* ---- 板级后端模拟（强符号） ---- */
 
-int board_config_read(void *buf, uint32_t max, uint32_t *len)
+int port_config_read(void *buf, uint32_t max, uint32_t *len)
 {
     if (!s_valid || buf == NULL || s_store_len > max) {
         return CONFIG_ERR;
@@ -35,7 +35,7 @@ int board_config_read(void *buf, uint32_t max, uint32_t *len)
     return CONFIG_OK;
 }
 
-int board_config_write(const void *data, uint32_t len)
+int port_config_write(const void *data, uint32_t len)
 {
     if (data == NULL || len > STORE_CAP) {
         return CONFIG_ERR;
@@ -46,7 +46,7 @@ int board_config_write(const void *data, uint32_t len)
     return CONFIG_OK;
 }
 
-int board_config_erase(void)
+int port_config_erase(void)
 {
     memset(s_store, 0, sizeof(s_store));
     s_store_len = 0U;
@@ -54,7 +54,7 @@ int board_config_erase(void)
     return CONFIG_OK;
 }
 
-bool board_config_valid(void)
+bool port_config_valid(void)
 {
     return s_valid;
 }

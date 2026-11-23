@@ -1,7 +1,7 @@
 /*
  * boot_flash.c - STM32F407VE Flash 原语（扇区擦除、字节编程）
  *
- * 供 stm32_meta.c 的 Meta/配置/日志/OTA 写入使用，
+ * 供 boot_meta/boot_config/boot_crash 的 Meta/配置/日志/OTA 写入使用，
  * 同时编入 Bootloader 与 App，不调用 libc。
  */
 

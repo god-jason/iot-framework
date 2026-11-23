@@ -5,13 +5,13 @@
  * fota.h - FOTA 升级会话接口
  *
  * fota_xxx 只做会话管理（开始 / 连续写入 / 完成 / 放弃），
- * OTA 区擦写与启动状态更新由板级 board_ota.c 实现：
+ * OTA 区擦写与启动状态更新由端口层实现（STM32 见 platforms/stm32/stm32_ota.c）：
  *
- *   fota_begin  -> board_ota_begin
- *   fota_write  -> board_ota_write
- *   fota_finish -> board_ota_finish
- *   fota_abort  -> board_ota_abort
- *   fota_get_state -> board_ota_state
+ *   fota_begin  -> port_ota_begin
+ *   fota_write  -> port_ota_write
+ *   fota_finish -> port_ota_finish
+ *   fota_abort  -> port_ota_abort
+ *   fota_get_state -> port_ota_state
  *
  * 典型流程：
  *   fota_begin(size, crc32);
@@ -73,11 +73,11 @@ int fota_run(uint32_t image_size, uint32_t image_crc,
  * 因此主机侧其它目标无需链接板级代码。
  * ========================================================================== */
 
-int  board_ota_begin(uint32_t image_size, uint32_t image_crc);
-int  board_ota_write(uint32_t offset, const void *data, uint32_t len);
-int  board_ota_finish(void);
-void board_ota_abort(void);
-int  board_ota_state(fota_state_t *state);
+int  port_ota_begin(uint32_t image_size, uint32_t image_crc);
+int  port_ota_write(uint32_t offset, const void *data, uint32_t len);
+int  port_ota_finish(void);
+void port_ota_abort(void);
+int  port_ota_state(fota_state_t *state);
 
 #ifdef __cplusplus
 }

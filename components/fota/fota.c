@@ -1,11 +1,11 @@
 /*
  * fota.c - FOTA 会话管理
  *
- * 只做参数校验与进度跟踪，Flash 操作全部转交板级 board_ota.c：
- *   begin  -> board_ota_begin（擦除 OTA 区）
- *   write  -> board_ota_write（按偏移写入原始 bin）
- *   finish -> board_ota_finish（校验并更新启动状态）
- *   abort  -> board_ota_abort（清除未完成的 ota 标识）
+ * 只做参数校验与进度跟踪，Flash 操作全部转交板级 port OTA 实现：
+ *   begin  -> port_ota_begin（擦除 OTA 区）
+ *   write  -> port_ota_write（按偏移写入原始 bin）
+ *   finish -> port_ota_finish（校验并更新启动状态）
+ *   abort  -> port_ota_abort（清除未完成的 ota 标识）
  */
 
 #include "fota.h"
@@ -19,17 +19,17 @@
 #endif
 
 /*
- * 板级后端缺省实现：没有 board_ota.c 的构建（如主机演示目标）
+ * 端口层缺省实现：没有端口层实现的构建（如主机演示目标）
  * 调用时统一返回错误，避免链接失败。
  */
-FOTA_WEAK int board_ota_begin(uint32_t image_size, uint32_t image_crc)
+FOTA_WEAK int port_ota_begin(uint32_t image_size, uint32_t image_crc)
 {
     (void)image_size;
     (void)image_crc;
     return FOTA_ERR;
 }
 
-FOTA_WEAK int board_ota_write(uint32_t offset, const void *data, uint32_t len)
+FOTA_WEAK int port_ota_write(uint32_t offset, const void *data, uint32_t len)
 {
     (void)offset;
     (void)data;
@@ -37,16 +37,16 @@ FOTA_WEAK int board_ota_write(uint32_t offset, const void *data, uint32_t len)
     return FOTA_ERR;
 }
 
-FOTA_WEAK int board_ota_finish(void)
+FOTA_WEAK int port_ota_finish(void)
 {
     return FOTA_ERR;
 }
 
-FOTA_WEAK void board_ota_abort(void)
+FOTA_WEAK void port_ota_abort(void)
 {
 }
 
-FOTA_WEAK int board_ota_state(fota_state_t *state)
+FOTA_WEAK int port_ota_state(fota_state_t *state)
 {
     (void)state;
     return FOTA_ERR;
@@ -59,7 +59,7 @@ static uint32_t s_written;
 void fota_abort(void)
 {
     if (s_busy) {
-        board_ota_abort();
+        port_ota_abort();
     }
     s_busy = false;
     s_written = 0U;
@@ -70,7 +70,7 @@ int fota_begin(uint32_t image_size, uint32_t image_crc)
     if (s_busy || image_size == 0U) {
         return FOTA_ERR;
     }
-    if (board_ota_begin(image_size, image_crc) != FOTA_OK) {
+    if (port_ota_begin(image_size, image_crc) != FOTA_OK) {
         return FOTA_ERR;
     }
     s_busy = true;
@@ -87,7 +87,7 @@ int fota_write(uint32_t offset, const void *data, uint32_t len)
     if (offset != s_written || len > (s_size - s_written)) {
         return FOTA_ERR;
     }
-    if (board_ota_write(offset, data, len) != FOTA_OK) {
+    if (port_ota_write(offset, data, len) != FOTA_OK) {
         return FOTA_ERR;
     }
     s_written += len;
@@ -101,7 +101,7 @@ int fota_finish(void)
     if (!s_busy || s_written != s_size) {
         return FOTA_ERR;
     }
-    rc = board_ota_finish();
+    rc = port_ota_finish();
     s_busy = false;
     return (rc == FOTA_OK) ? FOTA_OK : FOTA_ERR;
 }
@@ -111,7 +111,7 @@ int fota_get_state(fota_state_t *state)
     if (state == NULL) {
         return FOTA_ERR;
     }
-    return board_ota_state(state);
+    return port_ota_state(state);
 }
 
 int fota_run(uint32_t image_size, uint32_t image_crc,

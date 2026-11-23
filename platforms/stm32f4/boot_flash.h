@@ -4,7 +4,7 @@
 /*
  * boot_flash.h - STM32F407VE Flash 原语接口
  *
- * 供 stm32_meta.c 的 Meta/配置/日志/OTA 写入使用；
+ * 供 boot_meta/boot_config/boot_crash 的 Meta/配置/日志/OTA 写入使用；
  * 实现见 boot_flash.c（按扇区擦除、字节编程）。
  */
 

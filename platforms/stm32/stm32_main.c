@@ -17,7 +17,8 @@
 #include "datetime.h"
 #include "app.h"
 #include "ros_rtc.h"
-#include "stm32_meta.h"
+#include "boot_meta.h"
+#include "boot_crash.h"
 
 /* 芯片头：提供 SCB / NVIC_SystemReset 等 */
 #if defined(ROS_STM32_F1)
@@ -56,7 +57,7 @@ int main(void)
                           s_app_stack, sizeof(s_app_stack));
 
     /* 初始化完成：向 Bootloader 确认启动成功，tries/crash 清零 */
-    stm32_boot_confirm();
+    boot_confirm();
 
     ros_sched_start();
 
@@ -92,7 +93,7 @@ void HardFault_Handler(void)
 
 void stm32_hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp)
 {
-    stm32_boot_crash_log(frame, sp, exc_return, ros_rtc_get_timestamp());
+    boot_crash_log(frame, sp, exc_return, ros_rtc_get_timestamp());
     NVIC_SystemReset();
 
     for (;;) {

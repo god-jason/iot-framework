@@ -19,7 +19,7 @@
  * 升级流程：
  *   上位机把新固件（按 APP 区地址 0x08020000 链接）经串口 OTA 写入 OTA 区；
  *   Bootloader 启动时若发现 ota 标识：APP -> BACKUP 备份，OTA -> APP，
- *   校验通过后清除标识；App 初始化完成调用 stm32_boot_confirm() 确认成功，
+ *   校验通过后清除标识；App 初始化完成调用 boot_confirm() 确认成功，
  *   否则崩溃/重试超限后用 BACKUP 恢复 APP，运行旧程序。
  *
  * Boot Meta 是 S1 内的启动状态（32B）+ 追加升级历史（16B × N），
@@ -50,8 +50,8 @@
 #define BOOT_SLOT_OTA_BASE      0x08060000U
 #define BOOT_SLOT_SIZE          (128U * 1024U)
 
-/* ---- 共享 boot_meta（platforms/stm32/stm32_meta.c）使用的板级参数 ---- */
-/* 共享 board_ota 以 BOOT_OTA_* 访问升级包区（本板即 S7 OTA 槽） */
+/* ---- 共享 boot_meta/boot_crash/boot_config 使用的板级参数 ---- */
+/* 共享 port_ota 以 BOOT_OTA_* 访问升级包区（本板即 S7 OTA 槽） */
 #define BOOT_OTA_BASE           BOOT_SLOT_OTA_BASE
 #define BOOT_OTA_SIZE           BOOT_SLOT_SIZE
 

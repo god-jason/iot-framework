@@ -17,7 +17,8 @@
  * 不依赖 HAL / RTOS / libc，限制在 Flash 首个扇区。
  */
 
-#include "stm32_meta.h"
+#include "boot_meta.h"
+#include "boot_config.h"
 #include "boot_flash.h"
 
 #include <stddef.h>
@@ -257,20 +258,20 @@ static bool image_valid(uint32_t base)
 }
 
 /* ota 区（原始 bin）是否完整：长度 + 整段 CRC */
-static bool ota_image_crc_ok(const stm32_boot_state_t *s)
+static bool ota_image_crc_ok(const boot_state_t *s)
 {
     if (s->ota_len == 0U || s->ota_len > BOOT_OTA_SIZE) {
         return false;
     }
-    return stm32_boot_crc32((const void *)(uintptr_t)BOOT_OTA_BASE, s->ota_len)
+    return boot_crc32((const void *)(uintptr_t)BOOT_OTA_BASE, s->ota_len)
            == s->ota_crc;
 }
 
 #ifdef BOOT_HAS_BACKUP
 static bool slots_equal(uint32_t a, uint32_t b)
 {
-    return stm32_boot_crc32((const void *)(uintptr_t)a, BOOT_APP_SIZE) ==
-           stm32_boot_crc32((const void *)(uintptr_t)b, BOOT_APP_SIZE);
+    return boot_crc32((const void *)(uintptr_t)a, BOOT_APP_SIZE) ==
+           boot_crc32((const void *)(uintptr_t)b, BOOT_APP_SIZE);
 }
 
 /* 擦除 dst 覆盖的扇区后，把 src 的 len 字节复制过去 */
@@ -300,10 +301,10 @@ static int copy_region(uint32_t dst, uint32_t src, uint32_t len)
 }
 
 /* 升级前备份当前 App 到 BACKUP；App 无效时清掉备份标志 */
-static bool backup_app(stm32_boot_state_t *s)
+static bool backup_app(boot_state_t *s)
 {
     if (!image_valid(BOOT_APP_BASE)) {
-        s->reserved &= ~STM32_BOOT_STATE_FLAG_BACKUP;
+        s->reserved &= ~BOOT_STATE_FLAG_BACKUP;
         return true;
     }
     uart_puts("[BOOT] backup APP -> BACKUP\r\n");
@@ -312,14 +313,14 @@ static bool backup_app(stm32_boot_state_t *s)
         uart_puts("[BOOT] backup failed\r\n");
         return false;
     }
-    s->reserved |= STM32_BOOT_STATE_FLAG_BACKUP;
+    s->reserved |= BOOT_STATE_FLAG_BACKUP;
     return true;
 }
 
 /* 用备份区恢复 App 区 */
-static bool restore_backup(stm32_boot_state_t *s)
+static bool restore_backup(boot_state_t *s)
 {
-    if ((s->reserved & STM32_BOOT_STATE_FLAG_BACKUP) == 0U) {
+    if ((s->reserved & BOOT_STATE_FLAG_BACKUP) == 0U) {
         uart_puts("[BOOT] no backup to restore\r\n");
         return false;
     }
@@ -341,22 +342,22 @@ static bool restore_backup(stm32_boot_state_t *s)
  * 有历史：从最后进度继续。F1 可按页擦除未确认尾部，F4 为单个扇区，
  * 只能整区重来。每拷完一块追加一条历史；完成后校验 CRC 并清 ota 标识。
  */
-static bool ota_apply(stm32_boot_state_t *s)
+static bool ota_apply(boot_state_t *s)
 {
     uint32_t off;
     uint32_t n;
     uint32_t i;
 
-    if (!stm32_boot_history_last_length(&off)) {
+    if (!boot_history_last_length(&off)) {
 #ifdef BOOT_HAS_BACKUP
         if (!backup_app(s)) {
             return false;
         }
-        if (stm32_boot_state_save(s) != 0) {
+        if (boot_state_save(s) != 0) {
             return false;
         }
 #endif
-        if (stm32_boot_history_append(s, 0U) != 0) {
+        if (boot_history_append(s, 0U) != 0) {
             return false;
         }
         uart_puts("[BOOT] erase app area\r\n");
@@ -365,7 +366,7 @@ static bool ota_apply(stm32_boot_state_t *s)
         }
         off = 0U;
     } else if (off > s->ota_len) {
-        (void)stm32_boot_state_save(s);       /* 状态异常：清历史，下次重来 */
+        (void)boot_state_save(s);       /* 状态异常：清历史，下次重来 */
         return false;
     } else if (off < s->ota_len) {
 #ifdef BOOT_HAS_BACKUP
@@ -373,10 +374,10 @@ static bool ota_apply(stm32_boot_state_t *s)
         if (boot_flash_erase(BOOT_APP_BASE, BOOT_APP_SIZE) != 0) {
             return false;
         }
-        if (stm32_boot_state_save(s) != 0) {
+        if (boot_state_save(s) != 0) {
             return false;
         }
-        if (stm32_boot_history_append(s, 0U) != 0) {
+        if (boot_history_append(s, 0U) != 0) {
             return false;
         }
 #else
@@ -404,7 +405,7 @@ static bool ota_apply(stm32_boot_state_t *s)
             return false;
         }
         off += n;
-        if (stm32_boot_history_append(s, off) != 0) {
+        if (boot_history_append(s, off) != 0) {
             uart_puts("\r\n[BOOT] history write failed\r\n");
             return false;
         }
@@ -414,10 +415,10 @@ static bool ota_apply(stm32_boot_state_t *s)
     }
     uart_puts("\r\n");
 
-    if (stm32_boot_crc32((const void *)(uintptr_t)BOOT_APP_BASE, s->ota_len)
+    if (boot_crc32((const void *)(uintptr_t)BOOT_APP_BASE, s->ota_len)
         != s->ota_crc) {
         uart_puts("[BOOT] verify failed, restart next boot\r\n");
-        (void)stm32_boot_state_save(s);       /* 清历史，保留 ota 标识 */
+        (void)boot_state_save(s);       /* 清历史，保留 ota 标识 */
         return false;
     }
 
@@ -426,7 +427,7 @@ static bool ota_apply(stm32_boot_state_t *s)
     s->ota_crc = 0U;
     s->tries = 0U;
     s->crash = 0U;
-    if (stm32_boot_state_save(s) != 0) {
+    if (boot_state_save(s) != 0) {
         return false;
     }
     uart_puts("[BOOT] upgrade complete\r\n");
@@ -457,7 +458,7 @@ static void jump_to(uint32_t base)
 
 /* ---------------------------- 串口升级（写入 OTA 区） ---------------------------- */
 
-static void do_update(stm32_boot_state_t *s)
+static void do_update(boot_state_t *s)
 {
     uint32_t len = 0U;
     uint32_t crc = 0U;
@@ -507,7 +508,7 @@ static void do_update(stm32_boot_state_t *s)
         buf[n++] = (uint8_t)c;
         got++;
         if (n == sizeof(buf) || got == len) {
-            calc = stm32_boot_crc32_update(calc, buf, n);
+            calc = boot_crc32_update(calc, buf, n);
             if (boot_flash_write(BOOT_OTA_BASE + got - n, buf, n) != 0) {
                 uart_puts("\r\n[BOOT] OTA error: flash write\r\n");
                 uart_putc(BOOT_NAK_CHAR);
@@ -534,7 +535,7 @@ static void do_update(stm32_boot_state_t *s)
     s->ota_crc = crc;
     s->tries = 0U;
     s->crash = 0U;
-    if (stm32_boot_state_save(s) != 0) {
+    if (boot_state_save(s) != 0) {
         uart_puts("[BOOT] OTA error: state save\r\n");
         uart_putc(BOOT_NAK_CHAR);
         return;
@@ -551,11 +552,11 @@ static void do_update(stm32_boot_state_t *s)
 
 int main(void)
 {
-    stm32_boot_state_t st;
+    boot_state_t st;
 
     (void)SysTick_Config(BOOT_SYSCLK_HZ / 1000U);
     uart_init();
-    stm32_boot_state_load(&st);
+    boot_state_load(&st);
 
     uart_puts("\r\n[BOOT] " BOOT_BANNER "\r\n");
     uart_puts("[BOOT] tries=");
@@ -566,7 +567,7 @@ int main(void)
     uart_putc((st.ota_valid != 0U) ? 'Y' : 'N');
 #ifdef BOOT_HAS_BACKUP
     uart_puts(" backup=");
-    uart_putc(((st.reserved & STM32_BOOT_STATE_FLAG_BACKUP) != 0U) ? 'Y' : 'N');
+    uart_putc(((st.reserved & BOOT_STATE_FLAG_BACKUP) != 0U) ? 'Y' : 'N');
 #endif
     uart_puts("\r\n");
 
@@ -574,7 +575,7 @@ int main(void)
 
     /* 配置区校验：主区无效且备份有效时自动还原 */
     {
-        int cfg = stm32_boot_config_restore();
+        int cfg = boot_config_restore();
 
         if (cfg == 1) {
             uart_puts("[BOOT] config invalid, restored from backup\r\n");
@@ -597,7 +598,7 @@ int main(void)
             st.ota_valid = 0U;
             st.ota_len = 0U;
             st.ota_crc = 0U;
-            (void)stm32_boot_state_save(&st);
+            (void)boot_state_save(&st);
         } else {
             uart_puts("[BOOT] apply OTA\r\n");
             if (!ota_apply(&st)) {
@@ -613,18 +614,18 @@ int main(void)
 
 #ifdef BOOT_HAS_BACKUP
     /* 启动失败/崩溃超过上限：恢复备份区程序 */
-    if (st.tries > STM32_BOOT_MAX_TRIES || st.crash > STM32_BOOT_MAX_CRASH) {
+    if (st.tries > BOOT_MAX_TRIES || st.crash > BOOT_MAX_CRASH) {
         uart_puts("[BOOT] too many failures, restore backup\r\n");
         (void)restore_backup(&st);
         st.tries = 0U;
         st.crash = 0U;
-        (void)stm32_boot_state_save(&st);
+        (void)boot_state_save(&st);
     }
 #else
     /* 单槽无备份：启动失败超过上限时停在 Bootloader 等待串口 OTA */
-    if (st.tries > STM32_BOOT_MAX_TRIES) {
+    if (st.tries > BOOT_MAX_TRIES) {
         uart_puts("[BOOT] boot failures > ");
-        uart_put_dec(STM32_BOOT_MAX_TRIES);
+        uart_put_dec(BOOT_MAX_TRIES);
         uart_puts(", wait OTA\r\n");
         for (;;) {
             if (wait_update_req(1000U)) {
@@ -637,7 +638,7 @@ int main(void)
     if (st.tries < 0xFFFFFFFFU) {
         st.tries++;
     }
-    (void)stm32_boot_state_save(&st);
+    (void)boot_state_save(&st);
 
     if (!image_valid(BOOT_APP_BASE)) {
 #ifdef BOOT_HAS_BACKUP
@@ -645,7 +646,7 @@ int main(void)
         if (restore_backup(&st)) {
             st.tries = 0U;
             st.crash = 0U;
-            (void)stm32_boot_state_save(&st);
+            (void)boot_state_save(&st);
         } else {
             uart_puts("[BOOT] wait OTA\r\n");
             for (;;) {

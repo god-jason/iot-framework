@@ -52,7 +52,7 @@
 #define BOOT_OTA_BASE           0x08013000U
 #define BOOT_OTA_SIZE           (52U * 1024U)
 
-/* ---- 共享 boot_meta（platforms/stm32/stm32_meta.c）使用的板级参数 ---- */
+/* ---- 共享 boot_meta/boot_crash/boot_config 使用的板级参数 ---- */
 #define BOOT_SRAM_END           0x20005000U     /* CBT6 20KB SRAM 顶端 */
 
 #define BOOT_LOG_PAD_EVEN                       /* 半字编程：日志行补齐为偶数 */
