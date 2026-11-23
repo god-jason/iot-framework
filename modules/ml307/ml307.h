@@ -102,6 +102,14 @@ bool ml307_network_is_connected(void);
 
 int ml307_get_ip(char *buffer, uint32_t size);
 
+/*
+ * 通过 AT+MNTP 获取网络时间（需 PDP 已激活）。
+ * 参数：server - NTP 服务器，NULL/空串用默认 "ntp1.aliyun.com"；
+ *       time   - 输出网络本地时间（Unix 秒，已带模组所在时区，可直接写入 RTC）。
+ * 返回：0 成功；-1 参数非法、模组不支持 / 同步失败 / 解析失败。
+ */
+int ml307_get_ntp_time(const char *server, uint32_t *time);
+
 #ifdef __cplusplus
 }
 #endif

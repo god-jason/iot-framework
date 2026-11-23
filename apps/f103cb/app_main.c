@@ -6,6 +6,7 @@
  *
  *   ml307                一次跑完整套：SIM 信息 -> ping -> http -> tcp -> mqtt
  *   sim                  读取 ICCID / IMEI / IMSI / CSQ / 注册状态 / IP
+ *   ntp [server]         联网后同步网络时间并写入 RTC
  *   ping <host>          模组 MPING（由 net_init 注册）
  *   http [url]           HTTP GET，默认 http://www.example.com/
  *   net [host] [port]    TCP 连接/发送/接收，默认 www.baidu.com:80
@@ -22,6 +23,8 @@
 #include "http.h"
 #include "mqtt.h"
 #include "common.h"
+#include "ros_rtc.h"
+#include "datetime.h"
 
 #include <string.h>
 
@@ -117,6 +120,32 @@ static int run_sim(void)
         ros_printf("ip    : %s\n", buf);
     } else {
         ros_puts("ip    : n/a");
+    }
+    return 0;
+}
+
+/* ------------------------------------------------------------- 网络时间同步 */
+
+static int run_ntp(const char *server)
+{
+    uint32_t now = 0U;
+    datetime_t dt;
+
+    ros_puts("--- NTP sync ---");
+    if (ml307_get_ntp_time(server, &now) != 0) {
+        ros_puts("ntp: failed");
+        return -1;
+    }
+    if (ros_rtc_set_timestamp(now) != ROS_OK) {
+        ros_puts("ntp: rtc set failed");
+        return -1;
+    }
+    if (timestamp_to_datetime((int64_t)now, &dt) == 0) {
+        ros_printf("ntp: %04u-%02u-%02u %02u:%02u:%02u (local) -> rtc\n",
+                   (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day,
+                   (unsigned)dt.hour, (unsigned)dt.minute, (unsigned)dt.second);
+    } else {
+        ros_printf("ntp: %u -> rtc\n", (unsigned)now);
     }
     return 0;
 }
@@ -283,6 +312,7 @@ static int cmd_all(const rs_cmd_ctx_t *ctx)
         return -1;
     }
     (void)run_sim();
+    (void)run_ntp(NULL);
     (void)run_ping(DEMO_PING_HOST, 3U);
     (void)run_http(DEMO_HTTP_URL);
     (void)run_net(DEMO_TCP_HOST, (uint16_t)DEMO_TCP_PORT);
@@ -298,6 +328,17 @@ static int cmd_sim(const rs_cmd_ctx_t *ctx)
         return -1;
     }
     return run_sim();
+}
+
+static int cmd_ntp(const rs_cmd_ctx_t *ctx)
+{
+    const char *server = NULL;
+
+    if (demo_ensure() != 0) {
+        return -1;
+    }
+    (void)rs_args_get_str(ctx->parsed, 0U, &server);
+    return run_ntp((server != NULL && server[0] != '\0') ? server : NULL);
 }
 
 static int cmd_http(const rs_cmd_ctx_t *ctx)
@@ -353,6 +394,10 @@ static const rs_args_t s_http_args[] = {
     { "url", 0, RS_ARGS_TYPE_STR, true, false, DEMO_HTTP_URL, "http url" }
 };
 
+static const rs_args_t s_ntp_args[] = {
+    { "server", 0, RS_ARGS_TYPE_STR, true, false, "ntp1.aliyun.com", "ntp server" }
+};
+
 static const rs_args_t s_host_port_args[] = {
     { "host", 0, RS_ARGS_TYPE_STR, true, false, DEMO_MQTT_HOST, "host" },
     { "port", 0, RS_ARGS_TYPE_UINT, true, false, "1883", "port" }
@@ -364,13 +409,18 @@ static const rs_args_t s_net_args[] = {
 };
 
 static const rs_cmd_t s_all_def = {
-    "ml307", "run all ML307 tests (sim/ping/http/tcp/mqtt)", NULL, NULL,
+    "ml307", "run all ML307 tests (sim/ntp/ping/http/tcp/mqtt)", NULL, NULL,
     NULL, 0U, cmd_all, NULL, NULL, NULL, NULL
 };
 
 static const rs_cmd_t s_sim_def = {
     "sim", "show ICCID/IMEI/IMSI/CSQ/reg/ip", NULL, NULL,
     NULL, 0U, cmd_sim, NULL, NULL, NULL, NULL
+};
+
+static const rs_cmd_t s_ntp_def = {
+    "ntp", "sync network time to RTC [server]", NULL, NULL,
+    s_ntp_args, 1U, cmd_ntp, NULL, NULL, NULL, NULL
 };
 
 static const rs_cmd_t s_http_def = {
@@ -396,6 +446,7 @@ void app_main(void *arg)
 
     (void)rs_cmd_register(&s_all_def);
     (void)rs_cmd_register(&s_sim_def);
+    (void)rs_cmd_register(&s_ntp_def);
     (void)rs_cmd_register(&s_http_def);
     (void)rs_cmd_register(&s_net_def);
     (void)rs_cmd_register(&s_mqtt_def);

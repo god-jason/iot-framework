@@ -1,6 +1,9 @@
 ﻿#include "ml307.h"
 #include "ros.h"
 #include "common.h"
+#include "at_urc.h"
+#include "hal_def.h"
+#include "datetime.h"
 
 #include <stdlib.h>
 
@@ -273,6 +276,178 @@ int ml307_set_apn(const char *apn, const char *username, const char *password)
         }
     }
     return 0;
+}
+
+/* ---------------------------- 网络时间（AT+MNTP） ---------------------------- */
+
+#define ML307_NTP_URC           "+MNTP:"
+#define ML307_NTP_DEFAULT_SRV   "ntp1.aliyun.com"
+#define ML307_NTP_PORT          123U
+#define ML307_NTP_TIMEOUT_S     30U
+#define ML307_NTP_WAIT_MS       35000U
+#define ML307_NTP_TIME_MAX      32U
+
+static bool s_ntp_urc;
+static volatile bool s_ntp_done;
+static volatile int s_ntp_result;
+static char s_ntp_time[ML307_NTP_TIME_MAX];
+
+/* 读取两位十进制数字，失败返回 -1 */
+static int ml307_digit2(const char **pp)
+{
+    const char *p = *pp;
+
+    if (p[0] < '0' || p[0] > '9' || p[1] < '0' || p[1] > '9') {
+        return -1;
+    }
+    *pp = p + 2;
+    return (p[0] - '0') * 10 + (p[1] - '0');
+}
+
+/* 期望下一个字符为 c */
+static int ml307_expect(const char **pp, char c)
+{
+    if (**pp != c) {
+        return -1;
+    }
+    (*pp)++;
+    return 0;
+}
+
+/*
+ * 解析模组时间串 "yy/MM/dd,hh:mm:ss±zz"（zz 为时区的 4 倍）。
+ * 实测 ML307R 返回的日期时间是 UTC，±zz 表示所在时区（+32 = UTC+8），
+ * 因此加上时区偏移得到本地墙钟时间，再写入 RTC。
+ */
+static int ml307_ntp_to_local(const char *s, uint32_t *time)
+{
+    const char *p = s;
+    datetime_t dt;
+    int64_t ts;
+    int v;
+    int tz;
+    int sign = 1;
+
+    memset(&dt, 0, sizeof(dt));
+
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    dt.year = (uint16_t)(2000 + v);
+    if (ml307_expect(&p, '/') != 0) return -1;
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    dt.month = (uint8_t)v;
+    if (ml307_expect(&p, '/') != 0) return -1;
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    dt.day = (uint8_t)v;
+    if (ml307_expect(&p, ',') != 0) return -1;
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    dt.hour = (uint8_t)v;
+    if (ml307_expect(&p, ':') != 0) return -1;
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    dt.minute = (uint8_t)v;
+    if (ml307_expect(&p, ':') != 0) return -1;
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    dt.second = (uint8_t)v;
+
+    if (*p == '+') {
+        p++;
+    } else if (*p == '-') {
+        sign = -1;
+        p++;
+    } else {
+        return -1;
+    }
+    if ((v = ml307_digit2(&p)) < 0) return -1;
+    tz = sign * v;                          /* 例如 +32 = UTC+8 */
+
+    if (!datetime_is_valid(&dt) ||
+        datetime_to_timestamp(&dt, &ts) != 0) {
+        return -1;
+    }
+    ts += (int64_t)tz * 900;                /* UTC -> 本地时间 */
+    if (ts < 0 || ts > (int64_t)0xFFFFFFFF) {
+        return -1;
+    }
+    *time = (uint32_t)ts;
+    return 0;
+}
+
+/* +MNTP: <result>[,"yy/MM/dd,hh:mm:ss±zz"] */
+static void ml307_ntp_urc(const char *line, uint32_t len, void *user)
+{
+    const char *p;
+    const char *end = line + len;
+    int result = 0;
+    uint32_t n = 0U;
+
+    (void)user;
+    if (line == NULL || len < 8U || !str_starts_with(line, ML307_NTP_URC)) {
+        return;
+    }
+    p = line + 7;
+    while (p < end && *p >= '0' && *p <= '9') {
+        result = result * 10 + (*p - '0');
+        p++;
+    }
+    while (p < end && (*p == ' ' || *p == '\t' || *p == ',')) {
+        p++;
+    }
+    if (p < end && *p == '"') {
+        p++;
+        while (p < end && *p != '"' && n + 1U < ML307_NTP_TIME_MAX) {
+            s_ntp_time[n++] = *p++;
+        }
+    }
+    s_ntp_time[n] = '\0';
+    s_ntp_result = result;
+    s_ntp_done = true;
+}
+
+int ml307_get_ntp_time(const char *server, uint32_t *time)
+{
+    char cmd[128];
+    uint32_t start;
+    int n;
+
+    if (time == NULL) {
+        return -1;
+    }
+    if (server == NULL || server[0] == '\0') {
+        server = ML307_NTP_DEFAULT_SRV;
+    }
+    if (!at_quoted_param_valid(server, 96U)) {
+        return -1;
+    }
+
+    if (!s_ntp_urc) {
+        if (at_urc_register(ML307_NTP_URC, ml307_ntp_urc, NULL) != 0) {
+            return -1;
+        }
+        s_ntp_urc = true;
+    }
+
+    s_ntp_done = false;
+    s_ntp_result = -1;
+    s_ntp_time[0] = '\0';
+
+    n = str_printf(cmd, sizeof(cmd), "AT+MNTP=\"%s\",%u,0,%u", server,
+                   (unsigned)ML307_NTP_PORT, (unsigned)ML307_NTP_TIMEOUT_S);
+    if (n <= 0 || n >= (int)sizeof(cmd)) {
+        return -1;
+    }
+    if (at_exec(cmd, 5000U) != AT_RESULT_OK) {
+        return -1;
+    }
+
+    start = hal_tick_get();
+    while (!s_ntp_done &&
+           (uint32_t)(hal_tick_get() - start) < ML307_NTP_WAIT_MS) {
+        (void)at_process();
+        hal_delay_ms(10U);
+    }
+    if (!s_ntp_done || s_ntp_result != 0 || s_ntp_time[0] == '\0') {
+        return -1;
+    }
+    return ml307_ntp_to_local(s_ntp_time, time);
 }
 
 /* 读取一个逗号分隔字段，支持可选的成对引号 */
