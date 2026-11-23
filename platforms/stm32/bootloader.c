@@ -1,7 +1,7 @@
 /*
  * bootloader.c - STM32 串口升级 Bootloader（F1/F4 共用）
  *
- * 分区与升级参数见 platforms/stm32<family>/partition.h：
+ * 分区与升级参数见 platforms/stm32<family> 或 apps/<board> 中的 partition.h：
  *   - F103：单 App 槽，Boot 8K / Boot Meta 4K / 配置 4K×2 / 日志 4K /
  *            App 52K / 升级包 52K；
  *   - F407：APP/BACKUP/OTA 三槽，升级前把 APP 备份到 BACKUP，

@@ -2,7 +2,7 @@
  * boot_crash.c - STM32 错误日志与崩溃记录（F1/F4 共用）
  *
  * 芯片相关的 Flash 擦写原语位于 platforms/stm32<family>/boot_flash.c；
- * 日志区地址/大小与栈顶参数位于 platforms/stm32<family>/partition.h。
+ * 日志区地址/大小与栈顶参数位于 platforms/stm32<family> 或 apps/<board> 中的 partition.h。
  */
 
 #include "boot_crash.h"

@@ -1,7 +1,7 @@
 /*
  * boot_config.h - STM32 配置区双备份（F1/F4 共用）
  *
- * 配置区主区/备份区地址与大小见 platforms/stm32<family>/partition.h。
+ * 配置区主区/备份区地址与大小见 platforms/stm32<family> 或 apps/<board> 中的 partition.h。
  * 每条记录 = 头部（magic/长度/CRC）+ 负载；写入时先备份后主区。
  */
 

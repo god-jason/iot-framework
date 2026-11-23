@@ -28,7 +28,7 @@
  *      然后启动 App。
  *
  * 修改后需同步：
- *   - stm32f103cb.ld（App=0x08006000）/ boot/bootloader.ld
+ *   - apps/f103cb/stm32f103cb.ld（App=0x08006000）/ apps/<board>/bootloader.ld
  *   - board.h 的 BOARD_APP_VECTOR_BASE=0x08006000U
  *   - tools/crash_log.py 的 F1 错误日志转储起始地址 0x08005000（4KB）
  */

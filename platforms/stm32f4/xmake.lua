@@ -2,8 +2,9 @@
 -- 公共实现见 platforms/stm32/xmake.lua
 if is_plat("cross") and ROS_FAMILY == "f4" then
     local board = "platforms/stm32f4"
+    local app_dir = path.join(ROS_ROOT, "apps/f407ve")
     local chip = ROS_CHIP or ""
-    local incs = { path.join(ROS_ROOT, board) }
+    local incs = { path.join(ROS_ROOT, board), app_dir }
     local cmsis_dev = (ROS_HAL_DRV ~= "")
         and path.join(ROS_HAL_DRV, "CMSIS", "Device", "ST", "STM32F4xx", "Include") or ""
     if ROS_HAL_INC ~= "" then table.insert(incs, ROS_HAL_INC) end
@@ -62,7 +63,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     ros_object("board-f407ve", {
         scope = "none",
         files = { "board.c", "boot_flash.c", "board_rtc.c",
-                  "startup_stm32f407.S",
+                  path.join(app_dir, "startup_stm32f407.S"),
                   path.join(ROS_ROOT, "platforms/stm32/stm32_main.c"),
                   path.join(ROS_ROOT, "platforms/stm32/stm32_shell.c"),
                   path.join(ROS_ROOT, "platforms/stm32/boot_meta.c"),
@@ -77,7 +78,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     -- Bootloader 板级对象
     ros_object("boot-f407ve", {
         scope = "none",
-        files = { "startup_stm32f407.S", "boot_flash.c",
+        files = { path.join(app_dir, "startup_stm32f407.S"), "boot_flash.c",
                   path.join(ROS_ROOT, "platforms/stm32/bootloader.c"),
                   path.join(ROS_ROOT, "platforms/stm32/boot_meta.c"),
                   path.join(ROS_ROOT, "platforms/stm32/boot_config.c") },
@@ -97,7 +98,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
         includedirs = incs,
         ldflags = {
             "-nostartfiles",
-            "-T" .. board .. "/stm32f407ve.ld",
+            "-T" .. path.join(app_dir, "stm32f407ve.ld"),
             "--specs=nano.specs",
             "-Wl,--gc-sections",
             "-lm",
@@ -119,7 +120,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
             "-nostartfiles", "-nostdlib",
             "-Wl,--defsym=BOOT_FLASH_LEN=0x4000",    -- Bootloader 16KB
             "-Wl,--defsym=BOOT_RAM_LEN=0x20000",     -- SRAM 128KB
-            "-T" .. path.join(ROS_ROOT, "platforms/stm32/bootloader.ld"),
+            "-T" .. path.join(app_dir, "bootloader.ld"),
             "-Wl,--gc-sections",
         },
     })

@@ -27,7 +27,7 @@
  * 错误日志是 S4 内的文本追加区，每条以 [unix] 开头，写满后整区擦除重写。
  *
  * 修改后需同步：
- *   - stm32f407ve.ld（App=0x08020000）/ boot/bootloader.ld
+ *   - apps/f407ve/stm32f407ve.ld（App=0x08020000）/ apps/<board>/bootloader.ld
  *   - board.h 的 BOARD_APP_VECTOR_BASE=0x08020000U
  *   - tools/crash_log.py 的 F4 错误日志转储起始地址 0x08010000（64KB）
  */

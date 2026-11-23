@@ -2,7 +2,7 @@
  * boot_meta.c - STM32 启动状态、升级历史与 CRC32（F1/F4 共用）
  *
  * 芯片相关的 Flash 擦写原语位于 platforms/stm32<family>/boot_flash.c；
- * 分区地址与板级参数（BOOT_*）位于 platforms/stm32<family>/partition.h。
+ * 分区地址与板级参数（BOOT_*）位于 platforms/stm32<family> 或 apps/<board> 中的 partition.h。
  *
  * 该文件同时编入 Bootloader 与 App：
  *   - Bootloader 构建使用 -nostdlib，因此这里不调用任何 libc 函数；

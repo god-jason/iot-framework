@@ -1,7 +1,7 @@
 /*
  * boot_meta.h - STM32 启动状态与升级历史（F1/F4 共用）
  *
- * Boot Meta 分区布局（地址/大小见 platforms/stm32<family>/partition.h）：
+ * Boot Meta 分区布局（地址/大小见 platforms/stm32<family> 或 apps/<board> 中的 partition.h）：
  *   [0x000] boot_state_t        32B  启动状态（tries / crash / ota 标识）
  *   [0x020] boot_ota_history_t  16B × N  升级进度历史（追加写）
  *
