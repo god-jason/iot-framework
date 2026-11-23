@@ -3,7 +3,8 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     local app_dir = path.join(ROS_ROOT, "apps/f407ve")
     local board_dir = path.join(ROS_ROOT, "platforms/stm32f4")
     local chip = ROS_CHIP or ""
-    local incs = { app_dir, board_dir }
+    local incs = { app_dir, board_dir,
+                   path.join(ROS_ROOT, "drivers/w25qxx") }
     local cmsis_dev = (ROS_HAL_DRV ~= "")
         and path.join(ROS_HAL_DRV, "CMSIS", "Device", "ST", "STM32F4xx", "Include") or ""
     if ROS_HAL_INC ~= "" then table.insert(incs, ROS_HAL_INC) end
@@ -24,6 +25,8 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     for _, dep in ipairs(ROS_OBJ_CROSS) do table.insert(fw_deps, dep) end
     table.insert(fw_deps, "board-f407ve")
     table.insert(fw_deps, "app-f407ve")
+    table.insert(fw_deps, "ros-vendor-littlefs")
+    table.insert(fw_deps, "ros-cmp-fs")
 
     ros_firmware("f407ve", {
         deps = fw_deps,

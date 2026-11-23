@@ -21,6 +21,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
             "stm32f4xx_hal_rcc.c", "stm32f4xx_hal_rcc_ex.c",
             "stm32f4xx_hal_gpio.c", "stm32f4xx_hal_uart.c",
             "stm32f4xx_hal_dma.c", "stm32f4xx_hal_dma_ex.c",
+            "stm32f4xx_hal_spi.c",
             "stm32f4xx_hal_pwr.c", "stm32f4xx_hal_pwr_ex.c",
             "stm32f4xx_hal_flash.c", "stm32f4xx_hal_flash_ex.c",
             "stm32f4xx_hal_tim.c", "stm32f4xx_hal_tim_ex.c",

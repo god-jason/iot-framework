@@ -28,6 +28,8 @@
 #include "http.h"
 #include "mqtt.h"
 #include "common.h"
+#include "fs.h"
+#include "w25qxx.h"
 
 #include "stm32_cube.h"
 
@@ -460,6 +462,148 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
     }
 }
 
+/* ==========================================================================
+ * littlefs：SPI1(PB3/PB4/PB5, AF5) + PB2 片选 + W25Qxx
+ * 注：PA6/PA7 被板载 LED 占用，SPI1 使用 PB3/PB4/PB5 复用引脚。
+ * ========================================================================== */
+
+#define FS_FLASH_SPI_ID        0U               /* SPI1 */
+#define FS_FLASH_CS_PIN        HAL_PIN(1, 2)    /* PB2 */
+#define FS_FLASH_BLOCK_SIZE    4096U            /* W25Q 扇区大小 */
+#define FS_FLASH_READ_SIZE     256U
+#define FS_FLASH_PROG_SIZE     256U
+#define FS_FLASH_CACHE_SIZE    256U
+#define FS_FLASH_LOOKAHEAD     16U
+#define FS_FLASH_SPI_HZ        10000000U
+
+static hal_spi_t         s_fs_spi;
+static w25qxx_handle_t   s_fs_flash;
+static ros_mutex_t       s_fs_lock;
+static struct lfs_config s_lfs_cfg;
+
+/* Cube SPI 初始化钩子：SPI1 复用 PB3(SCK)/PB4(MISO)/PB5(MOSI) */
+void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
+{
+    GPIO_InitTypeDef gpio;
+
+    if (hspi->Instance == SPI1) {
+        __HAL_RCC_SPI1_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+
+        memset(&gpio, 0, sizeof(gpio));
+        gpio.Pin = GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5;
+        gpio.Mode = GPIO_MODE_AF_PP;
+        gpio.Pull = GPIO_NOPULL;
+        gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        gpio.Alternate = GPIO_AF5_SPI1;
+        HAL_GPIO_Init(GPIOB, &gpio);
+    }
+}
+
+/* littlefs 块设备回调：SPI Flash 为共享总线，统一加锁串行访问 */
+static int fs_flash_read(const struct lfs_config *cfg, lfs_block_t block,
+                         lfs_off_t off, void *buffer, lfs_size_t size)
+{
+    uint32_t addr = (uint32_t)block * cfg->block_size + (uint32_t)off;
+    int rc;
+
+    (void)ros_mutex_lock(&s_fs_lock, ROS_TIMEOUT_FOREVER);
+    rc = w25qxx_read(&s_fs_flash, addr, buffer, (size_t)size);
+    (void)ros_mutex_unlock(&s_fs_lock);
+    return (rc == HAL_OK) ? 0 : LFS_ERR_IO;
+}
+
+static int fs_flash_prog(const struct lfs_config *cfg, lfs_block_t block,
+                         lfs_off_t off, const void *buffer, lfs_size_t size)
+{
+    uint32_t addr = (uint32_t)block * cfg->block_size + (uint32_t)off;
+    int rc;
+
+    (void)ros_mutex_lock(&s_fs_lock, ROS_TIMEOUT_FOREVER);
+    rc = w25qxx_write(&s_fs_flash, addr, buffer, (size_t)size);
+    (void)ros_mutex_unlock(&s_fs_lock);
+    return (rc == HAL_OK) ? 0 : LFS_ERR_IO;
+}
+
+static int fs_flash_erase(const struct lfs_config *cfg, lfs_block_t block)
+{
+    int rc;
+
+    (void)ros_mutex_lock(&s_fs_lock, ROS_TIMEOUT_FOREVER);
+    rc = w25qxx_erase_sector(&s_fs_flash,
+                             (uint32_t)block * cfg->block_size);
+    (void)ros_mutex_unlock(&s_fs_lock);
+    return (rc == HAL_OK) ? 0 : LFS_ERR_IO;
+}
+
+static int fs_flash_sync(const struct lfs_config *cfg)
+{
+    (void)cfg;
+    return 0;                           /* W25Q 写入为同步等待完成 */
+}
+
+/* 初始化 SPI Flash 并挂载 littlefs（首次挂载失败时自动格式化） */
+static int app_fs_init(void)
+{
+    hal_spi_config_t spi_cfg;
+    fs_config_t fs_cfg;
+    int rc;
+
+    (void)ros_mutex_init(&s_fs_lock);
+
+    memset(&spi_cfg, 0, sizeof(spi_cfg));
+    spi_cfg.id = FS_FLASH_SPI_ID;
+    spi_cfg.mode = HAL_SPI_MODE_MASTER;
+    spi_cfg.direction = HAL_SPI_DIRECTION_2LINES;
+    spi_cfg.baudrate = FS_FLASH_SPI_HZ;
+    spi_cfg.cpol = HAL_SPI_CPOL_LOW;
+    spi_cfg.cpha = HAL_SPI_CPHA_1EDGE;
+    spi_cfg.bit_order = HAL_SPI_BITORDER_MSB;
+    spi_cfg.data_bits = 8U;
+    rc = hal_spi_init(&s_fs_spi, &spi_cfg);
+    if (rc != HAL_OK) {
+        LOG_E("fs", "spi init failed: %d", rc);
+        return -1;
+    }
+
+    rc = w25qxx_init(&s_fs_flash, &s_fs_spi, FS_FLASH_CS_PIN);
+    if (rc != HAL_OK) {
+        LOG_E("fs", "spi flash init failed: %d", rc);
+        return -1;
+    }
+    if (s_fs_flash.capacity < FS_FLASH_BLOCK_SIZE) {
+        LOG_E("fs", "spi flash capacity invalid");
+        return -1;
+    }
+
+    memset(&s_lfs_cfg, 0, sizeof(s_lfs_cfg));
+    s_lfs_cfg.read = fs_flash_read;
+    s_lfs_cfg.prog = fs_flash_prog;
+    s_lfs_cfg.erase = fs_flash_erase;
+    s_lfs_cfg.sync = fs_flash_sync;
+    s_lfs_cfg.read_size = FS_FLASH_READ_SIZE;
+    s_lfs_cfg.prog_size = FS_FLASH_PROG_SIZE;
+    s_lfs_cfg.block_size = FS_FLASH_BLOCK_SIZE;
+    s_lfs_cfg.block_count = s_fs_flash.capacity / FS_FLASH_BLOCK_SIZE;
+    s_lfs_cfg.cache_size = FS_FLASH_CACHE_SIZE;
+    s_lfs_cfg.lookahead_size = FS_FLASH_LOOKAHEAD;
+    s_lfs_cfg.block_cycles = 500;
+
+    memset(&fs_cfg, 0, sizeof(fs_cfg));
+    fs_cfg.lfs_cfg = &s_lfs_cfg;
+    fs_cfg.auto_format = true;
+    rc = fs_init(&fs_cfg);
+    if (rc < 0) {
+        LOG_E("fs", "littlefs mount failed: %d", rc);
+        return -1;
+    }
+
+    LOG_I("fs", "littlefs mounted: %u KB, %u blocks",
+          (unsigned)(s_fs_flash.capacity / 1024U),
+          (unsigned)s_lfs_cfg.block_count);
+    return 0;
+}
+
 static void app_pwm_register(void)
 {
     uint32_t i;
@@ -624,6 +768,7 @@ void app_main(void *arg)
         app_fan_init();
     }
     app_stepper_init();
+    (void)app_fs_init();
 
     /* 心跳：板载 LED 1Hz */
     (void)ros_task_create(&s_blink_task, "blink", 2U, blink_entry, NULL,

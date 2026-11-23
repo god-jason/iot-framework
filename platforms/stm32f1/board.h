@@ -27,7 +27,7 @@ void board_init(void);
 #define BOARD_NAME              "f103cb"
 #define BOARD_APP_VECTOR_BASE   0x08006000U     /* App 区基址 */
 #define BOARD_BLINK_STACK_SIZE  512U            /* 20KB SRAM 紧张，取最小可用值 */
-#define BOARD_APP_STACK_SIZE    512U
+#define BOARD_APP_STACK_SIZE    1024U           /* app 任务含 sched/命令注册，需较深调用栈 */
 
 /* 把 trace 输出注册到应用初始化的 UART1(PA9)（硬件初始化在 apps/f103cb/app_uart.c） */
 void board_trace_start(uint32_t baud);
