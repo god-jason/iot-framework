@@ -15,7 +15,7 @@
 
 typedef struct {
     bool used;
-    hal_pin_t pin;
+    uint16_t pin;
     hal_exti_callback_t callback;
     void *user_data;
 } stm32_exti_slot_t;
@@ -33,7 +33,7 @@ static IRQn_Type stm32_exti_irqn(uint32_t index)
     return EXTI15_10_IRQn;
 }
 
-int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
+int hal_exti_init(uint16_t pin, const hal_exti_config_t *config)
 {
     GPIO_InitTypeDef init;
     GPIO_TypeDef *port;
@@ -84,7 +84,7 @@ int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
     return HAL_OK;
 }
 
-int hal_exti_enable(hal_pin_t pin)
+int hal_exti_enable(uint16_t pin)
 {
     uint32_t index = HAL_PIN_GET_INDEX(pin);
     uint16_t mask;
@@ -98,7 +98,7 @@ int hal_exti_enable(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_disable(hal_pin_t pin)
+int hal_exti_disable(uint16_t pin)
 {
     uint32_t index = HAL_PIN_GET_INDEX(pin);
     uint16_t mask;
@@ -112,7 +112,7 @@ int hal_exti_disable(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_clear(hal_pin_t pin)
+int hal_exti_clear(uint16_t pin)
 {
     uint32_t index = HAL_PIN_GET_INDEX(pin);
 
@@ -124,7 +124,7 @@ int hal_exti_clear(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_deinit(hal_pin_t pin)
+int hal_exti_deinit(uint16_t pin)
 {
     GPIO_TypeDef *port = stm32_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);

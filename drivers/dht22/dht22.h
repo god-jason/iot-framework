@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    hal_pin_t pin;          /* 单总线数据引脚 */
+    uint16_t pin;          /* 单总线数据引脚 */
     uint32_t last_read_ms;   /* 上次成功通信的开始时刻，用于限制采样间隔 */
     bool sampled;            /* last_read_ms 是否有效（避免 tick 0 的歧义） */
     bool initialized;
@@ -35,7 +35,7 @@ typedef struct {
  * @param  pin     数据引脚（HAL_PIN(port, index) 编码）
  * @return 0 成功，负值为 HAL 状态码
  */
-int dht22_init(dht22_handle_t *handle, hal_pin_t pin);
+int dht22_init(dht22_handle_t *handle, uint16_t pin);
 
 /**
  * @brief  反初始化（释放引脚）

@@ -38,7 +38,7 @@ static int hc_sr04_wait_level(const hc_sr04_handle_t *handle, int level,
     }
 }
 
-int hc_sr04_init(hc_sr04_handle_t *handle, hal_pin_t trig, hal_pin_t echo)
+int hc_sr04_init(hc_sr04_handle_t *handle, uint16_t trig, uint16_t echo)
 {
     if (handle == NULL || trig == 0U || echo == 0U || trig == echo) {
         return (int)HAL_INVALID_PARAM;

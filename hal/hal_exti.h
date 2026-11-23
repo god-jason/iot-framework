@@ -9,7 +9,7 @@
  */
 
 #include "hal_def.h"
-#include "hal_pin.h"
+#include "hal_gpio.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,7 +28,7 @@ typedef enum {
  * user_data : 注册时绑定的上下文，可为 NULL。
  * 注意：执行于中断上下文，禁止阻塞。
  */
-typedef void (*hal_exti_callback_t)(hal_pin_t pin, void *user_data);
+typedef void (*hal_exti_callback_t)(uint16_t pin, void *user_data);
 
 /* 外部中断配置 */
 typedef struct {
@@ -46,19 +46,19 @@ typedef struct {
  * 返回   : HAL_OK 成功；HAL_INVALID_PARAM；引脚不支持中断返回 HAL_NOT_SUPPORTED。
  * 注意   : 初始化后默认未必使能，需再调用 hal_exti_enable()。
  */
-int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config);
+int hal_exti_init(uint16_t pin, const hal_exti_config_t *config);
 
 /* 使能指定引脚的外部中断；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-int hal_exti_enable(hal_pin_t pin);
+int hal_exti_enable(uint16_t pin);
 
 /* 关闭指定引脚的外部中断；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
-int hal_exti_disable(hal_pin_t pin);
+int hal_exti_disable(uint16_t pin);
 
 /* 清除挂起的中断标志；返回 HAL_OK / HAL_INVALID_PARAM */
-int hal_exti_clear(hal_pin_t pin);
+int hal_exti_clear(uint16_t pin);
 
 /* 反初始化并释放该引脚的中断资源；返回 HAL_OK / HAL_INVALID_PARAM */
-int hal_exti_deinit(hal_pin_t pin);
+int hal_exti_deinit(uint16_t pin);
 
 #ifdef __cplusplus
 }

@@ -23,7 +23,7 @@ typedef struct {
  * @brief  初始化（器件无配置寄存器，仅保存总线并拉高片选）
  * @param  cs  片选引脚，HAL_PIN(0,0) 表示由外部控制
  */
-int max6675_init(max6675_handle_t *handle, hal_spi_t *spi, hal_pin_t cs);
+int max6675_init(max6675_handle_t *handle, hal_spi_t *spi, uint16_t cs);
 
 /** @brief  反初始化 */
 int max6675_deinit(max6675_handle_t *handle);

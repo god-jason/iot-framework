@@ -87,7 +87,7 @@ int w25qxx_read_id(w25qxx_handle_t *handle, w25qxx_id_t *id)
     return HAL_OK;
 }
 
-int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
+int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, uint16_t cs)
 {
     uint8_t status = 0U;
     uint8_t cmd = W25QXX_CMD_RELEASE_PD;

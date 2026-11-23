@@ -184,7 +184,7 @@ static size_t s_eth_len;
 
 /* ============================== 通用辅助 ============================== */
 
-static bool pc_gpio_valid(hal_pin_t pin)
+static bool pc_gpio_valid(uint16_t pin)
 {
     return HAL_PIN_GET_PORT(pin) < PC_GPIO_PORTS &&
            HAL_PIN_GET_INDEX(pin) < PC_GPIO_PINS;
@@ -344,7 +344,7 @@ int hal_pin_init(const hal_pin_config_t *config)
     return HAL_OK;
 }
 
-int hal_pin_deinit(hal_pin_t pin)
+int hal_pin_deinit(uint16_t pin)
 {
     if (!pc_gpio_valid(pin)) {
         return HAL_INVALID_PARAM;
@@ -354,7 +354,7 @@ int hal_pin_deinit(hal_pin_t pin)
 
 /* ============================== GPIO ============================== */
 
-int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
+int hal_gpio_init(uint16_t pin, const hal_gpio_config_t *config)
 {
     pc_gpio_t *gpio;
 
@@ -370,7 +370,7 @@ int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
     return HAL_OK;
 }
 
-int hal_gpio_deinit(hal_pin_t pin)
+int hal_gpio_deinit(uint16_t pin)
 {
     pc_gpio_t *gpio;
 
@@ -385,7 +385,7 @@ int hal_gpio_deinit(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
+int hal_gpio_write(uint16_t pin, hal_gpio_level_e level)
 {
     if (!pc_gpio_valid(pin)) {
         return HAL_INVALID_PARAM;
@@ -397,7 +397,7 @@ int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
     return HAL_OK;
 }
 
-int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
+int hal_gpio_read(uint16_t pin, hal_gpio_level_e *level)
 {
     if (level == NULL || !pc_gpio_valid(pin)) {
         return HAL_INVALID_PARAM;
@@ -406,7 +406,7 @@ int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
     return HAL_OK;
 }
 
-int hal_gpio_toggle(hal_pin_t pin)
+int hal_gpio_toggle(uint16_t pin)
 {
     pc_gpio_t *gpio;
 
@@ -418,19 +418,19 @@ int hal_gpio_toggle(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_gpio_set(hal_pin_t pin)
+int hal_gpio_set(uint16_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_HIGH);
 }
 
-int hal_gpio_reset(hal_pin_t pin)
+int hal_gpio_reset(uint16_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_LOW);
 }
 
 /* ============================== EXTI ============================== */
 
-int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
+int hal_exti_init(uint16_t pin, const hal_exti_config_t *config)
 {
     pc_exti_t *exti;
 
@@ -444,7 +444,7 @@ int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
     return HAL_OK;
 }
 
-int hal_exti_enable(hal_pin_t pin)
+int hal_exti_enable(uint16_t pin)
 {
     pc_exti_t *exti;
 
@@ -459,7 +459,7 @@ int hal_exti_enable(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_disable(hal_pin_t pin)
+int hal_exti_disable(uint16_t pin)
 {
     pc_exti_t *exti;
 
@@ -471,7 +471,7 @@ int hal_exti_disable(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_clear(hal_pin_t pin)
+int hal_exti_clear(uint16_t pin)
 {
     if (!pc_gpio_valid(pin)) {
         return HAL_INVALID_PARAM;
@@ -479,7 +479,7 @@ int hal_exti_clear(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_deinit(hal_pin_t pin)
+int hal_exti_deinit(uint16_t pin)
 {
     pc_exti_t *exti;
 
@@ -581,6 +581,7 @@ int hal_spi_init(hal_spi_t *handle, const hal_spi_config_t *config)
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
+    handle->base.instance = (void *)(uintptr_t)(config->id + 1U);
     pc_handle_ready(&handle->base, HAL_STATE_READY);
     return HAL_OK;
 }
@@ -703,6 +704,7 @@ int hal_i2c_init(hal_i2c_t *handle, const hal_i2c_config_t *config)
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
+    handle->base.instance = (void *)(uintptr_t)(config->id + 1U);
     pc_handle_ready(&handle->base, HAL_STATE_READY);
     return HAL_OK;
 }
@@ -910,6 +912,7 @@ int hal_i2s_init(hal_i2s_t *handle, const hal_i2s_config_t *config)
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
+    handle->base.instance = (void *)(uintptr_t)(config->id + 1U);
     pc_handle_ready(&handle->base, HAL_STATE_READY);
     return HAL_OK;
 }
@@ -1156,6 +1159,7 @@ int hal_adc_init(hal_adc_t *handle, const hal_adc_config_t *config)
     handle->config = *config;
     handle->callback = NULL;
     handle->user_data = NULL;
+    handle->base.instance = (void *)(uintptr_t)(config->id + 1U);
     pc_handle_ready(&handle->base, HAL_STATE_READY);
     return HAL_OK;
 }
@@ -1585,6 +1589,7 @@ int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
         return HAL_INVALID_PARAM;
     }
     handle->config = *config;
+    handle->base.instance = (void *)(uintptr_t)(config->id + 1U);
     pc_handle_ready(&handle->base, HAL_STATE_READY);
     return HAL_OK;
 }
@@ -2782,7 +2787,7 @@ void ros_pc_adc_set_max(uint8_t channel, uint32_t max)
     }
 }
 
-void ros_pc_exti_trigger(hal_pin_t pin)
+void ros_pc_exti_trigger(uint16_t pin)
 {
     pc_exti_t *exti;
 
@@ -2901,7 +2906,7 @@ void ros_test_adc_set_max(uint8_t channel, uint32_t max)
     ros_pc_adc_set_max(channel, max);
 }
 
-void ros_test_exti_trigger(hal_pin_t pin)
+void ros_test_exti_trigger(uint16_t pin)
 {
     ros_pc_exti_trigger(pin);
 }

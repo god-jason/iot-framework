@@ -3,6 +3,8 @@
  *
  * 支持 SPI1/SPI2（大容量型号含 SPI3）主机/从机、8/16 位、四种
  * CPOL/CPHA 组合与 LSB/MSB 位序。片选与引脚复用由板级/驱动配置。
+ *
+ * 编号：config.id = 0/1/2 依次对应 SPI1/SPI2/SPI3（按芯片裁剪）。
  */
 
 #if defined(ROS_STM32_F1)
@@ -26,6 +28,19 @@
 #define STM32_SPI_CR1_DFF   (1UL << 11)
 #define STM32_SPI_CR1_BIDIOE (1UL << 14)
 #define STM32_SPI_CR1_BIDIMODE (1UL << 15)
+
+static SPI_TypeDef *const s_stm32_spi_inst[] = {
+    SPI1,
+#ifdef SPI2
+    SPI2,
+#endif
+#ifdef SPI3
+    SPI3,
+#endif
+};
+
+#define STM32_SPI_CH_COUNT \
+    (sizeof(s_stm32_spi_inst) / sizeof(s_stm32_spi_inst[0]))
 
 static uint32_t stm32_spi_pclk2(void)
 {
@@ -103,10 +118,11 @@ int hal_spi_init(hal_spi_t *handle, const hal_spi_config_t *config)
         return HAL_NOT_SUPPORTED;
     }
 
-    spi = stm32_spi_instance(handle);
-    if (spi == NULL) {
-        return HAL_NOT_READY;
+    if (config->id >= STM32_SPI_CH_COUNT) {
+        return HAL_INVALID_PARAM;
     }
+    spi = s_stm32_spi_inst[config->id];
+    handle->base.instance = spi;
 
     if (spi == SPI1) {
         RCC->APB2ENR |= (1UL << 12);

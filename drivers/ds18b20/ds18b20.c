@@ -74,7 +74,7 @@ static uint8_t ds18b20_read_byte(ds18b20_handle_t *handle)
     return value;
 }
 
-int ds18b20_init(ds18b20_handle_t *handle, hal_pin_t pin)
+int ds18b20_init(ds18b20_handle_t *handle, uint16_t pin)
 {
     hal_gpio_config_t cfg;
 

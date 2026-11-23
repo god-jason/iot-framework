@@ -37,7 +37,7 @@ static void ws2812b_encode_byte(uint8_t value, uint8_t *out)
     out[2] = (uint8_t)(bits & 0xFFU);
 }
 
-int ws2812b_init(ws2812b_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
+int ws2812b_init(ws2812b_handle_t *handle, hal_spi_t *spi, uint16_t cs,
                  uint16_t led_count, uint8_t *pixels, uint8_t *encoded)
 {
     if (handle == NULL || spi == NULL || led_count == 0U ||

@@ -2,6 +2,9 @@
  * hal_i2s.c - STM32F4 I2S HAL 适配
  *
  * 由原单文件 stm32_f4xx.c 按模块拆分。
+ *
+ * 编号：config.id = 0/1 依次对应 I2S2(SPI2)/I2S3(SPI3)；
+ * hal_i2s_init() 内部按编号取静态 Cube 句柄，调用者无需提供实例。
  */
 
 #if defined(ROS_STM32_F4)
@@ -12,6 +15,32 @@
 #include "stm32_internal.h"
 
 #include <string.h>
+
+#define STM32_I2S_COUNT    2U
+
+static I2S_HandleTypeDef s_hi2s[STM32_I2S_COUNT];
+
+static SPI_TypeDef *const s_i2s_inst[STM32_I2S_COUNT] = {
+#ifdef SPI2
+    [0] = SPI2,
+#endif
+#ifdef SPI3
+    [1] = SPI3,
+#endif
+};
+
+static I2S_HandleTypeDef *stm32_i2s_instance(uint8_t instance)
+{
+    I2S_HandleTypeDef *hi2s;
+
+    if ((instance >= STM32_I2S_COUNT) || (s_i2s_inst[instance] == NULL)) {
+        return NULL;
+    }
+    hi2s = &s_hi2s[instance];
+    memset(hi2s, 0, sizeof(*hi2s));
+    hi2s->Instance = s_i2s_inst[instance];
+    return hi2s;
+}
 
 int hal_i2s_init(hal_i2s_t *handle,
                             const hal_i2s_config_t *config)
@@ -25,12 +54,11 @@ int hal_i2s_init(hal_i2s_t *handle,
         return HAL_ALREADY_INIT;
     }
 
-    hi2s = (I2S_HandleTypeDef *)handle->base.instance;
-    if ((hi2s == NULL) || (hi2s->Instance == NULL)) {
-        return HAL_NOT_READY;
+    hi2s = stm32_i2s_instance(config->id);
+    if (hi2s == NULL) {
+        return HAL_INVALID_PARAM;
     }
-
-    memset(&hi2s->Init, 0, sizeof(hi2s->Init));
+    handle->base.instance = hi2s;
 
     switch (config->mode) {
     case HAL_I2S_MODE_MASTER_RX:

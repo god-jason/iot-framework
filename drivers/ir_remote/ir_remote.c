@@ -168,7 +168,7 @@ int ir_remote_recv(ir_remote_handle_t *h, uint16_t *timings, size_t max_timings,
     return (n >= IR_NEC_TIMINGS_MIN) ? HAL_OK : (int)HAL_TIMEOUT;
 }
 
-int ir_remote_init(ir_remote_handle_t *handle, hal_pin_t tx_pin, hal_pin_t rx_pin)
+int ir_remote_init(ir_remote_handle_t *handle, uint16_t tx_pin, uint16_t rx_pin)
 {
     if (handle == NULL || (tx_pin == 0U && rx_pin == 0U)) {
         return (int)HAL_INVALID_PARAM;

@@ -2,6 +2,9 @@
  * hal_uart.c - STM32F4 UART HAL 适配
  *
  * 由原单文件 stm32_f4xx.c 按模块拆分。
+ *
+ * 编号：config.id = 0..N 依次对应 USART1/USART2/USART3/UART4/UART5/
+ * USART6；hal_uart_init() 内部按编号取静态 Cube 句柄，调用者无需提供实例。
  */
 
 #if defined(ROS_STM32_F4)
@@ -12,6 +15,42 @@
 #include "stm32_internal.h"
 
 #include <string.h>
+
+#define STM32_UART_COUNT   6U
+
+static UART_HandleTypeDef s_huart[STM32_UART_COUNT];
+
+static USART_TypeDef *const s_uart_inst[STM32_UART_COUNT] = {
+    [0] = USART1,
+#ifdef USART2
+    [1] = USART2,
+#endif
+#ifdef USART3
+    [2] = USART3,
+#endif
+#ifdef UART4
+    [3] = UART4,
+#endif
+#ifdef UART5
+    [4] = UART5,
+#endif
+#ifdef USART6
+    [5] = USART6,
+#endif
+};
+
+static UART_HandleTypeDef *stm32_uart_instance(uint8_t instance)
+{
+    UART_HandleTypeDef *huart;
+
+    if ((instance >= STM32_UART_COUNT) || (s_uart_inst[instance] == NULL)) {
+        return NULL;
+    }
+    huart = &s_huart[instance];
+    memset(huart, 0, sizeof(*huart));
+    huart->Instance = s_uart_inst[instance];
+    return huart;
+}
 
 static uint32_t stm32_uart_mode(hal_uart_mode_e mode)
 {
@@ -38,10 +77,11 @@ int hal_uart_init(hal_uart_t *handle,
         return HAL_ALREADY_INIT;
     }
 
-    huart = (UART_HandleTypeDef *)handle->base.instance;
-    if ((huart == NULL) || (huart->Instance == NULL)) {
-        return HAL_NOT_READY;
+    huart = stm32_uart_instance(config->id);
+    if (huart == NULL) {
+        return HAL_INVALID_PARAM;
     }
+    handle->base.instance = huart;
 
     if (config->word_length == HAL_UART_WORD_7BIT) {
         /* STM32F4 只支持 8/9 位数据。 */

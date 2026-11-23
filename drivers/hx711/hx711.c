@@ -42,7 +42,7 @@ static int hx711_wait_ready(hx711_handle_t *handle, uint32_t timeout_ms)
     }
 }
 
-int hx711_init(hx711_handle_t *handle, hal_pin_t sck, hal_pin_t dout)
+int hx711_init(hx711_handle_t *handle, uint16_t sck, uint16_t dout)
 {
     if (handle == NULL || sck == 0U || dout == 0U || sck == dout) {
         return (int)HAL_INVALID_PARAM;

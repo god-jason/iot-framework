@@ -17,10 +17,7 @@
 
 #include <string.h>
 
-/* USART1 / USART2 的 HAL 句柄与框架句柄（全局，便于调试器查看） */
-UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart2;
-
+/* USART1 / USART2 的框架句柄（全局，便于调试器查看） */
 static hal_uart_t s_uart1;
 static hal_uart_t s_uart2;
 
@@ -101,16 +98,13 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
     }
 }
 
-/* 初始化一个 USART 句柄（USART1 / USART2 共用） */
-static void board_uart_setup(UART_HandleTypeDef *huart, hal_uart_t *handle,
-                             USART_TypeDef *instance, uint32_t baudrate)
+/* 初始化一个串口句柄（instance：0 = USART1，1 = USART2，平台按编号定位实例） */
+static void board_uart_setup(hal_uart_t *handle, uint8_t instance,
+                             uint32_t baudrate)
 {
     hal_uart_config_t cfg;
 
     memset(handle, 0, sizeof(*handle));
-    memset(huart, 0, sizeof(*huart));
-    huart->Instance = instance;
-    handle->base.instance = huart;
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.baudrate = (baudrate != 0U) ? baudrate : 115200U;
@@ -120,6 +114,7 @@ static void board_uart_setup(UART_HandleTypeDef *huart, hal_uart_t *handle,
     cfg.flow_control = HAL_UART_FLOW_NONE;
     cfg.mode = HAL_UART_MODE_TX_RX;
     cfg.oversampling = false;       /* 16 倍过采样 */
+    cfg.id = instance;
 
     if (hal_uart_init(handle, &cfg) != HAL_OK) {
         board_halt();
@@ -128,7 +123,7 @@ static void board_uart_setup(UART_HandleTypeDef *huart, hal_uart_t *handle,
 
 void board_uart_init(uint32_t baudrate)
 {
-    board_uart_setup(&huart1, &s_uart1, USART1, baudrate);
+    board_uart_setup(&s_uart1, 0U, baudrate);
 }
 
 hal_uart_t *board_uart1(void)
@@ -142,7 +137,7 @@ hal_uart_t *board_uart2(void)
     static bool inited;
 
     if (!inited) {
-        board_uart_setup(&huart2, &s_uart2, USART2, 115200U);
+        board_uart_setup(&s_uart2, 1U, 115200U);
         inited = true;
     }
     return &s_uart2;

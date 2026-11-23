@@ -5,6 +5,8 @@
  * DMA 方式在 F1 平台未实现，返回 HAL_NOT_SUPPORTED。
  * 采样时间参数按 ADC 时钟周期数解释（1.5/7.5/13.5/28.5/41.5/55.5/
  * 71.5/239.5 取最接近档位）。
+ *
+ * 编号：config.id = 0/1 依次对应 ADC1/ADC2（按芯片裁剪）。
  */
 
 #if defined(ROS_STM32_F1)
@@ -29,6 +31,16 @@
 #define STM32_ADC_CR2_EXTSEL_EXTI11   6UL
 
 static hal_adc_t *s_stm32_adc[2];
+
+static ADC_TypeDef *const s_stm32_adc_inst[] = {
+    ADC1,
+#ifdef ADC2
+    ADC2,
+#endif
+};
+
+#define STM32_ADC_CH_COUNT \
+    (sizeof(s_stm32_adc_inst) / sizeof(s_stm32_adc_inst[0]))
 
 static uint8_t stm32_adc_index(ADC_TypeDef *adc)
 {
@@ -139,10 +151,11 @@ int hal_adc_init(hal_adc_t *handle, const hal_adc_config_t *config)
         return HAL_NOT_SUPPORTED;
     }
 
-    adc = (ADC_TypeDef *)handle->base.instance;
-    if (adc == NULL) {
-        return HAL_NOT_READY;
+    if (config->id >= STM32_ADC_CH_COUNT) {
+        return HAL_INVALID_PARAM;
     }
+    adc = s_stm32_adc_inst[config->id];
+    handle->base.instance = adc;
 
     stm32_adc_clock_enable(adc);
 

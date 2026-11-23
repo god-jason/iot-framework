@@ -1,5 +1,6 @@
--- platforms/stm32f4/xmake.lua - STM32F4 外设（Cube HAL）与 F407VE 板级/固件
--- 公共实现见 platforms/stm32/xmake.lua
+-- platforms/stm32f4/xmake.lua - STM32F4 外设库与 F407VE 板级对象
+-- 公共实现见 platforms/stm32/xmake.lua；最终固件/Bootloader 目标定义在
+-- apps/f407ve/xmake.lua。
 if is_plat("cross") and ROS_FAMILY == "f4" then
     local board = "platforms/stm32f4"
     local app_dir = path.join(ROS_ROOT, "apps/f407ve")
@@ -12,10 +13,8 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     if ROS_CMSIS_INC ~= "" then table.insert(incs, ROS_CMSIS_INC) end
 
     local hal_ok = (ROS_HAL_SRC ~= "" and os.isdir(ROS_HAL_SRC))
-    local fw_deps = {}
-    for _, dep in ipairs(ROS_OBJ_CROSS) do table.insert(fw_deps, dep) end
 
-    -- Cube HAL 子集（仅固件使用）
+    -- Cube HAL 子集库（供固件链接）
     if hal_ok then
         local hal_modules = {
             "stm32f4xx_hal.c", "stm32f4xx_hal_cortex.c",
@@ -39,12 +38,11 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
         end
 
         ros_object("hal-f407ve", {
-            scope = "none",
+            scope = "cross",
             files = hal_files,
             defines = { "USE_HAL_DRIVER", ROS_CHIP, "HSE_VALUE=8000000" },
             includedirs = incs,
         })
-        table.insert(fw_deps, "hal-f407ve")
     end
 
     -- 外设适配模块（板级文件由下方 board 目标单独编译）
@@ -56,7 +54,6 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
             defines = { "USE_HAL_DRIVER", ROS_CHIP, "ROS_TRACE_CLOCK_HZ=168000000" },
             includedirs = incs,
         })
-        table.insert(fw_deps, "ros-platform-stm32f4")
     end
 
     -- App 板级对象（共享 boot/config/ota 实现依赖本板 partition.h，故在此编译）
@@ -85,43 +82,5 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
         defines = { ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
         cflags = { "-ffreestanding" },
-    })
-
-    table.insert(fw_deps, "board-f407ve")
-    table.insert(fw_deps, "app-f407ve")
-
-    ros_firmware("ros-fw-f407ve", {
-        deps = fw_deps,
-        defines = { "ROS_PLATFORM_STM32", "ROS_STM32_F4", "USE_HAL_DRIVER", ROS_CHIP,
-                    "HSE_VALUE=8000000",
-                    "LOG_LEVEL=LOG_LEVEL_INFO" },
-        includedirs = incs,
-        ldflags = {
-            "-nostartfiles",
-            "-T" .. path.join(app_dir, "stm32f407ve.ld"),
-            "--specs=nano.specs",
-            "-Wl,--gc-sections",
-            "-lm",
-        },
-        after_load = function (target)
-            if not hal_ok then
-                cprint("${yellow}[f407ve] 未找到 Cube HAL 源码，请用 " ..
-                       "--cube_hal_dir=<.../STM32F4xx_HAL_Driver> 指定${clear}")
-            end
-            cprint("${dim}[f407ve] chip=" .. chip .. "${clear}")
-        end,
-    })
-
-    ros_bootloader("ros-boot-f407ve", {
-        deps = { "boot-f407ve" },
-        defines = { ROS_CHIP, "HSE_VALUE=8000000" },
-        includedirs = incs,
-        ldflags = {
-            "-nostartfiles", "-nostdlib",
-            "-Wl,--defsym=BOOT_FLASH_LEN=0x4000",    -- Bootloader 16KB
-            "-Wl,--defsym=BOOT_RAM_LEN=0x20000",     -- SRAM 128KB
-            "-T" .. path.join(app_dir, "bootloader.ld"),
-            "-Wl,--gc-sections",
-        },
     })
 end

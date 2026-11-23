@@ -120,7 +120,7 @@ int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
     return HAL_OK;
 }
 
-int dht11_init(dht11_handle_t *handle, hal_pin_t pin)
+int dht11_init(dht11_handle_t *handle, uint16_t pin)
 {
     int ret;
 

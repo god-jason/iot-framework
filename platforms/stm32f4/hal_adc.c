@@ -2,6 +2,9 @@
  * hal_adc.c - STM32F4 ADC HAL 适配
  *
  * 由原单文件 stm32_f4xx.c 按模块拆分。
+ *
+ * 编号：config.id = 0..N 依次对应 ADC1/ADC2/ADC3；
+ * hal_adc_init() 内部按编号取静态 Cube 句柄，调用者无需提供实例。
  */
 
 #if defined(ROS_STM32_F4)
@@ -12,6 +15,33 @@
 #include "stm32_internal.h"
 
 #include <string.h>
+
+#define STM32_ADC_COUNT    3U
+
+static ADC_HandleTypeDef s_hadc[STM32_ADC_COUNT];
+
+static ADC_TypeDef *const s_adc_inst[STM32_ADC_COUNT] = {
+    [0] = ADC1,
+#ifdef ADC2
+    [1] = ADC2,
+#endif
+#ifdef ADC3
+    [2] = ADC3,
+#endif
+};
+
+static ADC_HandleTypeDef *stm32_adc_instance(uint8_t instance)
+{
+    ADC_HandleTypeDef *hadc;
+
+    if ((instance >= STM32_ADC_COUNT) || (s_adc_inst[instance] == NULL)) {
+        return NULL;
+    }
+    hadc = &s_hadc[instance];
+    memset(hadc, 0, sizeof(*hadc));
+    hadc->Instance = s_adc_inst[instance];
+    return hadc;
+}
 
 int hal_adc_init(hal_adc_t *handle,
                             const hal_adc_config_t *config)
@@ -24,12 +54,12 @@ int hal_adc_init(hal_adc_t *handle,
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
     }
-    hadc = (ADC_HandleTypeDef *)handle->base.instance;
-    if ((hadc == NULL) || (hadc->Instance == NULL)) {
-        return HAL_NOT_READY;
+    hadc = stm32_adc_instance(config->id);
+    if (hadc == NULL) {
+        return HAL_INVALID_PARAM;
     }
+    handle->base.instance = hadc;
 
-    memset(&hadc->Init, 0, sizeof(hadc->Init));
     hadc->Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
     switch (config->resolution) {
     case HAL_ADC_RESOLUTION_6BIT:

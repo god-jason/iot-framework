@@ -53,6 +53,8 @@ typedef enum {
 
 /* UART 配置 */
 typedef struct {
+    uint8_t id;                     /* 外设编号（0 基）：0 = 第 1 路 UART，平台按编号定位实例 */
+
     uint32_t baudrate;              /* 波特率（bps），需大于 0 */
 
     hal_uart_word_e word_length;   /* 数据字长 */

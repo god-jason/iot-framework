@@ -2,6 +2,9 @@
  * hal_spi.c - STM32H7 SPI HAL 适配
  *
  * 由原单文件 stm32_f4xx.c 按模块拆分。
+ *
+ * 编号：config.id = 0..N 依次对应 SPI1..SPI6；
+ * hal_spi_init() 内部按编号取静态 Cube 句柄，调用者无需提供实例。
  */
 
 #if defined(ROS_STM32_H7)
@@ -12,6 +15,42 @@
 #include "stm32_internal.h"
 
 #include <string.h>
+
+#define STM32_SPI_COUNT    6U
+
+static SPI_HandleTypeDef s_hspi[STM32_SPI_COUNT];
+
+static SPI_TypeDef *const s_spi_inst[STM32_SPI_COUNT] = {
+    [0] = SPI1,
+#ifdef SPI2
+    [1] = SPI2,
+#endif
+#ifdef SPI3
+    [2] = SPI3,
+#endif
+#ifdef SPI4
+    [3] = SPI4,
+#endif
+#ifdef SPI5
+    [4] = SPI5,
+#endif
+#ifdef SPI6
+    [5] = SPI6,
+#endif
+};
+
+static SPI_HandleTypeDef *stm32_spi_instance(uint8_t instance)
+{
+    SPI_HandleTypeDef *hspi;
+
+    if ((instance >= STM32_SPI_COUNT) || (s_spi_inst[instance] == NULL)) {
+        return NULL;
+    }
+    hspi = &s_hspi[instance];
+    memset(hspi, 0, sizeof(*hspi));
+    hspi->Instance = s_spi_inst[instance];
+    return hspi;
+}
 
 static uint32_t stm32_spi_prescaler(SPI_TypeDef *instance, uint32_t baudrate)
 {
@@ -64,12 +103,12 @@ int hal_spi_init(hal_spi_t *handle,
         return HAL_INVALID_PARAM;
     }
 
-    hspi = (SPI_HandleTypeDef *)handle->base.instance;
-    if ((hspi == NULL) || (hspi->Instance == NULL)) {
-        return HAL_NOT_READY;
+    hspi = stm32_spi_instance(config->id);
+    if (hspi == NULL) {
+        return HAL_INVALID_PARAM;
     }
+    handle->base.instance = hspi;
 
-    memset(&hspi->Init, 0, sizeof(hspi->Init));
     hspi->Init.Mode = (config->mode == HAL_SPI_MODE_SLAVE) ?
                       SPI_MODE_SLAVE : SPI_MODE_MASTER;
     switch (config->direction) {

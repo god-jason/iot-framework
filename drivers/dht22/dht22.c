@@ -133,7 +133,7 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
     return HAL_OK;
 }
 
-int dht22_init(dht22_handle_t *handle, hal_pin_t pin)
+int dht22_init(dht22_handle_t *handle, uint16_t pin)
 {
     int ret;
 

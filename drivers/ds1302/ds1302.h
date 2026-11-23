@@ -32,9 +32,9 @@ typedef struct {
 } ds1302_time_t;
 
 typedef struct {
-    hal_pin_t ce;    /* 片选 / 使能 */
-    hal_pin_t sclk;  /* 串行时钟 */
-    hal_pin_t io;    /* 双向数据线 */
+    uint16_t ce;    /* 片选 / 使能 */
+    uint16_t sclk;  /* 串行时钟 */
+    uint16_t io;    /* 双向数据线 */
     bool initialized;
 } ds1302_handle_t;
 
@@ -42,7 +42,7 @@ typedef struct {
  * @brief  初始化三线 GPIO 并解除写保护
  * @return 0 成功，负值为 HAL 状态码
  */
-int ds1302_init(ds1302_handle_t *handle, hal_pin_t ce, hal_pin_t sclk, hal_pin_t io);
+int ds1302_init(ds1302_handle_t *handle, uint16_t ce, uint16_t sclk, uint16_t io);
 
 /** @brief  反初始化（释放三个引脚） */
 int ds1302_deinit(ds1302_handle_t *handle);

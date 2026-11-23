@@ -27,8 +27,8 @@
         components/<x>/ -> ros-cmp-<x>
         drivers/     -> ros-drivers（静态库，按需链接）
         modules/<x>/ -> ros-module-<x>
-        platforms/<x>/ -> ros-platform-<x>（stm32f1/stm32f4 同时包含板级与固件目标）
-        apps/<x>/    -> PC 可执行文件或嵌入式 app_main 对象
+        platforms/<x>/ -> 库目标（ros-platform-<x> / 板级对象库）
+        apps/<x>/    -> 最终可执行目标（PC 程序、嵌入式固件与 Bootloader）
 
     目标一览：
         ros-pc / ros-test / ros-demo / ros-shell     主机目标

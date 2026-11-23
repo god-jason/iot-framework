@@ -41,6 +41,8 @@ typedef enum {
 
 /* I2S 配置 */
 typedef struct {
+    uint8_t id;                    /* 外设编号（0 基）：0 = 第 1 路 I2S，平台按编号定位实例 */
+
     hal_i2s_mode_e mode;           /* 工作模式 */
     hal_i2s_standard_e standard;   /* 协议标准 */
 

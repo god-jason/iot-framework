@@ -3,17 +3,16 @@
 #include "ros.h"
 #include "common.h"
 
-#define VOLTAGE_ADC_CHANNEL_MAX 16
-
-static hal_adc_t s_adc_handles[VOLTAGE_ADC_CHANNEL_MAX];
-static bool s_adc_ready[VOLTAGE_ADC_CHANNEL_MAX];
+/* 所有通道共用同一个 ADC 外设（编号 0），按 channel 切换规则组。 */
+static hal_adc_t s_adc;
+static bool s_adc_ready;
 
 int voltage_init(voltage_t *s, uint8_t channel,
                             uint16_t adc_max, uint16_t vref_mv)
 {
     hal_adc_config_t cfg;
 
-    if (s == NULL || adc_max == 0 || channel >= VOLTAGE_ADC_CHANNEL_MAX) {
+    if (s == NULL || adc_max == 0) {
         return -1;
     }
     s->adc_channel = channel;
@@ -21,15 +20,16 @@ int voltage_init(voltage_t *s, uint8_t channel,
     s->vref_mv = vref_mv;
     filter_mean_init(&s->filter, s->fbuf, 8);
 
-    if (!s_adc_ready[channel]) {
+    if (!s_adc_ready) {
         cfg.resolution = HAL_ADC_RESOLUTION_12BIT;
         cfg.alignment = HAL_ADC_ALIGN_RIGHT;
         cfg.trigger = HAL_ADC_TRIGGER_SOFTWARE;
         cfg.channel_count = 1;
-        if (hal_adc_init(&s_adc_handles[channel], &cfg) != HAL_OK) {
+        cfg.id = 0U;
+        if (hal_adc_init(&s_adc, &cfg) != HAL_OK) {
             return -1;
         }
-        s_adc_ready[channel] = true;
+        s_adc_ready = true;
     }
     return HAL_OK;
 }
@@ -39,13 +39,10 @@ int voltage_read(voltage_t *s, uint16_t *mv)
     uint32_t raw;
     float f;
 
-    if (s == NULL || mv == NULL ||
-        s->adc_channel >= VOLTAGE_ADC_CHANNEL_MAX ||
-        !s_adc_ready[s->adc_channel]) {
+    if (s == NULL || mv == NULL || !s_adc_ready) {
         return -1;
     }
-    if (hal_adc_read(&s_adc_handles[s->adc_channel], s->adc_channel,
-                      &raw, 0) != HAL_OK) {
+    if (hal_adc_read(&s_adc, s->adc_channel, &raw, 0) != HAL_OK) {
         LOG_E("volt", "adc read fail");   /* adc read failed */
         return -1;
     }

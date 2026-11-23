@@ -226,7 +226,7 @@ int mfrc522_halt(mfrc522_handle_t *h)
 }
 
 int mfrc522_init(mfrc522_handle_t *handle, hal_spi_t *spi,
-                 hal_pin_t cs, hal_pin_t reset)
+                 uint16_t cs, uint16_t reset)
 {
     uint8_t version = 0U;
     if (handle == NULL || spi == NULL) { return (int)HAL_INVALID_PARAM; }

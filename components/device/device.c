@@ -14,7 +14,7 @@
 /* ============================== 公共解析 ============================== */
 
 /* 解析引脚：PA5 / pb12 / 0x0105（十进制或十六进制原始编码） */
-static bool dev_parse_pin(const char *s, hal_pin_t *pin)
+static bool dev_parse_pin(const char *s, uint16_t *pin)
 {
     uint32_t port;
     uint32_t index = 0U;
@@ -39,7 +39,7 @@ static bool dev_parse_pin(const char *s, hal_pin_t *pin)
         if (end == p || *end != '\0') {
             return false;
         }
-        *pin = (hal_pin_t)v;
+        *pin = (uint16_t)v;
         return true;
     } else {
         return false;
@@ -59,7 +59,7 @@ static bool dev_parse_pin(const char *s, hal_pin_t *pin)
     return true;
 }
 
-static void dev_format_pin(hal_pin_t pin, char *buf, size_t cap)
+static void dev_format_pin(uint16_t pin, char *buf, size_t cap)
 {
     (void)str_printf(buf, (uint32_t)cap, "P%c%u",
                    (char)('A' + (char)HAL_PIN_GET_PORT(pin)),
@@ -81,7 +81,7 @@ static bool gpio_parse_level(const char *s, hal_gpio_level_e *level)
 
 /* ============================== gpio ============================== */
 
-static int gpio_apply(int rc, const char *what, hal_pin_t pin)
+static int gpio_apply(int rc, const char *what, uint16_t pin)
 {
     char name[12];
 
@@ -100,7 +100,7 @@ static int device_gpio_cmd(const rs_cmd_ctx_t *ctx)
     const char *pin_s = NULL;
     const char *a1 = NULL;
     const char *a2 = NULL;
-    hal_pin_t pin;
+    uint16_t pin;
     int rc;
 
     if (!rs_args_get_str(ctx->parsed, 0U, &action) ||
@@ -400,8 +400,8 @@ static int device_pwm_cmd(const rs_cmd_ctx_t *ctx)
 
             for (i = 0U; i < DEVICE_PWM_MAX; i++) {
                 if (s_pwm[i].used && s_pwm[i].handle != NULL &&
-                    s_pwm[i].handle->base.instance ==
-                        slot->handle->base.instance) {
+                    s_pwm[i].handle->config.id ==
+                        slot->handle->config.id) {
                     s_pwm[i].handle->config.frequency = hz;
                 }
             }

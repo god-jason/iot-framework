@@ -3,7 +3,8 @@
  *
  * PWM：TIM2_CH1~4(PA0~PA3)、TIM3_CH1~4(PA6/PA7/PB0/PB1)，
  *      定时器计数时钟 72MHz（APB1 二分频后 x2），16 位分辨率。
- * 句柄约定：hal_pwm_t.base.instance = TIMx 指针，handle->channel = 1..4。
+ * 句柄约定：config.id 为 0 基定时器编号（0=TIM1，1=TIM2，…），
+ *      config.channel = 1..4；hal_pwm_init() 按编号解析定时器实例。
  *
  * 无 Cube HAL 的构建不提供硬件定时器/中断加减速：hal_tim_* 仅为满足链接，
  * 运行时返回 HAL_NOT_SUPPORTED（步进电机请使用软件延时）。
@@ -57,6 +58,27 @@ static const stm32_pwm_map_t s_stm32_pwm[] = {
 #define STM32_PWM_CLOCK_HZ  72000000UL     /* APB1 x2 */
 #define STM32_PWM_PSC       71UL           /* /72 -> 1MHz */
 
+/* 定时器编号：0=TIM1，1=TIM2，2=TIM3，3=TIM4，4=TIM5，5=TIM8 */
+static TIM_TypeDef *const s_stm32_tim_inst[] = {
+    [0] = TIM1,
+    [1] = TIM2,
+#ifdef TIM3
+    [2] = TIM3,
+#endif
+#ifdef TIM4
+    [3] = TIM4,
+#endif
+#ifdef TIM5
+    [4] = TIM5,
+#endif
+#ifdef TIM8
+    [5] = TIM8,
+#endif
+};
+
+#define STM32_TIM_CH_COUNT \
+    (sizeof(s_stm32_tim_inst) / sizeof(s_stm32_tim_inst[0]))
+
 /* 定时器是否已配置过时基：同组通道初始化时不再重置 ARR/PSC，避免打断运行 */
 static uint8_t s_stm32_tim_ready[4];       /* TIM2 / TIM3 / TIM4 / TIM5 */
 
@@ -89,7 +111,7 @@ static const stm32_pwm_map_t *stm32_pwm_find(const hal_pwm_t *handle)
 
     for (i = 0U; i < sizeof(s_stm32_pwm) / sizeof(s_stm32_pwm[0]); i++) {
         if (s_stm32_pwm[i].tim == handle->base.instance &&
-            s_stm32_pwm[i].channel == handle->channel) {
+            s_stm32_pwm[i].channel == handle->config.channel) {
             return &s_stm32_pwm[i];
         }
     }
@@ -122,7 +144,7 @@ static void stm32_pwm_apply(hal_pwm_t *handle, TIM_TypeDef *tim)
     uint32_t ccr = stm32_pwm_ccr(tim->ARR, handle->config.duty);
     uint32_t pol = (handle->config.polarity == HAL_PWM_POLARITY_LOW) ? 1U : 0U;
 
-    switch (handle->channel) {
+    switch (handle->config.channel) {
     case 1U:
         tim->CCMR1 = (tim->CCMR1 & ~0x00FFUL) | 0x0068UL;
         tim->CCR1 = ccr;
@@ -159,11 +181,20 @@ int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
     }
-    map = stm32_pwm_find(handle);
-    if (map == NULL) {
+    if (config->id >= STM32_TIM_CH_COUNT) {
         return HAL_INVALID_PARAM;
     }
-    tim = (TIM_TypeDef *)handle->base.instance;
+    tim = s_stm32_tim_inst[config->id];
+    if (tim == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    handle->base.instance = tim;
+    handle->config = *config;
+    map = stm32_pwm_find(handle);
+    if (map == NULL) {
+        handle->base.instance = NULL;
+        return HAL_INVALID_PARAM;
+    }
 
     /* 使能对应定时器时钟（TIM2~TIM5 均在 APB1） */
     if (tim == TIM2) {
@@ -189,7 +220,6 @@ int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
     gpio.initial_level = HAL_GPIO_LOW;
     (void)hal_gpio_init(HAL_PIN(map->port, map->pin), &gpio);
 
-    handle->config = *config;
     if (handle->config.duty > 10000U) {
         handle->config.duty = 10000U;
     }
@@ -272,7 +302,7 @@ int hal_pwm_stop(hal_pwm_t *handle)
     }
     tim = (TIM_TypeDef *)handle->base.instance;
     /* 只清本通道 CCR，保持同一定时器的其它通道继续输出 */
-    switch (handle->channel) {
+    switch (handle->config.channel) {
     case 1U: tim->CCR1 = 0U; break;
     case 2U: tim->CCR2 = 0U; break;
     case 3U: tim->CCR3 = 0U; break;

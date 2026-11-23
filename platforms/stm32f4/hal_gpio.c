@@ -42,7 +42,7 @@ static uint32_t stm32_gpio_pull(hal_gpio_pull_e pull)
     }
 }
 
-int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
+int hal_gpio_init(uint16_t pin, const hal_gpio_config_t *config)
 {
     GPIO_InitTypeDef init;
     GPIO_TypeDef *port;
@@ -91,7 +91,7 @@ int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
     return HAL_OK;
 }
 
-int hal_gpio_deinit(hal_pin_t pin)
+int hal_gpio_deinit(uint16_t pin)
 {
     GPIO_TypeDef *port = stm32_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -103,7 +103,7 @@ int hal_gpio_deinit(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
+int hal_gpio_write(uint16_t pin, hal_gpio_level_e level)
 {
     GPIO_TypeDef *port = stm32_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -116,7 +116,7 @@ int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
     return HAL_OK;
 }
 
-int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
+int hal_gpio_read(uint16_t pin, hal_gpio_level_e *level)
 {
     GPIO_TypeDef *port = stm32_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -129,7 +129,7 @@ int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
     return HAL_OK;
 }
 
-int hal_gpio_toggle(hal_pin_t pin)
+int hal_gpio_toggle(uint16_t pin)
 {
     GPIO_TypeDef *port = stm32_gpio_port(HAL_PIN_GET_PORT(pin));
     uint32_t index = HAL_PIN_GET_INDEX(pin);
@@ -141,12 +141,12 @@ int hal_gpio_toggle(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_gpio_set(hal_pin_t pin)
+int hal_gpio_set(uint16_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_HIGH);
 }
 
-int hal_gpio_reset(hal_pin_t pin)
+int hal_gpio_reset(uint16_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_LOW);
 }
@@ -191,7 +191,7 @@ int hal_pin_init(const hal_pin_config_t *config)
     return HAL_OK;
 }
 
-int hal_pin_deinit(hal_pin_t pin)
+int hal_pin_deinit(uint16_t pin)
 {
     return hal_gpio_deinit(pin);
 }

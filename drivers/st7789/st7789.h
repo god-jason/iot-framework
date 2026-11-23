@@ -17,9 +17,9 @@ extern "C" {
 
 typedef struct {
     hal_spi_dev_t spi;
-    hal_pin_t dc;          /* 命令/数据选择，必填 */
-    hal_pin_t res;         /* 复位，可为 0 */
-    hal_pin_t bl;          /* 背光，可为 0 */
+    uint16_t dc;          /* 命令/数据选择，必填 */
+    uint16_t res;         /* 复位，可为 0 */
+    uint16_t bl;          /* 背光，可为 0 */
 
     uint8_t *gram;          /* RGB565 显存 */
     size_t gram_len;

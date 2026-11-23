@@ -33,9 +33,9 @@ typedef enum {
 
 typedef struct {
     hal_spi_dev_t spi;
-    hal_pin_t busy;
-    hal_pin_t reset;
-    hal_pin_t dio1;            /* 可传 0，则仅轮询 IRQ 状态寄存器 */
+    uint16_t busy;
+    uint16_t reset;
+    uint16_t dio1;            /* 可传 0，则仅轮询 IRQ 状态寄存器 */
     uint32_t frequency_hz;
     uint8_t spreading_factor;   /* 5..12 */
     uint32_t bandwidth_hz;      /* 125000/250000/500000 */
@@ -47,11 +47,11 @@ typedef struct {
     bool initialized;
 } sx1262_handle_t;
 
-int sx1262_init(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
-                hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1);
+int sx1262_init(sx1262_handle_t *handle, hal_spi_t *spi, uint16_t cs,
+                uint16_t busy, uint16_t reset, uint16_t dio1);
 /* SX1268 / LLCC68 共用入口 */
-int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
-                        hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1,
+int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, uint16_t cs,
+                        uint16_t busy, uint16_t reset, uint16_t dio1,
                         sx1262_variant_e variant);
 int sx1262_deinit(sx1262_handle_t *handle);
 

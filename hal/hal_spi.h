@@ -50,6 +50,8 @@ typedef enum {
 
 /* SPI 配置 */
 typedef struct {
+    uint8_t id;                    /* 外设编号（0 基）：0 = 第 1 路 SPI，平台按编号定位实例 */
+
     hal_spi_mode_e mode;           /* 主从模式 */
     hal_spi_direction_e direction; /* 数据线方向 */
 
@@ -137,7 +139,7 @@ int hal_spi_abort(hal_spi_t *handle);
 /* SPI 设备描述：句柄 + 片选 + 超时 */
 typedef struct {
     hal_spi_t *handle;
-    hal_pin_t cs;               /* HAL_PIN(0,0) 表示不控制片选 */
+    uint16_t cs;               /* HAL_PIN(0,0) 表示不控制片选 */
     uint32_t timeout_ms;
 } hal_spi_dev_t;
 

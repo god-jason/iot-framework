@@ -28,8 +28,8 @@ typedef struct {
 
     /* SPI 模式 */
     hal_spi_dev_t spi;
-    hal_pin_t dc;      /* 数据/命令选择 */
-    hal_pin_t res;     /* 复位，可为 0 */
+    uint16_t dc;      /* 数据/命令选择 */
+    uint16_t res;     /* 复位，可为 0 */
 
     uint8_t *gram;      /* 显存，长度必须 >= SSD1306_GRAM_SIZE */
     bool mirror_x;

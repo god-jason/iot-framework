@@ -3,7 +3,7 @@
 #include "ros.h"
 #include "common.h"
 
-int max6675_init(max6675_handle_t *handle, hal_spi_t *spi, hal_pin_t cs)
+int max6675_init(max6675_handle_t *handle, hal_spi_t *spi, uint16_t cs)
 {
     if (handle == NULL || spi == NULL) {
         return (int)HAL_INVALID_PARAM;

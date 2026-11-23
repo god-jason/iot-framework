@@ -42,6 +42,8 @@ typedef enum {
 
 /* ADC 控制器配置 */
 typedef struct {
+    uint8_t id;                         /* 外设编号（0 基）：0 = 第 1 个 ADC，平台按编号定位实例 */
+
     hal_adc_resolution_e resolution;   /* 分辨率 */
     hal_adc_align_e alignment;         /* 数据对齐 */
     hal_adc_trigger_e trigger;         /* 触发源 */

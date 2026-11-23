@@ -229,7 +229,7 @@ int nrf24l01_recv(nrf24l01_handle_t *handle, uint8_t *data, size_t len,
 }
 
 int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
-                  hal_pin_t cs, hal_pin_t ce, hal_pin_t irq)
+                  uint16_t cs, uint16_t ce, uint16_t irq)
 {
     static const uint8_t defaults[][2] = {
         { NRF24L01_REG_EN_AA, 0x01U },

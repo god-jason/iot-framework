@@ -1,12 +1,10 @@
 /*
  * PC 平台 UART 模拟实现。
  *
- * 实例映射：
- *   - UART1：handle->base.instance == (void *)1，
- *     发送写 stdout，接收非阻塞读 stdin（标准控制台）；
- *   - UART2..N：handle->base.instance == (void *)2..(PC_UART_MAX+1)，
- *     使用内存缓冲区模拟串口；
- *   - instance 为 NULL：自动分配一个空闲的 UART2..N。
+ * 实例映射（config.id 为 0 基编号，由 hal_uart_init 转换为内部编码）：
+ *   - instance 0（内部编码 1）：UART1，发送写 stdout，接收非阻塞读 stdin；
+ *   - instance 1..N（内部编码 2..N+1）：UART2..N，使用内存缓冲区模拟；
+ *   - 若 base.instance 为 NULL（测试注入等场景）：自动分配一个空闲虚拟串口。
  *
  * 测试注入接口 ros_pc_uart_inject()/ros_pc_uart_get_tx() 对应虚拟串口。
  */
@@ -231,10 +229,11 @@ int hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config)
     if (handle == NULL || config == NULL) {
         return HAL_INVALID_PARAM;
     }
-    instance = (uintptr_t)handle->base.instance;
+    instance = (uintptr_t)config->id + 1U;   /* 0 -> UART1 */
     if (instance > (uintptr_t)(PC_UART_MAX + 1)) {
         return HAL_INVALID_PARAM;
     }
+    handle->base.instance = (void *)instance;
     ctx = pc_uart_alloc(handle);
     if (ctx == NULL) {
         return HAL_NO_MEMORY;

@@ -17,7 +17,7 @@ extern "C" {
 
 typedef struct {
     hal_spi_dev_t spi;
-    hal_pin_t reset;           /* 可传 0，则仅软件复位 */
+    uint16_t reset;           /* 可传 0，则仅软件复位 */
     uint8_t version;
     uint32_t timeout_ms;
     bool initialized;
@@ -32,7 +32,7 @@ typedef struct {
 } mfrc522_card_t;
 
 int mfrc522_init(mfrc522_handle_t *handle, hal_spi_t *spi,
-                 hal_pin_t cs, hal_pin_t reset);
+                 uint16_t cs, uint16_t reset);
 int mfrc522_deinit(mfrc522_handle_t *handle);
 
 int mfrc522_get_version(mfrc522_handle_t *handle, uint8_t *version);

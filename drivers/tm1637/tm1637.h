@@ -16,8 +16,8 @@ extern "C" {
 #endif
 
 typedef struct {
-    hal_pin_t clk;
-    hal_pin_t dio;
+    uint16_t clk;
+    uint16_t dio;
 
     uint8_t *gram;          /* 每位数码管一个段码字节 */
     size_t gram_len;

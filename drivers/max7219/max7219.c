@@ -57,7 +57,7 @@ int max7219_write(max7219_handle_t *handle, uint8_t reg, uint8_t data)
     return HAL_OK;
 }
 
-int max7219_init(max7219_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
+int max7219_init(max7219_handle_t *handle, hal_spi_t *spi, uint16_t cs,
                  uint8_t chain_length)
 {
     if (handle == NULL || spi == NULL || chain_length == 0U ||

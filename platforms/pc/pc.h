@@ -27,7 +27,7 @@ void ros_pc_adc_set(uint8_t channel, uint32_t value);
 void ros_pc_adc_set_max(uint8_t channel, uint32_t max);
 
 /* EXTI：触发一次外部中断 */
-void ros_pc_exti_trigger(hal_pin_t pin);
+void ros_pc_exti_trigger(uint16_t pin);
 
 /* CAN：注入接收帧 */
 void ros_pc_can_inject(hal_can_t *h, const hal_can_frame_t *frame);
@@ -74,7 +74,7 @@ void ros_test_adc_set(uint8_t channel, uint32_t value);
 void ros_test_adc_set_max(uint8_t channel, uint32_t max);
 
 /* 外部中断触发 */
-void ros_test_exti_trigger(hal_pin_t pin);
+void ros_test_exti_trigger(uint16_t pin);
 
 /* CAN 接收注入 */
 void ros_test_can_inject(hal_can_t *h, const hal_can_frame_t *frame);

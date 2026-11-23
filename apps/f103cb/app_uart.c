@@ -13,14 +13,14 @@
 
 #include "ros.h"
 #include "hal_uart.h"
-#include "stm32f10x.h"
 
 #include <string.h>
 
 static hal_uart_t s_console;
 static hal_uart_t s_ml307;
 
-static void app_uart_setup(hal_uart_t *handle, USART_TypeDef *instance)
+/* instance：0 = USART1，1 = USART2（平台内部按编号定位实例） */
+static void app_uart_setup(hal_uart_t *handle, uint8_t instance)
 {
     hal_uart_config_t config;
 
@@ -32,15 +32,15 @@ static void app_uart_setup(hal_uart_t *handle, USART_TypeDef *instance)
     config.flow_control = HAL_UART_FLOW_NONE;
     config.mode = HAL_UART_MODE_TX_RX;
     config.oversampling = false;
+    config.id = instance;
 
-    handle->base.instance = instance;
     (void)hal_uart_init(handle, &config);
 }
 
 void app_uart_init(void)
 {
-    app_uart_setup(&s_console, USART1);
-    app_uart_setup(&s_ml307, USART2);
+    app_uart_setup(&s_console, 0U);
+    app_uart_setup(&s_ml307, 1U);
 
     ros_trace_set_output(&s_console, 0U);
     ros_trace_set_level(ROS_TRACE_LEVEL_CORE);

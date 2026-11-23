@@ -2,6 +2,9 @@
  * hal_i2c.c - STM32H7 I2C HAL 适配
  *
  * 由原单文件 stm32_f4xx.c 按模块拆分。
+ *
+ * 编号：config.id = 0..N 依次对应 I2C1..I2C4；
+ * hal_i2c_init() 内部按编号取静态 Cube 句柄，调用者无需提供实例。
  */
 
 #if defined(ROS_STM32_H7)
@@ -12,6 +15,36 @@
 #include "stm32_internal.h"
 
 #include <string.h>
+
+#define STM32_I2C_COUNT    4U
+
+static I2C_HandleTypeDef s_hi2c[STM32_I2C_COUNT];
+
+static I2C_TypeDef *const s_i2c_inst[STM32_I2C_COUNT] = {
+    [0] = I2C1,
+#ifdef I2C2
+    [1] = I2C2,
+#endif
+#ifdef I2C3
+    [2] = I2C3,
+#endif
+#ifdef I2C4
+    [3] = I2C4,
+#endif
+};
+
+static I2C_HandleTypeDef *stm32_i2c_instance(uint8_t instance)
+{
+    I2C_HandleTypeDef *hi2c;
+
+    if ((instance >= STM32_I2C_COUNT) || (s_i2c_inst[instance] == NULL)) {
+        return NULL;
+    }
+    hi2c = &s_hi2c[instance];
+    memset(hi2c, 0, sizeof(*hi2c));
+    hi2c->Instance = s_i2c_inst[instance];
+    return hi2c;
+}
 
 static uint16_t stm32_i2c_dev_address(hal_i2c_t *handle, uint16_t address)
 {
@@ -96,10 +129,11 @@ int hal_i2c_init(hal_i2c_t *handle,
         return HAL_ALREADY_INIT;
     }
 
-    hi2c = (I2C_HandleTypeDef *)handle->base.instance;
-    if ((hi2c == NULL) || (hi2c->Instance == NULL)) {
-        return HAL_NOT_READY;
+    hi2c = stm32_i2c_instance(config->id);
+    if (hi2c == NULL) {
+        return HAL_INVALID_PARAM;
     }
+    handle->base.instance = hi2c;
 
     switch (config->speed) {
     case HAL_I2C_SPEED_FAST:

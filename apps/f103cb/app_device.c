@@ -25,27 +25,28 @@
  *   编号 8~11  = TIM4_CH1~4（PB6/PB7/PB8/PB9），默认 3kHz
  * 首次执行 pwm 命令（freq/duty/start）时才调用 hal_pwm_init() 初始化硬件；
  * 同一 TIM 的通道共用频率（ARR/PSC），占空比各自独立。
+ * instance 为定时器编号（0=TIM1，1=TIM2，2=TIM3，3=TIM4）。
  */
 typedef struct {
-    hal_pwm_t    pwm;
-    TIM_TypeDef *tim;
-    uint8_t      channel;
-    uint32_t     frequency;
+    hal_pwm_t   pwm;
+    uint8_t     instance;
+    uint8_t     channel;
+    uint32_t    frequency;
 } app_pwm_def_t;
 
 static app_pwm_def_t s_pwms[] = {
-    { .tim = TIM2, .channel = 1U, .frequency = 1000U },
-    { .tim = TIM2, .channel = 2U, .frequency = 1000U },
-    { .tim = TIM2, .channel = 3U, .frequency = 1000U },
-    { .tim = TIM2, .channel = 4U, .frequency = 1000U },
-    { .tim = TIM3, .channel = 1U, .frequency = 2000U },
-    { .tim = TIM3, .channel = 2U, .frequency = 2000U },
-    { .tim = TIM3, .channel = 3U, .frequency = 2000U },
-    { .tim = TIM3, .channel = 4U, .frequency = 2000U },
-    { .tim = TIM4, .channel = 1U, .frequency = 3000U },
-    { .tim = TIM4, .channel = 2U, .frequency = 3000U },
-    { .tim = TIM4, .channel = 3U, .frequency = 3000U },
-    { .tim = TIM4, .channel = 4U, .frequency = 3000U },
+    { .instance = 1U, .channel = 1U, .frequency = 1000U },
+    { .instance = 1U, .channel = 2U, .frequency = 1000U },
+    { .instance = 1U, .channel = 3U, .frequency = 1000U },
+    { .instance = 1U, .channel = 4U, .frequency = 1000U },
+    { .instance = 2U, .channel = 1U, .frequency = 2000U },
+    { .instance = 2U, .channel = 2U, .frequency = 2000U },
+    { .instance = 2U, .channel = 3U, .frequency = 2000U },
+    { .instance = 2U, .channel = 4U, .frequency = 2000U },
+    { .instance = 3U, .channel = 1U, .frequency = 3000U },
+    { .instance = 3U, .channel = 2U, .frequency = 3000U },
+    { .instance = 3U, .channel = 3U, .frequency = 3000U },
+    { .instance = 3U, .channel = 4U, .frequency = 3000U },
 };
 
 static void app_pwm_register(void)
@@ -55,9 +56,9 @@ static void app_pwm_register(void)
     for (i = 0U; i < sizeof(s_pwms) / sizeof(s_pwms[0]); i++) {
         app_pwm_def_t *def = &s_pwms[i];
 
-        def->pwm.channel = def->channel;
-        def->pwm.base.instance = def->tim;
+        def->pwm.config.channel = def->channel;
         /* 只记录默认配置，hal_pwm_init() 推迟到命令真正使用时 */
+        def->pwm.config.id = def->instance;
         def->pwm.config.frequency = def->frequency;
         def->pwm.config.duty = 0U;
         def->pwm.config.polarity = HAL_PWM_POLARITY_HIGH;

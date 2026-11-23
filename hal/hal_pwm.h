@@ -23,6 +23,9 @@ typedef enum {
 
 /* PWM 配置 */
 typedef struct {
+    uint8_t id;                  /* 定时器编号（0 基）：0 = 第 1 个定时器，平台按编号定位实例 */
+    uint8_t channel;             /* 定时器通道号，通常为 1~4 */
+
     uint32_t frequency;         /* PWM 频率（Hz），必须大于 0 */
     uint32_t duty;              /* 占空比，范围 0~10000，对应 0~100.00% */
 
@@ -34,14 +37,12 @@ typedef struct hal_pwm {
     hal_handle_base_t base;        /* 通用句柄基类，勿移动位置 */
 
     hal_pwm_config_t config;       /* 初始化时保存的配置副本 */
-
-    uint8_t channel;                /* 定时器通道号，由平台/调用者预先设置 */
 } hal_pwm_t;
 
 /*
  * 初始化 PWM 通道。
- * handle : 句柄，不可为 NULL，调用前需设置 channel。
- * config : 配置，不可为 NULL；duty 超过 10000 视为 10000。
+ * handle : 句柄，不可为 NULL。
+ * config : 配置，不可为 NULL；channel 为定时器通道号，duty 超过 10000 视为 10000。
  * 返回   : HAL_OK；HAL_INVALID_PARAM；频率不可达返回 HAL_NOT_SUPPORTED。
  */
 int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config);

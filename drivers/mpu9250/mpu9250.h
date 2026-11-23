@@ -88,7 +88,7 @@ typedef struct {
  * @return 0 成功；磁力计缺失不算失败
  */
 int mpu9250_init(mpu9250_handle_t *handle, hal_i2c_t *i2c,
-                 hal_spi_t *spi, hal_pin_t cs, uint16_t address,
+                 hal_spi_t *spi, uint16_t cs, uint16_t address,
                  mpu9250_accel_range_e accel_range, mpu9250_gyro_range_e gyro_range);
 
 /** @brief 反初始化：陀螺/加速度进入睡眠，磁力计掉电 */

@@ -21,8 +21,8 @@ extern "C" {
 #endif
 
 typedef struct {
-    hal_pin_t trig;
-    hal_pin_t echo;
+    uint16_t trig;
+    uint16_t echo;
     uint32_t timeout_us;
     bool initialized;
 } hc_sr04_handle_t;
@@ -32,7 +32,7 @@ typedef struct {
  * @param  trig  TRIG 引脚逻辑编号，0 表示无效
  * @param  echo  ECHO 引脚逻辑编号，0 表示无效
  */
-int hc_sr04_init(hc_sr04_handle_t *handle, hal_pin_t trig, hal_pin_t echo);
+int hc_sr04_init(hc_sr04_handle_t *handle, uint16_t trig, uint16_t echo);
 
 int hc_sr04_deinit(hc_sr04_handle_t *handle);
 

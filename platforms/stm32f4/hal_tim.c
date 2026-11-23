@@ -2,6 +2,9 @@
  * hal_tim.c - STM32F4 TIM / PWM / CAPTURE / ENCODER HAL 适配
  *
  * 由原单文件 stm32_f4xx.c 按模块拆分。
+ *
+ * PWM 编号：config.id = 0..N 依次对应 TIM1..TIM14；
+ * hal_pwm_init() 内部按编号取静态 Cube 句柄，调用者无需提供实例。
  */
 
 #if defined(ROS_STM32_F4)
@@ -12,6 +15,67 @@
 #include "stm32_internal.h"
 
 #include <string.h>
+
+#define STM32_PWM_TIM_COUNT    14U
+
+static TIM_HandleTypeDef s_hpwm_tim[STM32_PWM_TIM_COUNT];
+
+static TIM_TypeDef *const s_pwm_tim_inst[STM32_PWM_TIM_COUNT] = {
+    [0] = TIM1,
+#ifdef TIM2
+    [1] = TIM2,
+#endif
+#ifdef TIM3
+    [2] = TIM3,
+#endif
+#ifdef TIM4
+    [3] = TIM4,
+#endif
+#ifdef TIM5
+    [4] = TIM5,
+#endif
+#ifdef TIM6
+    [5] = TIM6,
+#endif
+#ifdef TIM7
+    [6] = TIM7,
+#endif
+#ifdef TIM8
+    [7] = TIM8,
+#endif
+#ifdef TIM9
+    [8] = TIM9,
+#endif
+#ifdef TIM10
+    [9] = TIM10,
+#endif
+#ifdef TIM11
+    [10] = TIM11,
+#endif
+#ifdef TIM12
+    [11] = TIM12,
+#endif
+#ifdef TIM13
+    [12] = TIM13,
+#endif
+#ifdef TIM14
+    [13] = TIM14,
+#endif
+};
+
+static TIM_HandleTypeDef *stm32_pwm_instance(uint8_t instance)
+{
+    TIM_HandleTypeDef *htim;
+
+    if ((instance >= STM32_PWM_TIM_COUNT) ||
+        (s_pwm_tim_inst[instance] == NULL)) {
+        return NULL;
+    }
+    htim = &s_hpwm_tim[instance];
+    memset(htim, 0, sizeof(*htim));
+    htim->Instance = s_pwm_tim_inst[instance];
+    return htim;
+}
 
 static uint32_t stm32_tim_counter_mode(hal_tim_counter_e mode)
 {
@@ -333,19 +397,21 @@ int hal_pwm_init(hal_pwm_t *handle,
         (config->duty > 10000U)) {
         return HAL_INVALID_PARAM;
     }
-    if ((handle->channel < 1U) || (handle->channel > 4U)) {
-        handle->channel = 1U;
-    }
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
     }
-
-    htim = (TIM_HandleTypeDef *)handle->base.instance;
-    if ((htim == NULL) || (htim->Instance == NULL)) {
-        return HAL_NOT_READY;
+    handle->config = *config;
+    if ((handle->config.channel < 1U) || (handle->config.channel > 4U)) {
+        handle->config.channel = 1U;
     }
 
-    channel = stm32_tim_channel(handle->channel);
+    htim = stm32_pwm_instance(config->id);
+    if (htim == NULL) {
+        return HAL_INVALID_PARAM;
+    }
+    handle->base.instance = htim;
+
+    channel = stm32_tim_channel(handle->config.channel);
     if (channel == 0U) {
         return HAL_INVALID_PARAM;
     }
@@ -365,7 +431,6 @@ int hal_pwm_init(hal_pwm_t *handle,
         return HAL_ERROR;
     }
 
-    handle->config = *config;
     if (stm32_pwm_config_output(handle, htim, channel) != HAL_OK) {
         handle->base.state = HAL_STATE_ERROR;
         return HAL_ERROR;
@@ -386,7 +451,7 @@ int hal_pwm_deinit(hal_pwm_t *handle)
     }
     htim = (TIM_HandleTypeDef *)handle->base.instance;
     if (htim != NULL) {
-        channel = stm32_tim_channel(handle->channel);
+        channel = stm32_tim_channel(handle->config.channel);
         if (channel != 0U) {
             (void)HAL_TIM_PWM_Stop(htim, channel);
         }
@@ -409,7 +474,7 @@ int hal_pwm_start(hal_pwm_t *handle)
     if (htim == NULL) {
         return HAL_NOT_READY;
     }
-    channel = stm32_tim_channel(handle->channel);
+    channel = stm32_tim_channel(handle->config.channel);
     if (channel == 0U) {
         return HAL_INVALID_PARAM;
     }
@@ -432,7 +497,7 @@ int hal_pwm_stop(hal_pwm_t *handle)
     if (htim == NULL) {
         return HAL_NOT_READY;
     }
-    channel = stm32_tim_channel(handle->channel);
+    channel = stm32_tim_channel(handle->config.channel);
     if (channel == 0U) {
         return HAL_INVALID_PARAM;
     }
@@ -458,7 +523,7 @@ int hal_pwm_set_frequency(hal_pwm_t *handle,
     if (htim == NULL) {
         return HAL_NOT_READY;
     }
-    channel = stm32_tim_channel(handle->channel);
+    channel = stm32_tim_channel(handle->config.channel);
     if (channel == 0U) {
         return HAL_INVALID_PARAM;
     }
@@ -507,7 +572,7 @@ int hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
     if (htim == NULL) {
         return HAL_NOT_READY;
     }
-    channel = stm32_tim_channel(handle->channel);
+    channel = stm32_tim_channel(handle->config.channel);
     if (channel == 0U) {
         return HAL_INVALID_PARAM;
     }
@@ -532,7 +597,7 @@ int hal_pwm_set_polarity(hal_pwm_t *handle,
     if (htim == NULL) {
         return HAL_NOT_READY;
     }
-    channel = stm32_tim_channel(handle->channel);
+    channel = stm32_tim_channel(handle->config.channel);
     if (channel == 0U) {
         return HAL_INVALID_PARAM;
     }

@@ -19,16 +19,16 @@ extern "C" {
 #endif
 
 typedef struct {
-    hal_pin_t pin;
+    uint16_t pin;
     uint32_t last_read_ms;   /* 上次成功读取时刻，用于限制 1s 采样间隔 */
     bool initialized;
 } dht11_handle_t;
 
 /**
  * @brief  初始化 DHT11（配置为输入 + 上拉，等待总线空闲）
- * @param  pin  数据引脚（hal_pin_t，HAL_PIN(port, pin) 编码）
+ * @param  pin  数据引脚（uint16_t，HAL_PIN(port, pin) 编码）
  */
-int dht11_init(dht11_handle_t *handle, hal_pin_t pin);
+int dht11_init(dht11_handle_t *handle, uint16_t pin);
 
 /** @brief 反初始化（释放引脚为输入） */
 int dht11_deinit(dht11_handle_t *handle);

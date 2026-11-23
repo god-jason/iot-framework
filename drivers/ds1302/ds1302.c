@@ -93,7 +93,7 @@ static int ds1302_read_regs(ds1302_handle_t *handle, uint8_t cmd, uint8_t *data,
 
 /* ---------------- 公开 API ---------------- */
 
-int ds1302_init(ds1302_handle_t *handle, hal_pin_t ce, hal_pin_t sclk, hal_pin_t io)
+int ds1302_init(ds1302_handle_t *handle, uint16_t ce, uint16_t sclk, uint16_t io)
 {
     if (handle == NULL || ce == 0U || sclk == 0U || io == 0U) {
         return (int)HAL_INVALID_PARAM;

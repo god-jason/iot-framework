@@ -4,6 +4,8 @@
  * 支持 I2C1（PB6/PB7）、I2C2（PB10/PB11）7 位地址主机收发、
  * 寄存器读写、组合传输与设备探测；10 位地址暂不支持（返回 NOT_SUPPORTED）。
  * 引脚复用为 AF 开漏 50MHz，若板级使用重映射请在 board_init() 中另行配置。
+ *
+ * 编号：config.id = 0/1 依次对应 I2C1/I2C2（按芯片裁剪）。
  */
 
 #if defined(ROS_STM32_F1)
@@ -29,6 +31,16 @@
 
 #define STM32_I2C_ERR_MASK      (STM32_I2C_SR1_BERR | STM32_I2C_SR1_ARLO | \
                                  STM32_I2C_SR1_AF)
+
+static I2C_TypeDef *const s_stm32_i2c_inst[] = {
+    I2C1,
+#ifdef I2C2
+    I2C2,
+#endif
+};
+
+#define STM32_I2C_CH_COUNT \
+    (sizeof(s_stm32_i2c_inst) / sizeof(s_stm32_i2c_inst[0]))
 
 static uint32_t stm32_pclk1(void)
 {
@@ -172,10 +184,11 @@ int hal_i2c_init(hal_i2c_t *handle, const hal_i2c_config_t *config)
         return HAL_NOT_SUPPORTED;
     }
 
-    i2c = (I2C_TypeDef *)handle->base.instance;
-    if (i2c == NULL) {
-        return HAL_NOT_READY;
+    if (config->id >= STM32_I2C_CH_COUNT) {
+        return HAL_INVALID_PARAM;
     }
+    i2c = s_stm32_i2c_inst[config->id];
+    handle->base.instance = i2c;
     if (i2c == I2C1) {
         RCC->APB1ENR |= (1UL << 21);
     }

@@ -136,13 +136,18 @@ void app_main(void *arg)
 
     /* 准备两路 PWM 并绑定（PC 平台为模拟实现） */
     {
-        static const hal_pwm_config_t pcfg = {
-            1000U, 5000U, HAL_PWM_POLARITY_HIGH
+        hal_pwm_config_t pcfg = {
+            .id = 0U,
+            .channel = 1U,
+            .frequency = 1000U,
+            .duty = 5000U,
+            .polarity = HAL_PWM_POLARITY_HIGH
         };
         uint32_t i;
 
         for (i = 0U; i < 2U; i++) {
-            s_demo_pwm[i].channel = (uint8_t)(i + 1U);
+            pcfg.channel = (uint8_t)(i + 1U);
+            pcfg.id = (uint8_t)i;
             if (hal_pwm_init(&s_demo_pwm[i], &pcfg) != HAL_OK) {
                 continue;
             }

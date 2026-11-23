@@ -221,8 +221,8 @@ int sx1262_poll(sx1262_handle_t *h, uint8_t *data, size_t len, size_t *received)
     return HAL_OK;
 }
 
-int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
-                        hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1,
+int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, uint16_t cs,
+                        uint16_t busy, uint16_t reset, uint16_t dio1,
                         sx1262_variant_e variant)
 {
     uint8_t p[8];
@@ -287,8 +287,8 @@ int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
     return HAL_OK;
 }
 
-int sx1262_init(sx1262_handle_t *handle, hal_spi_t *spi, hal_pin_t cs,
-                hal_pin_t busy, hal_pin_t reset, hal_pin_t dio1)
+int sx1262_init(sx1262_handle_t *handle, hal_spi_t *spi, uint16_t cs,
+                uint16_t busy, uint16_t reset, uint16_t dio1)
 {
     return sx1262_init_variant(handle, spi, cs, busy, reset, dio1, SX1262_VARIANT_SX1262);
 }

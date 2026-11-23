@@ -400,31 +400,27 @@ static const rs_cmd_t s_mqtt_def = {
  * 板级设备注册（PWM / 风扇 / 步进）与心跳任务
  * ========================================================================== */
 
-static TIM_HandleTypeDef s_htim2;
-static TIM_HandleTypeDef s_htim3;
-static TIM_HandleTypeDef s_htim4;
-static TIM_HandleTypeDef s_htim12;
-
+/* instance 为定时器编号（0=TIM1，1=TIM2，3=TIM4，11=TIM12） */
 typedef struct {
-    hal_pwm_t          pwm;
-    TIM_HandleTypeDef *htim;
-    uint8_t            channel;
-    uint32_t           frequency;
+    hal_pwm_t pwm;
+    uint8_t   instance;
+    uint8_t   channel;
+    uint32_t  frequency;
 } app_pwm_def_t;
 
 static app_pwm_def_t s_pwms[] = {
-    { .htim = &s_htim2,  .channel = 1U, .frequency = 1000U },
-    { .htim = &s_htim2,  .channel = 2U, .frequency = 1000U },
-    { .htim = &s_htim2,  .channel = 3U, .frequency = 1000U },
-    { .htim = &s_htim2,  .channel = 4U, .frequency = 1000U },
-    { .htim = &s_htim4,  .channel = 1U, .frequency = 2000U },
-    { .htim = &s_htim4,  .channel = 2U, .frequency = 2000U },
-    { .htim = &s_htim4,  .channel = 3U, .frequency = 2000U },
-    { .htim = &s_htim4,  .channel = 4U, .frequency = 2000U },
-    { .htim = &s_htim3,  .channel = 3U, .frequency = 3000U },
-    { .htim = &s_htim3,  .channel = 4U, .frequency = 3000U },
-    { .htim = &s_htim12, .channel = 1U, .frequency = 4000U },
-    { .htim = &s_htim12, .channel = 2U, .frequency = 4000U },
+    { .instance = 1U,  .channel = 1U, .frequency = 1000U },
+    { .instance = 1U,  .channel = 2U, .frequency = 1000U },
+    { .instance = 1U,  .channel = 3U, .frequency = 1000U },
+    { .instance = 1U,  .channel = 4U, .frequency = 1000U },
+    { .instance = 3U,  .channel = 1U, .frequency = 2000U },
+    { .instance = 3U,  .channel = 2U, .frequency = 2000U },
+    { .instance = 3U,  .channel = 3U, .frequency = 2000U },
+    { .instance = 3U,  .channel = 4U, .frequency = 2000U },
+    { .instance = 2U,  .channel = 3U, .frequency = 3000U },
+    { .instance = 2U,  .channel = 4U, .frequency = 3000U },
+    { .instance = 11U, .channel = 1U, .frequency = 4000U },
+    { .instance = 11U, .channel = 2U, .frequency = 4000U },
 };
 
 static void pwm_gpio_init(GPIO_TypeDef *port, uint16_t pins, uint32_t af)
@@ -468,16 +464,11 @@ static void app_pwm_register(void)
 {
     uint32_t i;
 
-    s_htim2.Instance = TIM2;
-    s_htim3.Instance = TIM3;
-    s_htim4.Instance = TIM4;
-    s_htim12.Instance = TIM12;
-
     for (i = 0U; i < sizeof(s_pwms) / sizeof(s_pwms[0]); i++) {
         app_pwm_def_t *def = &s_pwms[i];
 
-        def->pwm.channel = def->channel;
-        def->pwm.base.instance = def->htim;
+        def->pwm.config.channel = def->channel;
+        def->pwm.config.id = def->instance;
         def->pwm.config.frequency = def->frequency;
         def->pwm.config.duty = 0U;
         def->pwm.config.polarity = HAL_PWM_POLARITY_HIGH;

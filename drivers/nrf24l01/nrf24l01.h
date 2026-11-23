@@ -22,8 +22,8 @@ typedef enum {
 
 typedef struct {
     hal_spi_dev_t spi;
-    hal_pin_t ce;              /* 必需 */
-    hal_pin_t irq;             /* 可传 0（不使用中断） */
+    uint16_t ce;              /* 必需 */
+    uint16_t irq;             /* 可传 0（不使用中断） */
     uint8_t channel;            /* 0..125 -> 2400..2525MHz */
     uint8_t payload_size;       /* 1..32 */
     uint8_t address_width;      /* 3..5 */
@@ -32,7 +32,7 @@ typedef struct {
 } nrf24l01_handle_t;
 
 int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
-                  hal_pin_t cs, hal_pin_t ce, hal_pin_t irq);
+                  uint16_t cs, uint16_t ce, uint16_t irq);
 int nrf24l01_deinit(nrf24l01_handle_t *handle);
 
 /* 频率单位 kHz，范围 2400000..2525000 */

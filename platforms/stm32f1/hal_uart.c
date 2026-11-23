@@ -11,7 +11,9 @@
  * 接收使用中断 + 每路独立环形缓冲；阻塞发送、阻塞/非阻塞接收。
  * 帧格式支持 8/9 位数据、奇偶校验、1/2 停止位；硬件流控与 DMA 未实现。
  *
- * 句柄约定：handle->base.instance = USART1 / USART2 / USART3 / UART4 / UART5。
+ * 句柄约定：config.id 为 0 基编号，依次对应
+ *   USART1 / USART2 / USART3 / UART4 / UART5（按芯片实际可用实例裁剪）；
+ *   hal_uart_init() 内部按编号解析寄存器实例，调用者无需指定 base.instance。
  */
 
 #if defined(ROS_STM32_F1)
@@ -319,14 +321,17 @@ int hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config)
         return HAL_NOT_SUPPORTED;
     }
 
-    u = (USART_TypeDef *)handle->base.instance;
-    index = stm32_uart_index(u);
+    if (config->id >= STM32_UART_CH_COUNT) {
+        return HAL_INVALID_PARAM;
+    }
+    index = config->id;
+    u = s_uart_inst[index];
     rx_mem = stm32_uart_rx_mem(u);
-    if ((index >= STM32_UART_CH_COUNT) || (rx_mem == NULL)) {
+    if (rx_mem == NULL) {
         return HAL_INVALID_PARAM;
     }
     ch = &s_uart_ch[index];
-
+    handle->base.instance = u;
     stm32_uart_clock_enable(u);
     stm32_uart_pins_init(u);
 

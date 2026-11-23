@@ -38,6 +38,8 @@ typedef enum {
 
 /* I2C 配置 */
 typedef struct {
+    uint8_t id;                    /* 外设编号（0 基）：0 = 第 1 路 I2C，平台按编号定位实例 */
+
     hal_i2c_mode_e mode;           /* 主从模式 */
     hal_i2c_speed_e speed;         /* 总线速率档位 */
     hal_i2c_addr_mode_e address_mode; /* 地址宽度 */

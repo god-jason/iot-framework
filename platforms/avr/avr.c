@@ -54,7 +54,7 @@ static volatile uint8_t *const s_pin_reg[AVR_GPIO_PORT_COUNT] = { &PINB, &PINC, 
 typedef struct {
     hal_exti_callback_t callback;
     void *user_data;
-    hal_pin_t pin;
+    uint16_t pin;
     hal_exti_trigger_e trigger;
     bool enabled;
 } avr_exti_entry_t;
@@ -78,7 +78,7 @@ static bool s_rtc_valid = false;
 static uint32_t s_rng_state = 0x12345678UL;
 
 /* ---------------- 通用辅助 ---------------- */
-static bool avr_pin_valid(hal_pin_t pin)
+static bool avr_pin_valid(uint16_t pin)
 {
     return (HAL_PIN_GET_PORT(pin) < AVR_GPIO_PORT_COUNT) &&
            (HAL_PIN_GET_INDEX(pin) < 8U);
@@ -196,7 +196,7 @@ int hal_pin_init(const hal_pin_config_t *config)
     return HAL_OK;
 }
 
-int hal_pin_deinit(hal_pin_t pin)
+int hal_pin_deinit(uint16_t pin)
 {
     uint8_t port;
     uint8_t bit;
@@ -212,7 +212,7 @@ int hal_pin_deinit(hal_pin_t pin)
 }
 
 /* ---------------- GPIO ---------------- */
-int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
+int hal_gpio_init(uint16_t pin, const hal_gpio_config_t *config)
 {
     uint8_t port;
     uint8_t bit;
@@ -251,12 +251,12 @@ int hal_gpio_init(hal_pin_t pin, const hal_gpio_config_t *config)
     return HAL_OK;
 }
 
-int hal_gpio_deinit(hal_pin_t pin)
+int hal_gpio_deinit(uint16_t pin)
 {
     return hal_pin_deinit(pin);
 }
 
-int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
+int hal_gpio_write(uint16_t pin, hal_gpio_level_e level)
 {
     uint8_t port;
     uint8_t bit;
@@ -274,7 +274,7 @@ int hal_gpio_write(hal_pin_t pin, hal_gpio_level_e level)
     return HAL_OK;
 }
 
-int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
+int hal_gpio_read(uint16_t pin, hal_gpio_level_e *level)
 {
     uint8_t port;
     uint8_t bit;
@@ -289,7 +289,7 @@ int hal_gpio_read(hal_pin_t pin, hal_gpio_level_e *level)
     return HAL_OK;
 }
 
-int hal_gpio_toggle(hal_pin_t pin)
+int hal_gpio_toggle(uint16_t pin)
 {
     uint8_t port;
     uint8_t bit;
@@ -303,12 +303,12 @@ int hal_gpio_toggle(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_gpio_set(hal_pin_t pin)
+int hal_gpio_set(uint16_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_HIGH);
 }
 
-int hal_gpio_reset(hal_pin_t pin)
+int hal_gpio_reset(uint16_t pin)
 {
     return hal_gpio_write(pin, HAL_GPIO_LOW);
 }
@@ -331,7 +331,7 @@ static void avr_exti_apply_int(uint8_t line, hal_exti_trigger_e trigger)
     }
 }
 
-int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
+int hal_exti_init(uint16_t pin, const hal_exti_config_t *config)
 {
     uint8_t port;
     uint8_t bit;
@@ -373,7 +373,7 @@ int hal_exti_init(hal_pin_t pin, const hal_exti_config_t *config)
     return HAL_OK;
 }
 
-int hal_exti_enable(hal_pin_t pin)
+int hal_exti_enable(uint16_t pin)
 {
     uint8_t port;
     uint8_t bit;
@@ -404,7 +404,7 @@ int hal_exti_enable(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_disable(hal_pin_t pin)
+int hal_exti_disable(uint16_t pin)
 {
     uint8_t port;
     uint8_t bit;
@@ -430,7 +430,7 @@ int hal_exti_disable(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_clear(hal_pin_t pin)
+int hal_exti_clear(uint16_t pin)
 {
     uint8_t port;
     uint8_t bit;
@@ -450,7 +450,7 @@ int hal_exti_clear(hal_pin_t pin)
     return HAL_OK;
 }
 
-int hal_exti_deinit(hal_pin_t pin)
+int hal_exti_deinit(uint16_t pin)
 {
     uint8_t port;
     uint8_t bit;
@@ -515,6 +515,9 @@ int hal_uart_init(hal_uart_t *handle, const hal_uart_config_t *config)
 
     if (handle == NULL || config == NULL || config->baudrate == 0U) {
         return HAL_INVALID_PARAM;
+    }
+    if (config->id != 0U) {
+        return HAL_NOT_SUPPORTED;   /* AVR 仅有一路 UART */
     }
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
@@ -830,6 +833,9 @@ int hal_spi_init(hal_spi_t *handle, const hal_spi_config_t *config)
     if (config->data_bits != 8U) {
         return HAL_NOT_SUPPORTED;
     }
+    if (config->id != 0U) {
+        return HAL_NOT_SUPPORTED;   /* AVR 仅有一路 SPI */
+    }
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
     }
@@ -1112,6 +1118,9 @@ int hal_i2c_init(hal_i2c_t *handle, const hal_i2c_config_t *config)
     }
     if (config->address_mode == HAL_I2C_ADDR_10BIT) {
         return HAL_NOT_SUPPORTED;
+    }
+    if (config->id != 0U) {
+        return HAL_NOT_SUPPORTED;   /* AVR 仅有一路 I2C */
     }
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
@@ -1890,18 +1899,22 @@ int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
     if (config->frequency == 0U || config->duty > 10000U) {
         return HAL_INVALID_PARAM;
     }
-    if (handle->channel < 1U || handle->channel > 2U) {
-        handle->channel = 1U;
+    if (config->id != 0U) {
+        return HAL_NOT_SUPPORTED;   /* 编号由平台自动分配 */
     }
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
+    }
+    handle->config = *config;
+    if (handle->config.channel < 1U || handle->config.channel > 2U) {
+        handle->config.channel = 1U;
     }
     index = avr_pwm_alloc();
     if (index == 0xFFU) {
         return HAL_NO_MEMORY;
     }
     cs = avr_pwm_clock_bits(config->frequency);
-    com = avr_pwm_com_bits(handle->channel, config->polarity);
+    com = avr_pwm_com_bits(handle->config.channel, config->polarity);
     switch (index) {
     case 0U:
         TCCR0A = (uint8_t)((1U << WGM01) | (1U << WGM00) | com);
@@ -1917,10 +1930,9 @@ int hal_pwm_init(hal_pwm_t *handle, const hal_pwm_config_t *config)
         TCCR2B = cs;
         break;
     }
-    avr_pwm_output_pin(index, handle->channel);
-    avr_pwm_write_duty(index, handle->channel, config->duty);
+    avr_pwm_output_pin(index, handle->config.channel);
+    avr_pwm_write_duty(index, handle->config.channel, config->duty);
     s_pwm_owner[index] = handle;
-    handle->config = *config;
     (void)avr_base_init(&handle->base, NULL);
     return HAL_OK;
 }
@@ -2038,7 +2050,7 @@ int hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
     if (index >= 3U) {
         return HAL_NOT_READY;
     }
-    avr_pwm_write_duty(index, handle->channel, duty);
+    avr_pwm_write_duty(index, handle->config.channel, duty);
     handle->config.duty = duty;
     return HAL_OK;
 }
@@ -2059,7 +2071,7 @@ int hal_pwm_set_polarity(hal_pwm_t *handle,
     if (index >= 3U) {
         return HAL_NOT_READY;
     }
-    com = avr_pwm_com_bits(handle->channel, polarity);
+    com = avr_pwm_com_bits(handle->config.channel, polarity);
     switch (index) {
     case 0U: TCCR0A = (uint8_t)((TCCR0A & 0x0FU) | com); break;
     case 1U: TCCR1A = (uint8_t)((TCCR1A & 0x0FU) | com); break;
@@ -2757,6 +2769,9 @@ int hal_adc_init(hal_adc_t *handle, const hal_adc_config_t *config)
 {
     if (handle == NULL || config == NULL) {
         return HAL_INVALID_PARAM;
+    }
+    if (config->id != 0U) {
+        return HAL_NOT_SUPPORTED;   /* AVR 仅有一个 ADC */
     }
     if (handle->base.state != HAL_STATE_RESET) {
         return HAL_ALREADY_INIT;
