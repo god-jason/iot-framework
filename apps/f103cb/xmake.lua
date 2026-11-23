@@ -22,7 +22,7 @@ if is_plat("cross") and ROS_FAMILY == "f1" then
     table.insert(fw_deps, "board-f103cb")
     table.insert(fw_deps, "app-f103cb")
 
-    ros_firmware("ros-fw-f103cb", {
+    ros_firmware("f103cb", {
         deps = fw_deps,
         defines = { "ROS_PLATFORM_STM32", "ROS_STM32_F1", "STM32F10X_MD",
                     "HSE_VALUE=8000000", "ROS_USE_TRACE=0", "LOG_LEVEL=LOG_LEVEL_NONE" },
@@ -44,7 +44,7 @@ if is_plat("cross") and ROS_FAMILY == "f1" then
         end,
     })
 
-    ros_bootloader("ros-boot-f103cb", {
+    ros_bootloader("f103cb-boot", {
         deps = { "boot-f103cb" },
         defines = { "STM32F10X_MD", "HSE_VALUE=8000000" },
         includedirs = incs,

@@ -33,8 +33,8 @@
     目标一览：
         ros-pc / ros-test / ros-demo / ros-shell     主机目标
         ros-stm32                                   交叉编译静态库（供外部 CubeMX 工程）
-        ros-fw-f103cb / ros-boot-f103cb             F103CB 固件与 Bootloader
-        ros-fw-f407ve / ros-boot-f407ve             F407VE 固件与 Bootloader
+        f103cb / f103cb-boot                        F103CB 固件与 Bootloader
+        f407ve / f407ve-boot                        F407VE 固件与 Bootloader
 ]]
 
 add_rules("mode.debug", "mode.release")

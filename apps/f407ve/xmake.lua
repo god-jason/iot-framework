@@ -25,7 +25,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     table.insert(fw_deps, "board-f407ve")
     table.insert(fw_deps, "app-f407ve")
 
-    ros_firmware("ros-fw-f407ve", {
+    ros_firmware("f407ve", {
         deps = fw_deps,
         defines = { "ROS_PLATFORM_STM32", "ROS_STM32_F4", "USE_HAL_DRIVER", ROS_CHIP,
                     "HSE_VALUE=8000000",
@@ -47,7 +47,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
         end,
     })
 
-    ros_bootloader("ros-boot-f407ve", {
+    ros_bootloader("f407ve-boot", {
         deps = { "boot-f407ve" },
         defines = { ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
