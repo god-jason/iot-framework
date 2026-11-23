@@ -34,8 +34,10 @@ robotos/
 ├── drivers/        器件驱动（50 个）
 ├── modules/        模组后端（ml307：net 原始接口 + 原生 HTTP/MQTT）
 ├── platforms/      pc / stm32 / avr 平台实现
-├── boards/         板级工程（启动文件、链接脚本、main）
-│   └── pc/         PC 示例（demo / shell_demo）与单测入口 test.c
+│   ├── pc/         PC 平台与示例入口
+│   ├── stm32/      STM32 共用层（启动流程、Boot、内存/移植）
+│   ├── stm32f1/    F1 外设 HAL + F103CB 板级/固件/Bootloader
+│   └── stm32f4/    F4 外设 HAL + F407VE 板级/固件/Bootloader
 ├── vendor/         cjson、tlsf、arena
 ├── docs/           设计文档
 └── xmake.lua       构建脚本
@@ -93,7 +95,7 @@ arm-none-eabi-addr2line -e ros-fw-f407ve -f -C 0x0800xxxx
 | 目标 | 类型 | 说明 |
 | --- | --- | --- |
 | `ros-pc` | static | 主机静态库 |
-| `ros-test` | binary | 单元测试入口 `boards/pc/test.c` |
+| `ros-test` | binary | 单元测试入口（汇总各模块 `*_test.c`） |
 | `ros-demo` | binary | 示例程序（日志 + LED） |
 | `ros-stm32` | static | STM32 交叉编译库 |
 | `ros-fw-f103cb` | binary | 可烧录固件（elf/hex/bin） |
@@ -229,7 +231,7 @@ xmake build ros-test && xmake run ros-test
 ```
 
 - 测试文件与实现同目录，命名 `*_test.c`，入口统一为 `void ut_xxx(void)`；
-- `boards/pc/test.c` 汇总调用全部套件；
+- `ros-test` 汇总调用全部套件；
 - 断言宏在 `components/common/test.h`：`TF_CHECK` / `TF_CHECK_INT` / `TF_CHECK_STR` / `TF_CHECK_NEAR` / `TF_CHECK_MEM`。
 
 ---

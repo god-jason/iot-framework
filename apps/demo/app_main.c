@@ -1,6 +1,6 @@
 /* robotos 综合示例：LED 闪烁 + roshell 命令行。
  *
- * 本文件实现 app_main()，由 boards/pc/main.c 创建为独立任务；
+ * 本文件实现 app_main()，由 platforms/pc/pc_main.c 创建为独立任务；
  * 创建 LED 任务与 roshell 会话后返回（任务结束），应用靠这些任务继续运行；
  * 支持 exit（退回监听）与 quit（结束进程，ros_stop 返回 main）。
  */

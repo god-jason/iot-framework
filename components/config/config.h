@@ -10,7 +10,7 @@
  *   config_erase    -> board_config_erase
  *   config_is_valid -> board_config_valid
  *
- * 板级实现在 boards/<board>/board_config.c 中完成（双区备份 + CRC 校验）；
+ * 板级实现在 platforms/stm32/stm32_config.c 中完成（双区备份 + CRC 校验）；
  * 未提供板级实现的构建使用 config.c 里的 weak 默认值（恒返回失败）。
  */
 
@@ -37,7 +37,7 @@ int config_erase(void);
 bool config_is_valid(void);
 
 /* ==========================================================================
- * 板级后端（boards/<board>/board_config.c 实现）
+ * 板级后端（platforms/stm32/stm32_config.c 实现）
  * ========================================================================== */
 
 int  board_config_read(void *buf, uint32_t max, uint32_t *len);

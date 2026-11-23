@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """uart_ota.py - robotos Bootloader 串口 OTA 上位机（F1 App/OTA、F4 APP/BACKUP/OTA）
 
-与 boards/stm32f103cb/bootloader.c 的升级协议保持一致：
+与 platforms/stm32/bootloader.c 的升级协议保持一致：
 
     Boot -> Host : ACK(0x06)                （就绪，可发长度/CRC）
     Host -> Boot : u32 len + u32 crc32(LE)  （crc32 覆盖后 len 字节）

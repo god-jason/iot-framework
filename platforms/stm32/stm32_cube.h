@@ -45,8 +45,8 @@
 #undef HAL_I2C_MODE_MASTER
 #undef HAL_I2C_MODE_SLAVE
 
-#if defined(ROS_STM32_F4)
-/* Cube F4 HAL 1.28 起把 DMA_MDATAALIGN_* 改名为 DMA_MEMORY_DATA_SIZE_*，
+#if defined(ROS_STM32_F4) || defined(ROS_STM32_H7)
+/* Cube F4/H7 HAL 1.28 起把 DMA_MDATAALIGN_* 改名为 DMA_MEMORY_DATA_SIZE_*，
  * 早期版本（如 Keil DFP 2.17 携带的 1.27）用旧名：这里统一到新名。 */
 #ifndef DMA_MEMORY_DATA_SIZE_BYTE
 #define DMA_MEMORY_DATA_SIZE_BYTE       DMA_MDATAALIGN_BYTE
@@ -57,7 +57,7 @@
 #ifndef DMA_MEMORY_DATA_SIZE_WORD
 #define DMA_MEMORY_DATA_SIZE_WORD       DMA_MDATAALIGN_WORD
 #endif
-#endif /* ROS_STM32_F4 */
+#endif /* ROS_STM32_F4 || ROS_STM32_H7 */
 
 #include "hal.h"
 

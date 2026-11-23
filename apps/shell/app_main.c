@@ -1,7 +1,7 @@
 /*
  * app_main.c - PC 平台 roshell 交互示例
  *
- * 本文件实现 app_main()，由 boards/pc/main.c 创建为独立任务。
+ * 本文件实现 app_main()，由 platforms/pc/pc_main.c 创建为独立任务。
  * rs_platform_start() 完成默认绑定：
  *   - 输出：stdout（与 log 的 printf 同一路）
  *   - 输入：监听任务逐字节读 stdin；未激活时只匹配 hello 口令，

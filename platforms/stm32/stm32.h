@@ -7,13 +7,13 @@
  * 公共 API 请包含 "hal.h"；本头文件只暴露需要用户中断服务函数转发的入口。
  * 编译时必须在目标宏中定义 ROS_STM32_F1、ROS_STM32_F4、ROS_STM32_H7 之一，
  * 对应实现文件才会参与编译：
- *   stm32_f1.c / stm32_f4.c / stm32_h7.c
+ *   F1: platforms/stm32f1 下的寄存器实现（gpio / tim）
+ *   F4: platforms/stm32f4 下的 HAL 模块（gpio / uart / dma 等）
+ *   H7: platforms/stm32h7 下的 HAL2 骨架
  *
  * 说明：
- *   - F1/F4 使用“用户提供 HAL 句柄”模型，中断需由用户 IRQHandler 转发到
- *     下面的 ros_stm32_*_irq_handler()；
- *   - H7 使用内部槽位池自动分配 HAL 句柄，并通过 HAL 弱回调分发事件，
- *     无需调用下列转发函数。
+ *   - F1/F4/H7 使用“用户提供 HAL 句柄”模型，中断需由用户 IRQHandler 转发到
+ *     下面的 ros_stm32_*_irq_handler()。
  */
 
 #include "hal.h"
@@ -30,6 +30,12 @@ void ros_stm32_can_irq_handler(hal_can_t *handle);
 
 /* 在 RTC_Alarm_IRQHandler() 中调用。 */
 void ros_stm32_rtc_alarm_irq_handler(void);
+
+/*
+ * 注册 1Hz 软件 RTC 后端（内核 tick 分频，基准 ROS_RTC_DEFAULT_UNIX）。
+ * 供硬件 RTC 不可用时的板级回退使用，多次调用只重新设置基准。
+ */
+void stm32_rtc_soft_init(void);
 
 #ifdef __cplusplus
 }

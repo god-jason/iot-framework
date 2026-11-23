@@ -67,7 +67,7 @@ int fota_run(uint32_t image_size, uint32_t image_crc,
              fota_read_fn read, void *user);
 
 /* ==========================================================================
- * 板级后端（boards/<board>/board_ota.c 实现）
+ * 板级后端（platforms/stm32/stm32_ota.c 实现）
  *
  * 未提供后端的构建会落到 fota.c 中的 weak 默认实现（恒返回 FOTA_ERR），
  * 因此主机侧其它目标无需链接板级代码。

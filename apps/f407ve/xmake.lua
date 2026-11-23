@@ -3,6 +3,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     ros_object("app-f407ve", {
         scope = "none",
         files = { "app_main.c" },
-        includedirs = { path.join(ROS_ROOT, "boards/stm32f407ve") },
+        defines = { "USE_HAL_DRIVER", ROS_CHIP, "HSE_VALUE=8000000" },
+        includedirs = { path.join(ROS_ROOT, "platforms/stm32f4") },
     })
 end

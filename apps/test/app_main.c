@@ -1,7 +1,7 @@
 /*
  * app_main.c - 单元测试入口（PC 应用）
  *
- * 本文件实现 app_main()，由 boards/pc/main.c 创建为独立任务；
+ * 本文件实现 app_main()，由 platforms/pc/pc_main.c 创建为独立任务；
  * 依次运行各模块测试套件并汇总结果，结束后 ros_stop() 返回 main，
  * 失败与否通过 app_set_exit_code() 传给进程退出码。
  */

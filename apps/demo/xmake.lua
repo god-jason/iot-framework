@@ -8,7 +8,7 @@ if not is_plat("cross") then
         add_cflags("-Wextra", "-Wshadow", "-Wformat=2", { force = true })
         ros_host_defines()
         add_defines("ROS_PC_REAL_DELAY")
-        add_files("app_main.c")
+        add_files("app_main.c", path.join(ROS_ROOT, "platforms/pc/pc_shell.c"))
         add_includedirs(ROS_INCLUDEDIRS)
         add_deps("board-pc")
         for _, dep in ipairs(ROS_OBJ_HOST) do

@@ -27,8 +27,7 @@
         components/<x>/ -> ros-cmp-<x>
         drivers/     -> ros-drivers（静态库，按需链接）
         modules/<x>/ -> ros-module-<x>
-        platforms/<x>/ -> ros-platform-<x>
-        boards/<x>/  -> board-<x> / 可烧录固件与 Bootloader
+        platforms/<x>/ -> ros-platform-<x>（stm32f1/stm32f4 同时包含板级与固件目标）
         apps/<x>/    -> PC 可执行文件或嵌入式 app_main 对象
 
     目标一览：
@@ -55,7 +54,7 @@ option_end()
 
 option("cube_hal_dir")
     set_default("")
-    set_description("STM32Cube HAL 目录（可传 .../STM32F4xx_HAL_Driver 或其 Inc）；留空则跳过依赖 Cube HAL 的平台文件")
+    set_description("STM32Cube HAL 目录（可传 .../STM32F4xx_HAL_Driver、STM32H7xx_HAL_Driver 或其 Inc）；留空则跳过依赖 Cube HAL 的平台文件")
 option_end()
 
 option("stm32_chip")
@@ -154,15 +153,23 @@ ROS_CMSIS_INC = get_config("cmsis_inc") or ""
 if ROS_CMSIS_INC == "" and cmsis_pack then
     ROS_CMSIS_INC = path.join(cmsis_pack, "CMSIS", "Core", "Include")
 end
-local cmsis_dev_inc = (ROS_HAL_DRV ~= "")
-    and path.join(ROS_HAL_DRV, "CMSIS", "Device", "ST", "STM32F4xx", "Include") or ""
+local cmsis_dev_inc = ""
+if family == "f4" and ROS_HAL_DRV ~= "" then
+    cmsis_dev_inc = path.join(ROS_HAL_DRV, "CMSIS", "Device", "ST", "STM32F4xx", "Include")
+end
 
 -- 头文件搜索路径：src + vendor + components + modules + drivers + platforms
 -- 统一转成绝对路径：各子目录 xmake.lua 中的相对 include 会以该目录为基准解析
 do
     local function ap(p) return path.join(ROS_ROOT, p) end
     local incs = { ap("src"), ap("hal"), ap("drivers"),
-                   ap("platforms"), ap("platforms/pc"), ap("platforms/stm32") }
+                   ap("platforms"), ap("platforms/pc"),
+                   ap("platforms/stm32") }
+    -- 板级头（board.h / partition.h）各系列同名：只把当前系列目录加入搜索路径，
+    -- 避免 stm32f1/stm32f4 的 board.h 互相覆盖。
+    if is_plat("cross") then
+        incs[#incs + 1] = ap("platforms/stm32" .. family)
+    end
     for _, d in ipairs(os.dirs("vendor/*")) do incs[#incs + 1] = ap(d) end
     for _, d in ipairs(os.dirs("components/*")) do incs[#incs + 1] = ap(d) end
     for _, d in ipairs(os.dirs("modules/*")) do incs[#incs + 1] = ap(d) end
@@ -206,7 +213,7 @@ local function ros_cross_defines(extra)
         -- F1 堆紧张：调度器任务表只需 3 个槽位，减半降低堆占用
         add_defines("SCHEDULER_MAX_ENTRIES=4")
         add_cflags("-Oz", { force = true })
-    elseif family == "f4" then
+    elseif family == "f4" or family == "h7" then
         add_defines("RS_ENABLE_EXPR=1", "RS_ENABLE_MATH=1")
     end
     ros_trace_defines()
@@ -444,12 +451,9 @@ for _, dir in ipairs(os.dirs("platforms/*")) do
     includes(dir)
 end
 
-includes("boards/pc")
 for _, dir in ipairs(os.dirs("apps/*")) do
     includes(dir)
 end
-includes("boards/stm32f103cb")
-includes("boards/stm32f407ve")
 
 -- ============================================================================
 -- 主机聚合目标：ros-pc 静态库（无 main，供外部集成）
@@ -468,6 +472,8 @@ if not is_plat("cross") then
         add_files("components/**.c")
         add_files("vendor/**.c")
         add_files("platforms/pc/**.c")
+        -- 静态库不包含平台 main（pc_main.c 由 board-pc 目标编入可执行文件）
+        remove_files("platforms/pc/pc_main.c")
         remove_files("src/*_test.c", "src/**/*_test.c", "src/test_*.c", "src/**/test_*.c",
                      "components/*_test.c", "components/**/*_test.c",
                      "components/test_*.c", "components/**/test_*.c",
@@ -503,7 +509,19 @@ if is_plat("cross") then
         add_files("src/**.c")
         add_files("components/**.c")
         add_files("drivers/**.c")
+        -- 公共实现（platforms/stm32）与当前系列的外设实现（platforms/stm32<family>）
         add_files("platforms/stm32/**.c")
+        add_files("platforms/stm32" .. family .. "/**.c")
+        -- 板级文件（启动/时钟/Flash/RTC）属于具体固件，不进入通用静态库
+        remove_files("platforms/stm32" .. family .. "/board.c",
+                     "platforms/stm32" .. family .. "/boot_flash.c",
+                     "platforms/stm32" .. family .. "/board_rtc.c")
+        -- 依赖板级 partition.h 的共享实现由各 board 目标编译（静态库无板级头文件路径）
+        remove_files("platforms/stm32/stm32_meta.c",
+                     "platforms/stm32/stm32_config.c",
+                     "platforms/stm32/stm32_ota.c",
+                     "platforms/stm32/bootloader.c",
+                     "platforms/stm32/stm32_main.c")
         add_files("modules/**.c")
         add_files("vendor/**.c")
         remove_files("components/net/net_bsd.c",
@@ -519,16 +537,8 @@ if is_plat("cross") then
         add_includedirs(ROS_INCLUDEDIRS)
 
         if (get_config("cube_hal_dir") or "") == "" then
-            remove_files("platforms/stm32/stm32_os.c",
-                         "platforms/stm32/stm32_f4.c",
-                         "platforms/stm32/stm32_h7.c")
-            if family ~= "f1" then
-                remove_files("platforms/stm32/stm32_f1.c")
-            end
-        else
-            if family ~= "f1" then remove_files("platforms/stm32/stm32_f1.c") end
-            if family ~= "f4" then remove_files("platforms/stm32/stm32_f4.c") end
-            if family ~= "h7" then remove_files("platforms/stm32/stm32_h7.c") end
+            -- 无 Cube HAL：去掉依赖 HAL 的时基实现（F1 由板级/寄存器实现提供）
+            remove_files("platforms/stm32/stm32_os.c")
         end
 
         set_basename("ros-stm32-" .. family)

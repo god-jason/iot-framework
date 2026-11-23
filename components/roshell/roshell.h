@@ -1,4 +1,4 @@
-﻿#ifndef RS_H
+#ifndef RS_H
 #define RS_H
 
 /*
@@ -264,7 +264,8 @@ uint32_t rs_shell_line_pending(void);
 /* ============================== 平台默认绑定 ============================== */
 
 /*
- * 平台层实现（platforms/pc/pc_shell.c、platforms/stm32/stm32_shell.c）：
+ * 平台层弱默认实现（platforms/pc/pc_shell.c、platforms/stm32/stm32_shell.c），
+ * 应用可提供强定义覆盖（如 apps/shell/app_shell.c、apps/f103cb/app_shell.c）：
  *   PC    : stdin 逐字节 feed 到会话；上电只跑监听任务，
  *           输入口令 "hello" 后才创建会话；exit 回收后回到监听；
  *           监听态 quit / 管道 EOF 停止内核。

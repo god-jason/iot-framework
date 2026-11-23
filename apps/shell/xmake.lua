@@ -9,7 +9,7 @@ if not is_plat("cross") then
         ros_host_defines()
         add_defines("SHELL_SHELL_STACK=8192", "SHELL_JOB_STACK=4096",
                     "ROS_PC_REAL_TIME")
-        add_files("app_main.c")
+        add_files("app_main.c", "app_shell.c")
         add_includedirs(ROS_INCLUDEDIRS)
         add_deps("board-pc")
         for _, dep in ipairs(ROS_OBJ_HOST) do
