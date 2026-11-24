@@ -28,6 +28,23 @@
  *   - 记录按完整相对路径组织（如 "config/device.json"），不建目录树。
  *
  * 所有多字节字段为小端序。
+ *
+ * 典型用法：
+ *
+ *   static rofs_t fs;
+ *   rofs_file_t f;
+ *   char buf[64];
+ *
+ *   rofs_init(&fs);
+ *   if (rofs_mount(&fs, FLASH_ROFS_OFFSET, flash_read, NULL) == ROFS_OK) {
+ *       if (rofs_open(&fs, "config/device.json", &f) == ROFS_OK) {
+ *           int n = rofs_read(&f, buf, sizeof(buf));
+ *           rofs_close(&f);
+ *       }
+ *   }
+ *
+ * 镜像由 tools/make_rofs.py 生成后烧写到 Flash 的指定分区，
+ * MCU 端不需要写入接口，也不需要垃圾回收。
  */
 
 #include <stdint.h>
@@ -54,20 +71,20 @@ extern "C" {
 
 /* 错误码 */
 typedef enum {
-    ROFS_OK             =  0,
+    ROFS_OK             =  0,   /* 成功 */
 
-    ROFS_ERR_PARAM      = -1,
-    ROFS_ERR_IO         = -2,
-    ROFS_ERR_MAGIC      = -3,
-    ROFS_ERR_VERSION    = -4,
-    ROFS_ERR_FORMAT     = -5,
-    ROFS_ERR_CRC        = -6,
-    ROFS_ERR_RANGE      = -7,
-    ROFS_ERR_NOT_FOUND  = -8,
-    ROFS_ERR_IS_DIR     = -9,
-    ROFS_ERR_NOT_DIR    = -10,
-    ROFS_ERR_INVALID    = -11,
-    ROFS_ERR_EOF        = -12
+    ROFS_ERR_PARAM      = -1,   /* 参数非法（空指针等） */
+    ROFS_ERR_IO         = -2,   /* 底层读取失败 */
+    ROFS_ERR_MAGIC      = -3,   /* 魔数不匹配，不是 ROFS 镜像 */
+    ROFS_ERR_VERSION    = -4,   /* 格式版本不兼容 */
+    ROFS_ERR_FORMAT     = -5,   /* 头部/记录区/END 结构不合法 */
+    ROFS_ERR_CRC        = -6,   /* 记录或镜像 CRC 校验失败 */
+    ROFS_ERR_RANGE      = -7,   /* 偏移越界 */
+    ROFS_ERR_NOT_FOUND  = -8,   /* 路径不存在 */
+    ROFS_ERR_IS_DIR     = -9,   /* 目标是目录 */
+    ROFS_ERR_NOT_DIR    = -10,  /* 目标不是目录 */
+    ROFS_ERR_INVALID    = -11,  /* 路径非法/未挂载/句柄无效 */
+    ROFS_ERR_EOF        = -12   /* 保留：读取接口在 EOF 时返回 0 */
 } rofs_err_t;
 
 /*
@@ -112,33 +129,33 @@ typedef struct rofs {
     rofs_read_fn read;         /* 只读回调 */
     void *ctx;                 /* 回调上下文 */
 
-    uint32_t image_size;
-    uint32_t records_offset;
-    uint32_t records_size;
-    uint32_t record_count;
-    uint32_t flags;
-    uint32_t image_crc;        /* 镜像 CRC32（计算时该字段视为 0） */
-    uint16_t version;
+    uint32_t image_size;       /* 镜像总大小（来自 Super Header） */
+    uint32_t records_offset;   /* 第一条记录偏移，通常 32 */
+    uint32_t records_size;     /* 记录区大小，不含 END */
+    uint32_t record_count;     /* 记录数量 */
+    uint32_t flags;            /* 镜像标志，保留 */
+    uint32_t image_crc;        /* 镜像 CRC32（计算时本字段视为 0） */
+    uint16_t version;          /* 格式版本 */
 
-    uint8_t mounted;
+    uint8_t mounted;           /* 1=已挂载 */
 } rofs_t;
 
 typedef struct rofs_file {
-    rofs_t *fs;
+    rofs_t *fs;                /* 所属实例 */
     uint32_t offset;           /* Body 在镜像内的偏移 */
     uint32_t size;             /* 文件大小 */
-    uint32_t position;         /* 当前读取位置 */
-    uint8_t used;
+    uint32_t position;         /* 当前读取位置，范围 [0, size] */
+    uint8_t used;              /* 1=句柄占用 */
 } rofs_file_t;
 
 typedef struct rofs_dir {
-    rofs_t *fs;
+    rofs_t *fs;                /* 所属实例 */
     uint32_t scan_offset;      /* 下一次扫描的记录偏移 */
     uint32_t scan_count;       /* 已扫描记录数 */
     char path[ROFS_PATH_MAX + 1];   /* 归一化目录路径，根为 "" */
     char last[ROFS_MAX_NAME + 1];   /* 上一次返回的名称，用于连续去重 */
-    uint8_t last_len;
-    uint8_t used;
+    uint8_t last_len;          /* last 的有效长度 */
+    uint8_t used;              /* 1=句柄占用 */
 } rofs_dir_t;
 
 /* ------------------------------ 生命周期 ------------------------------ */

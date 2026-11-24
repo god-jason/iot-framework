@@ -15,7 +15,10 @@
 
 /* ---------------- 路径 ---------------- */
 
-/* 校验单个路径段：非空且不是 "." / ".." */
+/*
+ * 单个路径段合法性检查。
+ * 空段（连续 '/'）、"."、".." 都视为非法。
+ */
 static int path_seg_ok(const char *seg, uint32_t len)
 {
     if (len == 0u) {
@@ -30,6 +33,17 @@ static int path_seg_ok(const char *seg, uint32_t len)
     return 1;
 }
 
+/*
+ * 校验镜像内相对路径。
+ *
+ * 规则（与 tools/make_rofs.py 保持一致）：
+ *   - 不允许以 '/' 开头或结尾；
+ *   - 不允许空段（"a//b"）、"."、".."；
+ *   - 总长度不超过 ROFS_PATH_MAX（255 字节）。
+ *
+ * allow_root 用于 opendir：允许 "" 或 "/" 表示根目录。
+ * 注意：打开文件时传 allow_root=0，根目录不能作为文件打开。
+ */
 int rofs__path_check(const char *path, int allow_root)
 {
     uint32_t len;
@@ -67,6 +81,16 @@ int rofs__path_check(const char *path, int allow_root)
     return ROFS_OK;
 }
 
+/*
+ * 归一化目录路径。
+ *
+ * 与 rofs__path_check 的区别：
+ *   - 接受 "/"、"config"、"/config"、"config/" 等写法；
+ *   - 去掉前导与结尾 '/'，根目录输出空串；
+ *   - 仍然拒绝空段、"."、".."。
+ *
+ * 输出的 out 用于 opendir 保存当前目录前缀，以及 readdir 做前缀匹配。
+ */
 int rofs__path_dir(const char *path, char *out, uint32_t cap)
 {
     const char *src;
@@ -115,6 +139,12 @@ int rofs__path_dir(const char *path, char *out, uint32_t cap)
 
 /* ---------------- 记录读取 ---------------- */
 
+/*
+ * 读取并解析 Record Header。
+ *
+ * 仅做“16 字节必须落在镜像内”的检查；name_len/size 的边界校验由
+ * rofs__record_load 完成，避免每个调用点重复实现。
+ */
 int rofs__rec_read(rofs_t *fs, uint32_t rec_off, rofs_rec_t *rec)
 {
     uint8_t buf[ROFS_RECORD_SIZE];
@@ -141,6 +171,13 @@ int rofs__rec_read(rofs_t *fs, uint32_t rec_off, rofs_rec_t *rec)
     return ROFS_OK;
 }
 
+/*
+ * 读取记录的文件名。
+ *
+ * 文件名紧跟 Record Header，长度由 name_len 指定，不带 '\0'。
+ * buf 必须至少 cap >= name_len + 1，函数负责补 '\0'。
+ * 只在确实需要比较/展示名称时调用，避免不必要的介质读取。
+ */
 int rofs__rec_name(rofs_t *fs, uint32_t rec_off, const rofs_rec_t *rec,
                    char *buf, uint32_t cap)
 {
@@ -164,7 +201,17 @@ int rofs__rec_name(rofs_t *fs, uint32_t rec_off, const rofs_rec_t *rec,
     return ROFS_OK;
 }
 
-/* 读取记录头并计算 Body 偏移，同时校验记录边界 */
+/*
+ * 读取记录头、校验边界并计算 Body 偏移。
+ *
+ * 校验内容：
+ *   - 记录头完整位于记录区内；
+ *   - name_len 非 0，type 合法（FILE/DIR）；
+ *   - Name 与 Body 均不越过记录区末尾。
+ *
+ * 这是顺序扫描的公共入口：lookup、readdir、dir_exists 都通过它
+ * 计算下一条记录的偏移，确保损坏字段不会导致越界访问。
+ */
 int rofs__record_load(rofs_t *fs, uint32_t off, rofs_rec_t *rec,
                       uint32_t *body_off)
 {
@@ -193,6 +240,19 @@ int rofs__record_load(rofs_t *fs, uint32_t off, rofs_rec_t *rec,
     return ROFS_OK;
 }
 
+/*
+ * 按相对路径顺序查找记录。
+ *
+ * 算法：
+ *   for 每条记录：
+ *       读取并校验记录边界；
+ *       只有当 name_len 与路径长度相同时才读取文件名并比较；
+ *       命中则返回记录头与 Body 偏移；
+ *       否则 off = Body 偏移 + size。
+ *
+ * 由于镜像按路径排序，查找是 O(n) 的顺序扫描；对小容量资源镜像足够。
+ * 名称比较区分大小写，且路径分隔符固定为 '/'。
+ */
 int rofs__lookup(rofs_t *fs, const char *path, rofs_rec_t *rec,
                  uint32_t *body_off)
 {
@@ -239,6 +299,19 @@ int rofs__lookup(rofs_t *fs, const char *path, rofs_rec_t *rec,
 
 /* ---------------- 文件接口 ---------------- */
 
+/*
+ * 打开文件（只读）。
+ *
+ * 处理流程：
+ *   1. 路径合法性检查（拒绝 "/" 开头、"."、".." 等）；
+ *   2. 顺序查找记录；
+ *   3. 若没有精确匹配但存在该路径前缀，说明目标是隐式目录，
+ *      返回 ROFS_ERR_IS_DIR；
+ *   4. 记录类型必须是 FILE。
+ *
+ * 成功后句柄只保存 Body 偏移、大小与当前位置，不保存文件名，
+ * 因此打开后再次改名/换镜像不会越界（镜像本身只读）。
+ */
 int rofs_open(rofs_t *fs, const char *path, rofs_file_t *file)
 {
     rofs_rec_t rec;
@@ -274,6 +347,10 @@ int rofs_open(rofs_t *fs, const char *path, rofs_file_t *file)
     return ROFS_OK;
 }
 
+/*
+ * 关闭文件句柄。
+ * 只清除 used 标志，不触发任何介质操作。
+ */
 int rofs_close(rofs_file_t *file)
 {
     if (file == NULL || file->used == 0u) {
@@ -284,6 +361,16 @@ int rofs_close(rofs_file_t *file)
     return ROFS_OK;
 }
 
+/*
+ * 读取文件数据。
+ *
+ * 返回：
+ *   >0 : 实际读取字节数（已按文件大小裁剪）；
+ *    0 : 已到 EOF 或请求长度为 0；
+ *   <0 : ROFS_ERR_* 错误码。
+ *
+ * 读取范围始终限制在 [Body, Body+size) 内，不依赖调用者的 seek 历史。
+ */
 int32_t rofs_read(rofs_file_t *file, void *buffer, uint32_t size)
 {
     uint32_t n;
@@ -312,6 +399,13 @@ int32_t rofs_read(rofs_file_t *file, void *buffer, uint32_t size)
     return (int32_t)n;
 }
 
+/*
+ * 定位读取位置。
+ *
+ * whence 取 SEEK_SET / SEEK_CUR / SEEK_END；
+ * 目标位置必须落在 [0, size] 内，越界返回 ROFS_ERR_RANGE。
+ * 只读文件不允许 seek 到文件尾之后形成稀疏区域。
+ */
 int rofs_seek(rofs_file_t *file, int32_t offset, int whence)
 {
     int64_t base;
@@ -339,16 +433,19 @@ int rofs_seek(rofs_file_t *file, int32_t offset, int whence)
     return ROFS_OK;
 }
 
+/* 返回当前读取位置；句柄无效时返回 0 */
 uint32_t rofs_tell(rofs_file_t *file)
 {
     return (file != NULL && file->used != 0u) ? file->position : 0u;
 }
 
+/* 返回文件大小；句柄无效时返回 0 */
 uint32_t rofs_size(rofs_file_t *file)
 {
     return (file != NULL && file->used != 0u) ? file->size : 0u;
 }
 
+/* 是否到达文件尾：1=已到 EOF（含句柄无效），0=未到 */
 int rofs_eof(rofs_file_t *file)
 {
     if (file == NULL || file->used == 0u) {
@@ -357,6 +454,10 @@ int rofs_eof(rofs_file_t *file)
     return (file->position >= file->size) ? 1 : 0;
 }
 
+/*
+ * 判断路径是否存在。
+ * 返回 1=存在（文件或隐式目录），0=不存在，负值=路径非法/介质错误。
+ */
 int rofs_exists(rofs_t *fs, const char *path)
 {
     rofs_rec_t rec;
@@ -372,6 +473,13 @@ int rofs_exists(rofs_t *fs, const char *path)
     return (err == ROFS_ERR_NOT_FOUND) ? 0 : err;
 }
 
+/*
+ * 查询文件属性。
+ *
+ * 只支持对实际记录（文件或显式 DIR 记录）stat；
+ * 隐式目录（仅通过路径前缀存在）没有对应记录，会返回 NOT_FOUND。
+ * stat.name 填充调用者传入的相对路径。
+ */
 int rofs_stat(rofs_t *fs, const char *path, rofs_stat_t *stat)
 {
     rofs_rec_t rec;

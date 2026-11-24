@@ -16,7 +16,17 @@
 
 #include "rofs_internal.h"
 
-/* 介质读取封装：offset 为镜像内偏移，自动加上挂载基址 */
+/*
+ * 介质读取封装。
+ *
+ * offset 为镜像内偏移，实际访问地址为 base_offset + offset。
+ * 所有读取都经过这里，统一做三项检查：
+ *   1. fs/read 有效；
+ *   2. buffer 与长度合法（长度为 0 时允许 buffer 为空）；
+ *   3. 访问范围不越过 image_size，防止损坏的长度字段带出镜像。
+ *
+ * 返回 ROFS_OK / ROFS_ERR_RANGE / ROFS_ERR_IO / ROFS_ERR_PARAM。
+ */
 int rofs__read(rofs_t *fs, uint32_t offset, void *buf, uint32_t size)
 {
     if (fs == NULL || fs->read == NULL) {
@@ -37,6 +47,10 @@ int rofs__read(rofs_t *fs, uint32_t offset, void *buf, uint32_t size)
     return ROFS_OK;
 }
 
+/*
+ * 初始化文件系统实例。
+ * 只清零内存，不访问介质；真正读取镜像发生在 rofs_mount。
+ */
 int rofs_init(rofs_t *fs)
 {
     if (fs == NULL) {
@@ -46,6 +60,24 @@ int rofs_init(rofs_t *fs)
     return ROFS_OK;
 }
 
+/*
+ * 挂载镜像。
+ *
+ * 参数：
+ *   base_offset : 镜像在介质中的起始地址（例如 Flash 分区偏移）；
+ *   read        : 只读回调；
+ *   ctx         : 传给回调的上下文。
+ *
+ * 挂载只读取 32B Super Header 与末尾 4B END 标记，不扫描全部记录，
+ * 因此耗时与镜像大小无关。校验顺序：
+ *   1. 魔数与版本；
+ *   2. header_size 必须为 32；
+ *   3. image_size / records_offset / records_size 的范围关系；
+ *   4. 记录区末尾必须恰好是 4B END 标记（image_size == end + 4）。
+ *
+ * 任何一步失败都直接返回对应错误码，不保留半挂载状态。
+ * 完整记录校验请调用 rofs_check。
+ */
 int rofs_mount(rofs_t *fs, uint32_t base_offset,
                rofs_read_fn read, void *ctx)
 {
@@ -122,6 +154,10 @@ int rofs_mount(rofs_t *fs, uint32_t base_offset,
     return ROFS_OK;
 }
 
+/*
+ * 卸载：只清除挂载标志。
+ * 已打开的文件/目录句柄由调用者保证不再使用。
+ */
 int rofs_unmount(rofs_t *fs)
 {
     if (fs == NULL) {
@@ -131,6 +167,10 @@ int rofs_unmount(rofs_t *fs)
     return ROFS_OK;
 }
 
+/*
+ * 获取镜像信息（镜像大小、记录区范围、记录数量、版本、flags）。
+ * 便于上层做容量统计与调试输出。
+ */
 int rofs_get_info(rofs_t *fs, rofs_info_t *info)
 {
     if (fs == NULL || info == NULL || fs->mounted == 0u) {
@@ -145,7 +185,18 @@ int rofs_get_info(rofs_t *fs, rofs_info_t *info)
     return ROFS_OK;
 }
 
-/* 逐条校验记录边界、文件名与 Body CRC */
+/*
+ * 逐条校验记录区。
+ *
+ * 从 records_offset 开始，按 record_count 条记录顺序前进：
+ *   - 记录头必须完整落在记录区内；
+ *   - name_len 不能为 0，类型必须是 FILE 或 DIR；
+ *   - Body 必须完整落在记录区内；
+ *   - Body CRC32 必须与 Record Header 中的 crc32 一致；
+ *   - 最后一条记录的末尾必须正好等于 records_offset + records_size。
+ *
+ * 这里不依赖“上一条记录可信”，每一步都重新做边界检查。
+ */
 static int check_records(rofs_t *fs)
 {
     uint32_t off = fs->records_offset;
@@ -196,7 +247,13 @@ static int check_records(rofs_t *fs)
     return (off == end) ? ROFS_OK : ROFS_ERR_FORMAT;
 }
 
-/* 校验整个镜像的 CRC，计算时把 image_crc32 字段视为 0 */
+/*
+ * 校验整镜像 CRC32。
+ *
+ * 计算范围是 [0, image_size)，但 Super Header 中的 image_crc32 字段
+ * 必须按 0 参与计算（与 Builder 生成时一致）。
+ * 分块读取，避免为整个镜像分配缓冲。
+ */
 static int check_image_crc(rofs_t *fs)
 {
     uint8_t chunk[ROFS_CRC_CHUNK];
@@ -231,6 +288,17 @@ static int check_image_crc(rofs_t *fs)
     return (crc == fs->image_crc) ? ROFS_OK : ROFS_ERR_CRC;
 }
 
+/*
+ * 完整校验镜像。
+ *
+ * 这是“可选”的重操作，用于：
+ *   - 下载/烧写后首次使用；
+ *   - 设备自检；
+ *   - 怀疑 Flash 损坏时排查。
+ *
+ * 顺序：先逐条校验记录（能定位到单条记录 CRC 错误），
+ * 再校验整镜像 CRC（覆盖 Super Header、记录区与 END 标记）。
+ */
 int rofs_check(rofs_t *fs)
 {
     int err;

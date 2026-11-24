@@ -124,7 +124,6 @@ void ut_rofs(void)
     rofs_stat_t st;
     rofs_info_t info;
     char buf[32];
-    int n;
     int rc;
 
     build_image();

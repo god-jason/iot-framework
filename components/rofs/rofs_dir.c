@@ -15,7 +15,17 @@
 
 #include "rofs_internal.h"
 
-/* 目录是否存在：根目录始终存在；否则要求存在 DIR 记录或路径前缀 */
+/*
+ * 判断目录是否存在。
+ *
+ * ROFS 没有独立目录节点，目录由记录路径隐式表达，判定条件：
+ *   1. 路径为空：根目录，始终存在；
+ *   2. 存在 name 完全等于 dir 且 type=DIR 的显式记录；
+ *   3. 存在 name 以 "dir/" 开头的记录（即目录下至少有一个子项）。
+ *
+ * 因此“空目录”只能在镜像中显式写入 DIR 记录才会存在；
+ * tools/make_rofs.py 默认只为文件生成记录。
+ */
 int rofs__dir_exists(rofs_t *fs, const char *dir)
 {
     uint32_t off;
@@ -56,6 +66,15 @@ int rofs__dir_exists(rofs_t *fs, const char *dir)
     return ROFS_ERR_NOT_FOUND;
 }
 
+/*
+ * 打开目录。
+ *
+ * path 支持 ""、"/"、"config"、"/config"、"config/" 等写法；
+ * 内部统一归一化为不带首尾 '/' 的前缀保存到 dir->path。
+ *
+ * 目录是否存在由 rofs__dir_exists 依据记录路径前缀推导。
+ * 打开后遍历位置指向记录区起点，last_len 用于连续重复项去重。
+ */
 int rofs_opendir(rofs_t *fs, const char *path, rofs_dir_t *dir)
 {
     char norm[ROFS_PATH_MAX + 1];
@@ -83,6 +102,21 @@ int rofs_opendir(rofs_t *fs, const char *path, rofs_dir_t *dir)
     return ROFS_OK;
 }
 
+/*
+ * 读取下一个目录项。
+ *
+ * 算法：
+ *   1. 从 scan_offset 继续顺序扫描记录，直到读完 record_count 条；
+ *   2. 根目录直接取完整路径作为候选；子目录要求 name 以 "dir/" 开头，
+ *      并截掉前缀得到相对路径 cand；
+ *   3. 若 cand 中还含 '/'，说明是更深层路径，只返回第一段并标记为 DIR；
+ *      否则按记录类型返回文件或显式目录；
+ *   4. 使用 dir->last 去掉连续重复的子目录名
+ *      （Builder 按路径排序，所以同一子目录的记录必然相邻）。
+ *
+ * 返回 0=成功填 entry，1=遍历结束，负值=错误。
+ * 每次成功返回都会推进 scan_offset/scan_count，重入安全。
+ */
 int rofs_readdir(rofs_dir_t *dir, rofs_dirent_t *entry)
 {
     rofs_t *fs;
@@ -166,6 +200,10 @@ int rofs_readdir(rofs_dir_t *dir, rofs_dirent_t *entry)
     return 1;                            /* 遍历结束 */
 }
 
+/*
+ * 回到目录开头，重新开始遍历。
+ * 只重置扫描位置与去重状态，不重新验证目录是否存在。
+ */
 int rofs_rewinddir(rofs_dir_t *dir)
 {
     if (dir == NULL || dir->used == 0u || dir->fs == NULL) {
@@ -177,6 +215,10 @@ int rofs_rewinddir(rofs_dir_t *dir)
     return ROFS_OK;
 }
 
+/*
+ * 关闭目录句柄。
+ * 只清除 used 标志并断开 fs 指针，无介质操作。
+ */
 int rofs_closedir(rofs_dir_t *dir)
 {
     if (dir == NULL || dir->used == 0u) {

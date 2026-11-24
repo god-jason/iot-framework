@@ -57,11 +57,18 @@ static inline uint32_t rofs__get_u32(const uint8_t *p)
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-/* CRC32（CRC-32/ISO-HDLC，与 zlib.crc32 一致） */
+/*
+ * CRC32 流式计算：
+ *   crc = rofs__crc32_update(0xFFFFFFFFu, buf, len) ^ 0xFFFFFFFFu;
+ * 与 zlib.crc32 的 CRC-32/ISO-HDLC 一致。
+ */
 uint32_t rofs__crc32_update(uint32_t crc, const void *buf, uint32_t len);
 uint32_t rofs__crc32(const void *buf, uint32_t len);
 
-/* 读取介质上的连续数据；越界判断由调用者完成 */
+/*
+ * 读取镜像内的连续数据（offset 为镜像内偏移）。
+ * 自动检查 [offset, offset+size) 是否越过 image_size。
+ */
 int rofs__read(rofs_t *fs, uint32_t offset, void *buf, uint32_t size);
 
 /* 读取并解析记录头；调用者需保证 rec_off 在记录区内 */
