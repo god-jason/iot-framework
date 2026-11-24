@@ -3,8 +3,7 @@
  *
  * 负责：
  *   - 板载 LED（PA6/PA7，低电平点亮）；
- *   - PWM 通道注册（TIM2/TIM3/TIM4/TIM12）；
- *   - 风扇调速（复用 PWM 0）；
+ *   - 风扇调速（TIM2_CH1 / PA0，25kHz）；
  *   - 步进电机（PB12 STEP / PB13 DIR，DWT 微秒延时）；
  *   - 1Hz 心跳任务。
  */
@@ -13,7 +12,7 @@
 
 #include "board.h"
 #include "ros.h"
-#include "device.h"
+#include "gpio.h"
 #include "fan.h"
 #include "stepper.h"
 #include "hal_gpio.h"
@@ -24,31 +23,8 @@
 #include <string.h>
 
 /* ==========================================================================
- * PWM 注册
+ * PWM 引脚复用
  * ========================================================================== */
-
-/* instance 为定时器编号（0=TIM1，1=TIM2，2=TIM3，3=TIM4，11=TIM12） */
-typedef struct {
-    hal_pwm_t pwm;
-    uint8_t   instance;
-    uint8_t   channel;
-    uint32_t  frequency;
-} app_pwm_def_t;
-
-static app_pwm_def_t s_pwms[] = {
-    { .instance = 1U,  .channel = 1U, .frequency = 1000U },
-    { .instance = 1U,  .channel = 2U, .frequency = 1000U },
-    { .instance = 1U,  .channel = 3U, .frequency = 1000U },
-    { .instance = 1U,  .channel = 4U, .frequency = 1000U },
-    { .instance = 3U,  .channel = 1U, .frequency = 2000U },
-    { .instance = 3U,  .channel = 2U, .frequency = 2000U },
-    { .instance = 3U,  .channel = 3U, .frequency = 2000U },
-    { .instance = 3U,  .channel = 4U, .frequency = 2000U },
-    { .instance = 2U,  .channel = 3U, .frequency = 3000U },
-    { .instance = 2U,  .channel = 4U, .frequency = 3000U },
-    { .instance = 11U, .channel = 1U, .frequency = 4000U },
-    { .instance = 11U, .channel = 2U, .frequency = 4000U },
-};
 
 /* 配置一组复用引脚为推挽输出 */
 static void pwm_gpio_init(GPIO_TypeDef *port, uint16_t pins, uint32_t af)
@@ -88,31 +64,14 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
     }
 }
 
-/* 向 device 组件注册本板 PWM 通道（只绑定句柄，硬件初始化延迟到首次使用） */
-static void app_pwm_register(void)
-{
-    uint32_t i;
-
-    for (i = 0U; i < sizeof(s_pwms) / sizeof(s_pwms[0]); i++) {
-        app_pwm_def_t *def = &s_pwms[i];
-
-        def->pwm.config.channel = def->channel;
-        def->pwm.config.id = def->instance;
-        def->pwm.config.frequency = def->frequency;
-        def->pwm.config.duty = 0U;
-        def->pwm.config.polarity = HAL_PWM_POLARITY_HIGH;
-        (void)device_pwm_bind(&def->pwm);
-    }
-}
-
 /* ==========================================================================
  * 风扇
  * ========================================================================== */
 
-/* 风扇：复用 PWM 编号 0（TIM2_CH1 / PA0）输出，25kHz */
-#define FAN_PWM_SLOT  0U
+/* 风扇：TIM2_CH1 / PA0，25kHz */
 #define FAN_PWM_FREQ  25000U
 
+static hal_pwm_t s_fan_pwm;
 static fan_t s_fan;
 
 /* fan 组件的占空比回调：0 停止，1~1000 映射到 0.1%~100% */
@@ -142,7 +101,14 @@ static int fan_set_duty(void *ctx, uint16_t duty)
 
 static void app_fan_init(void)
 {
-    static const fan_ops_t ops = { fan_set_duty, &s_pwms[FAN_PWM_SLOT].pwm };
+    static const fan_ops_t ops = { fan_set_duty, &s_fan_pwm };
+
+    /* 只记录默认配置，硬件初始化延迟到 fan 首次设置转速时 */
+    s_fan_pwm.config.id = 1U;                     /* TIM2 */
+    s_fan_pwm.config.channel = 1U;
+    s_fan_pwm.config.frequency = 1000U;
+    s_fan_pwm.config.duty = 0U;
+    s_fan_pwm.config.polarity = HAL_PWM_POLARITY_HIGH;
 
     (void)fan_init(&s_fan, &ops);
 }
@@ -263,7 +229,7 @@ static void blink_entry(void *arg)
 /*
  * 应用设备初始化：
  *   1. LED 输出；
- *   2. device 组件（gpio/pwm 命令）与 PWM/风扇注册；
+ *   2. gpio 命令与风扇注册；
  *   3. 步进电机；
  *   4. 心跳任务。
  */
@@ -271,11 +237,9 @@ void app_device_init(void)
 {
     app_led_init();
 
-    /* 板级设备：gpio/pwm 命令 + PWM/风扇/步进 */
-    if (device_init() == 0) {
-        app_pwm_register();
-        app_fan_init();
-    }
+    /* 板级设备：gpio 命令 + 风扇/步进 */
+    (void)gpio_cmd_register();
+    app_fan_init();
     app_stepper_init();
 
     /* 心跳：板载 LED 1Hz */

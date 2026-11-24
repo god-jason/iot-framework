@@ -31,7 +31,6 @@
  *   > waitjob 0              （等待槽位 0 结束）
  *   > gpio mode PA5 out      （设备命令走 cmd 全局命令表）
  *   > gpio set PA5 1
- *   > pwm list
  *   > fan 0 speed 60%
  *   > ping 127.0.0.1 count 4
  *   > exit           （回收会话，回到口令监听）
@@ -40,7 +39,8 @@
  */
 
 #include "roshell.h"
-#include "device.h"
+#include "gpio.h"
+#include "hal.h"
 #include "fan.h"
 #include "ros.h"
 #include "common.h"
@@ -71,7 +71,7 @@ static uint8_t    s_cpu_stack[1024];
 static ros_task_t s_mem_task;
 static uint8_t    s_mem_stack[1024];
 
-/* 演示用 PWM 通道：由应用准备句柄并绑定，pwm 命令里用编号 0/1 操作 */
+/* 演示用 PWM 通道：由应用准备句柄，风扇实例直接使用 */
 static hal_pwm_t s_demo_pwm[2];
 
 /* 演示用风扇：把 PWM 通道包装成 fan 实例，fan 命令里用 fan 0 / fan 1 操作 */
@@ -131,13 +131,13 @@ void app_main(void *arg)
         app_set_exit_code(1);
         return;
     }
-    (void)device_init();
+    (void)gpio_cmd_register();
     (void)app_fs_init(APP_FS_IMG_PATH);
     if (rs_cmd_register(&s_quit_def) != 0) {
         printf("register quit failed\n");
     }
 
-    /* 准备两路 PWM 并绑定（PC 平台为模拟实现） */
+    /* 准备两路 PWM 演示通道（PC 平台为模拟实现），并包装成风扇实例 */
     {
         hal_pwm_config_t pcfg = {
             .id = 0U,
@@ -154,7 +154,6 @@ void app_main(void *arg)
             if (hal_pwm_init(&s_demo_pwm[i], &pcfg) != HAL_OK) {
                 continue;
             }
-            (void)device_pwm_bind(&s_demo_pwm[i]);
 
             /* 同一个 PWM 通道再包装成风扇实例（fan_init 会注册 fan 命令） */
             s_demo_fan_ops[i].set_duty = demo_fan_duty;

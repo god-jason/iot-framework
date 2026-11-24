@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-/* 初始化 LED，注册 device/PWM/风扇/步进，并创建 1Hz 心跳任务 */
+/* 初始化 LED，注册 gpio 命令与风扇/步进，并创建 1Hz 心跳任务 */
 void app_device_init(void);
 
 #ifdef __cplusplus
