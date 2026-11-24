@@ -152,10 +152,16 @@ void board_trace_start(uint32_t baudrate)
 {
     board_uart_init(baudrate);
 
-    ros_trace_set_output(&s_uart1, 0U);
-
-    /* 只输出核心事件，避免串口轮询影响实时性；需要全量时改 DEBUG */
-    ros_trace_set_level(ROS_TRACE_LEVEL_CORE);
+    /*
+     * trace 与 Shell/printf 共用 UART1：CORE 级事件由调度器/中断上下文
+     * 高频产生（每个事件一行，行首固定为 'T'），而 hal_uart_transmit
+     * 是轮询发送且不可重入，两个上下文同时发送会互相覆盖 HAL 的
+     * pTxBuffPtr/TxXferCount，把栈内容当成待发数据打出去。
+     * 因此默认只注册输出通道、不打开 trace；需要时再显式
+     * ros_trace_set_level() 打开（注意此时应避开日志输出）。
+     */
+    ros_trace_set_output(&s_uart1, 50U);
+    ros_trace_set_level(ROS_TRACE_LEVEL_OFF);
 }
 
 /* ==========================================================================

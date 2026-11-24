@@ -2,7 +2,7 @@
  * app_device.c - STM32F407VET6 应用级设备初始化
  *
  * 负责：
- *   - 板载 LED（PA6/PA7，低电平点亮）；
+ *   - 指示灯 PA1（低电平点亮）；
  *   - 风扇调速（TIM2_CH1 / PA0，25kHz）；
  *   - 步进电机（PB12 STEP / PB13 DIR，DWT 微秒延时）；
  *   - 1Hz 心跳任务。
@@ -46,8 +46,9 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
     if (htim->Instance == TIM2) {
         __HAL_RCC_TIM2_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
-        pwm_gpio_init(GPIOA, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3,
-                      GPIO_AF1_TIM2);
+        /* 只配 TIM2_CH1（PA0，风扇）。PA1 为指示灯、PA2/PA3 为 USART2，
+         * 不能再被复用成 PWM 通道。 */
+        pwm_gpio_init(GPIOA, GPIO_PIN_0, GPIO_AF1_TIM2);
     } else if (htim->Instance == TIM3) {
         __HAL_RCC_TIM3_CLK_ENABLE();
         __HAL_RCC_GPIOB_CLK_ENABLE();
@@ -186,7 +187,7 @@ static void app_stepper_init(void)
  * 板载 LED 与心跳
  * ========================================================================== */
 
-/* 板载 LED（PA6 / PA7，低电平点亮） */
+/* 指示灯（PA1，低电平点亮） */
 static void app_led_init(void)
 {
     GPIO_InitTypeDef gpio;
@@ -194,21 +195,21 @@ static void app_led_init(void)
     __HAL_RCC_GPIOA_CLK_ENABLE();
 
     memset(&gpio, 0, sizeof(gpio));
-    gpio.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+    gpio.Pin = GPIO_PIN_1;
     gpio.Mode = GPIO_MODE_OUTPUT_PP;
     gpio.Pull = GPIO_NOPULL;
     gpio.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOA, &gpio);
 
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);   /* 熄灭 */
 }
 
 static void app_led_toggle(void)
 {
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_6 | GPIO_PIN_7);
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
 }
 
-/* 心跳任务：板载 LED 1Hz 闪烁 */
+/* 心跳任务：PA1 指示灯每 500ms 翻转一次（1 秒一个闪烁周期） */
 static ros_task_t s_blink_task;
 static uint8_t    s_blink_stack[BOARD_BLINK_STACK_SIZE];
 

@@ -6,9 +6,9 @@
  *   SPI1_SCK  = PB3  (AF5)
  *   SPI1_MISO = PB4  (AF5)
  *   SPI1_MOSI = PB5  (AF5)
- *   CS        = PB2
+ *   CS        = PA15
  *
- * 文件系统使用 W25Q 的前 512KB（可改 FS_PARTITION_SIZE）。
+ * 文件系统使用 W25Q16 整片 2MB（FS_PARTITION_SIZE）。
  * 本文件把 MFS 适配为 fs_ops_t 并挂载到 VFS 根目录 "/"；
  * MFS 的 lock/unlock 在 mfs_config_t 中配置，适配层不重复加锁。
  */
@@ -28,9 +28,9 @@
 #include <string.h>
 
 #define FS_SPI_ID            0U               /* SPI1 */
-#define FS_CS_PIN            HAL_PIN(1, 2)    /* PB2 */
+#define FS_CS_PIN            HAL_PIN(0, 15)   /* PA15 */
 #define FS_SECTOR_SIZE       4096U            /* W25Q 扇区大小 */
-#define FS_PARTITION_SIZE    (512U * 1024U)   /* 使用前 512KB，缩短格式/扫描时间 */
+#define FS_PARTITION_SIZE    (2048U * 1024U)  /* 整片 2MB */
 #define FS_SPI_HZ            10000000U
 
 static hal_spi_t       s_fs_spi;
@@ -407,6 +407,122 @@ static void fs_unlock(void *ctx)
     (void)ros_mutex_unlock(&s_fs_lock);
 }
 
+/* ==========================================================================
+ * 临时：整片容量读写测试（验证 2MB 分区）
+ * 上电后写入直到空间不足，再回读首尾各 4KB 校验，最后删除测试文件。
+ *
+ * 注意：默认关闭。MFS V1 在写满（无空闲块）后触发 GC，而 GC 的有效性
+ * 统计是 O(记录数²)（每条记录都要全盘查 Inode 和最新 Chunk），2MB 写满
+ * 时实际会卡在扫描里，无法自动完成「写满 → GC → 回收」流程。
+ * 需要回归时改为 1，并把写入量控制在块耗尽之前。
+ * ========================================================================== */
+#define APP_FS_FULLTEST  0
+
+#if APP_FS_FULLTEST
+#define FULLTEST_PATTERN 0xA5U
+/*
+ * 每次写入 48KB：MFS V1 每调用一次 mfs_write 会在末尾扫描全盘定位 Inode，
+ * 用 4KB 小块写 2MB 会退化成 O(n²)（实测 8 分钟只写了 768KB）。
+ * 加大单次写入可把扫描次数从 510 次降到 43 次。
+ */
+#define FULLTEST_CHUNK   (48U * 1024U)
+
+static uint8_t s_ft_buf[FULLTEST_CHUNK];
+
+/* 顺序读取 len 字节并校验模式；返回 0 成功，负值表示失败位置类别 */
+static int ft_read_check(vfs_file_t *f, uint32_t len)
+{
+    uint32_t off = 0U;
+
+    while (off < len) {
+        int32_t n = vfs_read(f, s_ft_buf, FULLTEST_CHUNK);
+        uint32_t i;
+
+        if (n <= 0) {
+            return -1;
+        }
+        for (i = 0U; i < (uint32_t)n; i++) {
+            if (s_ft_buf[i] != (uint8_t)FULLTEST_PATTERN) {
+                return -2;
+            }
+        }
+        off += (uint32_t)n;
+    }
+    return 0;
+}
+
+static void fs_fulltest_run(void)
+{
+    vfs_file_t f;
+    fs_statfs_t st;
+    uint32_t total = 0U;
+    uint32_t t0 = ros_tick_get();
+    int32_t n = 0;
+    int rc;
+
+    memset(s_ft_buf, (int)FULLTEST_PATTERN, sizeof(s_ft_buf));
+
+    /* 先格式化，从干净分区开始测满容量；否则残留文件失效块会触发大量 GC，
+     * 写满 2MB 会慢到不可接受 */
+    rc = vfs_format("/");
+    LOG_I("fs", "fulltest: format rc=%d", rc);
+    if (rc != FS_OK) {
+        return;
+    }
+
+    memset(&f, 0, sizeof(f));
+    rc = vfs_open("/fill.bin", FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &f);
+    if (rc != FS_OK) {
+        LOG_E("fs", "fulltest: open failed %d", rc);
+        return;
+    }
+
+    for (;;) {
+        uint32_t t1 = ros_tick_get();
+
+        n = vfs_write(&f, s_ft_buf, sizeof(s_ft_buf));
+        LOG_I("fs", "ft: %u KB n=%d dt=%u ms", (unsigned)(total / 1024U), (int)n,
+              (unsigned)(ros_tick_get() - t1));
+        if (n <= 0) {
+            break;                          /* 空间不足或 IO 错误 */
+        }
+        total += (uint32_t)n;
+        if ((uint32_t)n < sizeof(s_ft_buf)) {
+            break;
+        }
+    }
+    (void)vfs_close(&f);
+    LOG_I("fs", "fulltest: wrote %u KB (last rc=%d)", (unsigned)(total / 1024U),
+          (int)n);
+
+    if (vfs_statfs("/", &st) == FS_OK) {
+        LOG_I("fs", "fulltest: df total=%uKB free=%uKB blocks=%u",
+              (unsigned)(st.total_bytes / 1024U),
+              (unsigned)(st.free_bytes / 1024U), (unsigned)st.total_blocks);
+    }
+
+    /* 回读校验：文件头 4KB + 文件尾 4KB */
+    memset(&f, 0, sizeof(f));
+    rc = vfs_open("/fill.bin", FS_O_RDONLY, &f);
+    if (rc == FS_OK) {
+        int head = ft_read_check(&f, FULLTEST_CHUNK);
+        int tail = -1;
+
+        if ((total > 2U * FULLTEST_CHUNK) &&
+            (vfs_seek(&f, (int32_t)(total - FULLTEST_CHUNK), FS_SEEK_SET) == FS_OK)) {
+            tail = ft_read_check(&f, FULLTEST_CHUNK);
+        }
+        LOG_I("fs", "fulltest: readback head=%d tail=%d", head, tail);
+        (void)vfs_close(&f);
+    } else {
+        LOG_E("fs", "fulltest: reopen failed %d", rc);
+    }
+
+    LOG_I("fs", "fulltest: unlink=%d cost=%u ms", vfs_unlink("/fill.bin"),
+          (unsigned)(ros_tick_get() - t0));
+}
+#endif /* APP_FS_FULLTEST */
+
 /*
  * 初始化 SPI Flash 并把 MFS 挂载到 VFS 根目录。
  * 未格式化时由 auto_format 自动格式化，成功后注册 FS Shell 命令。
@@ -493,7 +609,12 @@ int app_fs_init(void)
         LOG_I("fs", "mounted");
     }
 
+#if APP_FS_FULLTEST
+    fs_fulltest_run();
+#endif
+
     (void)fs_cmd_register();
+
     s_fs_ready = 1u;
     return 0;
 }

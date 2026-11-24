@@ -2,7 +2,7 @@
  * fs_cmd.c - 通用文件系统 Shell 命令（基于 VFS）
  * ============================================================================
  *
- * 命令：ls / cat / mkdir / rmdir / rm / stat / df / put
+ * 命令：ls / cat / mkdir / rmdir / rm / stat / df / put / format
  * 不直接依赖具体后端，挂载点由 VFS 前缀分发决定。
  */
 
@@ -219,6 +219,25 @@ static int cmd_put(const rs_cmd_ctx_t *ctx)
     return 0;
 }
 
+/* format [path]：格式化挂载点（清空数据），默认根挂载点 */
+static int cmd_format(const rs_cmd_ctx_t *ctx)
+{
+    const char *path = NULL;
+    int rc;
+
+    (void)rs_args_get_str(ctx->parsed, 0U, &path);
+    if (path == NULL || path[0] == '\0') {
+        path = "/";
+    }
+    rc = vfs_format(path);
+    if (rc != FS_OK) {
+        ros_printf("format: %s: %s\n", path, fs_strerror(rc));
+        return -1;
+    }
+    ros_printf("format: %s done\n", path);
+    return 0;
+}
+
 static const rs_args_t s_ls_args[] = {
     { "path", 0, RS_ARGS_TYPE_STR, true, false, "/", "directory (default /)" }
 };
@@ -276,6 +295,11 @@ static const rs_cmd_t s_put_def = {
     s_put_args, 2U, cmd_put, NULL, NULL, NULL, NULL
 };
 
+static const rs_cmd_t s_format_def = {
+    "format", "format mount point [path]", NULL, NULL,
+    s_df_args, 1U, cmd_format, NULL, NULL, NULL, NULL
+};
+
 int fs_cmd_register(void)
 {
     int rc = 0;
@@ -288,5 +312,6 @@ int fs_cmd_register(void)
     rc |= rs_cmd_register(&s_stat_def);
     rc |= rs_cmd_register(&s_df_def);
     rc |= rs_cmd_register(&s_put_def);
+    rc |= rs_cmd_register(&s_format_def);
     return (rc == 0) ? 0 : -1;
 }

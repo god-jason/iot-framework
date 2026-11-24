@@ -38,8 +38,14 @@ g_pfnVectors:
     .word 0                             /* 13: 保留 */
     .word PendSV_Handler                /* 14: PendSV（RTOS 切换） */
     .word SysTick_Handler               /* 15: SysTick（RTOS tick） */
-    /* STM32F407 共 82 个外部中断，全部落进 Default_Handler */
-    .rept 82
+    /* 外部中断：默认落进 Default_Handler；
+     * USART1（Shell/日志）与 USART2（ML307）接出中断接收入口 */
+    .rept 37
+    .word Default_Handler
+    .endr
+    .word USART1_IRQHandler             /* 37: USART1 */
+    .word USART2_IRQHandler             /* 38: USART2 */
+    .rept 43
     .word Default_Handler
     .endr
     .size g_pfnVectors, . - g_pfnVectors
@@ -100,6 +106,11 @@ Default_Handler:
     .thumb_set UsageFault_Handler, Default_Handler
     .weak      DebugMon_Handler
     .thumb_set DebugMon_Handler, Default_Handler
+    /* USART 中断：未链接中断接收实现时（如 Bootloader）落回默认处理 */
+    .weak      USART1_IRQHandler
+    .thumb_set USART1_IRQHandler, Default_Handler
+    .weak      USART2_IRQHandler
+    .thumb_set USART2_IRQHandler, Default_Handler
     /* SVC / PendSV / SysTick 刻意不在此定义：让向量表的未定义引用
      * 把 libros-stm32-f4.a 中的 RTOS 移植层对象拉入链接。 */
 

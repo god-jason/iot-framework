@@ -232,7 +232,10 @@ int mfs__data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
  *   2. 计算 Payload CRC 与 Header CRC；
  *   3. 写 Header、Payload，sync；
  *   4. 在独立对齐位置写 Commit Marker，sync；
- *   5. 更新 active_off / seq / used_bytes。
+ *   5. 更新 active_off / seq。
+ *
+ * used_bytes 由 mfs__blk_alloc() 按整块累加，这里不能重复累加记录长度，
+ * 否则统计值会超过分区容量。
  *
  * 空间不足且开启 auto_gc 时，会先触发一次强制 GC 再重试分配。
  * GC 自身写记录时 gc_running=1，不会递归触发。
@@ -346,7 +349,6 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
         return err;
     }
 
-    fs->used_bytes += end_off - fs->active_off;
     fs->active_off = end_off;
     fs->seq++;
     return MFS_OK;
@@ -362,8 +364,9 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
  * payload 非空时把完整 Payload 读入缓冲区；
  * payload 为空时只做流式 CRC 校验。
  */
-int mfs__rec_read(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
-                   void *payload, uint32_t cap, uint32_t *next_off)
+static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
+                          void *payload, uint32_t cap, uint32_t *next_off,
+                          bool verify_payload)
 {
     uint8_t hb[MFS_REC_HDR_SIZE];
     uint8_t marker[4];
@@ -429,11 +432,13 @@ int mfs__rec_read(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
         if (err != MFS_OK) {
             return err;
         }
-        crc = mfs__crc32(payload, hdr->payload_size);
-        if (crc != hdr->payload_crc) {
-            return MFS_ERR_CRC;
+        if (verify_payload) {
+            crc = mfs__crc32(payload, hdr->payload_size);
+            if (crc != hdr->payload_crc) {
+                return MFS_ERR_CRC;
+            }
         }
-    } else {
+    } else if (verify_payload) {
         err = rec_check_payload(fs, rec_addr + MFS_REC_HDR_SIZE,
                                 hdr->payload_size, hdr->payload_crc);
         if (err != MFS_OK) {

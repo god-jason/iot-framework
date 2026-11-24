@@ -118,12 +118,13 @@ static void stm32_shell_watch_task(void *arg)
         }
 
         /*
-         * 非阻塞收字节：有数据时连续收完（UART 只有 1 字节硬件缓冲，
-         * 不能每 5ms 只取一个字节，否则会丢字符）；无数据时睡眠让出 CPU，
-         * 避免旧实现的 100ms 忙等占满处理器。
+         * 串口接收由平台 HAL 的接收中断写入环形缓冲（F4 见 hal_uart.c），
+         * 本任务只负责排空缓冲并投喂/匹配口令。这样即使 shell 任务
+         * 抢占本任务去回显，成串到达的字节也不会因为 UART 只有 1 字节
+         * 硬件缓冲而溢出丢失。无数据时休眠 5ms 让出 CPU。
          */
-        while (hal_uart_receive != NULL &&
-               hal_uart_receive(uart, &ch, 1U, 0U) == HAL_OK) {
+        while ((hal_uart_receive != NULL) &&
+               (hal_uart_receive(uart, &ch, 1U, 0U) == HAL_OK)) {
             got = true;
             if (rs_shell_started()) {
                 rs_shell_feed((const char *)&ch, 1U);
