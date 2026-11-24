@@ -1,36 +1,51 @@
 /*
- * boot_config.h - STM32 配置区双备份（F1/F4 共用）
+ * boot_config.h - STM32 配置存储（F1/F4 共用）
  *
- * 配置区主区/备份区地址与大小见 platforms/stm32<family> 或 apps/<board> 中的 partition.h。
- * 每条记录 = 头部（magic/长度/CRC）+ 负载；写入时先备份后主区。
+ * 底层采用 components/config 的双区轮转追加日志：
+ *   - 配置区两段（BOOT_CONFIG_BASE0/1，各 BOOT_CONFIG_SIZE）轮流追加；
+ *   - 每条记录带 magic/version/length/sequence/CRC32，Commit 最后写入；
+ *   - 掉电只会丢弃最后一条未提交记录，上一次完整配置仍可恢复。
+ * 地址与大小见各板 partition.h。
  */
 
 #ifndef BOOT_CONFIG_H
 #define BOOT_CONFIG_H
 
 #include "partition.h"
+#include "config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#define BOOT_CONFIG_MAGIC   0x46434F52U     /* 'ROCF' */
+/* 写入记录的配置结构体版本号（结构体变更时递增，配合 load_raw 做迁移） */
+#define BOOT_CONFIG_VERSION     1U
 
-typedef struct {
-    uint32_t magic;
-    uint32_t len;       /* 负载长度 */
-    uint32_t crc;       /* 负载 CRC32 */
-} boot_config_hdr_t;
+/* 初始化（幂等）：扫描配置区并定位最新有效记录。返回 0 成功，-1 失败 */
+int boot_config_init(void);
 
-/* 指定配置区是否有效（magic/长度/CRC 均校验） */
-bool boot_config_valid_at(uint32_t base);
-
-/* 写入配置：先写备份区，再写主区；成功返回 0 */
-int boot_config_save(const void *data, uint32_t len);
+/* 读取最新配置：size 必须与记录中的数据长度一致。返回 0/-2(无配置)/-1 */
+int boot_config_load(void *data, uint32_t size);
 
 /*
- * 启动时校验主配置；无效且备份有效则把备份还原到主区。
- * 返回：1=已还原，0=主区有效无需处理，-2=主备均无效，-1=还原失败。
+ * 按缓冲区容量读取原始数据，并输出实际长度与版本号，
+ * 供结构体升级时按 version/length 做迁移。返回 0/-2(无配置)/-1。
  */
+int boot_config_load_raw(void *buf, uint32_t cap, uint32_t *len,
+                         uint16_t *version);
+
+/* 保存配置（追加写；当前区写满时自动轮转）。返回 0 成功，-1 失败 */
+int boot_config_save(const void *data, uint32_t len);
+
+/* 是否存在有效配置 */
+bool boot_config_valid(void);
+
+/* 擦除两区配置 */
+int boot_config_format(void);
+
+/* Bootloader 兼容接口：0=存在有效配置，-2=无有效配置，-1=初始化失败 */
 int boot_config_restore(void);
+
+/* 通用存储句柄：板级可直接调用 config_store_* 接口 */
+config_store_t *boot_config_storage(void);
 
 #endif /* BOOT_CONFIG_H */

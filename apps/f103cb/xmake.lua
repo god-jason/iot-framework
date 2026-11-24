@@ -45,7 +45,7 @@ if is_plat("cross") and ROS_FAMILY == "f1" then
     })
 
     ros_bootloader("f103cb-boot", {
-        deps = { "boot-f103cb" },
+        deps = { "boot-f103cb", "ros-cmp-config" },
         defines = { "STM32F10X_MD", "HSE_VALUE=8000000" },
         includedirs = incs,
         ldflags = {

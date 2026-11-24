@@ -2,12 +2,13 @@
  * app_main.c - STM32F407VET6 开发板 ML307(4G) 功能演示入口
  *
  * 由板级 main 创建为 app 任务，依次完成：
- *   1. app_device_init()     LED / 风扇 / 步进 / 心跳任务
- *   2. app_ml307_register()  ML307 演示命令（ml307/sim/ping/http/net/mqtt）
- *   3. app_fs_init()         SPI Flash + MFS 文件系统
+ *   1. app_config_init()     内部 Flash 配置加载/保存（cfg 命令）
+ *   2. app_device_init()     LED / 风扇 / 步进 / 心跳任务
+ *   3. app_ml307_register()  ML307 演示命令（ml307/sim/ping/http/net/mqtt）
+ *   4. app_fs_init()         SPI Flash + MFS 文件系统
  *
  * 命令先于文件系统注册：FS 初始化可能较慢，先保证 Shell 命令可用。
- * 各功能实现见 app_device.c / app_fs.c / app_ml307.c。
+ * 各功能实现见 app_config.c / app_device.c / app_fs.c / app_ml307.c。
  *
  * 注意：F407 的 USART2 走 Cube HAL 轮询收字节（at 引擎已适配），
  *       PA2/PA3 与 PWM 编号 2/3 冲突，接模组时这两路 PWM 不可用。
@@ -15,6 +16,7 @@
 
 #include "app.h"
 #include "ros.h"
+#include "app_config.h"
 #include "app_device.h"
 #include "app_fs.h"
 #include "app_ml307.h"
@@ -22,6 +24,10 @@
 void app_main(void *arg)
 {
     (void)arg;
+
+    /* 内部 Flash 配置：加载（或默认）并记录本次启动，注册 cfg 命令 */
+    (void)app_config_init();
+    app_config_register();
 
     app_device_init();
 

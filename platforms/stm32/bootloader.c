@@ -573,16 +573,14 @@ int main(void)
 
     print_error_log();
 
-    /* 配置区校验：主区无效且备份有效时自动还原 */
+    /* 配置区校验：定位最新有效配置记录（双区轮转，掉电安全） */
     {
         int cfg = boot_config_restore();
 
-        if (cfg == 1) {
-            uart_puts("[BOOT] config invalid, restored from backup\r\n");
-        } else if (cfg == -2) {
-            uart_puts("[BOOT] config invalid (no backup)\r\n");
+        if (cfg == -2) {
+            uart_puts("[BOOT] config empty\r\n");
         } else if (cfg < 0) {
-            uart_puts("[BOOT] config restore failed\r\n");
+            uart_puts("[BOOT] config check failed\r\n");
         }
     }
 
