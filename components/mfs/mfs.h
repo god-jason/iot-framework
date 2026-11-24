@@ -8,7 +8,7 @@
  * 设计目标：
  *   - 追加写（Log-Structured）：所有更新都生成新记录，不原地覆盖；
  *   - Record 级 CRC + 独立提交标记：掉电只会丢掉未提交的尾部记录；
- *   - Inode 统一管理文件/目录，文件数据按 256B 逻辑 Chunk 存放；
+ *   - Inode 统一管理文件/目录，文件数据按 512B 逻辑 Chunk 存放；
  *   - 静态 RAM，不使用 malloc，句柄数量编译期固定；
  *   - 与 MCU/块设备解耦，可移植到 SPI NOR 或内部 Flash；
  *   - 所有公开接口返回 0 或负的 MFS_ERR_* 错误码。
@@ -61,9 +61,9 @@
  *
  * RAM 预算（32 位 MCU，典型值）：
  *   - mfs_t 约 300B；
- *   - 工作缓冲 MFS_WORKBUF_SIZE = 256B；
+ *   - 工作缓冲 MFS_WORKBUF_SIZE = 512B；
  *   - 2 个文件句柄 + 1 个目录句柄；
- *   - 合计约 0.7KB，满足核心 RAM <= 1KB 目标。
+ *   - 合计约 1KB（GC 内部另有约 3KB 静态候选表）。
  */
 
 #include <stdint.h>
@@ -75,17 +75,21 @@ extern "C" {
 
 /* 版本号，Superblock 中保存为 (MAJOR << 16) | MINOR */
 #define MFS_VERSION_MAJOR       1
-#define MFS_VERSION_MINOR       1
+#define MFS_VERSION_MINOR       2       /* 1.2：Chunk 512B，旧盘自动重格式化 */
 
 /* 单个路径分量最大长度（不含结尾 '\0'） */
 #define MFS_NAME_MAX            31
 /* 完整路径最大长度 */
 #define MFS_PATH_MAX            127
 
-/* 文件逻辑 Chunk 大小；文件大小不受该值限制 */
-#define MFS_CHUNK_SIZE          256
+/*
+ * 文件逻辑 Chunk 大小；文件大小不受该值限制。
+ * 512B 与 4KB 块配合时每块可放 7 条记录（每块浪费 < 2%），
+ * 数据区利用率约 87.5%（256B Chunk 时只有 75%）。
+ */
+#define MFS_CHUNK_SIZE          512
 /* 调用者必须提供的工作缓冲区最小大小，用于 CRC 校验与 Chunk 合并 */
-#define MFS_WORKBUF_SIZE        256
+#define MFS_WORKBUF_SIZE        MFS_CHUNK_SIZE
 
 /* 编译期句柄上限，配置中的 max_open_files/dirs 不能超过这两个值 */
 #define MFS_MAX_OPEN_FILES      2

@@ -453,7 +453,7 @@ int mfs_mount(mfs_t *fs)
             continue;
         }
 
-        err = mfs__scan_block(fs, block, mount_cb, &m, &last);
+        err = mfs__scan_block_fast(fs, block, mount_cb, &m, &last);
         if (err != MFS_OK) {
             mfs__unlock(fs);
             return err;

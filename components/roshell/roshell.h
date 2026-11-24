@@ -246,6 +246,13 @@ uint32_t rs_shell_process(void);
 bool rs_shell_started(void);
 bool rs_shell_task_finished(void);
 
+/* 会话当前工作目录（默认 "/"，会话启动时重置）；用于 pwd/cd 等命令 */
+#ifndef RS_CWD_MAX
+#define RS_CWD_MAX 128U            /* 当前工作目录缓冲长度 */
+#endif
+const char *rs_shell_cwd(void);
+int rs_shell_cwd_set(const char *path);
+
 /* 请求关闭会话（exit 命令 / 平台输入 EOF）：输入任务在本轮后退出 */
 void rs_shell_request_exit(void);
 

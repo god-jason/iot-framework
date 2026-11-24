@@ -215,7 +215,7 @@ int mfs__data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
     loc->chunk = chunk;
     loc->epoch = epoch;
 
-    return mfs__scan_all(fs, data_locate_cb, loc);
+    return mfs__scan_all_fast(fs, data_locate_cb, loc);
 }
 
 /*
@@ -255,6 +255,7 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
     uint32_t end_off;
     uint32_t base;
     uint32_t crc;
+    bool meta;
     int err;
 
     if (fs == NULL || !fs->mounted || fs->readonly) {
@@ -267,22 +268,38 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
         return MFS_ERR_PARAM;
     }
 
+    /* Inode 更新与删除记录属于元数据：写满时仍必须能写入，才能释放空间 */
+    meta = (type == MFS_REC_INODE_CREATE || type == MFS_REC_INODE_UPDATE ||
+            type == MFS_REC_INODE_DELETE || type == MFS_REC_DATA_DELETE);
+
     align = rec_align(fs);
 
     /* 找到能容纳 Header + Payload + 对齐 Padding + Marker 的块 */
     for (;;) {
         if (fs->active_block == MFS_BLOCK_NONE) {
-            err = mfs__blk_alloc(fs);
-            if (err == MFS_ERR_NOSPC && fs->cfg.auto_gc &&
-                !fs->gc_running) {
-                /* 没有空闲块：尝试回收一个块后再分配 */
-                err = mfs__gc_run(fs, 1u);
+            uint32_t tries;
+
+            /*
+             * 分配成功即可；
+             * 失败时先 GC，再重试。普通数据要求 free_blocks > 预留值
+             * （预留块留给元数据/GC），因此可能需要连续回收两个块。
+             */
+            for (tries = 0U; ; tries++) {
+                err = meta ? mfs__blk_alloc_meta(fs) : mfs__blk_alloc(fs);
                 if (err == MFS_OK) {
-                    err = mfs__blk_alloc(fs);
+                    break;
                 }
-            }
-            if (err != MFS_OK) {
-                return err;
+                if (err != MFS_ERR_NOSPC || !fs->cfg.auto_gc ||
+                    fs->gc_running || tries >= 2U) {
+                    return err;
+                }
+                err = mfs__gc_run(fs, 1u);
+                if (err != MFS_OK) {
+                    return err;
+                }
+                if (fs->active_block != MFS_BLOCK_NONE) {
+                    break;              /* GC 复制后留下的目的块可直接继续写 */
+                }
             }
         }
 
@@ -452,6 +469,20 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
     return MFS_OK;
 }
 
+/* 完整读取：校验 Payload CRC */
+int mfs__rec_read(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
+                   void *payload, uint32_t cap, uint32_t *next_off)
+{
+    return rec_read_impl(fs, rec_addr, hdr, payload, cap, next_off, true);
+}
+
+/* 快速读取：只校验 Header/Marker，跳过 Payload CRC（用于扫描/定位） */
+int mfs__rec_read_fast(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
+                        uint32_t *next_off)
+{
+    return rec_read_impl(fs, rec_addr, hdr, NULL, 0u, next_off, false);
+}
+
 /*
  * 直接读取 Payload 的指定区间。
  * 不做 CRC/边界之外的重复校验，调用者应已通过 mfs__rec_read 确认记录有效。
@@ -485,8 +516,8 @@ int mfs__rec_read_raw(mfs_t *fs, uint32_t rec_addr,
  *
  * 返回 last_off：最后一条有效记录之后的块内偏移，用于设置 active_off。
  */
-int mfs__scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
-                     void *ctx, uint32_t *last_off)
+static int scan_block_impl(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
+                            void *ctx, uint32_t *last_off, bool verify)
 {
     mfs_blk_hdr_t bh;
     mfs_rec_hdr_t hdr;
@@ -509,7 +540,11 @@ int mfs__scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
     off = MFS_BLK_HDR_SIZE;
 
     while (off + MFS_REC_HDR_SIZE <= fs->block_size) {
-        err = mfs__rec_read(fs, base + off, &hdr, NULL, 0u, &next);
+        if (verify) {
+            err = mfs__rec_read(fs, base + off, &hdr, NULL, 0u, &next);
+        } else {
+            err = mfs__rec_read_fast(fs, base + off, &hdr, &next);
+        }
         if (err != MFS_OK) {
             break;                       /* 未提交/损坏：块尾结束 */
         }
@@ -531,12 +566,24 @@ int mfs__scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
     return MFS_OK;
 }
 
+int mfs__scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
+                     void *ctx, uint32_t *last_off)
+{
+    return scan_block_impl(fs, block, cb, ctx, last_off, true);
+}
+
+int mfs__scan_block_fast(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
+                          void *ctx, uint32_t *last_off)
+{
+    return scan_block_impl(fs, block, cb, ctx, last_off, false);
+}
+
 /*
  * 扫描整个数据池。
  * 空闲块（Header 无效）直接跳过；块头 CRC 错误也按空闲处理，
  * 避免单块损坏导致整个文件系统无法挂载。
  */
-int mfs__scan_all(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
+static int scan_all_impl(mfs_t *fs, mfs_rec_cb_t cb, void *ctx, bool verify)
 {
     uint32_t block;
     uint32_t last;
@@ -547,11 +594,21 @@ int mfs__scan_all(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
     }
 
     for (block = 0; block < fs->block_count; block++) {
-        err = mfs__scan_block(fs, block, cb, ctx, &last);
+        err = scan_block_impl(fs, block, cb, ctx, &last, verify);
         if (err == MFS_OK || err == MFS_ERR_NOENT || err == MFS_ERR_CRC) {
             continue;
         }
         return err;
     }
     return MFS_OK;
+}
+
+int mfs__scan_all(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
+{
+    return scan_all_impl(fs, cb, ctx, true);
+}
+
+int mfs__scan_all_fast(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
+{
+    return scan_all_impl(fs, cb, ctx, false);
 }

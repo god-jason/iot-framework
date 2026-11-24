@@ -15,11 +15,24 @@
  *   version/generation/sequence 选择新副本，数据仍一致；下次 GC
  *   会发现旧块已无有效记录并直接回收。
  *
+ * 有效数据判定（1.2 起）：
+ *   旧实现逐条记录调用 mfs__inode_find()/mfs__data_locate()，每条记录
+ *   都要全盘扫描，整体退化为 O(记录数²)，2MB 写满时几乎无法完成。
+ *   现在先收集候选块的全部记录，再对整个日志做一次扫描：
+ *     - 同 (inode, chunk, epoch) 的更新记录使旧记录失效；
+ *     - DATA_DELETE 按范围使旧记录失效；
+ *     - 同时记录每个 Inode 的最新记录，用于判断 Inode/文件是否仍存在。
+ *   整体复杂度 O(日志大小 × 块内记录数)，块内记录数上限 64。
+ *
  * 选块策略：
  *   - 跳过活动块、坏块、正在 GC 的块；
- *   - 计算块内有效字节比例；
+ *   - 按块头 sequence 从旧到新尝试，最多 MFS_GC_TRY_BLOCKS 个块；
  *   - 默认只回收有效比例 < 75% 的块；
- *   - 比例相同时优先选择擦除次数高的块（磨损均衡）。
+ *   - 有效数据为 0（纯垃圾/坏记录头）的块立即选中。
+ *
+ * 空间预留：
+ *   mfs__blk_alloc() 在 free_blocks <= MFS_GC_RESERVE 时拒绝普通分配
+ *   （GC 自身除外），保证 GC 总有一个块可以承载复制出的有效记录。
  *
  * 约束：
  *   - 有目录句柄打开时禁止 GC，避免 readdir 看到复制出的新记录而重复；
@@ -31,125 +44,245 @@
 /* 有效数据比例上限（百分比），超过则不选为牺牲块 */
 #define MFS_GC_LIVE_MAX      75u
 
-/* ---------------- 有效记录判定 ---------------- */
-
 /*
- * 判断一条记录是否仍然有效（GC 需要保留）。
- * 返回 1=有效，0=可回收，负值=读取错误。
- *
- * INODE：最新一条记录（version/sequence 最大）有效；删除记录本身
- *        在 Inode 已删除时保留，避免计数器/审计信息丢失。
- * DATA ：仅当它是该 (inode, chunk, epoch) 最新的 DATA，且未被
- *        更晚的 DATA_DELETE 覆盖时有效。
- * DATA_DELETE：Inode 仍存在且 epoch 一致时保留。
+ * 强制回收（空间不足时）也要求块内至少有 10% 可回收空间。
+ * 否则像顺序追加写满这种场景，GC 会为回收几十字节垃圾而搬移整块有效数据，
+ * 既没有收益又非常耗时（每次评估都要全盘扫描一遍）。
  */
-static int record_is_live(mfs_t *fs, const mfs_rec_hdr_t *hdr,
-                          uint32_t rec_addr)
-{
-    mfs_ii_t info;
-    uint8_t deleted = 0u;
-    uint8_t buf[MFS_DATA_PREFIX];
-    int err;
+#define MFS_GC_FORCE_LIVE_MAX 90u
 
-    switch (hdr->type) {
-    case MFS_REC_INODE_CREATE:
-    case MFS_REC_INODE_UPDATE:
-    case MFS_REC_INODE_DELETE:
-        err = mfs__inode_find_ex(fs, hdr->object_id, &info, &deleted);
-        if (err == MFS_ERR_NOENT) {
-            return 0;
-        }
-        if (err != MFS_OK) {
-            return err;
-        }
-        if (info.rec_seq != hdr->sequence) {
-            return 0;                    /* 已有更新版本 */
-        }
-        if (hdr->type == MFS_REC_INODE_DELETE) {
-            return (deleted != 0u) ? 1 : 0;
-        }
-        return (deleted == 0u) ? 1 : 0;
+/* 单个块最多参与评估的记录数；超过则该块本轮不回收（保守） */
+#define MFS_GC_MAX_RECS      64u
 
-    case MFS_REC_DATA: {
-        uint32_t chunk;
-        uint32_t epoch;
-        mfs_data_loc_t loc;
+/* 单次 GC 最多评估的块数（按 sequence 从旧到新） */
+#define MFS_GC_TRY_BLOCKS    2u
 
-        if (hdr->payload_size < MFS_DATA_PREFIX) {
-            return 0;
-        }
-        err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, sizeof(buf));
-        if (err != MFS_OK) {
-            return err;
-        }
-        chunk = mfs__get_u32(&buf[4]);
-        epoch = mfs__get_u32(&buf[12]);
+/* Inode Payload 读取缓冲（前缀 + 最长名称 + 余量） */
+#define MFS_GC_INODE_BUF     96u
 
-        err = mfs__inode_find(fs, hdr->object_id, &info);
-        if (err == MFS_ERR_NOENT) {
-            return 0;                    /* 文件已删除 */
-        }
-        if (err != MFS_OK) {
-            return err;
-        }
-        if (epoch != info.epoch) {
-            return 0;
-        }
-        /* Chunk 已超出文件大小：截断残留 */
-        if (info.size == 0u ||
-            chunk > (info.size - 1u) / MFS_CHUNK_SIZE) {
-            return 0;
-        }
-
-        /* 复用与文件读取相同的最新数据判定 */
-        err = mfs__data_locate(fs, hdr->object_id, chunk, epoch, &loc);
-        if (err != MFS_OK) {
-            return err;
-        }
-        return (loc.found && loc.seq == hdr->sequence &&
-                loc.seq > loc.del_seq) ? 1 : 0;
-    }
-
-    case MFS_REC_DATA_DELETE:
-        if (hdr->payload_size < 16u) {
-            return 0;
-        }
-        err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, 16u);
-        if (err != MFS_OK) {
-            return err;
-        }
-        err = mfs__inode_find(fs, hdr->object_id, &info);
-        if (err != MFS_OK) {
-            return 0;                    /* 文件已删除，删除记录可回收 */
-        }
-        return (mfs__get_u32(&buf[12]) == info.epoch) ? 1 : 0;
-
-    default:
-        /* 未知/预留记录：保守保留 */
-        return 1;
-    }
-}
-
-/* ---------------- 块内有效数据统计 ---------------- */
+/* 一条候选记录 */
+typedef struct {
+    uint32_t addr;          /* 记录绝对地址 */
+    uint32_t seq;           /* 记录 sequence */
+    uint32_t object_id;     /* Inode 编号 */
+    uint32_t chunk;         /* DATA: chunk；DATA_DELETE: start */
+    uint32_t count;         /* DATA_DELETE: 覆盖数量 */
+    uint32_t epoch;
+    uint32_t payload_size;
+    uint16_t type;
+    uint8_t  live;          /* 评估结果：1 有效 */
+} gc_rec_t;
 
 typedef struct {
-    uint32_t base;      /* 块起始绝对地址 */
-    uint32_t live;      /* 有效记录字节数 */
-} gc_stat_ctx_t;
+    uint32_t base;                      /* 块起始绝对地址 */
+    uint32_t count;
+    uint8_t  overflow;                  /* 记录数超出上限 */
+    gc_rec_t recs[MFS_GC_MAX_RECS];
+} gc_block_t;
 
-static int gc_stat_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
+typedef struct {
+    gc_rec_t *recs;
+    uint32_t  count;
+    uint32_t  inode_seq[MFS_GC_MAX_RECS];   /* 各候选对应的最新 Inode 记录 */
+    uint32_t  inode_addr[MFS_GC_MAX_RECS];
+    uint16_t  inode_type[MFS_GC_MAX_RECS];
+} gc_eval_t;
+
+/* ---------------- 收集块内记录 ---------------- */
+
+static int gc_collect_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
+                         uint32_t rec_addr, void *ctx)
+{
+    gc_block_t *b = (gc_block_t *)ctx;
+    uint8_t buf[MFS_DATA_PREFIX];
+    uint32_t need;
+    gc_rec_t *r;
+    int err;
+
+    if (b->count >= MFS_GC_MAX_RECS) {
+        b->overflow = 1u;
+        return MFS_ERR_NOSPC;           /* 中止扫描 */
+    }
+    r = &b->recs[b->count++];
+    memset(r, 0, sizeof(*r));
+    r->addr = rec_addr;
+    r->seq = hdr->sequence;
+    r->object_id = hdr->object_id;
+    r->payload_size = hdr->payload_size;
+    r->type = hdr->type;
+    r->live = 1u;
+
+    need = 0u;
+    if (hdr->type == MFS_REC_DATA) {
+        need = MFS_DATA_PREFIX;
+    } else if (hdr->type == MFS_REC_DATA_DELETE) {
+        need = 16u;
+    }
+    if (need != 0u) {
+        if (hdr->payload_size < need) {
+            r->live = 0u;               /* 坏记录，直接可回收 */
+            return MFS_OK;
+        }
+        err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, need);
+        if (err != MFS_OK) {
+            return err;
+        }
+        r->epoch = mfs__get_u32(&buf[12]);
+        r->chunk = mfs__get_u32(&buf[4]);
+        if (hdr->type == MFS_REC_DATA_DELETE) {
+            r->count = mfs__get_u32(&buf[8]);
+        }
+    }
+    return MFS_OK;
+}
+
+/* ---------------- 单遍评估 ---------------- */
+
+static bool gc_is_inode_rec(uint16_t type)
+{
+    return type == MFS_REC_INODE_CREATE || type == MFS_REC_INODE_UPDATE ||
+           type == MFS_REC_INODE_DELETE;
+}
+
+/*
+ * 扫描整个日志一次，把所有候选记录与日志中的其他记录比较：
+ *   - 更新的同 (inode, chunk, epoch) DATA 使旧 DATA 失效；
+ *   - 覆盖该 Chunk 的 DATA_DELETE 使旧 DATA 失效；
+ *   - 更新的 INODE 记录使旧 INODE 记录失效，并记录每个 Inode 的最新记录。
+ */
+static int gc_eval_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
                       uint32_t rec_addr, void *ctx)
 {
-    gc_stat_ctx_t *s = (gc_stat_ctx_t *)ctx;
-    int live = record_is_live(fs, hdr, rec_addr);
+    gc_eval_t *e = (gc_eval_t *)ctx;
+    uint8_t buf[MFS_DATA_PREFIX];
+    uint32_t r_chunk = 0u;
+    uint32_t r_count = 0u;
+    uint32_t r_epoch = 0u;
+    bool prefix_ok = false;
+    uint32_t i;
+    int err;
 
-    if (live < 0) {
-        return live;
+    for (i = 0u; i < e->count; i++) {
+        gc_rec_t *c = &e->recs[i];
+
+        if (c->addr == rec_addr || c->object_id != hdr->object_id) {
+            continue;
+        }
+
+        if (gc_is_inode_rec(hdr->type)) {
+            if (hdr->sequence > e->inode_seq[i]) {
+                e->inode_seq[i] = hdr->sequence;
+                e->inode_addr[i] = rec_addr;
+                e->inode_type[i] = hdr->type;
+            }
+            if (gc_is_inode_rec(c->type) && hdr->sequence > c->seq) {
+                c->live = 0u;
+            }
+            continue;
+        }
+
+        if (c->type != MFS_REC_DATA ||
+            (hdr->type != MFS_REC_DATA && hdr->type != MFS_REC_DATA_DELETE)) {
+            continue;
+        }
+        if (!prefix_ok) {
+            uint32_t need = (hdr->type == MFS_REC_DATA) ? MFS_DATA_PREFIX : 16u;
+
+            if (hdr->payload_size < need) {
+                return MFS_OK;           /* 坏记录：不影响其它候选 */
+            }
+            err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, need);
+            if (err != MFS_OK) {
+                return err;
+            }
+            r_epoch = mfs__get_u32(&buf[12]);
+            r_chunk = mfs__get_u32(&buf[4]);
+            if (hdr->type == MFS_REC_DATA_DELETE) {
+                r_count = mfs__get_u32(&buf[8]);
+            }
+            prefix_ok = true;
+        }
+        if (r_epoch != c->epoch || hdr->sequence <= c->seq) {
+            continue;
+        }
+        if (hdr->type == MFS_REC_DATA) {
+            if (r_chunk == c->chunk) {
+                c->live = 0u;
+            }
+        } else if (c->chunk >= r_chunk && c->chunk - r_chunk < r_count) {
+            c->live = 0u;
+        }
     }
-    if (live != 0) {
-        s->live += mfs__rec_total_size(fs, rec_addr - s->base,
-                                        hdr->payload_size);
+    return MFS_OK;
+}
+
+/* 读取指定地址的 Inode 记录并解析（Payload CRC 完整校验） */
+static int gc_read_inode(mfs_t *fs, uint32_t rec_addr, mfs_ii_t *info)
+{
+    mfs_rec_hdr_t hdr;
+    uint8_t buf[MFS_GC_INODE_BUF];
+    int err;
+
+    err = mfs__rec_read(fs, rec_addr, &hdr, buf, sizeof(buf), NULL);
+    if (err != MFS_OK) {
+        return err;
     }
+    return mfs__inode_parse(buf, hdr.payload_size, info);
+}
+
+/* 根据单遍扫描结果确定候选记录是否有效，并累计有效字节数 */
+static int gc_resolve(mfs_t *fs, gc_block_t *b, gc_eval_t *e,
+                      uint32_t *live_out)
+{
+    uint32_t live = 0u;
+    uint32_t i;
+    int err;
+
+    for (i = 0u; i < e->count; i++) {
+        gc_rec_t *c = &e->recs[i];
+
+        if (c->live == 0u) {
+            continue;
+        }
+        if (c->type == MFS_REC_DATA) {
+            mfs_ii_t info;
+
+            if (e->inode_seq[i] == 0u ||
+                e->inode_type[i] == MFS_REC_INODE_DELETE) {
+                c->live = 0u;           /* 文件已删除 */
+                continue;
+            }
+            err = gc_read_inode(fs, e->inode_addr[i], &info);
+            if (err == MFS_ERR_NOENT || err == MFS_ERR_CRC ||
+                err == MFS_ERR_CORRUPT) {
+                c->live = 0u;           /* 最新 Inode 记录损坏：保守回收 */
+                continue;
+            }
+            if (err != MFS_OK) {
+                return err;
+            }
+            if (c->epoch != info.epoch || info.size == 0u ||
+                c->chunk > (info.size - 1u) / MFS_CHUNK_SIZE) {
+                c->live = 0u;           /* 已截断/换代的残留 Chunk */
+                continue;
+            }
+        } else if (gc_is_inode_rec(c->type)) {
+            if (c->seq != e->inode_seq[i]) {
+                c->live = 0u;           /* 已有更新版本 */
+                continue;
+            }
+            if (e->inode_type[i] == MFS_REC_INODE_DELETE) {
+                c->live = (c->type == MFS_REC_INODE_DELETE) ? 1u : 0u;
+            } else {
+                c->live = (c->type == MFS_REC_INODE_DELETE) ? 0u : 1u;
+            }
+        }
+        if (c->live != 0u) {
+            live += mfs__rec_total_size(fs, c->addr - b->base,
+                                         c->payload_size);
+        }
+    }
+    *live_out = live;
     return MFS_OK;
 }
 
@@ -204,22 +337,6 @@ static int gc_copy_record(mfs_t *fs, const mfs_rec_hdr_t *hdr,
                            fs->workbuf, size, NULL, 0u);
 }
 
-/* 复制回调：只搬移仍然有效的记录 */
-static int gc_copy_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
-                      uint32_t rec_addr, void *ctx)
-{
-    int live = record_is_live(fs, hdr, rec_addr);
-
-    (void)ctx;
-    if (live < 0) {
-        return live;
-    }
-    if (live == 0) {
-        return MFS_OK;
-    }
-    return gc_copy_record(fs, hdr, rec_addr);
-}
-
 /* ---------------- GC 主流程 ---------------- */
 
 static int gc_has_open_dir(mfs_t *fs)
@@ -236,13 +353,15 @@ static int gc_has_open_dir(mfs_t *fs)
 
 int mfs__gc_run(mfs_t *fs, uint8_t force)
 {
-    uint32_t block;
-    uint32_t victim = MFS_BLOCK_NONE;
-    uint32_t best_ratio = 0xFFFFFFFFu;
-    uint32_t best_wear = 0u;
-    mfs_blk_hdr_t vh;
-    uint32_t last = 0u;
+    static gc_block_t s_blk;
+    static gc_eval_t  s_eval;
     uint32_t usable;
+    uint32_t min_seq = 0u;
+    uint32_t victim = MFS_BLOCK_NONE;
+    uint32_t victim_erase = 0u;
+    uint32_t attempt;
+    uint32_t i;
+    uint32_t last = 0u;
     int err;
 
     if (fs == NULL || !fs->mounted) {
@@ -260,87 +379,130 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
 
     usable = fs->block_size - MFS_BLK_HDR_SIZE;
 
-    /* 1. 选择牺牲块：有效数据比例最低，比例相同优先高磨损块 */
-    for (block = 0u; block < fs->block_count; block++) {
-        mfs_blk_hdr_t bh;
-        gc_stat_ctx_t st;
+    /*
+     * 1. 选择牺牲块：按块头 sequence 从旧到新逐个尝试，
+     *    最新的空闲块（刚被 GC 擦除）sequence 最大，不会被优先选中。
+     */
+    for (attempt = 0u; attempt < MFS_GC_TRY_BLOCKS; attempt++) {
+        uint32_t pick = MFS_BLOCK_NONE;
+        uint32_t pick_seq = 0xFFFFFFFFu;
+        uint32_t pick_erase = 0u;
+        uint32_t block;
+        uint32_t live = 0u;
         uint32_t ratio;
 
-        if (block == fs->active_block || block == fs->gc_block) {
-            continue;
-        }
-        err = mfs__blk_read_hdr(fs, block, &bh);
-        if (err != MFS_OK) {
-            continue;                    /* 空闲/坏块/无效块 */
-        }
-        if (bh.state == MFS_BLK_STATE_BAD) {
-            continue;
-        }
+        for (block = 0u; block < fs->block_count; block++) {
+            mfs_blk_hdr_t bh;
 
-        memset(&st, 0, sizeof(st));
-        st.base = mfs__blk_addr(fs, block);
-        err = mfs__scan_block(fs, block, gc_stat_cb, &st, &last);
-        if (err != MFS_OK) {
+            if (block == fs->active_block || block == fs->gc_block) {
+                continue;
+            }
+            if (mfs__blk_read_hdr(fs, block, &bh) != MFS_OK) {
+                continue;               /* 未初始化/无效块头 */
+            }
+            if (bh.state == MFS_BLK_STATE_BAD) {
+                continue;
+            }
+            if (bh.sequence > min_seq && bh.sequence < pick_seq) {
+                pick = block;
+                pick_seq = bh.sequence;
+                pick_erase = bh.erase_count;
+            }
+        }
+        if (pick == MFS_BLOCK_NONE) {
+            break;                      /* 没有更多候选块 */
+        }
+        min_seq = pick_seq;
+
+        memset(&s_blk, 0, sizeof(s_blk));
+        s_blk.base = mfs__blk_addr(fs, pick);
+        err = mfs__scan_block_fast(fs, pick, gc_collect_cb, &s_blk, &last);
+        if (s_blk.overflow != 0u) {
+            continue;                   /* 记录过多：本轮跳过该块 */
+        }
+        if (err != MFS_OK && err != MFS_ERR_NOENT && err != MFS_ERR_CRC) {
             return err;
         }
-        if (last == MFS_BLK_HDR_SIZE) {
+        if (s_blk.count == 0u) {
             uint8_t empty = 0u;
 
-            err = mfs__blk_is_empty(fs, block, &empty);
+            if (mfs__blk_is_empty(fs, pick, &empty) != MFS_OK) {
+                return MFS_ERR_IO;
+            }
+            if (empty != 0u) {
+                continue;               /* 真正空块 */
+            }
+            live = 0u;                  /* 只有坏记录头：整块可回收 */
+        } else {
+            memset(&s_eval, 0, sizeof(s_eval));
+            s_eval.recs = s_blk.recs;
+            s_eval.count = s_blk.count;
+            err = mfs__scan_all_fast(fs, gc_eval_cb, &s_eval);
             if (err != MFS_OK) {
                 return err;
             }
-            if (empty != 0u) {
-                continue;                /* 真正空块 */
+            err = gc_resolve(fs, &s_blk, &s_eval, &live);
+            if (err != MFS_OK) {
+                return err;
             }
-            /* 只有写坏的记录头：按 live=0 的垃圾块回收 */
-            st.live = 0u;
         }
 
         ratio = (usable != 0u)
-                    ? (uint32_t)(((uint64_t)st.live * 100u) / usable)
+                    ? (uint32_t)(((uint64_t)live * 100u) / usable)
                     : 100u;
-        if (st.live != 0u && !force && ratio >= MFS_GC_LIVE_MAX) {
-            continue;                    /* 有效数据太多，不值得搬 */
+        if (ratio >= 100u) {
+            continue;                   /* 没有可回收空间 */
         }
-
-        if (victim == MFS_BLOCK_NONE || ratio < best_ratio ||
-            (ratio == best_ratio && bh.erase_count > best_wear)) {
-            victim = block;
-            best_ratio = ratio;
-            best_wear = bh.erase_count;
+        if (!force && ratio >= MFS_GC_LIVE_MAX) {
+            continue;                   /* 有效数据太多，不值得搬 */
         }
+        if (force && ratio > MFS_GC_FORCE_LIVE_MAX) {
+            continue;                   /* 回收收益太小，留待真正需要时再搬 */
+        }
+        victim = pick;
+        victim_erase = pick_erase;
+        break;
     }
 
     if (victim == MFS_BLOCK_NONE) {
-        return force ? MFS_ERR_NOSPC : MFS_OK;
-    }
-
-    /* 记录牺牲块头信息（擦除后需要沿用擦除次数） */
-    err = mfs__blk_read_hdr(fs, victim, &vh);
-    if (err != MFS_OK) {
-        return err;
+        return MFS_ERR_NOSPC;           /* 没有可回收的块（全部有效） */
     }
 
     fs->gc_running = 1u;
     fs->gc_block = victim;
 
-    /* 2. 复制有效记录；任何失败都保留原块 */
-    err = mfs__scan_block(fs, victim, gc_copy_cb, NULL, &last);
-    if (err == MFS_OK) {
-        err = mfs__sync(fs);
+    /* 2. 只复制评估为有效的记录 */
+    for (i = 0u; i < s_blk.count; i++) {
+        mfs_rec_hdr_t hdr;
+
+        if (s_blk.recs[i].live == 0u) {
+            continue;
+        }
+        err = mfs__rec_read_fast(fs, s_blk.recs[i].addr, &hdr, NULL);
+        if (err != MFS_OK) {
+            fs->gc_block = MFS_BLOCK_NONE;
+            fs->gc_running = 0u;
+            return err;
+        }
+        err = gc_copy_record(fs, &hdr, s_blk.recs[i].addr);
+        if (err != MFS_OK) {
+            fs->gc_block = MFS_BLOCK_NONE;
+            fs->gc_running = 0u;
+            return err;
+        }
     }
+    err = mfs__sync(fs);
     if (err != MFS_OK) {
         fs->gc_block = MFS_BLOCK_NONE;
         fs->gc_running = 0u;
         return err;
     }
 
-    /* 3. 擦除牺牲块并写 FREE 头 */
+    /* 3. 擦除牺牲块并写 FREE 头（沿用原擦除次数 + 1） */
     err = mfs__erase(fs, mfs__blk_addr(fs, victim), fs->block_size);
     if (err != MFS_OK) {
         /* 尽量持久化坏块标记；原数据已被复制，文件系统仍可用 */
-        (void)mfs__blk_mark_bad(fs, victim, vh.erase_count + 1u);
+        (void)mfs__blk_mark_bad(fs, victim, victim_erase + 1u);
         fs->bad_blocks++;
         fs->gc_block = MFS_BLOCK_NONE;
         fs->gc_running = 0u;
@@ -356,7 +518,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
         fs->used_bytes = 0u;
     }
 
-    err = mfs__blk_write_hdr(fs, victim, fs->seq++, vh.erase_count + 1u,
+    err = mfs__blk_write_hdr(fs, victim, fs->seq++, victim_erase + 1u,
                               MFS_BLK_STATE_FREE);
     fs->gc_block = MFS_BLOCK_NONE;
     fs->gc_running = 0u;

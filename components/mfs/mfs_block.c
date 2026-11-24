@@ -142,12 +142,23 @@ int mfs__blk_mark_bad(mfs_t *fs, uint32_t block, uint32_t erase_count)
  * 选择 erase_count 最小的候选，从 alloc_hint 开始轮转。
  * 擦除失败时尝试标记 BAD，并继续寻找下一个候选。
  */
-int mfs__blk_alloc(mfs_t *fs)
+static int blk_alloc_impl(mfs_t *fs, bool allow_reserve)
 {
     uint32_t tries;
 
     if (fs == NULL || fs->readonly) {
         return MFS_ERR_READONLY;
+    }
+
+    /*
+     * 预留一个空闲块给 GC：普通写入不能在池子耗尽时才触发回收，
+     * 否则 GC 复制有效记录时没有目的块可用。
+     * Inode/删除类元数据记录（allow_reserve）必须能写入，否则文件系统
+     * 写满后连 rm 都无法执行，永远无法释放空间。
+     */
+    if (fs->block_count > MFS_GC_RESERVE && fs->gc_running == 0u &&
+        !allow_reserve && fs->free_blocks <= MFS_GC_RESERVE) {
+        return MFS_ERR_NOSPC;
     }
 
     /*
@@ -238,4 +249,16 @@ int mfs__blk_alloc(mfs_t *fs)
     }
 
     return MFS_ERR_NOSPC;
+}
+
+/* 普通数据分配：保留 GC 预留块 */
+int mfs__blk_alloc(mfs_t *fs)
+{
+    return blk_alloc_impl(fs, false);
+}
+
+/* 元数据/删除记录分配：空间不足时允许使用 GC 预留块 */
+int mfs__blk_alloc_meta(mfs_t *fs)
+{
+    return blk_alloc_impl(fs, true);
 }

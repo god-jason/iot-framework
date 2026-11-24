@@ -65,9 +65,26 @@ static int demo_ensure(void)
         ros_puts("ml307: init failed");
         return -1;
     }
-    if (ml307_start() != 0) {
-        ros_puts("ml307: no AT response");
-        return -1;
+    /*
+     * MCU 启动远快于模组：模组上电后需要数秒才能响应 AT。
+     * 这里最多等待约 10s（20 次 × 500ms），避免开机后第一命令直接失败。
+     */
+    {
+        int tries;
+
+        for (tries = 0; tries < 20; tries++) {
+            if (ml307_start() == 0) {
+                break;
+            }
+            if (tries == 0) {
+                ros_puts("ml307: waiting for module boot...");
+            }
+            ros_sleep_ms(500U);
+        }
+        if (tries >= 20) {
+            ros_puts("ml307: no AT response");
+            return -1;
+        }
     }
     ros_puts("ml307: ready");
     /* 激活 PDP；模组可能已激活而返回错误，忽略继续 */

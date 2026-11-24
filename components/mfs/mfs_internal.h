@@ -36,6 +36,12 @@
 #define MFS_SB_SIZE          24u   /* Superblock 序列化长度 */
 #define MFS_BLK_HDR_SIZE     24u   /* Block Header 长度，也是块内首条记录偏移 */
 #define MFS_REC_HDR_SIZE     32u   /* Record Header 长度 */
+
+/*
+ * GC 预留块数：普通写路径至少保留这么多空闲块，GC 才有地方复制
+ * 有效记录。GC 自身的分配（gc_running=1）不受此限制。
+ */
+#define MFS_GC_RESERVE       1u
 #define MFS_DATA_PREFIX      24u   /* DATA 记录 Payload 前缀长度（含 4B 保留） */
 #define MFS_INODE_PREFIX     32u   /* INODE 记录 Payload 固定前缀长度 */
 
@@ -216,6 +222,12 @@ int mfs__blk_write_hdr(mfs_t *fs, uint32_t block, uint32_t sequence,
 /* 找到合适的空闲块并设为活动块（按擦除次数做磨损均衡） */
 int mfs__blk_alloc(mfs_t *fs);
 
+/*
+ * 元数据记录专用分配：允许使用 GC 预留块。
+ * 写满时仍必须能写 Inode 更新/删除记录，否则无法通过 rm 释放空间。
+ */
+int mfs__blk_alloc_meta(mfs_t *fs);
+
 /* 将块标记为坏块（尽量持久化 BAD 头）；成功返回 OK */
 int mfs__blk_mark_bad(mfs_t *fs, uint32_t block, uint32_t erase_count);
 
@@ -254,6 +266,13 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
 int mfs__rec_read(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
                    void *payload, uint32_t cap, uint32_t *next_off);
 
+/*
+ * 快速读取：只校验 Header CRC 与 Commit Marker，跳过 Payload CRC。
+ * 用于扫描/定位类操作；真正读取数据时仍会用 mfs__rec_read 校验。
+ */
+int mfs__rec_read_fast(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
+                        uint32_t *next_off);
+
 /* 读取 Payload 的指定片段（不重复校验 CRC，调用前应已确认记录有效） */
 int mfs__rec_read_raw(mfs_t *fs, uint32_t rec_addr,
                        const mfs_rec_hdr_t *hdr, uint32_t payload_off,
@@ -269,6 +288,11 @@ int mfs__scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
 
 /* 扫描整个数据池；块头无效（空闲块）自动跳过 */
 int mfs__scan_all(mfs_t *fs, mfs_rec_cb_t cb, void *ctx);
+
+/* 快速扫描（跳过 Payload CRC），用于 GC 统计、Inode/Chunk 定位、挂载 */
+int mfs__scan_block_fast(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
+                          void *ctx, uint32_t *last_off);
+int mfs__scan_all_fast(mfs_t *fs, mfs_rec_cb_t cb, void *ctx);
 
 /* 计算一条记录占用的总字节数（Header + Payload + Padding + Marker） */
 uint32_t mfs__rec_total_size(mfs_t *fs, uint32_t rec_off,

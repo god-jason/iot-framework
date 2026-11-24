@@ -212,7 +212,7 @@ int mfs__inode_find_ex(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info,
     memset(&f, 0, sizeof(f));
     f.inode = inode;
 
-    err = mfs__scan_all(fs, inode_find_cb, &f);
+    err = mfs__scan_all_fast(fs, inode_find_cb, &f);
     if (err != MFS_OK) {
         return err;
     }
@@ -343,7 +343,7 @@ int mfs__inode_lookup(mfs_t *fs, mfs_inode_t parent, const char *name,
     l.name = name;
     l.name_len = (uint32_t)strlen(name);
 
-    err = mfs__scan_all(fs, inode_lookup_cb, &l);
+    err = mfs__scan_all_fast(fs, inode_lookup_cb, &l);
     if (err != MFS_OK) {
         return err;
     }

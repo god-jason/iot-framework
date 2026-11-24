@@ -482,8 +482,13 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
         }
 
         if (err != MFS_OK) {
+            /*
+             * 中间某个 Chunk 写失败时，已写入的记录还没有通过 Inode 更新
+             * 提交文件大小，对调用者不可见；因此返回错误而不是“部分成功”，
+             * 避免调用者误以为数据已经落盘。
+             */
             mfs__unlock(fs);
-            return (done > 0u) ? (mfs_ssize_t)done : (mfs_ssize_t)err;
+            return (mfs_ssize_t)err;
         }
 
         file->pos += n;
@@ -497,11 +502,13 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
             info.size = file->pos;
             err = mfs__inode_update(fs, &info);
         }
-        if (err == MFS_OK) {
-            file->size = info.size;
-            file->version = info.version;
-            file->epoch = info.epoch;
+        if (err != MFS_OK) {
+            mfs__unlock(fs);
+            return (mfs_ssize_t)err;    /* size 未提交：本次写入不可见 */
         }
+        file->size = info.size;
+        file->version = info.version;
+        file->epoch = info.epoch;
     }
 
     mfs__unlock(fs);

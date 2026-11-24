@@ -315,7 +315,7 @@ static int dir_is_empty(mfs_t *fs, mfs_inode_t inode)
     memset(&c, 0, sizeof(c));
     c.parent = inode;
 
-    err = mfs__scan_all(fs, dir_child_cb, &c);
+    err = mfs__scan_all_fast(fs, dir_child_cb, &c);
     if (err != MFS_OK) {
         return err;
     }
@@ -654,7 +654,7 @@ int mfs_readdir(mfs_dir_t *dir, mfs_dirent_t *entry)
     memset(&r, 0, sizeof(r));
     r.dir = dir;
 
-    err = mfs__scan_all(dir->fs, dir_read_cb, &r);
+    err = mfs__scan_all_fast(dir->fs, dir_read_cb, &r);
     if (err != MFS_OK) {
         mfs__unlock(dir->fs);
         return err;

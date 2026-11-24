@@ -17,6 +17,10 @@
 #define RS_SHELL_RX_MAX        256U    /* 接收环形缓冲字节数 */
 #endif
 
+#ifndef RS_CWD_MAX
+#define RS_CWD_MAX             128U    /* 会话当前工作目录缓冲长度 */
+#endif
+
 /* 会话上下文（单实例，rs_shell_start 时挂到 rs->ctx） */
 typedef struct rs_context {
     rs_t             *rs;                 /* 归属实例 */
@@ -25,6 +29,7 @@ typedef struct rs_context {
     ringbuf_t         rx;
     uint8_t           rx_mem[RS_SHELL_RX_MAX];
     char              line[RS_LINE_MAX];
+    char              cwd[RS_CWD_MAX];    /* 当前工作目录，默认 "/" */
     uint32_t          line_len;
     bool              last_cr;
     bool              last_esc;

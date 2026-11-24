@@ -367,6 +367,8 @@ int rs_shell_start(const char *version)
     s_ctx.finished = false;
     s_ctx.exit_req = false;
     s_ctx.version = version;
+    s_ctx.cwd[0] = '/';
+    s_ctx.cwd[1] = '\0';
 
     s_ctx.task = ros_task_create_dynamic(RS_SHELL_TASK_NAME,
                                            RS_SHELL_PRIO,
@@ -395,6 +397,28 @@ int rs_shell_start(const char *version)
 bool rs_shell_started(void)
 {
     return s_ctx.started;
+}
+
+/* 当前工作目录；会话未启动时视为根目录 */
+const char *rs_shell_cwd(void)
+{
+    return (s_ctx.cwd[0] != '\0') ? s_ctx.cwd : "/";
+}
+
+/* 保存当前工作目录（调用者需先校验目录存在） */
+int rs_shell_cwd_set(const char *path)
+{
+    size_t len;
+
+    if (path == NULL || path[0] != '/') {
+        return -1;
+    }
+    len = strlen(path);
+    if (len + 1U > sizeof(s_ctx.cwd)) {
+        return -1;
+    }
+    memcpy(s_ctx.cwd, path, len + 1U);
+    return 0;
 }
 
 bool rs_shell_task_finished(void)

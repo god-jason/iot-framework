@@ -408,24 +408,23 @@ static void fs_unlock(void *ctx)
 }
 
 /* ==========================================================================
- * 临时：整片容量读写测试（验证 2MB 分区）
- * 上电后写入直到空间不足，再回读首尾各 4KB 校验，最后删除测试文件。
- *
- * 注意：默认关闭。MFS V1 在写满（无空闲块）后触发 GC，而 GC 的有效性
- * 统计是 O(记录数²)（每条记录都要全盘查 Inode 和最新 Chunk），2MB 写满
- * 时实际会卡在扫描里，无法自动完成「写满 → GC → 回收」流程。
- * 需要回归时改为 1，并把写入量控制在块耗尽之前。
+ * 临时：2MB 容量与 GC 回收集成测试
+ *   1. 格式化 → 写满直到空间不足（NOSPC）
+ *   2. 回读首尾校验 → 删除文件
+ *   3. 删除后再写 256KB，验证 GC 能回收失效块
+ *   4. 输出 df 与总耗时
+ * 生产固件默认关闭（APP_FS_FULLTEST 0），需要回归时改为 1。
  * ========================================================================== */
-#define APP_FS_FULLTEST  0
+#define APP_FS_FULLTEST  1
 
 #if APP_FS_FULLTEST
 #define FULLTEST_PATTERN 0xA5U
 /*
- * 每次写入 48KB：MFS V1 每调用一次 mfs_write 会在末尾扫描全盘定位 Inode，
- * 用 4KB 小块写 2MB 会退化成 O(n²)（实测 8 分钟只写了 768KB）。
- * 加大单次写入可把扫描次数从 510 次降到 43 次。
+ * 每次写入 16KB：MFS 每次 mfs_write 末尾要扫描定位 Inode，
+ * 单次写入越大扫描次数越少；但缓冲会占用 RAM，16KB 与 64KB 内核堆
+ * 在 128KB SRAM 内比较平衡。
  */
-#define FULLTEST_CHUNK   (48U * 1024U)
+#define FULLTEST_CHUNK   (16U * 1024U)
 
 static uint8_t s_ft_buf[FULLTEST_CHUNK];
 
@@ -435,9 +434,14 @@ static int ft_read_check(vfs_file_t *f, uint32_t len)
     uint32_t off = 0U;
 
     while (off < len) {
-        int32_t n = vfs_read(f, s_ft_buf, FULLTEST_CHUNK);
+        uint32_t want = len - off;
+        int32_t n;
         uint32_t i;
 
+        if (want > 4096U) {
+            want = 4096U;
+        }
+        n = vfs_read(f, s_ft_buf, want);
         if (n <= 0) {
             return -1;
         }
@@ -501,18 +505,55 @@ static void fs_fulltest_run(void)
               (unsigned)(st.free_bytes / 1024U), (unsigned)st.total_blocks);
     }
 
-    /* 回读校验：文件头 4KB + 文件尾 4KB */
+    /* 回读校验：按实际文件大小取头 4KB + 尾 4KB */
     memset(&f, 0, sizeof(f));
     rc = vfs_open("/fill.bin", FS_O_RDONLY, &f);
     if (rc == FS_OK) {
+        uint32_t fsize = vfs_size(&f);
         int head = ft_read_check(&f, FULLTEST_CHUNK);
         int tail = -1;
 
-        if ((total > 2U * FULLTEST_CHUNK) &&
-            (vfs_seek(&f, (int32_t)(total - FULLTEST_CHUNK), FS_SEEK_SET) == FS_OK)) {
+        if ((fsize > 2U * FULLTEST_CHUNK) &&
+            (vfs_seek(&f, (int32_t)(fsize - FULLTEST_CHUNK), FS_SEEK_SET) == FS_OK)) {
             tail = ft_read_check(&f, FULLTEST_CHUNK);
         }
-        LOG_I("fs", "fulltest: readback head=%d tail=%d", head, tail);
+        LOG_I("fs", "fulltest: readback head=%d tail=%d size=%uKB", head, tail,
+              (unsigned)(fsize / 1024U));
+
+        /* 全文件校验：报告第一个不一致的字节偏移 */
+        {
+            int bad = -1;
+            uint32_t off = 0U;
+
+            if (vfs_seek(&f, 0, FS_SEEK_SET) == FS_OK) {
+                while (off < fsize) {
+                    uint32_t want = fsize - off;
+                    int32_t rn;
+                    uint32_t k;
+
+                    if (want > 4096U) {
+                        want = 4096U;
+                    }
+                    rn = vfs_read(&f, s_ft_buf, want);
+                    if (rn <= 0) {
+                        bad = (int)off;
+                        break;
+                    }
+                    for (k = 0U; k < (uint32_t)rn; k++) {
+                        if (s_ft_buf[k] != (uint8_t)FULLTEST_PATTERN) {
+                            bad = (int)(off + k);
+                            break;
+                        }
+                    }
+                    if (bad >= 0) {
+                        break;
+                    }
+                    off += (uint32_t)rn;
+                }
+            }
+            LOG_I("fs", "fulltest: verify size=%uKB first_bad=%d",
+                  (unsigned)(fsize / 1024U), bad);
+        }
         (void)vfs_close(&f);
     } else {
         LOG_E("fs", "fulltest: reopen failed %d", rc);
@@ -520,6 +561,45 @@ static void fs_fulltest_run(void)
 
     LOG_I("fs", "fulltest: unlink=%d cost=%u ms", vfs_unlink("/fill.bin"),
           (unsigned)(ros_tick_get() - t0));
+
+    /* 删除后再次写入 64KB：验证 GC 能回收失效块并重新分配 */
+    total = 0U;
+    memset(&f, 0, sizeof(f));
+    rc = vfs_open("/reuse.bin", FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &f);
+    if (rc == FS_OK) {
+        while (total < 64U * 1024U) {
+            uint32_t t1 = ros_tick_get();
+
+            n = vfs_write(&f, s_ft_buf, sizeof(s_ft_buf));
+            LOG_I("fs", "reuse: %u KB n=%d dt=%u ms", (unsigned)(total / 1024U),
+                  (int)n, (unsigned)(ros_tick_get() - t1));
+            if (n <= 0) {
+                break;
+            }
+            total += (uint32_t)n;
+            if ((uint32_t)n < sizeof(s_ft_buf)) {
+                break;
+            }
+        }
+        (void)vfs_close(&f);
+        LOG_I("fs", "reuse: wrote %u KB (last rc=%d)", (unsigned)(total / 1024U),
+              (int)n);
+        memset(&f, 0, sizeof(f));
+        if (vfs_open("/reuse.bin", FS_O_RDONLY, &f) == FS_OK) {
+            LOG_I("fs", "reuse: readback=%d", ft_read_check(&f, FULLTEST_CHUNK));
+            (void)vfs_close(&f);
+        }
+        LOG_I("fs", "reuse: unlink=%d", vfs_unlink("/reuse.bin"));
+    } else {
+        LOG_E("fs", "reuse: open failed %d", rc);
+    }
+
+    if (vfs_statfs("/", &st) == FS_OK) {
+        LOG_I("fs", "fulltest: final total=%uKB free=%uKB used_blocks=%u",
+              (unsigned)(st.total_bytes / 1024U),
+              (unsigned)(st.free_bytes / 1024U), (unsigned)st.used_blocks);
+    }
+    LOG_I("fs", "fulltest: done cost=%u ms", (unsigned)(ros_tick_get() - t0));
 }
 #endif /* APP_FS_FULLTEST */
 
