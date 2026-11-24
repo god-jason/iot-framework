@@ -19,8 +19,8 @@
 #include <string.h>
 
 /* ls 递归深度与单层最多下探的子目录数（限制栈占用） */
-#define LS_MAX_DEPTH   3U
-#define LS_MAX_CHILD   6U
+#define LS_MAX_DEPTH   2U
+#define LS_MAX_CHILD   4U
 
 /*
  * 把输入路径解析为绝对路径并规范化。

@@ -364,6 +364,28 @@ static int cmd_mqtt(const rs_cmd_ctx_t *ctx)
     return run_mqtt(host, (uint16_t)port);
 }
 
+/* ntp [server]：网络校时，并把结果写入硬件 RTC */
+static int cmd_ntp(const rs_cmd_ctx_t *ctx)
+{
+    const char *server = NULL;
+    uint32_t ts = 0U;
+
+    if (demo_ensure() != 0) {
+        return -1;
+    }
+    (void)rs_args_get_str(ctx->parsed, 0U, &server);
+    if (ml307_get_ntp_time(server, &ts) != 0) {
+        ros_puts("ntp: sync failed");
+        return -1;
+    }
+    if (ros_rtc_set_timestamp(ts) != ROS_OK) {
+        ros_puts("ntp: rtc write failed");
+        return -1;
+    }
+    ros_printf("ntp: unix=%u saved to rtc\n", (unsigned)ts);
+    return 0;
+}
+
 static const rs_args_t s_http_args[] = {
     { "url", 0, RS_ARGS_TYPE_STR, true, false, DEMO_HTTP_URL, "http url" }
 };
@@ -376,6 +398,10 @@ static const rs_args_t s_host_port_args[] = {
 static const rs_args_t s_net_args[] = {
     { "host", 0, RS_ARGS_TYPE_STR, true, false, DEMO_TCP_HOST, "host" },
     { "port", 0, RS_ARGS_TYPE_UINT, true, false, "80", "port" }
+};
+
+static const rs_args_t s_ntp_args[] = {
+    { "server", 0, RS_ARGS_TYPE_STR, true, false, NULL, "ntp server (optional)" }
 };
 
 static const rs_cmd_t s_all_def = {
@@ -403,6 +429,11 @@ static const rs_cmd_t s_mqtt_def = {
     s_host_port_args, 2U, cmd_mqtt, NULL, NULL, NULL, NULL
 };
 
+static const rs_cmd_t s_ntp_def = {
+    "ntp", "sync time via NTP and save to RTC [server]", NULL, NULL,
+    s_ntp_args, 1U, cmd_ntp, NULL, NULL, NULL, NULL
+};
+
 /* 注册全部演示命令；重复调用由 roshell 处理 */
 void app_ml307_register(void)
 {
@@ -411,4 +442,5 @@ void app_ml307_register(void)
     (void)rs_cmd_register(&s_http_def);
     (void)rs_cmd_register(&s_net_def);
     (void)rs_cmd_register(&s_mqtt_def);
+    (void)rs_cmd_register(&s_ntp_def);
 }

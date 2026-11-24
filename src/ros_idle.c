@@ -11,7 +11,7 @@
 #include "common.h"
 #include "ros_port.h"
 
-#define ROS_IDLE_STACK_SIZE 512
+#define ROS_IDLE_STACK_SIZE 1024
 
 ros_task_t *ros_idle_task = NULL;
 

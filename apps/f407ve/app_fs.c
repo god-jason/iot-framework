@@ -408,17 +408,19 @@ static void fs_unlock(void *ctx)
 }
 
 /* ==========================================================================
- * 临时：2MB 容量与 GC 回收集成测试
+ * 临时：全容量（4MB 目标，写满即止）容量与 GC 回收集成测试
  *   1. 格式化 → 写满直到空间不足（NOSPC）
- *   2. 回读首尾校验 → 删除文件
- *   3. 删除后再写 256KB，验证 GC 能回收失效块
+ *   2. 全文件逐字节校验 → 删除文件
+ *   3. 删除后再写 64KB，验证 GC 能回收失效块
  *   4. 输出 df 与总耗时
  * 生产固件默认关闭（APP_FS_FULLTEST 0），需要回归时改为 1。
  * ========================================================================== */
-#define APP_FS_FULLTEST  1
+#define APP_FS_FULLTEST  0
 
 #if APP_FS_FULLTEST
 #define FULLTEST_PATTERN 0xA5U
+/* 目标写入量：4MB；实际在分区写满（NOSPC）时提前结束，即用尽全部空间 */
+#define FULLTEST_TOTAL_KB 4096U
 /*
  * 每次写入 16KB：MFS 每次 mfs_write 末尾要扫描定位 Inode，
  * 单次写入越大扫描次数越少；但缓冲会占用 RAM，16KB 与 64KB 内核堆
@@ -484,6 +486,10 @@ static void fs_fulltest_run(void)
     for (;;) {
         uint32_t t1 = ros_tick_get();
 
+        if (total >= FULLTEST_TOTAL_KB * 1024U) {
+            n = 0;
+            break;                          /* 达到 4MB 目标 */
+        }
         n = vfs_write(&f, s_ft_buf, sizeof(s_ft_buf));
         LOG_I("fs", "ft: %u KB n=%d dt=%u ms", (unsigned)(total / 1024U), (int)n,
               (unsigned)(ros_tick_get() - t1));

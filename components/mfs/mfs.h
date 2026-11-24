@@ -240,6 +240,7 @@ struct mfs_file {
     uint32_t parent;              /* 父目录 Inode */
     uint32_t size;                /* 打开时/写入后的文件大小 */
     uint32_t pos;                 /* 当前读写位置 */
+    uint32_t rcache;              /* 顺序读提示：上一条 DATA 之后的下一条记录地址（0=无） */
     uint32_t version;             /* 打开时 Inode 版本 */
     uint32_t epoch;               /* 数据 epoch，截断时用于失效旧 Chunk */
     uint32_t flags;               /* 打开标志 */

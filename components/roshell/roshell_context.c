@@ -25,7 +25,7 @@
 #if defined(ROS_STM32_F1)
 #define RS_SHELL_STACK         2048U   /* F1 仅 10KB 堆：命令处理（http/mqtt）需要该栈深度 */
 #else
-#define RS_SHELL_STACK         3072U   /* 输入任务栈字节数 */
+#define RS_SHELL_STACK         4096U   /* 输入任务栈字节数（ls 递归 + 嵌套扫描需要余量） */
 #endif
 #endif
 

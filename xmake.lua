@@ -217,6 +217,10 @@ local function ros_cross_defines(extra)
         add_defines("RS_ENABLE_EXPR=1", "RS_ENABLE_MATH=1")
         -- F4/H7 SRAM 充足：内核 TLSF 堆从默认 32KB 调到 64KB
         add_defines("ROS_MEM_HEAP_SIZE=65536")
+        if family == "f4" then
+            -- SysTick/tickless 时基与板级 SYSCLK 一致（默认宏为 72MHz）
+            add_defines("ROS_TRACE_CLOCK_HZ=168000000")
+        end
     end
     ros_trace_defines()
     if extra then

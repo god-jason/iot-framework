@@ -359,6 +359,17 @@ void ros_task_exit(void)
     ros_task_t *cur = ros_current_task;
     ros_task_t *next;
 
+    if (cur != NULL && cur == ros_idle_task) {
+        /*
+         * 空闲任务是调度器的兜底任务，绝不允许退出。
+         * 走到这里说明 idle 栈/上下文已被破坏，直接停机并保留现场。
+         */
+        LOG_E(ROS_TAG, "idle task must not exit (stack overflow?)");
+        for (;;) {
+            ros_port_idle();
+        }
+    }
+
     ros_port_critical_enter();
     if (cur != NULL) {
         cur->state = ROS_TASK_TERMINATED;

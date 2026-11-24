@@ -48,7 +48,8 @@
  *   负数：错误码。
  */
 static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
-                     uint32_t epoch, uint8_t *buf, uint32_t cap)
+                     uint32_t epoch, uint8_t *buf, uint32_t cap,
+                     uint32_t *hint)
 {
     mfs_data_loc_t loc;
     mfs_rec_hdr_t hdr;
@@ -56,11 +57,44 @@ static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
     uint32_t size;
     int err;
 
+    /*
+     * 顺序读快通道：顺序写入时下一个 Chunk 的 DATA 记录通常紧跟在上一条之后。
+     * 先按 hint 探测该位置，命中则省去一次全盘 locate（大文件顺序读从
+     * O(Chunk×日志) 降到近似 O(Chunk)）。
+     */
+    if (hint != NULL && *hint != 0u) {
+        err = mfs__rec_read_fast(fs, *hint, &hdr, &next);
+        if (err == MFS_OK && hdr.type == MFS_REC_DATA &&
+            hdr.object_id == inode &&
+            hdr.payload_size >= MFS_DATA_PREFIX &&
+            hdr.payload_size <= MFS_DATA_PREFIX + MFS_CHUNK_SIZE) {
+            uint8_t pre[MFS_DATA_PREFIX];
+
+            if (mfs__rec_read_raw(fs, *hint, &hdr, 0u, pre, sizeof(pre)) == MFS_OK &&
+                mfs__get_u32(&pre[4]) == chunk &&
+                mfs__get_u32(&pre[12]) == epoch) {
+                size = hdr.payload_size - MFS_DATA_PREFIX;
+                if (size > cap) {
+                    size = cap;
+                }
+                err = mfs__rec_read_raw(fs, *hint, &hdr,
+                                        MFS_DATA_PREFIX, buf, size);
+                if (err == MFS_OK) {
+                    *hint = next;
+                    return (int)size;
+                }
+            }
+        }
+    }
+
     err = mfs__data_locate(fs, inode, chunk, epoch, &loc);
     if (err != MFS_OK) {
         return err;
     }
     if (!loc.found || loc.size == 0u || loc.seq < loc.del_seq) {
+        if (hint != NULL) {
+            *hint = 0u;
+        }
         return 0;                        /* 无数据或被截断失效 */
     }
 
@@ -68,6 +102,9 @@ static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
     err = mfs__rec_read(fs, loc.addr, &hdr, NULL, 0u, &next);
     if (err != MFS_OK) {
         return err;
+    }
+    if (hint != NULL) {
+        *hint = next;                    /* 下一条记录，供顺序读探测 */
     }
 
     size = loc.size;
@@ -160,7 +197,7 @@ static int inode_truncate(mfs_t *fs, mfs_ii_t *info, uint32_t new_size)
     if (valid != 0u) {
         memset(fs->workbuf, 0, MFS_CHUNK_SIZE);
         got = data_read(fs, info->inode, base, info->epoch,
-                        fs->workbuf, MFS_CHUNK_SIZE);
+                        fs->workbuf, MFS_CHUNK_SIZE, NULL);
         if (got < 0) {
             return got;
         }
@@ -285,6 +322,7 @@ int mfs_open(mfs_t *fs, const char *path, uint32_t flags, mfs_file_t **file)
     slot->parent = info.parent;
     slot->size = info.size;
     slot->pos = (flags & MFS_O_APPEND) ? info.size : 0u;
+    slot->rcache = 0u;
     slot->version = info.version;
     slot->epoch = info.epoch;
     slot->flags = flags;
@@ -360,7 +398,7 @@ mfs_ssize_t mfs_read(mfs_file_t *file, void *buffer, uint32_t size)
 
         memset(fs->workbuf, 0, MFS_CHUNK_SIZE);
         got = data_read(fs, file->inode, chunk, file->epoch,
-                        fs->workbuf, MFS_CHUNK_SIZE);
+                        fs->workbuf, MFS_CHUNK_SIZE, &file->rcache);
         if (got < 0) {
             mfs__unlock(fs);
             /* 已经读到部分数据时优先返回已读字节数 */
@@ -435,6 +473,7 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
     if ((file->flags & MFS_O_APPEND) != 0u) {
         file->pos = file->size;
     }
+    file->rcache = 0u;               /* 写入后旧的顺序读提示可能指向过期记录 */
 
     while (done < size) {
         chunk = file->pos / MFS_CHUNK_SIZE;
@@ -456,7 +495,7 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
             if (chunk < (file->size + MFS_CHUNK_SIZE - 1u) / MFS_CHUNK_SIZE) {
                 /* Chunk 完全或部分落在当前文件大小内，需要读旧数据 */
                 got = data_read(fs, file->inode, chunk, file->epoch,
-                                fs->workbuf, MFS_CHUNK_SIZE);
+                                fs->workbuf, MFS_CHUNK_SIZE, NULL);
                 if (got < 0) {
                     mfs__unlock(fs);
                     return (done > 0u) ? (mfs_ssize_t)done : (mfs_ssize_t)got;
@@ -546,6 +585,7 @@ int mfs_seek(mfs_file_t *file, mfs_off_t offset, int whence)
 
     mfs__lock(file->fs);
     file->pos = (uint32_t)pos;
+    file->rcache = 0u;               /* 位置变化后顺序读提示失效 */
     mfs__unlock(file->fs);
     return MFS_OK;
 }
@@ -598,6 +638,7 @@ int mfs_truncate(mfs_file_t *file, mfs_size_t size)
     if (err == MFS_OK) {
         file->size = size;
         file->version = info.version;
+        file->rcache = 0u;
         if (file->pos > size) {
             file->pos = size;
         }
