@@ -70,6 +70,7 @@ void ut_at_urc(void);
 void ut_storage(void);
 void ut_fs(void);
 void ut_mfs(void);
+void ut_rofs(void);
 void ut_robot_proto(void);
 void ut_can_proto(void);
 
@@ -162,6 +163,7 @@ void app_main(void *arg)
     ut_storage();
     ut_fs();
     ut_mfs();
+    ut_rofs();
     ut_robot_proto();
     ut_can_proto();
 
