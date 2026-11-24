@@ -1,26 +1,26 @@
 /*
- * rofs_crc.c - CRC32 校验
+ * mfs_crc.c - CRC32 校验
  * ============================================================================
  *
- * ROFS 对三类数据分别计算 CRC32：
+ * MFS 对三类数据分别计算 CRC32：
  *   1. Superblock 前 20B；
- *   2. Block Header 前 12B；
+ *   2. Block Header 前 16B（magic/sequence/erase_count/state）；
  *   3. Record Header 前 28B 与整个 Payload。
  *
  * 采用 IEEE 802.3 反射多项式 0xEDB88320，与常见 CRC32 工具一致。
  * 为满足 MCU 的 RAM 预算，这里不建 256 项查找表，而是逐位计算：
  *   - 代码量约一百多字节；
- *   - 速度较慢，但 ROFS 的元数据量很小，瓶颈通常在 SPI Flash。
+ *   - 速度较慢，但 MFS 的元数据量很小，瓶颈通常在 SPI Flash。
  */
 
-#include "rofs_internal.h"
+#include "mfs_internal.h"
 
 /*
  * 以运行值方式更新 CRC。
  * crc 首次传 0xFFFFFFFF，后续把上次返回值继续传入；
  * 全部数据处理完后，调用者需要再异或 0xFFFFFFFF 得到最终值。
  */
-uint32_t rofs__crc32_update(uint32_t crc, const void *buf, uint32_t len)
+uint32_t mfs__crc32_update(uint32_t crc, const void *buf, uint32_t len)
 {
     const uint8_t *p = (const uint8_t *)buf;
     uint32_t i;
@@ -41,7 +41,7 @@ uint32_t rofs__crc32_update(uint32_t crc, const void *buf, uint32_t len)
 }
 
 /* 一次性计算一段连续内存的最终 CRC32 */
-uint32_t rofs__crc32(const void *buf, uint32_t len)
+uint32_t mfs__crc32(const void *buf, uint32_t len)
 {
-    return rofs__crc32_update(0xFFFFFFFFu, buf, len) ^ 0xFFFFFFFFu;
+    return mfs__crc32_update(0xFFFFFFFFu, buf, len) ^ 0xFFFFFFFFu;
 }

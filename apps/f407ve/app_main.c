@@ -3,7 +3,7 @@
  *
  * 由板级 main 创建为 app 任务，依次完成：
  *   1. app_device_init()     LED / PWM / 风扇 / 步进 / 心跳任务
- *   2. app_fs_init()         SPI Flash + ROFS 文件系统
+ *   2. app_fs_init()         SPI Flash + MFS 文件系统
  *   3. app_ml307_register()  ML307 演示命令（ml307/sim/ping/http/net/mqtt）
  *
  * 各功能实现见 app_device.c / app_fs.c / app_ml307.c。
