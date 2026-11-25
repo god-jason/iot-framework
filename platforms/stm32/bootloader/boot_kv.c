@@ -61,10 +61,7 @@ static const kvfs_config_t s_cfg = {
     .workbuf = s_work,
     .workbuf_size = sizeof(s_work),
     .max_value = BOOT_KV_MAX_VALUE,
-    .readonly = 0U,
-    .lock = NULL,
-    .unlock = NULL,
-    .mutex_ctx = NULL
+    .readonly = 0U
 };
 
 kvfs_t *boot_kv(void)

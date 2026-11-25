@@ -178,14 +178,9 @@ int kvfs_region_scan(kvfs_t *fs, uint32_t index, uint8_t verify_crc,
 int kvfs_compact(kvfs_t *fs);
 
 /*
- * 建立「每个键的最新记录」槽位表（静态表，受实例锁保护）。
+ * 建立「每个键的最新记录」槽位表（静态表，调用者需保证不并发访问）。
  * 返回存活键数量；键数量超过 KVFS_MAX_KEYS 返回 KVFS_ERR_NOSPC。
  */
 int kvfs_build_latest(kvfs_t *fs, uint32_t *live_count);
-
-/* ============================== 杂项 ============================== */
-
-void kvfs_lock(kvfs_t *fs);
-void kvfs_unlock(kvfs_t *fs);
 
 #endif /* KVFS_INTERNAL_H */

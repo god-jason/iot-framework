@@ -216,8 +216,9 @@ kvfs_foreach(&s_kv, dump_one, NULL);
    `cfg.workbuf` 必须不小于 `max_value`。
 3. **`kvfs_get` 的 `buf` 可以为 NULL**：只查询存在性；`cap` 不足返回
    `KVFS_ERR_NOMEM`，但 `*len` 仍会写入实际长度。
-4. **`kvfs_foreach` 回调期间持有实例锁**，不要在回调里调用其它 `kvfs_*`
-   （避免非递归锁死锁）；需要写回时先收集到本地数组，回调结束后再操作。
+4. **kvfs 自身不加锁**：并发访问由调用方负责（本工程在 components/config 用
+   ROS 互斥量保护）。`kvfs_foreach` 回调执行期间静态槽位表与工作缓冲仍在使用，
+   回调内不要调用其它 `kvfs_*`，需要写回时先收集到本地数组。
 5. **容量语义**：`kvfs_statfs` 的 `used_bytes` 是活动区已追加字节数，
    包含尚未压缩的旧记录；`free_bytes` 到 0 前会自动压缩。
 6. **只读模式**：`cfg.readonly = 1` 时禁止 put/del/format/gc，只允许读。

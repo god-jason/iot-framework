@@ -121,10 +121,6 @@ typedef struct {
     uint32_t max_value;                     /* 单条数据上限，0 或超限时取 KVFS_VALUE_MAX */
 
     uint8_t readonly;                       /* 非 0：禁止写/删除/格式化 */
-
-    void (*lock)(void *ctx);                /* 可选：公开 API 加锁 */
-    void (*unlock)(void *ctx);
-    void *mutex_ctx;
 } kvfs_config_t;
 
 /* ============================== 统计 ============================== */

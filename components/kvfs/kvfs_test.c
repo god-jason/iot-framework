@@ -73,10 +73,7 @@ static const kvfs_config_t s_cfg = {
     .workbuf = s_work,
     .workbuf_size = sizeof(s_work),
     .max_value = 64U,
-    .readonly = 0U,
-    .lock = NULL,
-    .unlock = NULL,
-    .mutex_ctx = NULL
+    .readonly = 0U
 };
 
 static void kv_reset(void)

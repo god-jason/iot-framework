@@ -17,22 +17,6 @@
 typedef char kvfs_super_size_check[(sizeof(kvfs_super_t) == KVFS_SUPER_SIZE) ? 1 : -1];
 typedef char kvfs_hdr_size_check[(sizeof(kvfs_rec_hdr_t) == KVFS_REC_HDR_SIZE) ? 1 : -1];
 
-/* ============================== 锁 ============================== */
-
-void kvfs_lock(kvfs_t *fs)
-{
-    if (fs != NULL && fs->cfg.lock != NULL) {
-        fs->cfg.lock(fs->cfg.mutex_ctx);
-    }
-}
-
-void kvfs_unlock(kvfs_t *fs)
-{
-    if (fs != NULL && fs->cfg.unlock != NULL) {
-        fs->cfg.unlock(fs->cfg.mutex_ctx);
-    }
-}
-
 /* ============================== 分区 SUPER ============================== */
 
 int kvfs_super_read(kvfs_t *fs, uint32_t index, kvfs_super_t *sb)
@@ -209,13 +193,11 @@ int kvfs_format(kvfs_t *fs)
         return KVFS_ERR_READONLY;
     }
 
-    kvfs_lock(fs);
     fs->mounted = 0U;
 
     for (i = 0U; i < 2U; i++) {
         rc = kvfs_dev_erase(fs, fs->region_base[i], fs->region_size);
         if (rc != KVFS_OK) {
-            kvfs_unlock(fs);
             return rc;
         }
     }
@@ -226,7 +208,6 @@ int kvfs_format(kvfs_t *fs)
     sb.live_bytes = 0U;
     rc = kvfs_super_write(fs, 0U, &sb);
     if (rc != KVFS_OK) {
-        kvfs_unlock(fs);
         return rc;
     }
 
@@ -236,8 +217,6 @@ int kvfs_format(kvfs_t *fs)
     fs->seq = 1U;
     fs->record_count = 0U;
     fs->mounted = 1U;
-
-    kvfs_unlock(fs);
     return KVFS_OK;
 }
 
@@ -257,7 +236,6 @@ int kvfs_mount(kvfs_t *fs)
         return KVFS_ERR_PARAM;
     }
 
-    kvfs_lock(fs);
     fs->mounted = 0U;
 
     for (i = 0U; i < 2U; i++) {
@@ -269,7 +247,6 @@ int kvfs_mount(kvfs_t *fs)
         if (rc[0] == KVFS_ERR_VERSION || rc[1] == KVFS_ERR_VERSION) {
             err = KVFS_ERR_VERSION;
         }
-        kvfs_unlock(fs);
         return err;
     }
     if (rc[0] == KVFS_OK && rc[1] == KVFS_OK) {
@@ -284,7 +261,6 @@ int kvfs_mount(kvfs_t *fs)
 
     rc[0] = kvfs_region_scan(fs, pick, 0U, &write_off, &count, &max_seq);
     if (rc[0] != KVFS_OK) {
-        kvfs_unlock(fs);
         return rc[0];
     }
 
@@ -292,8 +268,6 @@ int kvfs_mount(kvfs_t *fs)
     fs->record_count = count;
     fs->seq = (max_seq == 0xFFFFFFFFU) ? 1U : (max_seq + 1U);
     fs->mounted = 1U;
-
-    kvfs_unlock(fs);
     return KVFS_OK;
 }
 
@@ -302,9 +276,7 @@ int kvfs_unmount(kvfs_t *fs)
     if (fs == NULL) {
         return KVFS_ERR_PARAM;
     }
-    kvfs_lock(fs);
     fs->mounted = 0U;
-    kvfs_unlock(fs);
     return KVFS_OK;
 }
 
@@ -357,9 +329,7 @@ int kvfs_check(kvfs_t *fs)
         return KVFS_ERR_STATE;
     }
 
-    kvfs_lock(fs);
     rc = kvfs_region_scan(fs, fs->active, 1U, &write_off, &count, &max_seq);
-    kvfs_unlock(fs);
     return rc;
 }
 
@@ -374,9 +344,7 @@ int kvfs_gc(kvfs_t *fs)
         return KVFS_ERR_READONLY;
     }
 
-    kvfs_lock(fs);
     rc = kvfs_compact(fs);
-    kvfs_unlock(fs);
     return rc;
 }
 

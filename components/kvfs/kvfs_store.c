@@ -18,7 +18,7 @@
 
 #include "kvfs_internal.h"
 
-/* 最新记录槽位表：压缩与遍历共用，受实例锁保护 */
+/* 最新记录槽位表：压缩与遍历共用（调用者需保证不并发访问） */
 static kvfs_slot_t s_slots[KVFS_MAX_KEYS];
 
 /* ============================== 槽位表 ============================== */
@@ -154,9 +154,7 @@ int kvfs_put(kvfs_t *fs, uint32_t key, const void *value, uint32_t len)
         return KVFS_ERR_PARAM;
     }
 
-    kvfs_lock(fs);
     rc = kvfs_append(fs, key, 0U, value, len);
-    kvfs_unlock(fs);
     return rc;
 }
 
@@ -170,7 +168,6 @@ int kvfs_get(kvfs_t *fs, uint32_t key, void *buf, uint32_t cap, uint32_t *len)
         return KVFS_ERR_STATE;
     }
 
-    kvfs_lock(fs);
     rc = key_find(fs, key, &c);
     if (rc == KVFS_OK) {
         n = (uint32_t)c.hdr.length;
@@ -185,7 +182,6 @@ int kvfs_get(kvfs_t *fs, uint32_t key, void *buf, uint32_t cap, uint32_t *len)
             }
         }
     }
-    kvfs_unlock(fs);
     return rc;
 }
 
@@ -198,12 +194,10 @@ int kvfs_size(kvfs_t *fs, uint32_t key, uint32_t *len)
         return KVFS_ERR_STATE;
     }
 
-    kvfs_lock(fs);
     rc = key_find(fs, key, &c);
     if (rc == KVFS_OK) {
         *len = (uint32_t)c.hdr.length;
     }
-    kvfs_unlock(fs);
     return rc;
 }
 
@@ -216,9 +210,7 @@ int kvfs_exists(kvfs_t *fs, uint32_t key)
         return KVFS_ERR_STATE;
     }
 
-    kvfs_lock(fs);
     rc = key_find(fs, key, &c);
-    kvfs_unlock(fs);
     return (rc == KVFS_OK) ? 1 : ((rc == KVFS_ERR_NOENT) ? 0 : rc);
 }
 
@@ -234,12 +226,10 @@ int kvfs_del(kvfs_t *fs, uint32_t key)
         return KVFS_ERR_READONLY;
     }
 
-    kvfs_lock(fs);
     rc = key_find(fs, key, &c);
     if (rc == KVFS_OK) {
         rc = kvfs_append(fs, key, KVFS_REC_FLAG_DELETED, NULL, 0U);
     }
-    kvfs_unlock(fs);
     return rc;
 }
 
@@ -253,7 +243,6 @@ int kvfs_foreach(kvfs_t *fs, kvfs_visit_cb cb, void *ctx)
         return KVFS_ERR_STATE;
     }
 
-    kvfs_lock(fs);
     rc = kvfs_build_latest(fs, &live);
     for (i = 0U; rc == KVFS_OK && i < KVFS_MAX_KEYS; i++) {
         const kvfs_slot_t *slot = &s_slots[i];
@@ -277,7 +266,7 @@ int kvfs_foreach(kvfs_t *fs, kvfs_visit_cb cb, void *ctx)
                 break;
             }
         }
-        /* 注意：回调执行期间实例锁仍然持有，不要在回调里调用 kvfs_* */
+        /* 注意：回调执行期间槽位表与工作缓冲仍在使用，回调内不要调用 kvfs_* */
         rc = cb(ctx, slot->key,
                 (slot->len > 0U) ? (const void *)fs->workbuf : NULL,
                 slot->len);
@@ -285,7 +274,6 @@ int kvfs_foreach(kvfs_t *fs, kvfs_visit_cb cb, void *ctx)
             break;
         }
     }
-    kvfs_unlock(fs);
     return rc;
 }
 
