@@ -24,6 +24,16 @@
 /* 调度器拥有的全局状态 */
 ros_task_t *ros_current_task = NULL;
 
+/*
+ * 切换临界标记（非 0 表示“目标已出就绪表、账本已改，但栈尚未切换”）。
+ *
+ * ros_sched_pick() 在任务上下文里把目标任务从就绪表摘出后置位，直到
+ * 移植层真正完成切栈才清除（Cortex-M 在 SVC handler 内清）。
+ * PendSV 看到该标记必须立即让路：否则它会用“已经改成新任务”的
+ * ros_current_task 去保存旧任务的 PSP，造成账本与栈永久错位。
+ */
+volatile uint8_t ros_switch_pending;
+
 static uint32_t s_ready_bitmap;
 static list_t s_ready[ROS_MAX_PRIORITY];
 static bool s_slice_expired;          /* 时间片耗尽，待切换 */
@@ -240,7 +250,19 @@ ros_task_t *ros_sched_pick(void)
 {
     ros_task_t *next = ros_sched_select();
 
-    return (next != NULL) ? next : ros_idle_task;
+    next = (next != NULL) ? next : ros_idle_task;
+
+    /*
+     * 任务上下文：目标任务已从就绪表摘出，从此刻起直到真正切栈
+     * 不允许 PendSV 介入（它会把旧任务的 PSP 记到新任务账上）。
+     * 中断上下文走 ros_sched_from_isr() → ros_sched_pick()，
+     * 此时无需该标记（PendSV 自身已在临界状态）。
+     */
+    if (!ros_port_in_isr()) {
+        ros_switch_pending = 1U;
+    }
+
+    return next;
 }
 
 #if ROS_USE_STACK_CHECK
@@ -265,6 +287,89 @@ static void ros_stack_guard(const ros_task_t *task)
 #endif
 
 /*
+ * 临时诊断：SRAM 顶部的跨复位轨迹环（NVIC_SystemReset 不清 SRAM）。
+ * 记录最后 12 次切换的 (prev, next, psp, next->stack_ptr) 与合法性标志，
+ * 崩溃复位后由 ros_diag_dump() 在下次启动时打印，用于定位
+ * 「ros_current_task 与真实运行栈错位」。
+ * flag bit0=1: 当前 PSP 不在 prev 的栈内；bit1=2: next->stack_ptr 非法。
+ */
+#define ROS_DIAG_BASE   ((volatile uint32_t *)0x2001F000U)
+#define ROS_DIAG_MAGIC  0x52444731U
+#define ROS_DIAG_SLOTS  12U
+#define ROS_DIAG_STRIDE 6U
+
+static void ros_diag_record(uint32_t tag, const ros_task_t *prev,
+                            const ros_task_t *next)
+{
+    volatile uint32_t *b = ROS_DIAG_BASE;
+    uint32_t psp;
+    uint32_t flags = 0U;
+    uint32_t slot;
+    uintptr_t lo;
+
+    __asm volatile ("mrs %0, psp" : "=r" (psp));
+
+    if (b[0] != ROS_DIAG_MAGIC) {
+        b[0] = ROS_DIAG_MAGIC;
+        b[1] = 0U;
+    }
+
+    if ((prev != NULL) && (prev->stack_mem != NULL) &&
+        (prev->stack_size != 0U)) {
+        lo = (uintptr_t)prev->stack_mem;
+        if (((uintptr_t)psp < lo) || ((uintptr_t)psp >= lo + prev->stack_size)) {
+            flags |= 1U;
+        }
+    }
+    if ((next != NULL) && (next->stack_mem != NULL) &&
+        (next->stack_size != 0U)) {
+        lo = (uintptr_t)next->stack_mem;
+        if (((uintptr_t)next->stack_ptr < lo) ||
+            ((uintptr_t)next->stack_ptr >= lo + next->stack_size)) {
+            flags |= 2U;
+        }
+    }
+
+    slot = 2U + ((b[1] % ROS_DIAG_SLOTS) * ROS_DIAG_STRIDE);
+    b[slot + 0U] = tag;
+    b[slot + 1U] = (uint32_t)(uintptr_t)prev;
+    b[slot + 2U] = (uint32_t)(uintptr_t)next;
+    b[slot + 3U] = psp;
+    b[slot + 4U] = (next != NULL) ? (uint32_t)(uintptr_t)next->stack_ptr : 0U;
+    b[slot + 5U] = flags;
+    b[1] = b[1] + 1U;
+}
+
+/* 打印上次崩溃前的切换轨迹（仅启动早期调用一次） */
+void ros_diag_dump(void)
+{
+    volatile uint32_t *b = ROS_DIAG_BASE;
+    uint32_t total;
+    uint32_t n;
+    uint32_t first;
+    uint32_t i;
+
+    if (b[0] != ROS_DIAG_MAGIC) {
+        return;
+    }
+
+    total = b[1];
+    n = (total < ROS_DIAG_SLOTS) ? total : ROS_DIAG_SLOTS;
+    first = total - n;
+    LOG_I(ROS_TAG, "diag ring: total=%u", (unsigned)total);
+    for (i = 0U; i < n; i++) {
+        uint32_t slot = 2U + (((first + i) % ROS_DIAG_SLOTS) * ROS_DIAG_STRIDE);
+
+        LOG_I(ROS_TAG, "  #%u tag=%u prev=%08x next=%08x psp=%08x nsp=%08x f=%u",
+              (unsigned)(first + i), (unsigned)b[slot + 0U],
+              (unsigned)b[slot + 1U], (unsigned)b[slot + 2U],
+              (unsigned)b[slot + 3U], (unsigned)b[slot + 4U],
+              (unsigned)b[slot + 5U]);
+    }
+    b[0] = 0U;
+}
+
+/*
  * 执行实际上下文切换：
  * 切走前校验栈底魔数，重置目标任务时间片并累计切换统计，
  * 最后交给移植层 ros_port_switch() 保存/恢复寄存器。
@@ -274,12 +379,14 @@ void ros_sched_switch(ros_task_t *next)
     ros_task_t *prev = ros_current_task;
 
     if (next == NULL || next == prev) {
-        return;                     /* 仍应运行当前任务，无需切换 */
+        ros_switch_pending = 0U;    /* 无需切换：撤销 pick 置的标记 */
+        return;
     }
 
 #if ROS_USE_STACK_CHECK
     ros_stack_guard(prev);
 #endif
+    ros_diag_record(1U, prev, next);
 
 #if ROS_USE_TIME_SLICING
     next->slice_remaining = ROS_TIME_SLICE_TICKS;
@@ -301,6 +408,12 @@ void ros_sched_switch(ros_task_t *next)
               next->name != NULL ? next->name : "?");
 
     ros_port_switch(prev, next);
+
+    /*
+     * 协作式端口在切换回来后才会执行到这里：撤销标记。
+     * Cortex-M 在 SVC handler 内已完成切换并清除，这里是幂等兜底。
+     */
+    ros_switch_pending = 0U;
 }
 
 /* 任务上下文主动调度一次：选出下一个任务并在临界区外切换。 */
@@ -344,6 +457,7 @@ ros_task_t *ros_sched_from_isr(void)
     }
 
     next = ros_sched_pick();
+    ros_diag_record(2U, prev, next);
 
     if (next != prev) {
         ros_current_task = next;

@@ -16,7 +16,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     ros_object("app-f407ve", {
         scope = "none",
         files = { "app_main.c", "app_config.c", "app_device.c", "app_fs.c",
-                  "app_ml307.c" },
+                  "app_ml307.c", "app_stress.c" },
         defines = { "USE_HAL_DRIVER", ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
     })

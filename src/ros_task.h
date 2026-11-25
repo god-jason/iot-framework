@@ -37,6 +37,12 @@ typedef struct ros_task {
     /* 移植层上下文：PC 端为 Fiber 句柄，STM32 端为保存的栈指针。
      * 必须是第一个成员：Cortex-M PendSV 汇编用 [tcb] 直接存取栈指针。 */
     void *stack_ptr;
+    /* Cortex-M 异常返回码（EXC_RETURN）：记录该任务最近一次被异常打断时
+     * 硬件压栈的帧类型（0xFFFFFFFD 基本帧 / 0xFFFFFFED FP 扩展帧）。
+     * 任务切换必须按“目标任务的帧类型”返回，否则 FPU 任务与普通任务
+     * 互切时硬件会从错误的偏移弹栈（PC/xPSR 取到浮点寄存器 → INVSTATE）。
+     * 偏移固定为 4：移植层汇编用 [tcb,#4] 直接存取。 */
+    uint32_t exc_return;
     void *stack_mem;                /* 任务栈内存（调用者提供） */
     uint32_t stack_size;            /* 任务栈大小（字节） */
 
@@ -102,6 +108,10 @@ typedef struct ros_task {
  */
 typedef char ros_task_stack_ptr_must_be_first[
     (offsetof(ros_task_t, stack_ptr) == 0U) ? 1 : -1];
+
+/* 移植层汇编用 [tcb,#4] 取 exc_return，偏移必须是 4 */
+typedef char ros_task_exc_return_must_be_second[
+    (offsetof(ros_task_t, exc_return) == 4U) ? 1 : -1];
 
 /* ============================== API ============================== */
 

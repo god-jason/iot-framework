@@ -108,6 +108,7 @@ void ut_http(void);
 void ut_mqtt(void);
 void ut_fota(void);
 void ut_config(void);
+void ut_kvfs(void);
 
 /* ---------------- 内核 ---------------- */
 void ut_version(void);
@@ -200,6 +201,7 @@ void app_main(void *arg)
     ut_mqtt();
     ut_fota();
     ut_config();
+    ut_kvfs();
 
     printf("\n--- 内核 ---\n");
     ut_version();

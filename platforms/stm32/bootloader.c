@@ -176,7 +176,7 @@ static void uart_put_dec(uint32_t v)
     }
 }
 
-/* 打印错误日志尾部（最多 1KB，避免大分区全文打印拖慢启动） */
+/* 打印错误日志尾部（最多 2KB，避免大分区全文打印拖慢启动） */
 static void print_error_log(void)
 {
     const uint8_t *p = (const uint8_t *)(uintptr_t)BOOT_LOG_BASE;
@@ -190,7 +190,7 @@ static void print_error_log(void)
     if (end == 0U) {
         return;
     }
-    start = (end > 1024U) ? (end - 1024U) : 0U;
+    start = (end > 2048U) ? (end - 2048U) : 0U;
     while (start < end && p[start] != '\n') {
         start++;
     }

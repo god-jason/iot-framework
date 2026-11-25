@@ -17,6 +17,16 @@ extern "C" {
 /* 当前运行任务（sched.c 维护） */
 extern ros_task_t *ros_current_task;
 
+/*
+ * 切换进行中标记（sched.c 维护）：
+ * 目标任务已出就绪表、账本已更新，但上下文尚未切换。
+ * 移植层的 PendSV 必须在该标记置位时让路，等 SVC 完成切栈后再抢占。
+ */
+extern volatile uint8_t ros_switch_pending;
+
+/* 临时诊断：打印上次崩溃前保留在 SRAM 的切换轨迹 */
+void ros_diag_dump(void);
+
 /* 获取当前运行任务，可能为 NULL（尚未启动） */
 ros_task_t *ros_current(void);
 

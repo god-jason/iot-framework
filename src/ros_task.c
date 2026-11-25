@@ -195,9 +195,10 @@ static int ros_task_create_impl(ros_task_t *task, const char *name,
     ros_port_critical_exit();
     ros_task_register(task);
 
-    LOG_I(ROS_TAG, "task create: name=%s prio=%u stack=%u",
+    LOG_I(ROS_TAG, "task create: name=%s prio=%u stack=%u tcb=%08x mem=%08x",
               name != NULL ? name : "?", (unsigned)priority,
-              (unsigned)stack_size);
+              (unsigned)stack_size, (unsigned)(uintptr_t)task,
+              (unsigned)(uintptr_t)stack_mem);
     return ROS_OK;
 }
 

@@ -34,6 +34,12 @@
 #define ROS_SCB_SHPR3           (*(volatile uint32_t *)0xE000ED20UL)
 #define ROS_PENDSV_PRIO_LOWEST  (0xFFUL << 16)   /* PendSV 设为最低优先级 */
 
+/* FPU：CPACR 使能位与 FPCCR（惰性压栈控制） */
+#define ROS_SCB_CPACR           (*(volatile uint32_t *)0xE000ED88UL)
+#define ROS_CPACR_FPU_FULL      (0xFUL << 20)    /* CP10/CP11 全访问 */
+#define ROS_FPU_FPCCR           (*(volatile uint32_t *)0xE000EF34UL)
+#define ROS_FPU_FPCCR_ASPEN     (1UL << 31)      /* 异常入口自动保存 FP 上下文 */
+
 /* DWT 周期计数器：trace 的 µs 时间源（Cortex-M3/M4/M7 均有） */
 #define ROS_DEMCR               (*(volatile uint32_t *)0xE000EDFCUL)
 #define ROS_DEMCR_TRCENA        (1UL << 24)
@@ -105,6 +111,17 @@ void ros_port_init(void)
 
     /* PendSV 设为最低优先级，保证不会打断其它 ISR */
     ROS_SCB_SHPR3 |= ROS_PENDSV_PRIO_LOWEST;
+
+    /*
+     * 关闭 FPU 惰性压栈（LSPEN=0，保留 ASPEN）：
+     * 异常入口立即把 s0-s15/FPSCR 完整写入扩展帧，帧长度确定；
+     * 否则惰性状态（LSPACT）跨任务切换会与每个任务保存的
+     * EXC_RETURN 不一致，导致返回时弹栈错位。
+     * 仅在 CPACR 已使能 FPU 时写 FPCCR（M3 无 FPU，地址不可写）。
+     */
+    if ((ROS_SCB_CPACR & ROS_CPACR_FPU_FULL) == ROS_CPACR_FPU_FULL) {
+        ROS_FPU_FPCCR = ROS_FPU_FPCCR_ASPEN;
+    }
 }
 
 void ros_port_critical_enter(void)
@@ -185,6 +202,8 @@ int ros_port_stack_init(ros_task_t *task)
     }
 
     task->stack_ptr = sp;
+    /* 新建任务未使用过 FPU：栈上是基本帧，按 0xFFFFFFFD 返回 */
+    task->exc_return = 0xFFFFFFFDUL;
     return ROS_OK;
 }
 
@@ -228,10 +247,18 @@ __attribute__((weak, naked)) void SVC_Handler(void)
         "mrs   r2, psp                      \n"
         "stmdb r2!, {r4-r11}                \n"   /* 补存旧任务 r4-r11 */
         "str   r2, [r0]                     \n"   /* from->stack_ptr = r2 */
+        "str   lr, [r0, #4]                 \n"   /* from->exc_return：本次压栈的帧类型 */
         "ldr   r2, [r1]                     \n"   /* r2 = to->stack_ptr */
+        "ldr   r3, [r1, #4]                 \n"   /* r3 = to->exc_return（目标任务的帧类型） */
+        /* 切栈完成：解除“切换进行中”标记，允许 PendSV 再次抢占 */
+        "movw  r12, #:lower16:ros_switch_pending \n"
+        "movt  r12, #:upper16:ros_switch_pending \n"
+        "movs  r0, #0                        \n"
+        "strb  r0, [r12]                     \n"
         "ldmia r2!, {r4-r11}                \n"
         "msr   psp, r2                      \n"   /* PSP 指向目标任务硬件帧 */
-        "bx    lr                           \n"   /* EXC_RETURN 弹出目标任务上下文 */
+        "mov   lr, r3                        \n"   /* 用目标任务自己的 EXC_RETURN */
+        "bx    lr                           \n"
         "1:                                 \n"
         "movw  r0, #:lower16:ros_first_task_sp \n"
         "movt  r0, #:upper16:ros_first_task_sp \n"
@@ -289,6 +316,20 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
         "tst   lr, #4                       \n"   /* EXC_RETURN bit2=0：被打断的是 MSP 上下文 */
         "beq   2f                           \n"   /* 首个任务尚未启动（PSP 未建立）：忽略切换 */
         "cpsid i                            \n"
+        /*
+         * 任务上下文正在执行“已改账本、尚未切栈”的窗口（pick 之后到 SVC 之前）：
+         * 此刻 ros_current_task 已指向新任务，但 PSP 仍是旧任务的。若在这里保存
+         * 上下文，会把旧任务的栈记到新任务账上，导致账本与栈永久错位。
+         * 让路即可：紧随其后的 SVC 会完成这次切换，被唤醒的高优先级任务
+         * 由下一个 tick（1ms）重新触发抢占。
+         */
+        "movw  r0, #:lower16:ros_switch_pending \n"
+        "movt  r0, #:upper16:ros_switch_pending \n"
+        "ldrb  r0, [r0]                     \n"
+        "cbz   r0, 3f                       \n"
+        "cpsie i                            \n"
+        "bx    lr                           \n"
+        "3:                                 \n"
         "mrs   r1, psp                      \n"
         "stmdb r1!, {r4-r11}                \n"   /* 保存到被打断任务的栈 */
 
@@ -296,6 +337,7 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
         "movt  r2, #:upper16:ros_current_task \n"
         "ldr   r2, [r2]                     \n"   /* r2 = 被打断的任务 */
         "str   r1, [r2]                     \n"   /* task->stack_ptr = r1 */
+        "str   lr, [r2, #4]                 \n"   /* task->exc_return：被打断时的帧类型 */
 
         "push  {r2, lr}                     \n"   /* 保护 lr 与当前任务指针 */
         "bl    ros_sched_from_isr           \n"   /* 返回下一个任务或 NULL */
@@ -305,10 +347,12 @@ __attribute__((weak, naked)) void PendSV_Handler(void)
         "bne   1f                           \n"
         "mov   r0, r2                       \n"   /* 不切换：恢复当前任务 */
         "1:                                 \n"
+        "ldr   r2, [r0, #4]                 \n"   /* 目标任务的 EXC_RETURN */
         "ldr   r0, [r0]                     \n"   /* r0 = task->stack_ptr */
         "ldmia r0!, {r4-r11}                \n"
         "msr   psp, r0                      \n"
         "cpsie i                            \n"
+        "mov   lr, r2                       \n"   /* 按目标任务帧类型弹栈 */
         "2:                                 \n"
         "bx    lr                           \n"
     );

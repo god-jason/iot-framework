@@ -48,11 +48,15 @@ void ros_sched_start(void)
 {
     ros_task_t *first = ros_sched_pick();   /* 无用户任务时返回空闲任务 */
 
+    ros_switch_pending = 0U;   /* 启动路径不做上下文切换，撤销 pick 置的标记 */
     ros_current_task = first;
     first->state = ROS_TASK_RUNNING;
 
     LOG_I(ROS_TAG, "scheduler start, first task=%s",
               first->name != NULL ? first->name : "?");
+
+    /* 临时诊断：打印上次崩溃前保留在 SRAM 的切换轨迹 */
+    ros_diag_dump();
 
     ros_port_start_first(first);
 
