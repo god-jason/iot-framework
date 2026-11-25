@@ -21,6 +21,7 @@
 #include "app_fs.h"
 #include "app_ml307.h"
 #include "app_stress.h"
+#include "app_memtest.h"
 
 void app_main(void *arg)
 {
@@ -36,6 +37,11 @@ void app_main(void *arg)
     app_ml307_register();
 
     ros_puts("ml307 demo app ready: type 'ml307' to run all tests");
+
+#if APP_MEMTEST_ENABLE
+    /* 堆泄漏自检：在压测/文件系统启动前同步执行，避免并发分配干扰 */
+    app_memtest_run();
+#endif
 
 #if APP_STRESS_ENABLE
     /* 稳定性压测：放在文件系统之前，FS 初始化异常也不影响压测运行 */
