@@ -6,8 +6,8 @@
  * ============================================================================
  *
  * 设计参照：
- *   - platforms/stm32/boot_meta.c：分区状态 + CRC + 追加历史；
- *   - components/config/config.c：双区轮转、记录追加、Commit 最后写。
+ *   - platforms/stm32/bootloader/boot_meta.c：分区状态 + CRC + 追加历史；
+ *   - components/config/config.c：基于本组件的配置读写封装；
  *
  * 用途：保存配置、标定参数、运行计数等「小数据」，不是通用文件系统。
  * 每个键对应一条记录，更新/删除都追加新记录，不原地覆盖。

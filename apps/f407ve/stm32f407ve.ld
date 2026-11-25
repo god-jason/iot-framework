@@ -1,16 +1,16 @@
 /*
  * stm32f407ve.ld - STM32F407VE APP 区固件链接脚本（GNU ld）
  *
- * APP 区：FLASH 0x08020000 起 128KB（S5）；SRAM 128KB @0x20000000。
- * Bootloader/配置/日志/Meta 在前部，BACKUP 区 0x08040000 为备份，
- * OTA 区 0x08060000 存放升级包；BACKUP/OTA 内容均为按本地址链接的镜像副本。
+ * APP 区：FLASH 0x08010000 起 192KB（S4 64KB + S5 128KB）；SRAM 128KB @0x20000000。
+ * 前部为 Bootloader / KV 双区 / 错误日志，OTA 区 0x08040000 存放升级包
+ * （S6+S7 共 256KB）。
  */
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08020000, LENGTH = 128K
+    FLASH (rx)  : ORIGIN = 0x08010000, LENGTH = 192K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }
 

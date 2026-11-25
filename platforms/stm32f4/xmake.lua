@@ -51,7 +51,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
         ros_object("ros-platform-stm32f4", {
             scope = "cross",
             files = { "*.c" },
-            exclude = { "board.c", "boot_flash.c", "board_rtc.c" },
+            exclude = { "board.c", "board_flash.c", "board_rtc.c" },
             defines = { "USE_HAL_DRIVER", ROS_CHIP, "ROS_TRACE_CLOCK_HZ=168000000" },
             includedirs = incs,
         })
@@ -60,28 +60,28 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     -- App 板级对象（共享 boot/config/ota 实现依赖本板 partition.h，故在此编译）
     ros_object("board-f407ve", {
         scope = "none",
-        files = { "board.c", "boot_flash.c", "board_rtc.c",
+        files = { "board.c", "board_flash.c", "board_rtc.c",
                   path.join(app_dir, "startup_stm32f407.S"),
                   path.join(ROS_ROOT, "platforms/stm32/stm32_main.c"),
                   path.join(ROS_ROOT, "platforms/stm32/stm32_shell.c"),
-                  path.join(ROS_ROOT, "platforms/stm32/boot_meta.c"),
-                  path.join(ROS_ROOT, "platforms/stm32/boot_crash.c"),
-                  path.join(ROS_ROOT, "platforms/stm32/boot_config.c"),
-                  path.join(ROS_ROOT, "platforms/stm32/stm32_config.c"),
+                  path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_kv.c"),
+                  path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_meta.c"),
                   path.join(ROS_ROOT, "platforms/stm32/stm32_ota.c") },
         defines = { "USE_HAL_DRIVER", ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
     })
 
-    -- Bootloader 板级对象
+    -- Bootloader 板级对象（-nostdlib：boot_mem.c 提供最小 libc 子集）
     ros_object("boot-f407ve", {
         scope = "none",
-        files = { path.join(app_dir, "startup_stm32f407.S"), "boot_flash.c",
-                  path.join(ROS_ROOT, "platforms/stm32/bootloader.c"),
-                  path.join(ROS_ROOT, "platforms/stm32/boot_meta.c"),
-                  path.join(ROS_ROOT, "platforms/stm32/boot_config.c") },
+        files = { path.join(app_dir, "startup_stm32f407.S"), "board_flash.c",
+                  path.join(ROS_ROOT, "platforms/stm32/bootloader/bootloader.c"),
+                  path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_kv.c"),
+                  path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_meta.c"),
+                  path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_mem.c"),
+                  path.join(ROS_ROOT, "components/crypto/crc32.c") },
         defines = { ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
-        cflags = { "-ffreestanding" },
+        cflags = { "-ffreestanding", "-fno-optimize-crc" },
     })
 end

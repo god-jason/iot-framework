@@ -41,7 +41,7 @@ static uint32_t put_record(uint32_t off, uint8_t type, const char *name,
                            const void *body, uint32_t size, uint32_t time)
 {
     uint32_t nlen = (uint32_t)strlen(name);
-    uint32_t crc = rofs__crc32(body, size);
+    uint32_t crc = crc32(body, size);
 
     s_img[off + ROFS_REC_OFF_TYPE] = type;
     s_img[off + ROFS_REC_OFF_NAME_LEN] = (uint8_t)nlen;
@@ -98,7 +98,7 @@ static uint32_t build_image(void)
     put_u32(&s_img[ROFS_SB_OFF_FLAGS], 0u);
 
     /* 镜像 CRC：计算时 image_crc32 字段为 0 */
-    crc = rofs__crc32(s_img, total);
+    crc = crc32(s_img, total);
     put_u32(&s_img[ROFS_SB_OFF_IMAGE_CRC], crc);
 
     s_img_len = total;

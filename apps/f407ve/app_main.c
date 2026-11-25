@@ -26,9 +26,8 @@ void app_main(void *arg)
 {
     (void)arg;
 
-    /* 内部 Flash 配置：加载（或默认）并记录本次启动，注册 cfg 命令 */
+    /* 内部 Flash 配置：加载（或默认）并记录本次启动 */
     (void)app_config_init();
-    app_config_register();
 
     app_device_init();
 

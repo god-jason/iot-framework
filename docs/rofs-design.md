@@ -56,7 +56,7 @@ ROFS 是面向 MCU 的**只读静态资源文件系统**：
 | [rofs.c](../components/rofs/rofs.c) | 挂载、卸载、镜像信息、完整校验 |
 | [rofs_file.c](../components/rofs/rofs_file.c) | 路径校验、顺序查找、open/read/seek/tell/size/eof/exists/stat |
 | [rofs_dir.c](../components/rofs/rofs_dir.c) | 基于路径前缀的 opendir/readdir/rewinddir/closedir |
-| [rofs_crc.c](../components/rofs/rofs_crc.c) | CRC-32/ISO-HDLC（与 `zlib.crc32` 一致） |
+| [crc32.c](../components/crypto/crc32.c) | CRC-32/ISO-HDLC（与 `zlib.crc32` 一致） |
 | [rofs_test.c](../components/rofs/rofs_test.c) | RAM 镜像单元测试（仅 host `ros-test`） |
 | [make_rofs.py](../tools/make_rofs.py) | 目录打包、镜像查看、提取与校验 |
 
@@ -67,8 +67,7 @@ rofs.h
   └── rofs_internal.h
         ├── rofs.c        （挂载/校验）
         ├── rofs_file.c   （查找/文件）
-        ├── rofs_dir.c    （目录）
-        └── rofs_crc.c    （CRC32）
+        └── rofs_dir.c    （目录）
 ```
 
 ---
@@ -384,7 +383,6 @@ int rofs_closedir(rofs_dir_t *dir);
 | rofs.c | 704B |
 | rofs_file.c | 1,130B |
 | rofs_dir.c | 736B |
-| rofs_crc.c | 58B |
 | **合计** | **约 2.6KB** |
 
 链接时若未被引用会被 `--gc-sections` 完全裁剪；实际接入固件后

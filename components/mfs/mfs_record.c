@@ -59,7 +59,7 @@ static void rec_hdr_serialize(const mfs_rec_hdr_t *hdr, uint8_t *buf)
     mfs__put_u16(&buf[18], hdr->flags);
     mfs__put_u32(&buf[20], hdr->payload_size);
     mfs__put_u32(&buf[24], hdr->payload_crc);
-    mfs__put_u32(&buf[28], mfs__crc32(buf, 28u));
+    mfs__put_u32(&buf[28], crc32(buf, 28u));
 }
 
 /* 解析 32B 小端字节流为 Record Header；CRC 校验由调用者完成 */
@@ -102,7 +102,7 @@ static int rec_check_payload(mfs_t *fs, uint32_t addr, uint32_t size,
         if (err != MFS_OK) {
             return err;
         }
-        crc = mfs__crc32_update(crc, fs->workbuf, chunk);
+        crc = crc32_update(crc, fs->workbuf, chunk);
         addr += chunk;
         left -= chunk;
     }
@@ -320,8 +320,8 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
 
     /* 跨两段连续计算 Payload CRC */
     crc = 0xFFFFFFFFu;
-    crc = mfs__crc32_update(crc, p1, l1);
-    crc = mfs__crc32_update(crc, p2, l2);
+    crc = crc32_update(crc, p1, l1);
+    crc = crc32_update(crc, p2, l2);
     crc ^= 0xFFFFFFFFu;
 
     memset(&hdr, 0, sizeof(hdr));
@@ -419,7 +419,7 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
     if (hdr->magic != MFS_REC_MAGIC) {
         return MFS_ERR_NOENT;           /* 0xFF 或非记录数据 */
     }
-    crc = mfs__crc32(hb, 28u);
+    crc = crc32(hb, 28u);
     if (crc != hdr->header_crc) {
         return MFS_ERR_CRC;
     }
@@ -450,7 +450,7 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
             return err;
         }
         if (verify_payload) {
-            crc = mfs__crc32(payload, hdr->payload_size);
+            crc = crc32(payload, hdr->payload_size);
             if (crc != hdr->payload_crc) {
                 return MFS_ERR_CRC;
             }

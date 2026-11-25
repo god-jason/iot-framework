@@ -24,7 +24,7 @@ void SystemInit(void);
 void board_init(void);
 
 /* 固件入口参数（platforms/stm32/stm32_main.c 使用） */
-#define BOARD_NAME              "f103cb"
+#define BOARD_NAME              "stm32f1xx"
 #define BOARD_APP_VECTOR_BASE   0x08006000U     /* App 区基址 */
 #define BOARD_BLINK_STACK_SIZE  512U            /* 20KB SRAM 紧张，取最小可用值 */
 #define BOARD_APP_STACK_SIZE    1024U           /* app 任务含 sched/命令注册，需较深调用栈 */

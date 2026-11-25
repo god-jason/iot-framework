@@ -24,6 +24,7 @@
 
 #include "ros.h"
 #include "log.h"
+#include "crc32.h"
 
 #include <string.h>
 
@@ -95,22 +96,6 @@ static uint32_t st_deep14(uint32_t depth, uint32_t seed)
     return st_deep14(depth - 1u, (uint32_t)(acc ^ local[1])) ^ local[3];
 }
 
-/* 逐位 CRC32（无表，CPU 密集） */
-static uint32_t st_crc32(const uint8_t *data, uint32_t len)
-{
-    uint32_t crc = 0xFFFFFFFFu;
-    uint32_t i;
-    uint32_t bit;
-
-    for (i = 0u; i < len; i++) {
-        crc ^= data[i];
-        for (bit = 0u; bit < 8u; bit++) {
-            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
-        }
-    }
-    return ~crc;
-}
-
 /* 整数牛顿迭代开方 */
 static uint32_t st_isqrt32(uint32_t v)
 {
@@ -140,7 +125,7 @@ static uint32_t st_calc_once(uint32_t id)
     for (i = 0u; i < (uint32_t)sizeof(buf); i++) {
         buf[i] = (uint8_t)(acc >> ((i & 3u) * 8u)) ^ (uint8_t)i;
     }
-    acc ^= st_crc32(buf, (uint32_t)sizeof(buf));
+    acc ^= crc32(buf, (uint32_t)sizeof(buf));
     acc += st_isqrt32(acc | 1u);
     acc = (uint32_t)((uint64_t)acc * 6364136223846793005ull +
                      1442695040888963407ull);

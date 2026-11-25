@@ -5,7 +5,9 @@
  */
 
 #include "test.h"
-#include "crc.h"
+#include "crc8.h"
+#include "crc16.h"
+#include "crc32.h"
 #include "md5.h"
 #include "sha256.h"
 #include "base64.h"
@@ -23,25 +25,12 @@ void ut_crc(void)
 
     tf_end();
 
-    tf_begin("crc/边界与自定义配置");
+    tf_begin("crc/边界");
 
     TF_CHECK_INT(crc8(NULL, 0U), 0);
+    TF_CHECK_INT(crc16_modbus(NULL, 1U), 0);
     TF_CHECK_INT(crc16_ccitt(NULL, 1U), 0);
-
-    {
-        crc_config_t cfg;
-        cfg.polynomial = 0x1021U;
-        cfg.initial = 0xFFFFU;
-        cfg.xor_out = 0U;
-        cfg.width = 16U;
-        cfg.reflect_in = false;
-        cfg.reflect_out = false;
-        TF_CHECK_INT(crc_calculate(&cfg, s, 9U), 0x29B1);
-
-        cfg.width = 0U;               /* 非法位宽 */
-        TF_CHECK_INT(crc_calculate(&cfg, s, 9U), 0);
-        TF_CHECK_INT(crc_calculate(NULL, s, 9U), 0);
-    }
+    TF_CHECK_INT(crc32(NULL, 1U), 0);
 
     tf_end();
 }

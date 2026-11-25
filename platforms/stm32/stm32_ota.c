@@ -7,7 +7,8 @@
  */
 
 #include "boot_meta.h"
-#include "boot_flash.h"
+#include "board_flash.h"
+#include "crc32.h"
 #include "fota.h"
 
 #include <stddef.h>
@@ -19,7 +20,7 @@ int port_ota_begin(uint32_t image_size, uint32_t image_crc)
 {
     boot_state_t s;
 
-    if (image_size == 0U || image_size > BOOT_OTA_SIZE) {
+    if (image_size == 0U || image_size > FLASH_OTA_SIZE) {
         return FOTA_ERR;
     }
     /* 清除旧标识，避免 Bootloader 使用半写入的镜像 */
@@ -30,7 +31,7 @@ int port_ota_begin(uint32_t image_size, uint32_t image_crc)
     if (boot_state_save(&s) != 0) {
         return FOTA_ERR;
     }
-    if (boot_flash_erase(BOOT_OTA_BASE, BOOT_OTA_SIZE) != 0) {
+    if (board_flash_erase(FLASH_OTA_BASE, FLASH_OTA_SIZE) != 0) {
         return FOTA_ERR;
     }
     s_len = image_size;
@@ -43,7 +44,7 @@ int port_ota_write(uint32_t offset, const void *data, uint32_t len)
     if (offset > s_len || len > (s_len - offset)) {
         return FOTA_ERR;
     }
-    return (boot_flash_write(BOOT_OTA_BASE + offset, data, len) == 0)
+    return (board_flash_write(FLASH_OTA_BASE + offset, data, len) == 0)
            ? FOTA_OK : FOTA_ERR;
 }
 
@@ -51,7 +52,7 @@ int port_ota_finish(void)
 {
     boot_state_t s;
 
-    if (boot_crc32((const void *)(uintptr_t)BOOT_OTA_BASE, s_len) != s_crc) {
+    if (crc32((const void *)(uintptr_t)FLASH_OTA_BASE, s_len) != s_crc) {
         return FOTA_ERR;
     }
     boot_state_load(&s);

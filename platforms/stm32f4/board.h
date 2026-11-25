@@ -27,8 +27,8 @@ void SystemClock_Config(void);
 void board_init(void);
 
 /* 固件入口参数（platforms/stm32/stm32_main.c 使用） */
-#define BOARD_NAME              "f407ve"
-#define BOARD_APP_VECTOR_BASE   0x08020000U     /* APP 区基址 */
+#define BOARD_NAME              "stm32f4xx"
+#define BOARD_APP_VECTOR_BASE   0x08010000U     /* APP 区基址（192KB） */
 #define BOARD_BLINK_STACK_SIZE  1024U
 #define BOARD_APP_STACK_SIZE    2048U
 

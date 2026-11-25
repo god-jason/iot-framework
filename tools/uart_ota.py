@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """uart_ota.py - robotos Bootloader 串口 OTA 上位机（F1 App/OTA、F4 APP/BACKUP/OTA）
 
-与 platforms/stm32/bootloader.c 的升级协议保持一致：
+与 platforms/stm32/bootloader/bootloader.c 的升级协议保持一致：
 
     Boot -> Host : ACK(0x06)                （就绪，可发长度/CRC）
     Host -> Boot : u32 len + u32 crc32(LE)  （crc32 覆盖后 len 字节）
@@ -45,7 +45,7 @@ REQ = b"R"          # Host -> Boot：请求升级
 ACK = b"\x06"       # Boot -> Host：就绪 / 擦除完成 / 升级成功
 ERR = b"\x15"       # Boot -> Host：升级失败（NAK）
 
-DEFAULT_SLOT_SIZE = 52 * 1024       # 与 F1 bootloader.c 的 BOOT_OTA_SIZE 一致
+DEFAULT_SLOT_SIZE = 52 * 1024       # 与 F1 bootloader.c 的 FLASH_OTA_SIZE 一致
 STLINK_CANDIDATES = [
     r"C:\Program Files (x86)\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\ST-LINK_CLI.exe",
     r"C:\Program Files\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\ST-LINK_CLI.exe",

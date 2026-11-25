@@ -57,7 +57,7 @@ int kvfs_super_read(kvfs_t *fs, uint32_t index, kvfs_super_t *sb)
         sb->data_start != KVFS_SUPER_SIZE || sb->generation == 0U) {
         return KVFS_ERR_FORMAT;
     }
-    crc = kvfs_crc32(sb, KVFS_SUPER_SIZE - 4U);
+    crc = crc32(sb, KVFS_SUPER_SIZE - 4U);
     if (crc != sb->crc32) {
         return KVFS_ERR_FORMAT;
     }
@@ -75,7 +75,7 @@ int kvfs_super_write(kvfs_t *fs, uint32_t index, const kvfs_super_t *sb)
     tmp.version = KVFS_VERSION;
     tmp.hdr_size = KVFS_SUPER_SIZE;
     tmp.data_start = KVFS_SUPER_SIZE;
-    tmp.crc32 = kvfs_crc32(&tmp, KVFS_SUPER_SIZE - 4U);
+    tmp.crc32 = crc32(&tmp, KVFS_SUPER_SIZE - 4U);
 
     rc = kvfs_dev_program(fs, addr, &tmp, KVFS_SUPER_SIZE);
     if (rc != KVFS_OK) {

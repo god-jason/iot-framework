@@ -234,7 +234,7 @@ static int check_records(rofs_t *fs)
             if (err != ROFS_OK) {
                 return err;
             }
-            crc = rofs__crc32_update(crc, chunk, n);
+            crc = crc32_update(crc, chunk, n);
             body += n;
             left -= n;
         }
@@ -280,7 +280,7 @@ static int check_image_crc(rofs_t *fs)
                 chunk[i] = 0u;
             }
         }
-        crc = rofs__crc32_update(crc, chunk, n);
+        crc = crc32_update(crc, chunk, n);
         pos += n;
     }
 

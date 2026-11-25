@@ -91,7 +91,7 @@ static int sb_read(mfs_t *fs, uint32_t slot, mfs_sb_t *sb)
     if (sb->version != ((MFS_VERSION_MAJOR << 16) | MFS_VERSION_MINOR)) {
         return MFS_ERR_VERSION;
     }
-    if (mfs__crc32(buf, 20u) != sb->crc) {
+    if (crc32(buf, 20u) != sb->crc) {
         return MFS_ERR_CRC;
     }
     /* 分区几何必须与当前设备配置一致 */
@@ -117,7 +117,7 @@ static int sb_write(mfs_t *fs)
     mfs__put_u32(&buf[8], fs->block_size);
     mfs__put_u32(&buf[12], fs->block_count);
     mfs__put_u32(&buf[16], fs->generation);
-    mfs__put_u32(&buf[20], mfs__crc32(buf, 20u));
+    mfs__put_u32(&buf[20], crc32(buf, 20u));
 
     for (slot = 0; slot < 2u; slot++) {
         err = mfs__prog(fs, sb_addr(fs, slot), buf, sizeof(buf));

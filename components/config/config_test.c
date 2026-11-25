@@ -1,94 +1,129 @@
 /*
- * config_test.c - 双区轮转配置存储测试
+ * config_test.c - 基于 kvfs 的配置存储测试（单例接口）
  *
- * 用两段 RAM 模拟 Flash（编程只能 1→0、擦除按扇区），覆盖：
- * 空设备、保存/读取、未提交记录（掉电）、写满轮转、非法头部、格式化。
+ * 用 RAM 模拟 Flash（编程只能 1→0、擦除按扇区），覆盖：
+ *   空设备、保存/读取/长度校验、重新挂载、写满压缩、删除与再写。
  */
 
 #include "test.h"
 #include "config.h"
 
-#define SECTOR_SIZE     256U
-#define SECTOR_A        0x1000U
-#define SECTOR_B        0x2000U
-#define MAX_DATA        96U
+#include <string.h>
+
+#define T_ERASE     1024U
+#define T_TOTAL     (T_ERASE * 2U)
+#define T_MAX_VALUE 64U
+#define T_KEY       0x43464731U     /* 'CFG1' */
+#define T_VERSION   1U
 
 typedef struct {
     uint32_t value;
     uint16_t tag;
+    uint16_t pad;
 } sample_t;
 
-static uint8_t s_flash[SECTOR_SIZE * 2U];
+static uint8_t s_flash[T_TOTAL];
 static uint32_t s_erase_count;
-static config_store_t s_store;
+static uint8_t s_work[T_MAX_VALUE];
+static kvfs_t s_kv;
 
-static uint32_t flash_index(uint32_t addr)
+/* ============================== RAM Flash ============================== */
+
+static int t_read(void *ctx, uint32_t addr, void *buf, uint32_t size)
 {
-    if (addr >= SECTOR_B) {
-        return SECTOR_SIZE + (addr - SECTOR_B);
-    }
-    return addr - SECTOR_A;
-}
-
-static int ram_read(uint32_t addr, void *buf, uint32_t size)
-{
-    uint32_t i = flash_index(addr);
-
-    if (i > sizeof(s_flash) || size > sizeof(s_flash) - i) {
+    (void)ctx;
+    if (addr > T_TOTAL || size > T_TOTAL - addr) {
         return -1;
     }
-    memcpy(buf, &s_flash[i], size);
+    memcpy(buf, &s_flash[addr], size);
     return 0;
 }
 
-static int ram_write(uint32_t addr, const void *buf, uint32_t size)
+static int t_program(void *ctx, uint32_t addr, const void *buf, uint32_t size)
 {
-    uint32_t i = flash_index(addr);
     const uint8_t *src = (const uint8_t *)buf;
-    uint32_t k;
+    uint32_t i;
 
-    if (i > sizeof(s_flash) || size > sizeof(s_flash) - i) {
+    (void)ctx;
+    if (addr > T_TOTAL || size > T_TOTAL - addr) {
         return -1;
     }
-    for (k = 0U; k < size; k++) {
-        s_flash[i + k] &= src[k];       /* Flash：编程只能把 1 变成 0 */
+    for (i = 0U; i < size; i++) {
+        s_flash[addr + i] &= src[i];       /* Flash：编程只能把 1 变成 0 */
     }
     return 0;
 }
 
-static int ram_erase(uint32_t addr, uint32_t size)
+static int t_erase(void *ctx, uint32_t addr, uint32_t size)
 {
-    if ((addr != SECTOR_A && addr != SECTOR_B) || size != SECTOR_SIZE) {
+    (void)ctx;
+    if (size != T_ERASE || (addr % T_ERASE) != 0U ||
+        addr > T_TOTAL || size > T_TOTAL - addr) {
         return -1;
     }
-    memset(&s_flash[flash_index(addr)], 0xFF, size);
+    memset(&s_flash[addr], 0xFF, size);
     s_erase_count++;
     return 0;
 }
 
-static const config_store_ops_t s_ops = {
-    ram_read, ram_write, ram_erase
+static const kvfs_blockdev_t s_dev = {
+    .read = t_read,
+    .program = t_program,
+    .erase = t_erase,
+    .sync = NULL,
+    .ctx = NULL,
+    .start_addr = 0U,
+    .total_size = T_TOTAL,
+    .erase_size = T_ERASE,
+    .program_size = 4U
 };
 
-static const config_store_layout_t s_layout = {
-    { SECTOR_A, SECTOR_B }, SECTOR_SIZE, 4U, MAX_DATA, 1U
+static const kvfs_config_t s_kv_cfg = {
+    .workbuf = s_work,
+    .workbuf_size = sizeof(s_work),
+    .max_value = T_MAX_VALUE,
+    .readonly = 0U,
+    .lock = NULL,
+    .unlock = NULL,
+    .mutex_ctx = NULL
 };
+
+/* ============================== 辅助 ============================== */
 
 static void store_reset(void)
 {
     memset(s_flash, 0xFF, sizeof(s_flash));
     s_erase_count = 0U;
-    memset(&s_store, 0, sizeof(s_store));
+    memset(&s_kv, 0, sizeof(s_kv));
+}
+
+/* 上电：初始化并挂载 KV，擦除态时自动格式化 */
+static void kv_open(void)
+{
+    int rc = kvfs_init(&s_kv, &s_dev, &s_kv_cfg);
+
+    TF_CHECK_INT(rc, KVFS_OK);
+    rc = kvfs_mount(&s_kv);
+    if (rc == KVFS_ERR_FORMAT) {
+        TF_CHECK_INT(kvfs_format(&s_kv), KVFS_OK);
+        rc = KVFS_OK;
+    }
+    TF_CHECK_INT(rc, KVFS_OK);
+}
+
+static int cfg_init(void)
+{
+    return config_init(&s_kv, T_KEY, T_VERSION, T_MAX_VALUE);
 }
 
 static int save_value(uint32_t value)
 {
     sample_t s;
 
-    memset(&s, 0, sizeof(s));           /* padding 也要确定，才能参与 CRC */
+    memset(&s, 0, sizeof(s));
     s.value = value;
     s.tag = (uint16_t)value;
-    return config_store_save(&s_store, &s, sizeof(s));
+    return config_save(&s, sizeof(s));
 }
 
 static int load_value(uint32_t *value)
@@ -97,8 +132,8 @@ static int load_value(uint32_t *value)
     int rc;
 
     memset(&s, 0, sizeof(s));
-    rc = config_store_load(&s_store, &s, sizeof(s));
-    if (rc == CONFIG_STORE_OK) {
+    rc = config_load(&s, sizeof(s));
+    if (rc == CONFIG_OK) {
         *value = s.value;
     }
     return rc;
@@ -107,137 +142,97 @@ static int load_value(uint32_t *value)
 void ut_config(void)
 {
     uint32_t value = 0U;
-    uint32_t len = 0U;
-    uint16_t version = 0U;
-    int rc;
+    uint32_t i;
 
     tf_begin("config/空设备");
     store_reset();
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_NONE);
-    TF_CHECK(s_store.has_record == 0U);
+    kv_open();
+    TF_CHECK_INT(config_init(NULL, T_KEY, T_VERSION, T_MAX_VALUE),
+                 CONFIG_ERR_PARAM);
+    TF_CHECK_INT(cfg_init(), CONFIG_NONE);
+    TF_CHECK_INT(load_value(&value), CONFIG_NONE);
     tf_end();
 
     tf_begin("config/保存与读取");
     store_reset();
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    TF_CHECK_INT(save_value(11U), CONFIG_STORE_OK);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
-    TF_CHECK_INT(value, 11U);
-    TF_CHECK_INT(save_value(22U), CONFIG_STORE_OK);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
-    TF_CHECK_INT(value, 22U);
-    TF_CHECK_INT(s_store.sequence, 2U);
-    TF_CHECK_INT(s_erase_count, 0U);            /* 追加不擦除 */
-
-    /* 长度不一致 / 超限 */
-    TF_CHECK_INT(config_store_load(&s_store, &value, 4U),
-                 CONFIG_STORE_ERR_SIZE);
+    kv_open();
     {
-        uint8_t big[MAX_DATA + 4U];
+        uint32_t erase_base = s_erase_count;
+
+        TF_CHECK_INT(cfg_init(), CONFIG_NONE);
+        TF_CHECK_INT(save_value(11U), CONFIG_OK);
+        TF_CHECK_INT(load_value(&value), CONFIG_OK);
+        TF_CHECK_INT(value, 11U);
+        TF_CHECK_INT(save_value(22U), CONFIG_OK);
+        TF_CHECK_INT(load_value(&value), CONFIG_OK);
+        TF_CHECK_INT(value, 22U);
+        TF_CHECK_INT(config_check(), CONFIG_OK);
+        TF_CHECK_INT(s_erase_count, erase_base);    /* 追加写不擦除 */
+    }
+
+    /* 长度不一致 / 超过上限 */
+    TF_CHECK_INT(config_load(&value, 4U), CONFIG_ERR_SIZE);
+    {
+        uint8_t big[T_MAX_VALUE + 4U];
+
         memset(big, 0, sizeof(big));
-        TF_CHECK_INT(config_store_save(&s_store, big, sizeof(big)),
-                     CONFIG_STORE_ERR_SIZE);
+        TF_CHECK_INT(config_save(big, sizeof(big)), CONFIG_ERR_SIZE);
     }
 
     /* 原始读取：输出长度与版本 */
     {
         sample_t raw;
-        TF_CHECK_INT(config_store_load_raw(&s_store, &raw, sizeof(raw),
-                                           &len, &version), CONFIG_STORE_OK);
-        TF_CHECK_INT(len, sizeof(sample_t));
-        TF_CHECK_INT(version, 1U);
+        uint32_t len = 0U;
+        uint16_t version = 0U;
+
+        memset(&raw, 0, sizeof(raw));
+        TF_CHECK_INT(config_load_raw(&raw, sizeof(raw), &len, &version),
+                     CONFIG_OK);
+        TF_CHECK_INT((int)len, (int)sizeof(sample_t));
+        TF_CHECK_INT(version, T_VERSION);
         TF_CHECK_INT(raw.value, 22U);
     }
     tf_end();
 
-    tf_begin("config/未提交记录（掉电）");
+    tf_begin("config/重新挂载");
     store_reset();
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    TF_CHECK_INT(save_value(33U), CONFIG_STORE_OK);
+    kv_open();
+    TF_CHECK_INT(cfg_init(), CONFIG_NONE);
+    TF_CHECK_INT(save_value(33U), CONFIG_OK);
 
-    /* 在追加位置伪造一条“头部已写、Commit 未写”的半成品记录 */
-    {
-        config_store_hdr_t h;
-        memset(&h, 0xFF, sizeof(h));
-        h.magic = CONFIG_STORE_MAGIC;
-        h.version = 1U;
-        h.length = (uint16_t)sizeof(sample_t);
-        h.sequence = 99U;
-        h.crc32 = 0xDEADBEEFU;
-        TF_CHECK_INT(ram_write(SECTOR_A + 32U, &h, sizeof(h)), 0);
-    }
-
-    /* 重新上电：半成品被跳过，仍读到上一条完整记录 */
-    memset(&s_store, 0, sizeof(s_store));
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_OK);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
+    /* 模拟复位：卸载后重新挂载（不擦除），再绑定一次 */
+    TF_CHECK_INT(kvfs_unmount(&s_kv), KVFS_OK);
+    kv_open();
+    TF_CHECK_INT(cfg_init(), CONFIG_OK);
+    TF_CHECK_INT(load_value(&value), CONFIG_OK);
     TF_CHECK_INT(value, 33U);
-    TF_CHECK_INT(s_store.sequence, 1U);
-    TF_CHECK_INT(s_store.write_offset, 64U);
-
-    /* 续写落在半成品之后，新旧配置都可读 */
-    TF_CHECK_INT(save_value(44U), CONFIG_STORE_OK);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
-    TF_CHECK_INT(value, 44U);
     tf_end();
 
-    tf_begin("config/写满轮转");
+    tf_begin("config/写满压缩");
     store_reset();
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    /* 8 字节数据 → 每条 32 字节，每区 8 条；第 9 条触发轮转 */
-    for (value = 1U; value <= 9U; value++) {
-        TF_CHECK_INT(save_value(value), CONFIG_STORE_OK);
+    kv_open();
+    TF_CHECK_INT(cfg_init(), CONFIG_NONE);
+    for (i = 1U; i <= 80U; i++) {
+        TF_CHECK_INT(save_value(i), CONFIG_OK);
     }
-    TF_CHECK_INT(s_erase_count, 1U);
-    TF_CHECK_INT(s_store.active_index, 1U);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
-    TF_CHECK_INT(value, 9U);
-
-    /* 再写满第二区，轮转回第一区 */
-    for (rc = 10; rc <= 17; rc++) {
-        TF_CHECK_INT(save_value((uint32_t)rc), CONFIG_STORE_OK);
-    }
-    TF_CHECK_INT(s_erase_count, 2U);
-    TF_CHECK_INT(s_store.active_index, 0U);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
-    TF_CHECK_INT(value, 17U);
-    TF_CHECK_INT(s_store.sequence, 17U);
+    TF_CHECK(s_erase_count > 0U);               /* 分区写满后发生压缩 */
+    TF_CHECK_INT(load_value(&value), CONFIG_OK);
+    TF_CHECK_INT(value, 80U);
+    TF_CHECK_INT(save_value(81U), CONFIG_OK);
+    TF_CHECK_INT(load_value(&value), CONFIG_OK);
+    TF_CHECK_INT(value, 81U);
     tf_end();
 
-    tf_begin("config/非法头部");
+    tf_begin("config/删除与再写");
     store_reset();
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    {
-        uint32_t garbage = 0x12345678U;
-        TF_CHECK_INT(ram_write(SECTOR_A, &garbage, sizeof(garbage)), 0);
-    }
-    memset(&s_store, 0, sizeof(s_store));
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    TF_CHECK_INT(s_store.active_index, 1U);            /* A 区不可用，改从 B 追加 */
-    TF_CHECK_INT(s_store.write_offset, 0U);
-    TF_CHECK_INT(save_value(55U), CONFIG_STORE_OK);
-    TF_CHECK_INT(s_store.active_index, 1U);            /* 写入另一区 */
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
-    TF_CHECK_INT(value, 55U);
-    tf_end();
-
-    tf_begin("config/格式化");
-    store_reset();
-    TF_CHECK_INT(config_store_init(&s_store, &s_layout, &s_ops),
-                 CONFIG_STORE_NONE);
-    TF_CHECK_INT(save_value(66U), CONFIG_STORE_OK);
-    TF_CHECK_INT(config_store_format(&s_store), CONFIG_STORE_OK);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_NONE);
-    TF_CHECK_INT(save_value(77U), CONFIG_STORE_OK);
-    TF_CHECK_INT(load_value(&value), CONFIG_STORE_OK);
+    kv_open();
+    TF_CHECK_INT(cfg_init(), CONFIG_NONE);
+    TF_CHECK_INT(save_value(66U), CONFIG_OK);
+    TF_CHECK_INT(config_format(), CONFIG_OK);
+    TF_CHECK_INT(load_value(&value), CONFIG_NONE);
+    TF_CHECK_INT(config_check(), CONFIG_NONE);
+    TF_CHECK_INT(save_value(77U), CONFIG_OK);
+    TF_CHECK_INT(load_value(&value), CONFIG_OK);
     TF_CHECK_INT(value, 77U);
     tf_end();
 }

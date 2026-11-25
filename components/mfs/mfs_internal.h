@@ -175,14 +175,10 @@ static inline uint32_t mfs__align_up(uint32_t v, uint32_t a)
 }
 
 /* ============================================================================
- * CRC32（IEEE 802.3，多项式 0xEDB88320，无查表）
+ * CRC32（统一使用 components/crypto 的实现）
  * ==========================================================================*/
 
-/* 以 crc 为运行值继续计算；首次调用传 0xFFFFFFFF，最后再异或 0xFFFFFFFF */
-uint32_t mfs__crc32_update(uint32_t crc, const void *buf, uint32_t len);
-
-/* 一次性计算一段数据的 CRC32 */
-uint32_t mfs__crc32(const void *buf, uint32_t len);
+#include "crc32.h"
 
 /* ============================================================================
  * 块设备封装

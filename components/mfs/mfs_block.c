@@ -66,7 +66,7 @@ int mfs__blk_read_hdr(mfs_t *fs, uint32_t block, mfs_blk_hdr_t *hdr)
     if (hdr->magic != MFS_BLK_MAGIC) {
         return MFS_ERR_NOENT;
     }
-    crc = mfs__crc32(buf, 16u);
+    crc = crc32(buf, 16u);
     if (crc != hdr->crc) {
         return MFS_ERR_CRC;
     }
@@ -96,7 +96,7 @@ int mfs__blk_write_hdr(mfs_t *fs, uint32_t block, uint32_t sequence,
     mfs__put_u32(&buf[8], erase_count);
     mfs__put_u32(&buf[12], state);
     /* CRC 只覆盖 magic/sequence/erase_count/state，不包含自身与保留字段 */
-    mfs__put_u32(&buf[16], mfs__crc32(buf, 16u));
+    mfs__put_u32(&buf[16], crc32(buf, 16u));
     mfs__put_u32(&buf[20], 0u);
 
     err = mfs__prog(fs, mfs__blk_addr(fs, block), buf, sizeof(buf));

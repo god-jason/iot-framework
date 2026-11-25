@@ -36,7 +36,7 @@ MFS（Record-Oriented File System）是一个面向 SPI NOR / 内部 Flash 的�
 | `mfs_blockdev.c` | 块设备回调封装（read / program / erase / sync）与错误映射 |
 | `mfs_block.c` | Block Header 读写、块分配（磨损均衡）、空闲判定、坏块标记 |
 | `mfs_record.c` | Record 写入/读取/CRC 校验、块扫描、DATA 定位 |
-| `mfs_crc.c` | CRC32（逐位实现，无查找表） |
+| [crc32.c](../components/crypto/crc32.c) | CRC32（components/crypto 提供，record/block/sb 共用） |
 | `mfs_inode.c` | Inode Payload 序列化/解析、最新版本查找、目录项查找、创建/更新/删除 |
 | `mfs_dir.c` | 路径解析、mkdir/rmdir/unlink/rename/stat、目录遍历 |
 | `mfs_file.c` | 文件打开/读写/seek/truncate，Chunk 读写策略 |
@@ -60,7 +60,7 @@ mfs.h (public)
          |      +-- mfs_file.c
          |      +-- mfs_gc.c
          |      +-- mfs_maint.c
-         +-- mfs_crc.c（被 record/block/sb 使用）
+         +-- （CRC32 由 components/crypto/crc32.c 提供）
 ```
 
 ---
@@ -412,7 +412,6 @@ Flash 剩余约 29.5KB（131,072 - 101,572）。
 | mfs_blockdev.c | 132 | 块设备封装 |
 | mfs_block.c | 650 | 块头、分配、坏块 |
 | mfs_record.c | 1,558 | 记录读写、扫描、DATA 定位 |
-| mfs_crc.c | 58 | CRC32 |
 | mfs_inode.c | 1,260 | Inode 解析/查找 |
 | mfs_dir.c | 1,528 | 路径与目录 |
 | mfs_file.c | 1,386 | 文件读写 |

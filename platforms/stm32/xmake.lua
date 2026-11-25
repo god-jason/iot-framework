@@ -6,11 +6,9 @@ if is_plat("cross") then
     -- 与系列无关的公共实现
     local shared = { "stm32_io.c", "stm32_rtos.c", "stm32_mem_tlsf.c",
                      "stm32_trace.c", "stm32_rtc_soft.c", "stm32_syscalls.c" }
-    -- 依赖板级 partition.h 的共享文件由各 board 目标编译（见 platforms/stm32f*/xmake.lua），
-    -- 平台目标只有 platforms/* 头文件搜索路径，无法解析 partition.h
-    local exclude = { "boot_meta.c", "boot_crash.c", "boot_config.c",
-                      "stm32_config.c", "stm32_ota.c",
-                      "bootloader.c",   -- 只编入 Bootloader 目标
+    -- 依赖板级 partition.h 的共享文件由各 board 目标编译（见 platforms/stm32f*/xmake.lua）；
+    -- 这些文件位于 platforms/stm32/bootloader，不会被本目录 "*.c" 通配匹配。
+    local exclude = { "stm32_ota.c",
                       "stm32_main.c",         -- 由各 board 目标编译（需要 board.h）
                       "stm32_shell.c" }       -- 由应用选择是否编入本文件
 

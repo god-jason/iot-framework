@@ -85,8 +85,7 @@ typedef struct {
 
 /* ============================== CRC32 ============================== */
 
-uint32_t kvfs_crc32_update(uint32_t crc, const void *buf, uint32_t len);
-uint32_t kvfs_crc32(const void *buf, uint32_t len);
+#include "crc32.h"
 
 /* ============================== 记录尺寸 ============================== */
 

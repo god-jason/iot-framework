@@ -16,9 +16,7 @@
 #include "roshell.h"
 #include "datetime.h"
 #include "app.h"
-#include "ros_rtc.h"
 #include "boot_meta.h"
-#include "boot_crash.h"
 
 /* 芯片头：提供 SCB / NVIC_SystemReset 等 */
 #if defined(ROS_STM32_F1)
@@ -67,8 +65,8 @@ int main(void)
 }
 
 /*
- * HardFault：crash 累计并写回状态，异常栈帧（PC/LR 等）带 Unix 时间追加到
- * 错误日志，随后复位。F4 由 Bootloader 在 crash 超限时用 BACKUP 恢复。
+ * HardFault：crash 计数写入 KV，现场（PC/LR/寄存器/故障状态/栈快照）
+ * 直接打印到 USART1，随后复位。
  */
 void stm32_hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp);
 
@@ -91,9 +89,144 @@ void HardFault_Handler(void)
     );
 }
 
+/*
+ * 崩溃现场直接输出到 USART1（轮询，不依赖 HAL / RTOS / Flash）。
+ *
+ * HardFault 上下文只剩寄存器，这里用 board_trace_start 已配置好的
+ * USART1（115200 8N1）逐字符输出，格式与 tools/crash_log.py 的解析规则
+ * 一致（reason=/pc=/lr=/sp=/xpsr=/cfsr=/hfsr=/excr=/stack[]）。
+ */
+#define CRASH_USART_SR_TXE      (1UL << 7)
+
+static void crash_putc(char c)
+{
+    while ((USART1->SR & CRASH_USART_SR_TXE) == 0U) {
+    }
+    USART1->DR = (uint32_t)(uint8_t)c;
+}
+
+static void crash_puts(const char *s)
+{
+    while (*s != '\0') {
+        crash_putc(*s++);
+    }
+}
+
+static void crash_put_hex(uint32_t v)
+{
+    int shift;
+
+    for (shift = 28; shift >= 0; shift -= 4) {
+        uint32_t d = (v >> (uint32_t)shift) & 0x0FU;
+
+        crash_putc((char)(d < 10U ? ('0' + d) : ('A' + d - 10U)));
+    }
+}
+
+static void crash_put_dec(uint32_t v)
+{
+    char buf[10];
+    uint32_t n = 0U;
+
+    if (v == 0U) {
+        crash_putc('0');
+        return;
+    }
+    while (v > 0U && n < sizeof(buf)) {
+        buf[n++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    }
+    while (n > 0U) {
+        crash_putc(buf[--n]);
+    }
+}
+
 void stm32_hardfault_report(uint32_t *frame, uint32_t exc_return, uint32_t sp)
 {
-    boot_crash_log(frame, sp, exc_return, ros_rtc_get_timestamp());
+    boot_state_t s;
+    uint32_t addr;
+    uint32_t words;
+    uint32_t i;
+
+    /* crash 累计并写回 KV（Bootloader 据此判断启动失败） */
+    boot_state_load(&s);
+    if (s.crash < 0xFFFFFFFFU) {
+        s.crash++;
+    }
+    (void)boot_state_save(&s);
+
+    crash_puts("\r\n[CRASH] reason=HARDFAULT" FLASH_CRASH_TAG " crash=");
+    crash_put_dec(s.crash);
+    crash_puts("\r\n");
+
+    if (frame == NULL) {
+        crash_puts("[CRASH] no exception frame, reset\r\n");
+        NVIC_SystemReset();
+        for (;;) {
+        }
+    }
+
+    crash_puts("pc=");
+    crash_put_hex(frame[6]);
+    crash_puts(" lr=");
+    crash_put_hex(frame[5]);
+    crash_puts(" sp=");
+    crash_put_hex(sp);
+    crash_puts(" xpsr=");
+    crash_put_hex(frame[7]);
+    crash_puts("\r\n");
+
+    crash_puts("r0=");
+    crash_put_hex(frame[0]);
+    crash_puts(" r1=");
+    crash_put_hex(frame[1]);
+    crash_puts(" r2=");
+    crash_put_hex(frame[2]);
+    crash_puts(" r3=");
+    crash_put_hex(frame[3]);
+    crash_puts(" r12=");
+    crash_put_hex(frame[4]);
+    crash_puts("\r\n");
+
+    crash_puts("cfsr=");
+    crash_put_hex(SCB->CFSR);
+    crash_puts(" hfsr=");
+    crash_put_hex(SCB->HFSR);
+    crash_puts(" excr=");
+    crash_put_hex(exc_return);
+    crash_puts("\r\n");
+
+    crash_puts("mmfar=");
+    crash_put_hex(SCB->MMFAR);
+    crash_puts(" bfar=");
+    crash_put_hex(SCB->BFAR);
+    crash_puts("\r\n");
+
+    /* 栈快照：从异常栈指针起最多 128 字，每行 8 字 */
+    addr = sp & ~3U;
+    if (addr > FLASH_SRAM_END) {
+        addr = FLASH_SRAM_END;
+    }
+    words = 128U;
+    if (((FLASH_SRAM_END - addr) / 4U) < words) {
+        words = (FLASH_SRAM_END - addr) / 4U;
+    }
+    i = 0U;
+    while (i < words) {
+        uint32_t j;
+
+        crash_puts("stack[");
+        crash_put_hex(addr + i * 4U);
+        crash_puts("]:");
+        for (j = 0U; j < 8U && i < words; j++, i++) {
+            crash_putc(' ');
+            crash_put_hex(*(const volatile uint32_t *)(uintptr_t)
+                          (addr + i * 4U));
+        }
+        crash_puts("\r\n");
+    }
+
+    crash_puts("[CRASH] reset\r\n");
     NVIC_SystemReset();
 
     for (;;) {

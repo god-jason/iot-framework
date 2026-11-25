@@ -2,10 +2,12 @@
  * bootloader.c - STM32 串口升级 Bootloader（F1/F4 共用）
  *
  * 分区与升级参数见 platforms/stm32<family> 或 apps/<board> 中的 partition.h：
- *   - F103：单 App 槽，Boot 8K / Boot Meta 4K / 配置 4K×2 / 日志 4K /
- *            App 52K / 升级包 52K；
- *   - F407：APP/BACKUP/OTA 三槽，升级前把 APP 备份到 BACKUP，
- *            失败或崩溃超限时从 BACKUP 恢复。
+ *   - F103：单 App 槽，Boot 8K / KV 8K×2 / App 52K / 升级包 52K（无文本日志）；
+ *   - F407：单 App 槽，Boot 16K / KV 16K×2 / 错误日志 16K /
+ *            App 192K / 升级包 256K。
+ *
+ * 启动状态与 OTA 进度存于 KV 区（components/kvfs）；应用配置由 App 通过
+ * components/config 读写同一 KV 区，Bootloader 不读取配置。
  *
  * 串口 OTA 协议（两板一致）：
  *   1. 上位机经 UART1 发送 'R' 进入升级，随后发送 len(4B) + crc(4B)；
@@ -18,8 +20,9 @@
  */
 
 #include "boot_meta.h"
-#include "boot_config.h"
-#include "boot_flash.h"
+
+#include "board_flash.h"
+#include "crc32.h"
 
 #include <stddef.h>
 
@@ -47,6 +50,10 @@
 #define BOOT_ACK_CHAR           0x06U
 #define BOOT_NAK_CHAR           0x15U
 #define COPY_CHUNK              1024U
+
+#if defined(FLASH_LOG_BASE) && (FLASH_LOG_SIZE > 0U)
+#define BOOT_HAS_LOG    1
+#endif
 
 uint32_t SystemCoreClock = BOOT_SYSCLK_HZ;
 
@@ -177,14 +184,15 @@ static void uart_put_dec(uint32_t v)
 }
 
 /* 打印错误日志尾部（最多 2KB，避免大分区全文打印拖慢启动） */
+#ifdef BOOT_HAS_LOG
 static void print_error_log(void)
 {
-    const uint8_t *p = (const uint8_t *)(uintptr_t)BOOT_LOG_BASE;
+    const uint8_t *p = (const uint8_t *)(uintptr_t)FLASH_LOG_BASE;
     uint32_t end = 0U;
     uint32_t start;
     uint32_t i;
 
-    while (end < BOOT_LOG_SIZE && p[end] != 0xFFU) {
+    while (end < FLASH_LOG_SIZE && p[end] != 0xFFU) {
         end++;
     }
     if (end == 0U) {
@@ -208,6 +216,7 @@ static void print_error_log(void)
     }
     uart_puts("\r\n");
 }
+#endif /* BOOT_HAS_LOG */
 
 static bool wait_update_req(uint32_t ms)
 {
@@ -251,96 +260,27 @@ static bool image_valid(uint32_t base)
     uint32_t sp = *(volatile uint32_t *)(uintptr_t)base;
     uint32_t pc = *(volatile uint32_t *)(uintptr_t)(base + 4U);
 
-    if (sp < 0x20000000U || sp > BOOT_SRAM_END) {
+    if (sp < 0x20000000U || sp > FLASH_SRAM_END) {
         return false;
     }
-    return (pc >= base) && (pc < (base + BOOT_APP_SIZE));
+    return (pc >= base) && (pc < (base + FLASH_APP_SIZE));
 }
 
 /* ota 区（原始 bin）是否完整：长度 + 整段 CRC */
 static bool ota_image_crc_ok(const boot_state_t *s)
 {
-    if (s->ota_len == 0U || s->ota_len > BOOT_OTA_SIZE) {
+    if (s->ota_len == 0U || s->ota_len > FLASH_OTA_SIZE) {
         return false;
     }
-    return boot_crc32((const void *)(uintptr_t)BOOT_OTA_BASE, s->ota_len)
+    return crc32((const void *)(uintptr_t)FLASH_OTA_BASE, s->ota_len)
            == s->ota_crc;
 }
 
-#ifdef BOOT_HAS_BACKUP
-static bool slots_equal(uint32_t a, uint32_t b)
-{
-    return boot_crc32((const void *)(uintptr_t)a, BOOT_APP_SIZE) ==
-           boot_crc32((const void *)(uintptr_t)b, BOOT_APP_SIZE);
-}
-
-/* 擦除 dst 覆盖的扇区后，把 src 的 len 字节复制过去 */
-static int copy_region(uint32_t dst, uint32_t src, uint32_t len)
-{
-    uint32_t off = 0U;
-
-    if (boot_flash_erase(dst, len) != 0) {
-        return -1;
-    }
-    while (off < len) {
-        uint32_t n = len - off;
-        uint32_t i;
-
-        if (n > COPY_CHUNK) {
-            n = COPY_CHUNK;
-        }
-        for (i = 0U; i < n; i++) {
-            s_copy_buf[i] = *(const volatile uint8_t *)(uintptr_t)(src + off + i);
-        }
-        if (boot_flash_write(dst + off, s_copy_buf, n) != 0) {
-            return -1;
-        }
-        off += n;
-    }
-    return 0;
-}
-
-/* 升级前备份当前 App 到 BACKUP；App 无效时清掉备份标志 */
-static bool backup_app(boot_state_t *s)
-{
-    if (!image_valid(BOOT_APP_BASE)) {
-        s->reserved &= ~BOOT_STATE_FLAG_BACKUP;
-        return true;
-    }
-    uart_puts("[BOOT] backup APP -> BACKUP\r\n");
-    if (copy_region(BOOT_SLOT_BACKUP_BASE, BOOT_APP_BASE, BOOT_APP_SIZE) != 0 ||
-        !slots_equal(BOOT_APP_BASE, BOOT_SLOT_BACKUP_BASE)) {
-        uart_puts("[BOOT] backup failed\r\n");
-        return false;
-    }
-    s->reserved |= BOOT_STATE_FLAG_BACKUP;
-    return true;
-}
-
-/* 用备份区恢复 App 区 */
-static bool restore_backup(boot_state_t *s)
-{
-    if ((s->reserved & BOOT_STATE_FLAG_BACKUP) == 0U) {
-        uart_puts("[BOOT] no backup to restore\r\n");
-        return false;
-    }
-    uart_puts("[BOOT] restore BACKUP -> APP\r\n");
-    if (copy_region(BOOT_APP_BASE, BOOT_SLOT_BACKUP_BASE, BOOT_APP_SIZE) != 0 ||
-        !slots_equal(BOOT_APP_BASE, BOOT_SLOT_BACKUP_BASE) ||
-        !image_valid(BOOT_APP_BASE)) {
-        uart_puts("[BOOT] restore failed\r\n");
-        return false;
-    }
-    uart_puts("[BOOT] restore done\r\n");
-    return true;
-}
-#endif /* BOOT_HAS_BACKUP */
-
 /*
  * 把 OTA 区原始镜像写入 App 区。
- * 无历史：F4 先备份 App -> BACKUP，写一条进度 0，再擦除 App 区；
- * 有历史：从最后进度继续。F1 可按页擦除未确认尾部，F4 为单个扇区，
- * 只能整区重来。每拷完一块追加一条历史；完成后校验 CRC 并清 ota 标识。
+ * 无进度：先擦除 App 区并写入进度 0；
+ * 有进度：从最后进度继续。F1 可按页擦除未确认尾部，F4 按扇区擦除
+ * 只能整区重来。每拷完一块更新进度；完成后校验 CRC 并清 ota 标识。
  */
 static bool ota_apply(boot_state_t *s)
 {
@@ -349,19 +289,11 @@ static bool ota_apply(boot_state_t *s)
     uint32_t i;
 
     if (!boot_history_last_length(&off)) {
-#ifdef BOOT_HAS_BACKUP
-        if (!backup_app(s)) {
-            return false;
-        }
-        if (boot_state_save(s) != 0) {
-            return false;
-        }
-#endif
         if (boot_history_append(s, 0U) != 0) {
             return false;
         }
         uart_puts("[BOOT] erase app area\r\n");
-        if (boot_flash_erase(BOOT_APP_BASE, BOOT_APP_SIZE) != 0) {
+        if (board_flash_erase(FLASH_APP_BASE, FLASH_APP_SIZE) != 0) {
             return false;
         }
         off = 0U;
@@ -369,9 +301,10 @@ static bool ota_apply(boot_state_t *s)
         (void)boot_state_save(s);       /* 状态异常：清历史，下次重来 */
         return false;
     } else if (off < s->ota_len) {
-#ifdef BOOT_HAS_BACKUP
-        uart_puts("[BOOT] resume from start (single sector)\r\n");
-        if (boot_flash_erase(BOOT_APP_BASE, BOOT_APP_SIZE) != 0) {
+#ifdef FLASH_APP_ERASE_WHOLE
+        /* 扇区擦除平台只能整区重来 */
+        uart_puts("[BOOT] resume from start (sector erase)\r\n");
+        if (board_flash_erase(FLASH_APP_BASE, FLASH_APP_SIZE) != 0) {
             return false;
         }
         if (boot_state_save(s) != 0) {
@@ -382,8 +315,8 @@ static bool ota_apply(boot_state_t *s)
         }
 #else
         uart_puts("[BOOT] erase unconfirmed tail\r\n");
-        if (boot_flash_erase(BOOT_APP_BASE + off,
-                             BOOT_APP_SIZE - off) != 0) {
+        if (board_flash_erase(FLASH_APP_BASE + off,
+                             FLASH_APP_SIZE - off) != 0) {
             return false;
         }
 #endif
@@ -398,9 +331,9 @@ static bool ota_apply(boot_state_t *s)
         }
         for (i = 0U; i < n; i++) {
             s_copy_buf[i] = *(const volatile uint8_t *)(uintptr_t)
-                            (BOOT_OTA_BASE + off + i);
+                            (FLASH_OTA_BASE + off + i);
         }
-        if (boot_flash_write(BOOT_APP_BASE + off, s_copy_buf, n) != 0) {
+        if (board_flash_write(FLASH_APP_BASE + off, s_copy_buf, n) != 0) {
             uart_puts("\r\n[BOOT] copy failed\r\n");
             return false;
         }
@@ -409,13 +342,13 @@ static bool ota_apply(boot_state_t *s)
             uart_puts("\r\n[BOOT] history write failed\r\n");
             return false;
         }
-        if ((off % BOOT_PROGRESS_STEP) == 0U) {
+        if ((off % FLASH_PROGRESS_STEP) == 0U) {
             uart_putc('.');
         }
     }
     uart_puts("\r\n");
 
-    if (boot_crc32((const void *)(uintptr_t)BOOT_APP_BASE, s->ota_len)
+    if (crc32((const void *)(uintptr_t)FLASH_APP_BASE, s->ota_len)
         != s->ota_crc) {
         uart_puts("[BOOT] verify failed, restart next boot\r\n");
         (void)boot_state_save(s);       /* 清历史，保留 ota 标识 */
@@ -472,7 +405,7 @@ static void do_update(boot_state_t *s)
     uart_putc(BOOT_ACK_CHAR);
 
     if (uart_read_u32(&len) != 0 || uart_read_u32(&crc) != 0 ||
-        len == 0U || len > BOOT_OTA_SIZE) {
+        len == 0U || len > FLASH_OTA_SIZE) {
         uart_puts("[BOOT] OTA error: bad header\r\n");
         uart_putc(BOOT_NAK_CHAR);
         return;
@@ -483,12 +416,12 @@ static void do_update(boot_state_t *s)
     uart_put_hex32(crc);
     uart_puts("\r\n");
 
-#ifdef BOOT_OTA_ERASE_FULL
+#ifdef FLASH_OTA_ERASE_FULL
     /* 扇区擦除：整块 OTA 区一起擦 */
-    if (boot_flash_erase(BOOT_OTA_BASE, BOOT_OTA_SIZE) != 0) {
+    if (board_flash_erase(FLASH_OTA_BASE, FLASH_OTA_SIZE) != 0) {
 #else
     /* 页擦除：只擦本次镜像覆盖的页 */
-    if (boot_flash_erase(BOOT_OTA_BASE, len) != 0) {
+    if (board_flash_erase(FLASH_OTA_BASE, len) != 0) {
 #endif
         uart_puts("[BOOT] OTA error: erase failed\r\n");
         uart_putc(BOOT_NAK_CHAR);
@@ -508,8 +441,8 @@ static void do_update(boot_state_t *s)
         buf[n++] = (uint8_t)c;
         got++;
         if (n == sizeof(buf) || got == len) {
-            calc = boot_crc32_update(calc, buf, n);
-            if (boot_flash_write(BOOT_OTA_BASE + got - n, buf, n) != 0) {
+            calc = crc32_update(calc, buf, n);
+            if (board_flash_write(FLASH_OTA_BASE + got - n, buf, n) != 0) {
                 uart_puts("\r\n[BOOT] OTA error: flash write\r\n");
                 uart_putc(BOOT_NAK_CHAR);
                 return;
@@ -558,38 +491,25 @@ int main(void)
     uart_init();
     boot_state_load(&st);
 
-    uart_puts("\r\n[BOOT] " BOOT_BANNER "\r\n");
+    uart_puts("\r\n[BOOT] " FLASH_BANNER "\r\n");
     uart_puts("[BOOT] tries=");
     uart_put_dec(st.tries);
     uart_puts(" crash=");
     uart_put_dec(st.crash);
     uart_puts(" ota=");
     uart_putc((st.ota_valid != 0U) ? 'Y' : 'N');
-#ifdef BOOT_HAS_BACKUP
-    uart_puts(" backup=");
-    uart_putc(((st.reserved & BOOT_STATE_FLAG_BACKUP) != 0U) ? 'Y' : 'N');
-#endif
     uart_puts("\r\n");
 
+#ifdef BOOT_HAS_LOG
     print_error_log();
-
-    /* 配置区校验：定位最新有效配置记录（双区轮转，掉电安全） */
-    {
-        int cfg = boot_config_restore();
-
-        if (cfg == -2) {
-            uart_puts("[BOOT] config empty\r\n");
-        } else if (cfg < 0) {
-            uart_puts("[BOOT] config check failed\r\n");
-        }
-    }
+#endif
 
     uart_puts("[BOOT] wait 'R' 500ms\r\n");
     if (wait_update_req(UPDATE_HANDSHAKE_MS)) {
         do_update(&st);                             /* 成功后复位，不返回 */
     }
 
-    /* ota 标识：校验 OTA 区并写入 App 区（F4 先备份 App） */
+    /* ota 标识：校验 OTA 区并写入 App 区 */
     if (st.ota_valid != 0U) {
         if (!ota_image_crc_ok(&st)) {
             uart_puts("[BOOT] OTA image invalid, clear flag\r\n");
@@ -610,17 +530,7 @@ int main(void)
         }
     }
 
-#ifdef BOOT_HAS_BACKUP
-    /* 启动失败/崩溃超过上限：恢复备份区程序 */
-    if (st.tries > BOOT_MAX_TRIES || st.crash > BOOT_MAX_CRASH) {
-        uart_puts("[BOOT] too many failures, restore backup\r\n");
-        (void)restore_backup(&st);
-        st.tries = 0U;
-        st.crash = 0U;
-        (void)boot_state_save(&st);
-    }
-#else
-    /* 单槽无备份：启动失败超过上限时停在 Bootloader 等待串口 OTA */
+    /* 启动失败超过上限：停在 Bootloader 等待串口 OTA */
     if (st.tries > BOOT_MAX_TRIES) {
         uart_puts("[BOOT] boot failures > ");
         uart_put_dec(BOOT_MAX_TRIES);
@@ -631,41 +541,24 @@ int main(void)
             }
         }
     }
-#endif
 
     if (st.tries < 0xFFFFFFFFU) {
         st.tries++;
     }
     (void)boot_state_save(&st);
 
-    if (!image_valid(BOOT_APP_BASE)) {
-#ifdef BOOT_HAS_BACKUP
-        uart_puts("[BOOT] app invalid\r\n");
-        if (restore_backup(&st)) {
-            st.tries = 0U;
-            st.crash = 0U;
-            (void)boot_state_save(&st);
-        } else {
-            uart_puts("[BOOT] wait OTA\r\n");
-            for (;;) {
-                if (wait_update_req(1000U)) {
-                    do_update(&st);
-                }
-            }
-        }
-#else
+    if (!image_valid(FLASH_APP_BASE)) {
         uart_puts("[BOOT] app invalid, wait OTA\r\n");
         for (;;) {
             if (wait_update_req(1000U)) {
                 do_update(&st);
             }
         }
-#endif
     }
 
     uart_puts("[BOOT] boot APP\r\n");
     uart_flush();
     delay_ms(10U);
-    jump_to(BOOT_APP_BASE);
+    jump_to(FLASH_APP_BASE);
     return 0;
 }

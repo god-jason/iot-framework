@@ -164,7 +164,8 @@ do
     local function ap(p) return path.join(ROS_ROOT, p) end
     local incs = { ap("src"), ap("hal"), ap("drivers"),
                    ap("platforms"), ap("platforms/pc"),
-                   ap("platforms/stm32") }
+                   ap("platforms/stm32"),
+                   ap("platforms/stm32/bootloader") }
     -- 板级头（board.h / partition.h）各系列同名：只把当前系列目录加入搜索路径，
     -- 避免 stm32f1/stm32f4 的 board.h 互相覆盖。
     if is_plat("cross") then
@@ -520,15 +521,11 @@ if is_plat("cross") then
         add_files("platforms/stm32" .. family .. "/**.c")
         -- 板级文件（启动/时钟/Flash/RTC）属于具体固件，不进入通用静态库
         remove_files("platforms/stm32" .. family .. "/board.c",
-                     "platforms/stm32" .. family .. "/boot_flash.c",
+                     "platforms/stm32" .. family .. "/board_flash.c",
                      "platforms/stm32" .. family .. "/board_rtc.c")
         -- 依赖板级 partition.h 的共享实现由各 board 目标编译（静态库无板级头文件路径）
-        remove_files("platforms/stm32/boot_meta.c",
-                     "platforms/stm32/boot_crash.c",
-                     "platforms/stm32/boot_config.c",
-                     "platforms/stm32/stm32_config.c",
+        remove_files("platforms/stm32/bootloader/**.c",
                      "platforms/stm32/stm32_ota.c",
-                     "platforms/stm32/bootloader.c",
                      "platforms/stm32/stm32_main.c")
         add_files("modules/**.c")
         add_files("vendor/**.c")

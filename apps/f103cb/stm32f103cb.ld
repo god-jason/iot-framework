@@ -1,9 +1,8 @@
 /*
  * stm32f103cb.ld - STM32F1 128KB Flash 板 App 固件链接脚本（GNU ld）
  *
- * App 区：FLASH 0x08006000 起 52KB（带 ML307 全量测试的 demo 放宽到 60KB，
- * 与 OTA 区重叠，仅用于功能验证）；SRAM 20KB @ 0x20000000。
- * Bootloader 占 0x08000000..0x08001FFF（8KB），Boot Meta/配置/错误日志在前部，
+ * App 区：FLASH 0x08006000 起 52KB；SRAM 20KB @ 0x20000000。
+ * Bootloader 占 0x08000000..0x08001FFF（8KB），KV 双区 8KB×2 紧随其后，
  * 升级包区在 0x08013000（52KB）。App 启动时把 SCB->VTOR 指向 App 区基址。
  */
 
@@ -11,7 +10,7 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08006000, LENGTH = 60K
+    FLASH (rx)  : ORIGIN = 0x08006000, LENGTH = 52K
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 

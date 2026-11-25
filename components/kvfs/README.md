@@ -11,7 +11,7 @@
 
 | 参考 | 借鉴点 |
 |---|---|
-| [boot_meta.c](../../platforms/stm32/boot_meta.c) | 分区状态记录 + CRC 校验 + 追加历史 |
+| [boot_meta.c](../../platforms/stm32/bootloader/boot_meta.c) | 分区状态记录 + CRC 校验 + 追加历史 |
 | [config.c](../config/config.c) | 双区轮转、记录追加、**Commit 最后写** |
 
 相比 `config`：从"只保存一份结构体"扩展到"多键独立更新"，并增加了
@@ -147,7 +147,7 @@ extern int board_flash_read(void *ctx, uint32_t addr, void *buf, uint32_t size);
 extern int board_flash_program(void *ctx, uint32_t addr, const void *buf, uint32_t size);
 extern int board_flash_erase(void *ctx, uint32_t addr, uint32_t size);
 
-int config_store_init(void)
+int board_kv_init(void)
 {
     kvfs_blockdev_t dev = {
         .read = board_flash_read,
@@ -155,8 +155,8 @@ int config_store_init(void)
         .erase = board_flash_erase,
         .sync = NULL,
         .ctx = NULL,
-        .start_addr = 0x08060000u,     /* 分区起始（绝对地址） */
-        .total_size = 32u * 1024u,     /* 两个 16KB 扇区 */
+        .start_addr = 0x08004000u,     /* 分区起始（F407VE 的 KV A 区） */
+        .total_size = 32u * 1024u,     /* 两个 16KB 扇区（A/B） */
         .erase_size = 16u * 1024u,     /* F4 最小擦除单位 */
         .program_size = 4u,            /* F4 字编程 */
     };

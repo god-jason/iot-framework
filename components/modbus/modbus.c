@@ -9,7 +9,7 @@
  * （收发由主站 transport 回调或从站上层完成）。
  */
 #include "modbus.h"
-#include "crc.h"
+#include "crc16.h"
 
 #include <string.h>
 

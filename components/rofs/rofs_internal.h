@@ -58,12 +58,11 @@ static inline uint32_t rofs__get_u32(const uint8_t *p)
 }
 
 /*
- * CRC32 流式计算：
- *   crc = rofs__crc32_update(0xFFFFFFFFu, buf, len) ^ 0xFFFFFFFFu;
+ * CRC32 统一使用 components/crypto 的实现：
+ *   crc = crc32_update(0xFFFFFFFFu, buf, len) ^ 0xFFFFFFFFu;
  * 与 zlib.crc32 的 CRC-32/ISO-HDLC 一致。
  */
-uint32_t rofs__crc32_update(uint32_t crc, const void *buf, uint32_t len);
-uint32_t rofs__crc32(const void *buf, uint32_t len);
+#include "crc32.h"
 
 /*
  * 读取镜像内的连续数据（offset 为镜像内偏移）。

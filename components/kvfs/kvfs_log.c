@@ -13,34 +13,6 @@
 
 #include "kvfs_internal.h"
 
-/* ============================== CRC32 ============================== */
-
-/* CRC-32/IEEE（反射多项式 0xEDB88320）nibble 表，16 项节省 Flash */
-static const uint32_t s_crc32_tab[16] = {
-    0x00000000U, 0x1DB71064U, 0x3B6E20C8U, 0x26D930ACU,
-    0x76DC4190U, 0x6B6B51F4U, 0x4DB26158U, 0x5005713CU,
-    0xEDB88320U, 0xF00F9344U, 0xD6D6A3E8U, 0xCB61B38CU,
-    0x9B64C2B0U, 0x86D3D2D4U, 0xA00AE278U, 0xBDBDF21CU
-};
-
-uint32_t kvfs_crc32_update(uint32_t crc, const void *buf, uint32_t len)
-{
-    const uint8_t *p = (const uint8_t *)buf;
-
-    while (len > 0U) {
-        crc ^= (uint32_t)(*p++);
-        crc = (crc >> 4) ^ s_crc32_tab[crc & 0x0FU];
-        crc = (crc >> 4) ^ s_crc32_tab[crc & 0x0FU];
-        len--;
-    }
-    return crc;
-}
-
-uint32_t kvfs_crc32(const void *buf, uint32_t len)
-{
-    return kvfs_crc32_update(0xFFFFFFFFU, buf, len) ^ 0xFFFFFFFFU;
-}
-
 /* 记录 CRC：Header(crc 字段按 0) + Payload */
 static uint32_t rec_crc(const kvfs_rec_hdr_t *hdr, const void *payload)
 {
@@ -48,9 +20,9 @@ static uint32_t rec_crc(const kvfs_rec_hdr_t *hdr, const void *payload)
     uint32_t crc;
 
     h.crc32 = 0U;
-    crc = kvfs_crc32_update(0xFFFFFFFFU, &h, (uint32_t)sizeof(h));
+    crc = crc32_update(0xFFFFFFFFU, &h, (uint32_t)sizeof(h));
     if (payload != NULL) {
-        crc = kvfs_crc32_update(crc, payload, h.length);
+        crc = crc32_update(crc, payload, h.length);
     }
     return crc ^ 0xFFFFFFFFU;
 }
@@ -143,7 +115,7 @@ static int rec_payload_crc_ok(kvfs_t *fs, uint32_t rec_addr,
     int rc;
 
     h.crc32 = 0U;
-    crc = kvfs_crc32_update(0xFFFFFFFFU, &h, (uint32_t)sizeof(h));
+    crc = crc32_update(0xFFFFFFFFU, &h, (uint32_t)sizeof(h));
     while (left > 0U) {
         uint32_t n = (left > sizeof(chunk)) ? (uint32_t)sizeof(chunk) : left;
 
@@ -151,7 +123,7 @@ static int rec_payload_crc_ok(kvfs_t *fs, uint32_t rec_addr,
         if (rc != KVFS_OK) {
             return rc;
         }
-        crc = kvfs_crc32_update(crc, chunk, n);
+        crc = crc32_update(crc, chunk, n);
         off += n;
         left -= n;
     }
