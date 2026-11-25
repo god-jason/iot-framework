@@ -25,7 +25,7 @@ int ds3231_init(ds3231_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->initialized = false;
 
-    hal_delay_ms(DS3231_POWER_ON_DELAY_MS);
+    ros_sleep_ms(DS3231_POWER_ON_DELAY_MS);
 
     if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("ds3231", "probe failed, addr=0x%02X", handle->i2c.address);
@@ -169,7 +169,7 @@ int ds3231_get_temperature(ds3231_handle_t *handle, float *celsius)
     /* BSY=1 表示正在进行温度转换，等待其结束 */
     if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_STATUS, &status, 1U) == HAL_OK &&
         (status & DS3231_STATUS_BSY) != 0U) {
-        hal_delay_ms(DS3231_CONV_DELAY_MS);
+        ros_sleep_ms(DS3231_CONV_DELAY_MS);
     }
 
     if (hal_i2c_dev_read_reg(&handle->i2c, DS3231_REG_TEMP_MSB, reg, sizeof(reg)) != HAL_OK) {

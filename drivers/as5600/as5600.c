@@ -60,7 +60,7 @@ int as5600_init(as5600_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         LOG_E("as5600", "no ack at 0x%02X", (int)handle->i2c.address);
         return (int)HAL_NOT_FOUND;
     }
-    hal_delay_ms(AS5600_BOOT_DELAY_MS);
+    ros_sleep_ms(AS5600_BOOT_DELAY_MS);
 
     /* 无 WHO_AM_I：先保存 CONF，写入已知慢滤波设置后回读校验写通路 */
     if (as5600_read_conf(handle, &conf) != HAL_OK) { return (int)HAL_IO_ERROR; }

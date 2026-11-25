@@ -97,16 +97,16 @@ uint32_t hal_get_capabilities(hal_device_type_e type, uint8_t instance);
 
 /* ================= 系统级原语 =================
  *
- * 时基、延时、中断开关、复位与低功耗，供 drivers / src / modules 使用。
+ * 时基、中断开关、复位与低功耗，供 drivers / src / modules 使用。
+ * 延时统一使用内核的 ros_sleep_ms()。
  * 具体实现位于 platforms/<platform>/：
  *   - simulator      : 纯软件推进 tick；复位/睡眠仅置标记，便于单元测试；
- *   - STM32F1/F4/H7  : HAL_GetTick / HAL_Delay / NVIC_SystemReset / PWR 低功耗；
- *   - AVR            : 定时器毫秒计数、_delay_ms/us、看门狗复位、sleep 模式。
+ *   - STM32F1/F4/H7  : HAL_GetTick / NVIC_SystemReset / PWR 低功耗；
+ *   - AVR            : 定时器毫秒计数、看门狗复位、sleep 模式。
  *
  * 约定：
  *   - tick 为 32 位毫秒计数，允许自然回绕；判断超时应使用无符号差值，
  *     例如 (uint32_t)(hal_tick_get() - start) >= timeout；
- *   - 延时为阻塞/忙等实现，禁止在中断上下文调用长延时；
  *   - hal_system_reset() 不返回；
  *   - hal_irq_disable()/hal_irq_enable() 不具备嵌套计数能力，
  *     只用于保护极短的临界区，进入与退出必须成对出现。
@@ -118,22 +118,6 @@ uint32_t hal_get_capabilities(hal_device_type_e type, uint8_t instance);
  * 注意 : 可在中断中调用；返回值只保证单调递增（回绕除外）。
  */
 uint32_t hal_tick_get(void);
-
-/*
- * 毫秒级阻塞延时。
- * ms   : 延时长度（毫秒），为 0 时立即返回。
- * 注意 : 依赖系统时基，调度器运行后精度受 tick 中断频率限制；
- *        不要在中断中调用。
- */
-void hal_delay_ms(uint32_t ms);
-
-/*
- * 微秒级阻塞延时。
- * us   : 延时长度（微秒），为 0 时立即返回。
- * 注意 : 通常为忙等实现，存在函数调用与循环开销，精度低于硬件定时器；
- *        用于 GPIO/单总线等短时序，不适合长延时。
- */
-void hal_delay_us(uint32_t us);
 
 /*
  * 使能全局中断。

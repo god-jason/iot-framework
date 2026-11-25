@@ -57,21 +57,21 @@ static int mpu9250_mag_init(mpu9250_handle_t *handle)
     }
     value = AK8963_CNTL2_SOFT_RESET;
     (void)hal_i2c_dev_write_reg(&handle->mag, AK8963_REG_CNTL2, &value, 1U);
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
     /* FUSE ROM 模式读三轴出厂灵敏度修正值 */
     value = AK8963_CNTL1_FUSE_ROM;
     if (hal_i2c_dev_write_reg(&handle->mag, AK8963_REG_CNTL1, &value, 1U) != HAL_OK) { return (int)HAL_IO_ERROR; }
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
     if (hal_i2c_dev_read_reg(&handle->mag, AK8963_REG_ASAX, asa, sizeof(asa)) != HAL_OK) { return (int)HAL_IO_ERROR; }
     value = AK8963_CNTL1_POWER_DOWN; (void)hal_i2c_dev_write_reg(&handle->mag, AK8963_REG_CNTL1, &value, 1U);
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
     /* Hadj = H * ((ASA - 128) * 0.5 / 128 + 1)，16 位模式基准 0.15 µT/LSB */
     for (i = 0U; i < AK8963_ASA_COUNT; i++) {
         handle->mag_ut_per_lsb[i] = AK8963_UT_PER_LSB * (1.0f + ((float)asa[i] - 128.0f) * 0.5f / 128.0f);
     }
     value = AK8963_CNTL1_16BIT_100HZ;
     if (hal_i2c_dev_write_reg(&handle->mag, AK8963_REG_CNTL1, &value, 1U) != HAL_OK) { return (int)HAL_IO_ERROR; }
-    hal_delay_ms(MPU9250_MAG_START_DELAY_MS);
+    ros_sleep_ms(MPU9250_MAG_START_DELAY_MS);
     handle->mag_present = true;
     LOG_I("mpu9250", "ak8963 ready");
     return HAL_OK;
@@ -115,7 +115,7 @@ int mpu9250_init(mpu9250_handle_t *handle, hal_i2c_t *i2c, hal_spi_t *spi,
     handle->gyro_lsb_per_dps = s_gyro_lsb_per_dps[gyro_range];
     handle->initialized = false;
     if (mpu9250_write(handle, MPU9250_REG_PWR_MGMT_1, MPU9250_PWR1_DEVICE_RESET) != HAL_OK) { return (int)HAL_IO_ERROR; }
-    hal_delay_ms(MPU9250_RESET_DELAY_MS);
+    ros_sleep_ms(MPU9250_RESET_DELAY_MS);
     /* WHO_AM_I 在位校验 */
     if (mpu9250_bus_read(handle, MPU9250_REG_WHO_AM_I, &id, 1U) != HAL_OK) { return (int)HAL_IO_ERROR; }
     if (id != MPU9250_WHO_AM_I_VALUE) {
@@ -126,7 +126,7 @@ int mpu9250_init(mpu9250_handle_t *handle, hal_i2c_t *i2c, hal_spi_t *spi,
         return (int)HAL_IO_ERROR;
     }
     if (mpu9250_write(handle, MPU9250_REG_PWR_MGMT_1, MPU9250_PWR1_CLKSEL_PLL_X) != HAL_OK) { return (int)HAL_IO_ERROR; }
-    hal_delay_ms(MPU9250_WAKE_DELAY_MS);
+    ros_sleep_ms(MPU9250_WAKE_DELAY_MS);
 
     /* DLPF ≈41Hz + 量程设置 */
     if (mpu9250_write(handle, MPU9250_REG_CONFIG, MPU9250_DLPF_41HZ) != HAL_OK ||
@@ -152,7 +152,7 @@ int mpu9250_init(mpu9250_handle_t *handle, hal_i2c_t *i2c, hal_spi_t *spi,
     if (!handle->use_spi) {
         /* 旁路使能，使 AK8963 可直接被主机寻址 */
         if (mpu9250_write(handle, MPU9250_REG_INT_PIN_CFG, bypass) != HAL_OK) { return (int)HAL_IO_ERROR; }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
         if (mpu9250_mag_init(handle) != HAL_OK) { LOG_W("mpu9250", "ak8963 init failed"); }
     }
     handle->initialized = true;
@@ -211,7 +211,7 @@ int mpu9250_read_mag_raw(mpu9250_handle_t *handle, int16_t mag[3])
     do {
         if (hal_i2c_dev_read_reg(&handle->mag, AK8963_REG_ST1, &st1, 1U) != HAL_OK) { return (int)HAL_IO_ERROR; }
         if ((st1 & AK8963_ST1_DRDY) != 0U) { break; }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     } while ((uint32_t)(hal_tick_get() - start) <= MPU9250_MAG_TIMEOUT_MS);
     if ((st1 & AK8963_ST1_DRDY) == 0U) { return (int)HAL_TIMEOUT; }
     if (hal_i2c_dev_read_reg(&handle->mag, AK8963_REG_ST1, d, sizeof(d)) != HAL_OK) { return (int)HAL_IO_ERROR; }

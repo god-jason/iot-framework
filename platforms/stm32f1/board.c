@@ -84,15 +84,6 @@ uint32_t hal_tick_get(void)
     return ros_port_trace_time_us() / 1000U;
 }
 
-void hal_delay_ms(uint32_t ms)
-{
-    uint32_t start = hal_tick_get();
-
-    while ((uint32_t)(hal_tick_get() - start) < ms) {
-        /* 忙等，sys 由 SysTick 中断推进 */
-    }
-}
-
 /* ==========================================================================
  * 板级早期初始化（由 platforms/stm32/stm32_main.c 的 main 调用）
  * ========================================================================== */

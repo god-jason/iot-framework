@@ -77,7 +77,7 @@ int nrf24l01_set_mode(nrf24l01_handle_t *handle, nrf24l01_mode_e mode)
         return (int)HAL_IO_ERROR;
     }
     if (mode == NRF24L01_MODE_RX) {
-        hal_delay_us(NRF24L01_RX_SETTLE_US);
+        ros_sleep_ms(1);
         (void)hal_gpio_write(handle->ce, HAL_GPIO_HIGH);
     }
     return HAL_OK;
@@ -141,7 +141,7 @@ int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
     }
     /* CE 高电平脉冲触发发射 */
     (void)hal_gpio_write(handle->ce, HAL_GPIO_HIGH);
-    hal_delay_us(NRF24L01_CE_PULSE_US);
+    ros_sleep_ms(1);
     (void)hal_gpio_write(handle->ce, HAL_GPIO_LOW);
     start = hal_tick_get();
     for (;;) {
@@ -161,7 +161,7 @@ int nrf24l01_send(nrf24l01_handle_t *handle, const uint8_t *data, size_t len)
             (void)nrf24l01_cmd(handle, NRF24L01_CMD_FLUSH_TX, NULL);
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(50U);
+        ros_sleep_ms(1);
     }
 }
 
@@ -224,7 +224,7 @@ int nrf24l01_recv(nrf24l01_handle_t *handle, uint8_t *data, size_t len,
         if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(100U);
+        ros_sleep_ms(1);
     }
 }
 
@@ -261,7 +261,7 @@ int nrf24l01_init(nrf24l01_handle_t *handle, hal_spi_t *spi,
     if (irq != 0U && hal_gpio_config_input(irq, HAL_GPIO_PULLUP) != HAL_OK) {
         LOG_W("nrf24l01", "irq pin init failed");
     }
-    hal_delay_ms(100U);   /* Tpor */
+    ros_sleep_ms(100U);   /* Tpor */
     /* 器件探测：SETUP_AW 仅 bit1:0 有效，回读必须等于写入值 */
     if (nrf24l01_write_reg8(handle, NRF24L01_REG_SETUP_AW, 0x03U) != HAL_OK ||
         nrf24l01_read_reg(handle, NRF24L01_REG_SETUP_AW, &value, 1U) != HAL_OK) {

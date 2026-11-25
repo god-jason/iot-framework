@@ -27,13 +27,13 @@ static void ds18b20_write_bit(ds18b20_handle_t *handle, uint8_t bit)
 {
     hal_irq_disable();
     ds18b20_low(handle);
-    hal_delay_us(DS18B20_WRITE_LOW_US);
+    ros_sleep_ms(1);
     if (bit != 0U) {
         ds18b20_release(handle);
     }
-    hal_delay_us(DS18B20_WRITE_HOLD_US);
+    ros_sleep_ms(1);
     ds18b20_release(handle);
-    hal_delay_us(DS18B20_WRITE_LOW_US);
+    ros_sleep_ms(1);
     hal_irq_enable();
 }
 
@@ -43,11 +43,11 @@ static uint8_t ds18b20_read_bit(ds18b20_handle_t *handle)
 
     hal_irq_disable();
     ds18b20_low(handle);
-    hal_delay_us(DS18B20_READ_LOW_US);
+    ros_sleep_ms(1);
     ds18b20_release(handle);
-    hal_delay_us(DS18B20_READ_SAMPLE_US);
+    ros_sleep_ms(1);
     bit = (uint8_t)ds18b20_sample(handle);
-    hal_delay_us(DS18B20_READ_TAIL_US);
+    ros_sleep_ms(1);
     hal_irq_enable();
     return bit;
 }
@@ -127,11 +127,11 @@ int ds18b20_reset(ds18b20_handle_t *handle)
 
     hal_irq_disable();
     ds18b20_low(handle);
-    hal_delay_us(DS18B20_RESET_LOW_US);
+    ros_sleep_ms(1);
     ds18b20_release(handle);
-    hal_delay_us(DS18B20_RESET_RELEASE_US);
+    ros_sleep_ms(1);
     presence = ds18b20_sample(handle);
-    hal_delay_us(DS18B20_RESET_WAIT_US);
+    ros_sleep_ms(1);
     hal_irq_enable();
 
     return (presence == 0) ? 1 : 0;
@@ -187,7 +187,7 @@ int ds18b20_read(ds18b20_handle_t *handle, float *celsius)
     if (ret != HAL_OK) {
         return ret;
     }
-    hal_delay_ms(DS18B20_CONVERT_DELAY_MS);
+    ros_sleep_ms(DS18B20_CONVERT_DELAY_MS);
 
     ret = ds18b20_read_scratchpad(handle, scratchpad);
     if (ret != HAL_OK) {

@@ -391,7 +391,7 @@ at_result_e at_transact(const at_request_t *request)
     while (s_req_pending) {
         at_process();
         /* 每次轮询间隔 1ms，使 timeout 的逻辑 tick 接近真实毫秒 */
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
     return s_result;
 }

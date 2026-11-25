@@ -51,7 +51,7 @@ static int vl53l0x_wait_range_ready(vl53l0x_handle_t *handle)
             LOG_W("vl53l0x", "range timeout, int status=0x%02X", (unsigned)status);
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(VL53L0X_POLL_INTERVAL_MS);
+        ros_sleep_ms(VL53L0X_POLL_INTERVAL_MS);
     }
 }
 
@@ -65,14 +65,14 @@ static int vl53l0x_soft_reset(vl53l0x_handle_t *handle)
         /* 冷启动时器件可能已处于复位态，不视为致命错误 */
         LOG_W("vl53l0x", "assert reset failed: %d", ret);
     }
-    hal_delay_ms(VL53L0X_RESET_DELAY_MS);
+    ros_sleep_ms(VL53L0X_RESET_DELAY_MS);
 
     ret = vl53l0x_write_u8(handle, VL53L0X_REG_SOFT_RESET, 0x01U);
     if (ret != HAL_OK) {
         LOG_E("vl53l0x", "release reset failed: %d", ret);
         return ret;
     }
-    hal_delay_ms(VL53L0X_RESET_DELAY_MS);
+    ros_sleep_ms(VL53L0X_RESET_DELAY_MS);
     return HAL_OK;
 }
 

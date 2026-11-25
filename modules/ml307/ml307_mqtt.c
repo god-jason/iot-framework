@@ -235,7 +235,7 @@ int mqtt_connect(mqtt_client_t *c, const char *host, uint16_t port,
         while (!s_conn_urc && s_conn_err == 0 &&
                (uint32_t)(hal_tick_get() - t0) < ML307_MQTT_CONNECT_MS) {
             (void)at_process();
-            hal_delay_ms(20U);
+            ros_sleep_ms(20U);
         }
     }
     if (!s_conn_urc) {
@@ -323,7 +323,7 @@ int mqtt_poll(mqtt_client_t *c, uint32_t timeout_ms)
             (uint32_t)(hal_tick_get() - start) >= timeout_ms) {
             return NET_ERR_TIMEOUT;
         }
-        hal_delay_ms(10U);
+        ros_sleep_ms(10U);
     }
 }
 

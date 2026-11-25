@@ -152,19 +152,19 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
     }
     if (config->res != 0U) {
         (void)hal_gpio_config_output(config->res, HAL_GPIO_LOW);
-        hal_delay_ms(ST7789_RESET_LOW_MS);
+        ros_sleep_ms(ST7789_RESET_LOW_MS);
         (void)hal_gpio_write(config->res, HAL_GPIO_HIGH);
-        hal_delay_ms(ST7789_RESET_WAIT_MS);
+        ros_sleep_ms(ST7789_RESET_WAIT_MS);
     }
 
     if (st7789_cmd(handle, ST7789_CMD_SWRESET) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(ST7789_RESET_WAIT_MS);
+    ros_sleep_ms(ST7789_RESET_WAIT_MS);
     if (st7789_cmd(handle, ST7789_CMD_SLPOUT) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(ST7789_SLPOUT_MS);
+    ros_sleep_ms(ST7789_SLPOUT_MS);
 
     if (config->mirror_x) {
         madctl |= ST7789_MADCTL_MX;
@@ -197,7 +197,7 @@ int st7789_init(st7789_handle_t *handle, const st7789_config_t *config)
         st7789_cmd(handle, ST7789_CMD_DISPON) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(ST7789_DISPON_MS);
+    ros_sleep_ms(ST7789_DISPON_MS);
 
     st7789_gram_fill(handle, ST7789_COLOR_BLACK);
     if (st7789_push(handle) != HAL_OK) {

@@ -17,9 +17,9 @@ static void ir_mark(ir_remote_handle_t *h, uint32_t duration_us)
     hal_irq_disable();
     while (elapsed + period <= duration_us) {
         (void)hal_gpio_write(h->tx_pin, HAL_GPIO_HIGH);
-        hal_delay_us(half);
+        ros_sleep_ms(1);
         (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-        hal_delay_us(period - half);
+        ros_sleep_ms(1);
         elapsed += period;
     }
     hal_irq_enable();
@@ -28,7 +28,7 @@ static void ir_mark(ir_remote_handle_t *h, uint32_t duration_us)
 static void ir_space(ir_remote_handle_t *h, uint32_t duration_us)
 {
     (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-    hal_delay_us(duration_us);
+    ros_sleep_ms(1);
 }
 
 int ir_remote_set_carrier(ir_remote_handle_t *h, uint16_t carrier_khz)
@@ -148,14 +148,14 @@ int ir_remote_recv(ir_remote_handle_t *h, uint16_t *timings, size_t max_timings,
         if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(IR_POLL_US);
+        ros_sleep_ms(1);
     }
     /* 逐段测量电平持续时间，直到帧结束或缓冲满 */
     while (n < max_timings) {
         int current = level;
         uint32_t ticks = 0U;
         while (hal_gpio_read_level(h->rx_pin) == current) {
-            hal_delay_us(IR_POLL_US);
+            ros_sleep_ms(1);
             ticks++;
             if (ticks * IR_POLL_US > IR_MAX_SEGMENT_US) { break; }
         }

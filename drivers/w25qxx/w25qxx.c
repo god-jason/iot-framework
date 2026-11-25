@@ -60,7 +60,7 @@ int w25qxx_wait_busy(w25qxx_handle_t *handle, uint32_t timeout_ms)
             LOG_E("w25qxx", "busy timeout");
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
 }
 
@@ -109,7 +109,7 @@ int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, uint16_t cs)
     }
 
     (void)hal_spi_dev_write_cs(&handle->spi, &cmd, 1U);
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
 
     if (w25qxx_read_id(handle, &handle->id) != HAL_OK) {
         return (int)HAL_IO_ERROR;

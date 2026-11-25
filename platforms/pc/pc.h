@@ -49,6 +49,14 @@ bool ros_pc_reset_called(void);
 /* 内部接口：复位系统级状态（tick/中断/复位/睡眠标记），由 pc.c 调用 */
 void ros_pc_os_reset_state(void);
 
+/*
+ * 运行时开关：模拟 tick 是否跟随墙钟（1 tick ≈ 1ms 真实时间）。
+ * 默认关闭（单元测试瞬间推进）；开启后 ros_sleep_ms 会真实等待。
+ * 需在调度器运行后调用。
+ */
+void ros_pc_set_real_time(bool on);
+bool ros_pc_real_time(void);
+
 /* 内部接口：复位 UART1 与全部虚拟串口，由 ros_pc_reset_state() 调用 */
 void pc_uart_reset(void);
 

@@ -167,7 +167,7 @@ int ads1115_read_raw(ads1115_handle_t *handle, ads1115_mux_e mux, int16_t *raw)
             LOG_E("ads1115", "conversion timeout");
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
 
     if (hal_i2c_dev_read_reg(&handle->i2c, ADS1115_REG_CONVERSION, buf, 2U) != HAL_OK) {

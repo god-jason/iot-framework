@@ -101,7 +101,7 @@ int ina226_init(ina226_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(2U);
+    ros_sleep_ms(2U);
 
     handle->initialized = true;
     LOG_I(INA226_TAG, "init ok at 0x%02X, cal=%u",

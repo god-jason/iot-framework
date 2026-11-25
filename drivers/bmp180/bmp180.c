@@ -38,7 +38,7 @@ static int bmp180_read_ut(bmp180_handle_t *handle, int32_t *ut)
     if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(BMP180_CONV_DELAY_TEMP_MS);
+    ros_sleep_ms(BMP180_CONV_DELAY_TEMP_MS);
 
     if (hal_i2c_dev_read_reg(&handle->i2c, BMP180_REG_ADC_OUT, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
@@ -56,7 +56,7 @@ static int bmp180_read_up(bmp180_handle_t *handle, int32_t *up)
     if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(bmp180_press_delay_ms[handle->oversampling & 0x03U]);
+    ros_sleep_ms(bmp180_press_delay_ms[handle->oversampling & 0x03U]);
 
     if (hal_i2c_dev_read_reg(&handle->i2c, BMP180_REG_ADC_OUT, d, sizeof(d)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
@@ -161,7 +161,7 @@ int bmp180_init(bmp180_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     }
 
     (void)hal_i2c_dev_write_reg(&handle->i2c, BMP180_REG_SOFT_RESET, &value, 1U);
-    hal_delay_ms(5U);
+    ros_sleep_ms(5U);
 
     if (bmp180_read_calib(handle) != HAL_OK) {
         LOG_E("bmp180", "read calibration failed");

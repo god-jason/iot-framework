@@ -98,7 +98,7 @@ int bmp280_init(bmp280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     value = BMP280_RESET_VALUE;
     (void)hal_i2c_dev_write_reg(&handle->i2c, BMP280_REG_RESET, &value, 1U);
-    hal_delay_ms(5U);
+    ros_sleep_ms(5U);
 
     if (bmp280_read_calib(handle) != HAL_OK) {
         LOG_E("bmp280", "read calibration failed");

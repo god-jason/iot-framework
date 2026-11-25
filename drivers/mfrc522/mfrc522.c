@@ -114,7 +114,7 @@ static int mfrc522_transceive(mfrc522_handle_t *h, const uint8_t *tx, size_t tx_
             (void)mfrc522_reg_write(h, MFRC522_REG_COMMAND, MFRC522_CMD_IDLE);
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(50U);
+        ros_sleep_ms(1);
     }
     (void)mfrc522_reg_read(h, MFRC522_REG_ERROR, &err);
     (void)mfrc522_reg_read(h, MFRC522_REG_FIFO_LEVEL, &level);
@@ -243,17 +243,17 @@ int mfrc522_init(mfrc522_handle_t *handle, hal_spi_t *spi,
         if (hal_gpio_config_output(reset, HAL_GPIO_HIGH) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
-        hal_delay_ms(10U);
+        ros_sleep_ms(10U);
         (void)hal_gpio_write(reset, HAL_GPIO_LOW);
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
         (void)hal_gpio_write(reset, HAL_GPIO_HIGH);
-        hal_delay_ms(50U);
+        ros_sleep_ms(50U);
     }
     /* 软件复位 */
     if (mfrc522_reg_write(handle, MFRC522_REG_COMMAND, MFRC522_CMD_SOFT_RESET) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(50U);
+    ros_sleep_ms(50U);
     if (mfrc522_reg_read(handle, MFRC522_REG_VERSION, &version) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }

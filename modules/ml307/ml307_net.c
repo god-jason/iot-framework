@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ml307_net.c - ML307R 网络后端：实现 components/net 的原始接口
  *
  * 通过 MIP 系列 AT 指令提供 TCP/UDP 客户端连接、收发与 DNS 解析
@@ -333,7 +333,7 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     while (!(s_open_done && s_open_id == id) &&
            (uint32_t)(hal_tick_get() - start) < wait) {
         (void)at_process();
-        hal_delay_ms(5U);
+        ros_sleep_ms(5U);
     }
     if (!s_open_done || s_open_id != id || s_open_result != 0) {
         /* 清掉模组侧半开连接 */
@@ -434,7 +434,7 @@ int net_recv(net_sock_t *sock, void *data, uint32_t len, uint32_t timeout_ms)
             return 0;
         }
         (void)at_process();
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
 }
 
@@ -488,7 +488,7 @@ int net_dns_resolve(const char *host, char *ip, uint32_t size)
     start = hal_tick_get();
     while (!s_dns_done && (uint32_t)(hal_tick_get() - start) < 30000U) {
         (void)at_process();
-        hal_delay_ms(5U);
+        ros_sleep_ms(5U);
     }
     if (!s_dns_done) {
         return NET_ERR_IO;

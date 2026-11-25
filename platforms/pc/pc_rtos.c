@@ -240,70 +240,106 @@ void ros_port_return(void)
  * 使 1 个 tick ≈ 1ms 真实时间：任务里 ros_sleep_ms(1000) 就是现实 1 秒。
  * 单元测试不加该宏，保持"时间瞬间推进"以便快速回归。
  */
-#if defined(ROS_PC_REAL_TIME)
 #if defined(_WIN32)
 #include <windows.h>
+#include <mmsystem.h>       /* timeBeginPeriod / timeEndPeriod */
 #else
 #include <time.h>
 #endif
 
-/* 单调墙钟（毫秒） */
-static uint64_t pc_now_ms(void)
+/* 单调墙钟（微秒），用于把模拟 tick 对齐到真实时间 */
+static uint64_t pc_now_us(void)
 {
 #if defined(_WIN32)
-    return (uint64_t)GetTickCount64();
+    static LARGE_INTEGER freq;
+    LARGE_INTEGER c;
+
+    if (freq.QuadPart == 0) {
+        (void)QueryPerformanceFrequency(&freq);
+    }
+    (void)QueryPerformanceCounter(&c);
+    return (uint64_t)((c.QuadPart * 1000000LL) / freq.QuadPart);
 #else
     struct timespec ts;
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000U + (uint64_t)(ts.tv_nsec / 1000000L);
+    return (uint64_t)ts.tv_sec * 1000000ULL + (uint64_t)(ts.tv_nsec / 1000L);
 #endif
 }
 
-static void pc_wait_ms(uint32_t ms)
+static void pc_sleep_ms(uint32_t ms)
 {
-    if (ms == 0U) {
-        return;
-    }
 #if defined(_WIN32)
     Sleep(ms);
 #else
-    {
-        struct timespec ts;
+    struct timespec ts;
 
-        ts.tv_sec = (time_t)(ms / 1000U);
-        ts.tv_nsec = (long)(ms % 1000U) * 1000000L;
-        (void)nanosleep(&ts, NULL);
-    }
+    ts.tv_sec = (time_t)(ms / 1000U);
+    ts.tv_nsec = (long)(ms % 1000U) * 1000000L;
+    (void)nanosleep(&ts, NULL);
 #endif
 }
 
+static bool s_real_time;
+static uint64_t s_wall_base_us;
+
 /*
- * tick -> 墙钟映射：tick T 对应 base + T 毫秒。
- *
- * 直接每步 Sleep(delta) 会因为 Sleep 的固定超时（Windows 默认 ~15.6ms）
- * 产生累计漂移，导致"睡 1s 实际 2s+"；这里改为对墙钟对齐：
- * 只要还没到目标时刻就补睡，落后时不再睡，误差不累积。
+ * 运行时开关：开启后模拟 tick 跟随墙钟（1 tick ≈ 1ms 真实时间），
+ * 默认关闭以保持单元测试“瞬间推进”。必须在调度器运行后调用。
  */
-static uint64_t s_wall_base;
-static bool s_wall_base_set;
-
-static void pc_wait_until_tick(uint32_t tick)
+void ros_pc_set_real_time(bool on)
 {
-    uint64_t now = pc_now_ms();
-
-    if (!s_wall_base_set) {
-        s_wall_base = (now > (uint64_t)tick) ? (now - (uint64_t)tick) : 0U;
-        s_wall_base_set = true;
-        return;                     /* 首个空闲建立基准，不等待 */
+    if (on == s_real_time) {
+        return;
     }
-    if ((uint64_t)s_wall_base + tick > now) {
-        pc_wait_ms((uint32_t)((uint64_t)s_wall_base + tick - now));
+    s_real_time = on;
+#if defined(_WIN32)
+    if (on) {
+        (void)timeBeginPeriod(1);       /* 提升 Sleep 粒度到 ~1ms */
+    } else {
+        (void)timeEndPeriod(1);
+    }
+#endif
+    if (on) {
+        uint64_t now = pc_now_us();
+        uint64_t t = (uint64_t)ros_tick_count * 1000ULL;
+
+        s_wall_base_us = (now > t) ? (now - t) : 0U;
     }
 }
-#else
-#define pc_wait_until_tick(tick) ((void)0)
-#endif /* ROS_PC_REAL_TIME */
+
+bool ros_pc_real_time(void)
+{
+    return s_real_time;
+}
+
+/*
+ * 把当前 tick 对齐到墙钟：粗睡到目标前 2ms，剩余自旋。
+ * 这样既有 Sleep 的低占用，又能获得亚毫秒精度且不累积漂移。
+ */
+static void pc_wait_until_tick(uint32_t tick)
+{
+    uint64_t target;
+    uint64_t now;
+
+    if (!s_real_time) {
+        return;
+    }
+    target = s_wall_base_us + (uint64_t)tick * 1000ULL;
+    for (;;) {
+        now = pc_now_us();
+        if (now >= target) {
+            break;
+        }
+        if ((target - now) > 2000ULL) {
+            uint32_t ms = (uint32_t)((target - now - 1000ULL) / 1000ULL);
+
+            if (ms > 0U) {
+                pc_sleep_ms(ms);
+            }
+        }
+    }
+}
 
 void ros_port_idle(void)
 {

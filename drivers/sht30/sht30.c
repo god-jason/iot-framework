@@ -73,7 +73,7 @@ int sht30_soft_reset(sht30_handle_t *handle)
         return (int)HAL_INVALID_PARAM;
     }
     ret = sht30_write_cmd(handle, SHT30_CMD_SOFT_RESET);
-    hal_delay_ms(SHT30_RESET_DELAY_MS);
+    ros_sleep_ms(SHT30_RESET_DELAY_MS);
     return ret;
 }
 
@@ -100,7 +100,7 @@ int sht30_read_raw(sht30_handle_t *handle, uint16_t *raw_temperature, uint16_t *
         return ret;
     }
 
-    hal_delay_ms(SHT30_MEASURE_DELAY_MS);
+    ros_sleep_ms(SHT30_MEASURE_DELAY_MS);
 
     ret = hal_i2c_dev_read(&handle->i2c, data, sizeof(data));
     if (ret != HAL_OK) {

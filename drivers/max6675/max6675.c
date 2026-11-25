@@ -19,7 +19,7 @@ int max6675_init(max6675_handle_t *handle, hal_spi_t *spi, uint16_t cs)
     }
 
     /* 器件无 ID 寄存器，无法探测；等待首次转换完成 */
-    hal_delay_ms(MAX6675_CONV_DELAY_MS);
+    ros_sleep_ms(MAX6675_CONV_DELAY_MS);
 
     handle->initialized = true;
     LOG_I("max6675", "init ok");

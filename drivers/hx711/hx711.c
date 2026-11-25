@@ -38,7 +38,7 @@ static int hx711_wait_ready(hx711_handle_t *handle, uint32_t timeout_ms)
         if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(100U);
+        ros_sleep_ms(1);
     }
 }
 
@@ -62,7 +62,7 @@ int hx711_init(hx711_handle_t *handle, uint16_t sck, uint16_t dout)
         return (int)HAL_IO_ERROR;
     }
 
-    hal_delay_ms(HX711_POWER_ON_MS);
+    ros_sleep_ms(HX711_POWER_ON_MS);
     handle->initialized = true;
     LOG_I("hx711", "init ok: sck=%u dout=%u",
           (unsigned)HAL_PIN_GET_INDEX(sck), (unsigned)HAL_PIN_GET_INDEX(dout));
@@ -131,7 +131,7 @@ int hx711_read_raw(hx711_handle_t *handle, int32_t *raw)
         int level;
 
         hx711_sck(handle, HAL_GPIO_HIGH);
-        hal_delay_us(HX711_SCK_HIGH_US);
+        ros_sleep_ms(1);
         level = hal_gpio_read_level(handle->dout);
         if (level < 0) {
             hx711_sck(handle, HAL_GPIO_LOW);
@@ -139,16 +139,16 @@ int hx711_read_raw(hx711_handle_t *handle, int32_t *raw)
         }
         value = (value << 1) | ((level != 0) ? 1UL : 0UL);
         hx711_sck(handle, HAL_GPIO_LOW);
-        hal_delay_us(HX711_SCK_LOW_US);
+        ros_sleep_ms(1);
     }
 
     /* 附加 1~3 个脉冲，选择下一次转换的通道与增益 */
     pulses = (uint8_t)(hx711_gain_pulses(handle->gain) - HX711_DATA_BITS);
     for (i = 0U; i < pulses; i++) {
         hx711_sck(handle, HAL_GPIO_HIGH);
-        hal_delay_us(HX711_SCK_HIGH_US);
+        ros_sleep_ms(1);
         hx711_sck(handle, HAL_GPIO_LOW);
-        hal_delay_us(HX711_SCK_LOW_US);
+        ros_sleep_ms(1);
     }
 
     /* 24 位补码扩展为 int32 */

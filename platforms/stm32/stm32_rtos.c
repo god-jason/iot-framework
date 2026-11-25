@@ -61,6 +61,7 @@
 
 static volatile uint32_t s_tickless_active;
 static volatile uint32_t s_tickless_expired;
+static volatile uint32_t s_tickless_frac;   /* 不足 1 tick 的周期余量 */
 
 static volatile uint32_t s_critical_nesting;
 static uint32_t s_critical_primask;
@@ -408,6 +409,8 @@ void ros_port_idle_timeout(uint32_t ms)
     uint32_t max_ms;
     uint32_t load;
     uint32_t val;
+    uint32_t need;
+    uint32_t progressed;
     uint32_t elapsed;
 
     if (ticks_per_ms == 0U) {
@@ -419,10 +422,25 @@ void ros_port_idle_timeout(uint32_t ms)
     if (sleep_ms > max_ms) {
         sleep_ms = max_ms;
     }
-    load = sleep_ms * ticks_per_ms - 1U;
 
-    /* 关中断重配 SysTick，避免配置过程中断打断 */
+    /* 先抵扣上次早唤醒累计的“不足 1 tick”余量，避免反复截断丢时间 */
+    need = sleep_ms * ticks_per_ms;
+    if (need > s_tickless_frac) {
+        need -= s_tickless_frac;
+    } else {
+        need = 1U;                          /* 已到/越过边界：直接补 1 tick */
+    }
+    if (need <= 1U) {
+        s_tickless_frac = 0U;
+        ros_tick_increment(1U);
+        return;
+    }
+    load = need - 1U;
+
+    /* 关中断重配 SysTick；进入前清 pending，避免带着旧 SysTick 中断
+     * 立即“伪唤醒”并按整段 sleep_ms 重复补偿 */
     __asm volatile ("cpsid i" ::: "memory");
+    ROS_SCB_ICSR = (1UL << 26);             /* PENDSTCLR */
     ROS_SYSTICK_LOAD = load;
     ROS_SYSTICK_VAL = 0U;
     s_tickless_expired = 0U;
@@ -443,13 +461,18 @@ void ros_port_idle_timeout(uint32_t ms)
     __asm volatile ("cpsie i" ::: "memory");
 
     if (s_tickless_expired) {
-        elapsed = sleep_ms;
+        progressed = need;
     } else if (val <= load) {
-        elapsed = (load - val) / ticks_per_ms;   /* 被其它中断提前唤醒 */
+        progressed = load - val;        /* 被其它中断提前唤醒：已过周期数 */
     } else {
-        elapsed = 0U;
+        progressed = 0U;
     }
     s_tickless_expired = 0U;
+
+    /* 累计余量：满 1 tick 才推进，余数留到下次，避免累计漂移 */
+    s_tickless_frac += progressed;
+    elapsed = s_tickless_frac / ticks_per_ms;
+    s_tickless_frac %= ticks_per_ms;
 
     ROS_TRACE(ROS_EVT_TICKLESS_EXIT, elapsed, val);
 

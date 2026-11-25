@@ -2,7 +2,7 @@
  * AVR 平台 —— 系统级接口（hal_mcu.h 实现）。
  *
  * 毫秒时基由 TIMER0 溢出中断维护（计数值定义在 avr.c）；
- * 延时使用 util/delay 忙等；复位通过看门狗实现。
+ * 延时统一使用内核 ros_sleep_ms()；复位通过看门狗实现。
  */
 
 #include "hal.h"
@@ -15,7 +15,6 @@
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
-#include <util/delay.h>
 
 /* 由 avr.c 的 TIMER0_OVF_vect 中断递增 */
 extern volatile uint32_t g_avr_millis;
@@ -28,22 +27,6 @@ uint32_t hal_tick_get(void)
     value = g_avr_millis;
     sei();
     return value;
-}
-
-void hal_delay_ms(uint32_t ms)
-{
-    while (ms > 0U) {
-        _delay_ms(1.0);
-        ms--;
-    }
-}
-
-void hal_delay_us(uint32_t us)
-{
-    while (us > 0U) {
-        _delay_us(1.0);
-        us--;
-    }
 }
 
 void hal_irq_enable(void)

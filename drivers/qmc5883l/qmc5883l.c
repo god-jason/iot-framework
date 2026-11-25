@@ -57,7 +57,7 @@ int qmc5883l_soft_reset(qmc5883l_handle_t *handle)
 
     /* CTRL2.SOFT_RST 复位全部寄存器，复位后必须重新下发配置 */
     ret = qmc5883l_write_reg(handle, QMC5883L_REG_CTRL2, QMC5883L_CTRL2_SOFT_RST);
-    hal_delay_ms(QMC5883L_RESET_DELAY_MS);
+    ros_sleep_ms(QMC5883L_RESET_DELAY_MS);
     if (ret != HAL_OK) {
         return ret;
     }
@@ -142,7 +142,7 @@ int qmc5883l_init(qmc5883l_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
         LOG_W("qmc5883l", "chip id 0x%02X (datasheet 0xFF)", (unsigned)id);
     }
 
-    hal_delay_ms(QMC5883L_START_DELAY_MS);
+    ros_sleep_ms(QMC5883L_START_DELAY_MS);
     handle->initialized = true;
     LOG_I("qmc5883l", "init ok at 0x%02X, range=%s",
           (unsigned)handle->i2c.address,
@@ -188,7 +188,7 @@ int qmc5883l_read_raw(qmc5883l_handle_t *handle, int16_t xyz[3])
         if ((uint32_t)(hal_tick_get() - start) > QMC5883L_DATA_TIMEOUT_MS) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
 
     ret = qmc5883l_read_regs(handle, QMC5883L_REG_DATA_X_LSB, data, sizeof(data));

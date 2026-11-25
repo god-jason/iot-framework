@@ -32,10 +32,10 @@ static void ds1302_write_byte(ds1302_handle_t *handle, uint8_t value)
         (void)hal_gpio_write(handle->io,
                                 ((value & (uint8_t)(1UL << (i))) != 0U) ? HAL_GPIO_HIGH
                                                                        : HAL_GPIO_LOW);
-        hal_delay_us(DS1302_TICK_US);
+        ros_sleep_ms(1);
         /* DS1302 在 SCLK 上升沿采样 */
         (void)hal_gpio_write(handle->sclk, HAL_GPIO_HIGH);
-        hal_delay_us(DS1302_TICK_US);
+        ros_sleep_ms(1);
     }
     (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
 }
@@ -48,13 +48,13 @@ static uint8_t ds1302_read_byte(ds1302_handle_t *handle)
     (void)hal_gpio_config_input(handle->io, HAL_GPIO_PULLUP);
     for (i = 0U; i < 8U; i++) {
         (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
-        hal_delay_us(DS1302_TICK_US);
+        ros_sleep_ms(1);
         /* DS1302 在 SCLK 下降沿输出，此处采样 */
         (void)hal_gpio_write(handle->sclk, HAL_GPIO_HIGH);
         if (hal_gpio_read_level(handle->io) > 0) {
             value = (uint8_t)(value | (uint8_t)(1UL << (i)));
         }
-        hal_delay_us(DS1302_TICK_US);
+        ros_sleep_ms(1);
     }
     (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
     (void)hal_gpio_config_output(handle->io, HAL_GPIO_HIGH);
@@ -67,7 +67,7 @@ static int ds1302_write_regs(ds1302_handle_t *handle, uint8_t cmd,
     size_t i;
 
     ds1302_ce(handle, HAL_GPIO_HIGH);
-    hal_delay_us(DS1302_CE_SETTLE_US);
+    ros_sleep_ms(1);
     ds1302_write_byte(handle, cmd);
     for (i = 0U; i < len; i++) {
         ds1302_write_byte(handle, data[i]);
@@ -81,7 +81,7 @@ static int ds1302_read_regs(ds1302_handle_t *handle, uint8_t cmd, uint8_t *data,
     size_t i;
 
     ds1302_ce(handle, HAL_GPIO_HIGH);
-    hal_delay_us(DS1302_CE_SETTLE_US);
+    ros_sleep_ms(1);
     /* 读命令 = 写命令 | 0x01 */
     ds1302_write_byte(handle, (uint8_t)(cmd | 0x01U));
     for (i = 0U; i < len; i++) {

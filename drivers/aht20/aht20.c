@@ -18,7 +18,7 @@ static int aht20_wait_ready(aht20_handle_t *handle)
         if ((uint32_t)(hal_tick_get() - start) > AHT20_MEASURE_DELAY_MS * 3U) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
 }
 
@@ -38,14 +38,14 @@ int aht20_init(aht20_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->initialized = false;
 
-    hal_delay_ms(AHT20_POWER_ON_DELAY_MS);
+    ros_sleep_ms(AHT20_POWER_ON_DELAY_MS);
 
     /* 软复位，部分模组不支持，失败不视为致命 */
     ret = hal_i2c_dev_write(&handle->i2c, &reset, 1U);
     if (ret != HAL_OK) {
         LOG_W("aht20", "soft reset failed: %d", ret);
     }
-    hal_delay_ms(AHT20_RESET_DELAY_MS);
+    ros_sleep_ms(AHT20_RESET_DELAY_MS);
 
     if (aht20_wait_ready(handle) != HAL_OK) {
         LOG_E("aht20", "device not ready");
@@ -64,7 +64,7 @@ int aht20_init(aht20_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
             LOG_E("aht20", "calibrate failed");
             return (int)HAL_IO_ERROR;
         }
-        hal_delay_ms(AHT20_CALIBRATE_DELAY_MS);
+        ros_sleep_ms(AHT20_CALIBRATE_DELAY_MS);
     }
 
     handle->initialized = true;
@@ -107,7 +107,7 @@ int aht20_read(aht20_handle_t *handle, float *temperature, float *humidity)
     if (hal_i2c_dev_write(&handle->i2c, cmd, sizeof(cmd)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(AHT20_MEASURE_DELAY_MS);
+    ros_sleep_ms(AHT20_MEASURE_DELAY_MS);
 
     if (aht20_wait_ready(handle) != HAL_OK) {
         return (int)HAL_TIMEOUT;

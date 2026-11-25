@@ -120,9 +120,9 @@ int ssd1306_init(ssd1306_handle_t *handle, const ssd1306_config_t *config)
         }
         if (config->res != 0U) {
             (void)hal_gpio_config_output(config->res, HAL_GPIO_LOW);
-            hal_delay_ms(10U);
+            ros_sleep_ms(10U);
             (void)hal_gpio_write(config->res, HAL_GPIO_HIGH);
-            hal_delay_ms(10U);
+            ros_sleep_ms(10U);
         }
     }
 

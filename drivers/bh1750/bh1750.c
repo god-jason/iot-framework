@@ -51,7 +51,7 @@ int bh1750_init(bh1750_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(BH1750_MEASURE_DELAY_MS);
+    ros_sleep_ms(BH1750_MEASURE_DELAY_MS);
 
     handle->initialized = true;
     LOG_I("bh1750", "init ok at 0x%02X", handle->i2c.address);
@@ -86,7 +86,7 @@ int bh1750_set_mode(bh1750_handle_t *handle, bh1750_mode_e mode)
         return (int)HAL_IO_ERROR;
     }
     handle->mode = mode;
-    hal_delay_ms(BH1750_MEASURE_DELAY_MS);
+    ros_sleep_ms(BH1750_MEASURE_DELAY_MS);
     return HAL_OK;
 }
 
@@ -104,7 +104,7 @@ int bh1750_read_raw(bh1750_handle_t *handle, uint16_t *raw)
         if (hal_i2c_dev_write(&handle->i2c, &cmd, 1U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
-        hal_delay_ms(BH1750_MEASURE_DELAY_MS);
+        ros_sleep_ms(BH1750_MEASURE_DELAY_MS);
     }
 
     if (hal_i2c_dev_read(&handle->i2c, d, sizeof(d)) != HAL_OK) {

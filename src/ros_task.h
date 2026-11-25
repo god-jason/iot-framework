@@ -105,13 +105,18 @@ typedef struct ros_task {
  * 移植层契约：Cortex-M 的 PendSV / ros_port_start_first 汇编用
  * `ldr r0, [tcb]` 取 stack_ptr，因此它必须位于偏移 0。
  * 布局一旦变化，这里会直接编译失败，避免上板后难以定位的栈错乱。
+ *
+ * 仅对 32 位目标生效：64 位主机（ucontext 移植层）不使用该汇编契约，
+ * 且指针 8 字节会让 exc_return 的偏移自然变为 8。
  */
+#if UINTPTR_MAX == 0xFFFFFFFFu
 typedef char ros_task_stack_ptr_must_be_first[
     (offsetof(ros_task_t, stack_ptr) == 0U) ? 1 : -1];
 
 /* 移植层汇编用 [tcb,#4] 取 exc_return，偏移必须是 4 */
 typedef char ros_task_exc_return_must_be_second[
     (offsetof(ros_task_t, exc_return) == 4U) ? 1 : -1];
+#endif
 
 /* ============================== API ============================== */
 

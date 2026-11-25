@@ -286,6 +286,7 @@ static void ros_stack_guard(const ros_task_t *task)
 }
 #endif
 
+#if defined(ROS_PLATFORM_STM32)
 /*
  * 临时诊断：SRAM 顶部的跨复位轨迹环（NVIC_SystemReset 不清 SRAM）。
  * 记录最后 12 次切换的 (prev, next, psp, next->stack_ptr) 与合法性标志，
@@ -368,6 +369,20 @@ void ros_diag_dump(void)
     }
     b[0] = 0U;
 }
+#else
+/* 非 STM32 平台（PC 模拟）没有 PSP/固定 SRAM 诊断环：空实现 */
+static void ros_diag_record(uint32_t tag, const ros_task_t *prev,
+                            const ros_task_t *next)
+{
+    (void)tag;
+    (void)prev;
+    (void)next;
+}
+
+void ros_diag_dump(void)
+{
+}
+#endif
 
 /*
  * 执行实际上下文切换：

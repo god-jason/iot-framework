@@ -27,7 +27,7 @@ int pcf8563_init(pcf8563_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     handle->i2c.timeout_ms = HAL_I2C_TIMEOUT_DEFAULT;
     handle->initialized = false;
 
-    hal_delay_ms(PCF8563_POWER_ON_DELAY_MS);
+    ros_sleep_ms(PCF8563_POWER_ON_DELAY_MS);
 
     if (hal_i2c_dev_probe(&handle->i2c) != HAL_OK) {
         LOG_E("pcf8563", "probe failed, addr=0x%02X", handle->i2c.address);

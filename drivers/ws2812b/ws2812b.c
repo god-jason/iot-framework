@@ -149,6 +149,6 @@ int ws2812b_show(ws2812b_handle_t *handle)
     }
 
     /* 锁存复位：拉低 >50us */
-    hal_delay_us(WS2812B_RESET_DELAY_US);
+    ros_sleep_ms(1);
     return HAL_OK;
 }

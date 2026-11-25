@@ -11,6 +11,7 @@
 #if defined(ROS_STM32_F1)
 
 #include "hal.h"
+#include "ros.h"
 #include "stm32f10x.h"
 
 #define STM32_I2C_CR1_PE        (1UL << 0)
@@ -581,17 +582,17 @@ int hal_i2c_bus_recover(hal_i2c_t *handle)
 
     for (i = 0U; i < 9U; i++) {
         GPIOB->BSRR = (scl_mask << 16);
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
         GPIOB->BSRR = scl_mask;
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
     /* 生成 STOP：SCL 高时 SDA 由低到高 */
     GPIOB->BSRR = (sda_mask << 16);
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
     GPIOB->BSRR = scl_mask;
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
     GPIOB->BSRR = sda_mask;
-    hal_delay_ms(1U);
+    ros_sleep_ms(1U);
 
     /* 恢复 I2C 复用配置并重新初始化 */
     stm32_i2c_pins_init(i2c);

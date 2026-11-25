@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ml307_http.c - ML307R 原生 HTTP 实现（AT+MHTTP*），平替 components/http
  *
  * 启用方式：ML307 目标的构建系统编译本文件，并排除 components/http/http_client.c。
@@ -24,6 +24,7 @@
 #include "at.h"
 #include "at_urc.h"
 #include "hal_def.h"
+#include "ros.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -424,7 +425,7 @@ static int ml307_http_request(const char *method, const char *url,
     start = hal_tick_get();
     while (!s_recv_done && (uint32_t)(hal_tick_get() - start) < wait) {
         (void)at_process();
-        hal_delay_ms(10U);
+        ros_sleep_ms(10U);
     }
     if (!s_recv_done || s_recv_err) {
         goto fail;

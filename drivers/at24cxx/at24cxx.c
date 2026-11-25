@@ -76,7 +76,7 @@ static int at24cxx_wait_ready(at24cxx_handle_t *handle)
         if ((uint32_t)(hal_tick_get() - start) > handle->write_delay_ms * 4U + 20U) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(1U);
+        ros_sleep_ms(1U);
     }
 }
 

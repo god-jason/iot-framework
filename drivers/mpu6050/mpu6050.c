@@ -124,7 +124,7 @@ int mpu6050_init(mpu6050_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
     if (mpu6050_write_reg(handle, MPU6050_REG_PWR_MGMT_1, MPU6050_PWR1_DEVICE_RESET) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(MPU6050_RESET_DELAY_MS);
+    ros_sleep_ms(MPU6050_RESET_DELAY_MS);
 
     /* WHO_AM_I 在位校验 */
     if (mpu6050_read_reg(handle, MPU6050_REG_WHO_AM_I, &id) != HAL_OK) {
@@ -139,7 +139,7 @@ int mpu6050_init(mpu6050_handle_t *handle, hal_i2c_t *i2c, uint16_t address,
     if (mpu6050_write_reg(handle, MPU6050_REG_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_PLL_X) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(MPU6050_WAKE_DELAY_MS);
+    ros_sleep_ms(MPU6050_WAKE_DELAY_MS);
 
     if (mpu6050_set_dlpf(handle, MPU6050_DLPF_BW_44HZ) != HAL_OK) {
         return (int)HAL_IO_ERROR;

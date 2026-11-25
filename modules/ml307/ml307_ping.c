@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ml307_ping.c - ML307R 的 ping 实现（AT+MPING），作为 components/net 后端
  *
  * 指令（TCP/IP 用户手册 V5.0.0）：
@@ -218,7 +218,7 @@ int net_ping(const char *host, uint32_t count, uint32_t interval_ms,
     while (!s_ping.finished && s_ping.done < count &&
            (uint32_t)(hal_tick_get() - start) < wait_ms) {
         (void)at_process();
-        hal_delay_ms(10U);
+        ros_sleep_ms(10U);
     }
 
     /* 没有上报的请求按超时处理 */

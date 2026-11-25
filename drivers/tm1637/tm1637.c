@@ -5,7 +5,7 @@
 
 static void tm1637_delay(void)
 {
-    hal_delay_us(TM1637_DELAY_US);
+    ros_sleep_ms(1);
 }
 
 static int tm1637_dio(tm1637_handle_t *handle, hal_gpio_level_e level)

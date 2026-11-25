@@ -33,7 +33,7 @@ static int hc_sr04_wait_level(const hc_sr04_handle_t *handle, int level,
         if (waited >= timeout_us) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(1U);
+        ros_sleep_ms(1);
         waited++;
     }
 }
@@ -115,11 +115,11 @@ int hc_sr04_read_us(hc_sr04_handle_t *handle, uint32_t *echo_us)
     if (hal_gpio_write(handle->trig, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_us(HC_SR04_TRIG_IDLE_US);
+    ros_sleep_ms(1);
     if (hal_gpio_write(handle->trig, HAL_GPIO_HIGH) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_us(HC_SR04_TRIG_PULSE_US);
+    ros_sleep_ms(1);
     if (hal_gpio_write(handle->trig, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
@@ -189,7 +189,7 @@ int hc_sr04_read_average(hc_sr04_handle_t *handle, uint8_t samples, float *dista
             valid++;
         }
         /* 相邻测量的回响余波需要间隔（datasheet 建议 >60ms） */
-        hal_delay_ms(60U);
+        ros_sleep_ms(60U);
     }
 
     if (valid == 0U) {

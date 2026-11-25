@@ -1,8 +1,7 @@
 /*
  * STM32 平台 —— 系统级接口（hal_mcu.h 实现）。
  *
- * 时基与毫秒延时由 HAL 提供（SysTick），微秒延时使用 DWT 周期计数器；
- * DWT 在首次调用 hal_delay_us() 时惰性初始化。
+ * 时基由 HAL SysTick 提供；毫秒延时统一使用内核 ros_sleep_ms()。
  *
  * 系列选择宏（编译目标中定义其一）：
  *   ROS_STM32_F1 / ROS_STM32_F4 / ROS_STM32_H7
@@ -17,42 +16,9 @@
 /* Cube 头文件与框架的 HAL_OK 等常量同名，统一由该包装头处理 */
 #include "stm32_cube.h"
 
-static bool s_dwt_ready = false;
-
-static void stm32_dwt_init(void)
-{
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CYCCNT = 0U;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-    s_dwt_ready = true;
-}
-
 uint32_t hal_tick_get(void)
 {
     return (uint32_t)HAL_GetTick();
-}
-
-void hal_delay_ms(uint32_t ms)
-{
-    HAL_Delay(ms);
-}
-
-void hal_delay_us(uint32_t us)
-{
-    uint32_t start;
-    uint32_t cycles;
-
-    if (us == 0U) {
-        return;
-    }
-    if (!s_dwt_ready) {
-        stm32_dwt_init();
-    }
-    start = DWT->CYCCNT;
-    cycles = us * (SystemCoreClock / 1000000U);
-    while ((DWT->CYCCNT - start) < cycles) {
-        ;
-    }
 }
 
 void hal_irq_enable(void)

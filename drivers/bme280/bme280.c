@@ -152,7 +152,7 @@ int bme280_init(bme280_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     value = BME280_RESET_VALUE;
     (void)hal_i2c_dev_write_reg(&handle->i2c, BME280_REG_RESET, &value, 1U);
-    hal_delay_ms(BME280_RESET_DELAY_MS);
+    ros_sleep_ms(BME280_RESET_DELAY_MS);
 
     if (bme280_read_calib(handle) != HAL_OK) {
         LOG_E("bme280", "read calibration failed");

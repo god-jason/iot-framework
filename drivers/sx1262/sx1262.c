@@ -18,7 +18,7 @@ static int sx1262_wait_busy(sx1262_handle_t *h)
             LOG_E("sx1262", "busy timeout");
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(10U);
+        ros_sleep_ms(1);
     }
 }
 
@@ -178,7 +178,7 @@ int sx1262_send(sx1262_handle_t *h, const uint8_t *data, size_t len)
         if ((uint32_t)(hal_tick_get() - start) > h->timeout_ms + 50U) {
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_us(100U);
+        ros_sleep_ms(1);
     }
 }
 
@@ -244,8 +244,8 @@ int sx1262_init_variant(sx1262_handle_t *handle, hal_spi_t *spi, uint16_t cs,
         return (int)HAL_IO_ERROR;
     }
     if (dio1 != 0U && hal_gpio_config_input(dio1, HAL_GPIO_NOPULL) != HAL_OK) { return (int)HAL_IO_ERROR; }
-    (void)hal_gpio_write(reset, HAL_GPIO_LOW); hal_delay_ms(1U);   /* 硬复位 */
-    (void)hal_gpio_write(reset, HAL_GPIO_HIGH); hal_delay_ms(10U);
+    (void)hal_gpio_write(reset, HAL_GPIO_LOW); ros_sleep_ms(1U);   /* 硬复位 */
+    (void)hal_gpio_write(reset, HAL_GPIO_HIGH); ros_sleep_ms(10U);
     if (sx1262_wait_busy(handle) != HAL_OK) {
         LOG_E("sx1262", "reset failed"); return (int)HAL_NOT_FOUND;
     }

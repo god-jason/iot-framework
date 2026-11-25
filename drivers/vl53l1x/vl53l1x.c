@@ -39,14 +39,14 @@ static int vl53l1x_soft_reset(vl53l1x_handle_t *handle)
     if (ret != HAL_OK) {
         LOG_W("vl53l1x", "assert reset failed: %d", ret);
     }
-    hal_delay_ms(VL53L1X_RESET_DELAY_MS);
+    ros_sleep_ms(VL53L1X_RESET_DELAY_MS);
 
     ret = vl53l1x_write_u8(handle, VL53L1X_REG_SOFT_RESET, VL53L1X_RESET_ON);
     if (ret != HAL_OK) {
         LOG_E("vl53l1x", "release reset failed: %d", ret);
         return ret;
     }
-    hal_delay_ms(VL53L1X_RESET_DELAY_MS);
+    ros_sleep_ms(VL53L1X_RESET_DELAY_MS);
     return HAL_OK;
 }
 
@@ -69,7 +69,7 @@ static int vl53l1x_wait_boot(vl53l1x_handle_t *handle)
             LOG_E("vl53l1x", "firmware boot timeout, status=0x%02X", (unsigned)status);
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(VL53L1X_POLL_INTERVAL_MS);
+        ros_sleep_ms(VL53L1X_POLL_INTERVAL_MS);
     }
 }
 
@@ -92,7 +92,7 @@ static int vl53l1x_wait_range_ready(vl53l1x_handle_t *handle)
             LOG_W("vl53l1x", "range timeout, int status=0x%02X", (unsigned)status);
             return (int)HAL_TIMEOUT;
         }
-        hal_delay_ms(VL53L1X_POLL_INTERVAL_MS);
+        ros_sleep_ms(VL53L1X_POLL_INTERVAL_MS);
     }
 }
 

@@ -47,7 +47,7 @@ static int dht22_wait_level(dht22_handle_t *handle, int level, uint32_t timeout_
         if (cur == level) {
             return HAL_OK;
         }
-        hal_delay_us(1U);
+        ros_sleep_ms(1);
     }
     return (int)HAL_TIMEOUT;
 }
@@ -77,7 +77,7 @@ static int dht22_read_byte(dht22_handle_t *handle, uint8_t *value)
             if (cur == 0) {
                 break;
             }
-            hal_delay_us(1U);
+            ros_sleep_ms(1);
         }
         data = (uint8_t)(data << 1);
         if (high_us > (uint32_t)DHT22_BIT1_MIN_HIGH_US) {
@@ -106,9 +106,9 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
     /* 起始信号 + 40 位数据全程关中断，避免位时序被中断拉长 */
     hal_irq_disable();
     (void)dht22_mode(handle, HAL_GPIO_MODE_OUTPUT);
-    hal_delay_us(DHT22_START_LOW_US);
+    ros_sleep_ms(1);
     ret = dht22_mode(handle, HAL_GPIO_MODE_INPUT);
-    hal_delay_us(DHT22_RELEASE_US);
+    ros_sleep_ms(1);
     /* 从机响应：低约 80us -> 高约 80us -> 低，随后即第 1 位的低电平 */
     if (ret == HAL_OK) {
         ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);

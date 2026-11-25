@@ -22,6 +22,7 @@
 #include "app_ml307.h"
 #include "app_stress.h"
 #include "app_memtest.h"
+#include "app_timing.h"
 
 void app_main(void *arg)
 {
@@ -41,6 +42,11 @@ void app_main(void *arg)
 #if APP_MEMTEST_ENABLE
     /* 堆泄漏自检：在压测/文件系统启动前同步执行，避免并发分配干扰 */
     app_memtest_run();
+#endif
+
+#if APP_TIMING_ENABLE
+    /* ros_sleep_ms 精度测试：压测启动前执行，减少抢占抖动 */
+    app_timing_run();
 #endif
 
 #if APP_STRESS_ENABLE

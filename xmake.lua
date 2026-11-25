@@ -221,6 +221,9 @@ local function ros_cross_defines(extra)
         if family == "f4" then
             -- SysTick/tickless 时基与板级 SYSCLK 一致（默认宏为 72MHz）
             add_defines("ROS_TRACE_CLOCK_HZ=168000000")
+            -- tickless 空闲补偿存在“tick 推进与实际时间不一致”的问题，
+            -- 精度优先：f4 关闭 tickless，使用固定 1ms SysTick（误差 ≤1 tick）
+            add_defines("ROS_USE_TICKLESS=0")
         end
     end
     ros_trace_defines()
@@ -251,7 +254,7 @@ end
 
 function ros_host_links()
     if is_plat("windows", "mingw") then
-        add_links("m", "ws2_32", "advapi32", "iphlpapi")
+        add_links("m", "ws2_32", "advapi32", "iphlpapi", "winmm")
     else
         add_links("m", "pthread")
     end

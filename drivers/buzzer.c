@@ -47,6 +47,6 @@ int buzzer_beep(buzzer_t *buzzer, uint32_t ms)
         return -1;
     }
     buzzer_start(buzzer);
-    hal_delay_ms(ms);
+    ros_sleep_ms(ms);
     return buzzer_stop(buzzer);
 }

@@ -37,7 +37,7 @@ static int dht11_wait_level(dht11_handle_t *handle, int level, uint32_t timeout_
         if (cur == level) {
             return HAL_OK;
         }
-        hal_delay_us(1U);
+        ros_sleep_ms(1);
         elapsed++;
     }
     return (int)HAL_TIMEOUT;
@@ -66,7 +66,7 @@ static int dht11_read_byte(dht11_handle_t *handle, uint8_t *value)
             if (dht11_line(handle) != 1) {
                 break;
             }
-            hal_delay_us(1U);
+            ros_sleep_ms(1);
             high_us++;
         }
 
@@ -93,9 +93,9 @@ int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
     hal_irq_disable();
 
     dht11_drive_low(handle);
-    hal_delay_ms(DHT11_START_LOW_MS);
+    ros_sleep_ms(DHT11_START_LOW_MS);
     dht11_release(handle);
-    hal_delay_us(DHT11_RELEASE_US);
+    ros_sleep_ms(1);
 
     /* 从机响应：低约 80us 再高约 80us */
     ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);

@@ -1,4 +1,4 @@
-﻿#include "ml307.h"
+#include "ml307.h"
 #include "ros.h"
 #include "common.h"
 #include "at_urc.h"
@@ -442,7 +442,7 @@ int ml307_get_ntp_time(const char *server, uint32_t *time)
     while (!s_ntp_done &&
            (uint32_t)(hal_tick_get() - start) < ML307_NTP_WAIT_MS) {
         (void)at_process();
-        hal_delay_ms(10U);
+        ros_sleep_ms(10U);
     }
     if (!s_ntp_done || s_ntp_result != 0 || s_ntp_time[0] == '\0') {
         return -1;

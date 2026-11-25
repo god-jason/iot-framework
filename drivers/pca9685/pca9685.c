@@ -57,7 +57,7 @@ int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
     if (pca9685_write_reg(handle, PCA9685_REG_MODE1, PCA9685_MODE1_DEFAULT) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(PCA9685_WAKE_DELAY_MS);
+    ros_sleep_ms(PCA9685_WAKE_DELAY_MS);
 
     if (pca9685_read_reg(handle, PCA9685_REG_MODE1, &mode1) != HAL_OK) {
         return (int)HAL_NOT_FOUND;
@@ -130,7 +130,7 @@ int pca9685_set_pwm_freq(pca9685_handle_t *handle, float freq_hz)
                                     PCA9685_MODE1_SLEEP)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(PCA9685_SLEEP_DELAY_MS);
+    ros_sleep_ms(PCA9685_SLEEP_DELAY_MS);
 
     if (pca9685_write_reg(handle, PCA9685_REG_PRESCALE, prescale) != HAL_OK) {
         return (int)HAL_IO_ERROR;
@@ -140,7 +140,7 @@ int pca9685_set_pwm_freq(pca9685_handle_t *handle, float freq_hz)
                           (uint8_t)(mode1 & (uint8_t)~PCA9685_MODE1_SLEEP)) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    hal_delay_ms(PCA9685_WAKE_DELAY_MS);
+    ros_sleep_ms(PCA9685_WAKE_DELAY_MS);
 
     handle->frequency = (float)PCA9685_OSC_HZ /
                         ((float)PCA9685_RESOLUTION * (float)(prescale + 1U));

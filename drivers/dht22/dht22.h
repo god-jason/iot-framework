@@ -7,7 +7,7 @@
  * 参考 libdriver 设计：
  *   dht22_init / dht22_deinit / dht22_read / dht22_read_raw
  *
- * 硬件访问只经由 hal.h 暴露的 hal_gpio_* 与 hal_delay_us：
+ * 硬件访问只经由 hal.h 暴露的 hal_gpio_* 与 ros_sleep_ms()：
  * 空闲态为输入 + 上拉；起始信号期间临时切为推挽输出拉低，
  * 释放后立即切回输入读取从机电平（不依赖开漏输出能力）。
  * 引脚必须外接 4.7k~10k 上拉电阻。
