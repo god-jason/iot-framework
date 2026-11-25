@@ -80,7 +80,7 @@ int pca9685_init(pca9685_handle_t *handle, hal_i2c_t *i2c, uint16_t address)
 
     handle->initialized = true;
     LOG_I("pca9685", "init ok at 0x%02X, %.1f Hz",
-          handle->i2c.address, (double)handle->frequency);
+          handle->i2c.address, (float)handle->frequency);
     return HAL_OK;
 }
 

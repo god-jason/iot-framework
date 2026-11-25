@@ -186,7 +186,7 @@ int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn);
  * 查找优先级：内置常量 -> 扩展常量（$x 变量为另一命名空间，互不影响）。
  * 返回值同 rs_func_register（容量为 RS_EXT_CONST_MAX）。
  */
-int rs_const_register(const char *name, double value);
+int rs_const_register(const char *name, float value);
 
 /* ============================== 命令分派 ============================== */
 

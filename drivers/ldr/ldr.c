@@ -42,7 +42,7 @@ int ldr_init(ldr_handle_t *handle, hal_adc_t *adc, uint8_t channel)
     handle->initialized = true;
 
     LOG_I("ldr", "init ok, ch=%u, dark=%.0fmV, bright=%.0fmV",
-          (unsigned)channel, (double)handle->dark_mv, (double)handle->bright_mv);
+          (unsigned)channel, (float)handle->dark_mv, (float)handle->bright_mv);
     return HAL_OK;
 }
 
@@ -100,7 +100,7 @@ int ldr_read(ldr_handle_t *handle, ldr_data_t *data)
     mv = (float)data->raw * handle->vref_mv / (float)handle->adc_max;
     value = (mv - handle->dark_mv) * 100.0f / span;
     if (value < 0.0f || value > 100.0f) {
-        LOG_W("ldr", "mv=%.0f out of calibrated span", (double)mv);
+        LOG_W("ldr", "mv=%.0f out of calibrated span", (float)mv);
     }
 
     if (value < 0.0f) {

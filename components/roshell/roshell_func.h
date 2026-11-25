@@ -54,7 +54,7 @@ typedef struct rs_ext_fn {
 
 typedef struct {
     char   name[RS_NAME_MAX];
-    double v;
+    float  v;
 } rs_ext_const_t;
 
 /* 查扩展函数表（大小写敏感）；未命中返回 NULL */

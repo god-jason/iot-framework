@@ -7,7 +7,12 @@
 
 #include "var.h"
 
+#include "ros_mem.h"
+
 #include <stddef.h>
+
+/* 递归释放深度上限（防止循环引用导致栈溢出） */
+#define VAR_FREE_MAX_DEPTH      8U
 
 void var_init(var_t *v)
 {
@@ -27,7 +32,7 @@ void var_set_bool(var_t *v, bool value)
     v->value.b = value;
 }
 
-void var_set_int(var_t *v, int32_t value)
+void var_set_int(var_t *v, int value)
 {
     if (v == NULL) {
         return;
@@ -98,7 +103,7 @@ bool var_get_bool(const var_t *v, bool *out)
     return true;
 }
 
-bool var_get_int(const var_t *v, int32_t *out)
+bool var_get_int(const var_t *v, int *out)
 {
     if (v == NULL || out == NULL || v->type != VAR_INT) {
         return false;
@@ -138,4 +143,52 @@ map_t *var_get_object(const var_t *v)
         return NULL;
     }
     return v->value.obj;
+}
+
+static void var_free_depth(var_t *v, uint32_t depth)
+{
+    if (v == NULL) {
+        return;
+    }
+    if (depth > VAR_FREE_MAX_DEPTH) {
+        var_init(v);                    /* 嵌套过深：放弃释放，防循环引用 */
+        return;
+    }
+
+    if (v->type == VAR_ARRAY && v->value.arr != NULL) {
+        vec_t *arr = v->value.arr;
+
+        if (arr->elem_size == sizeof(var_t)) {
+            uint32_t i;
+
+            for (i = 0U; i < arr->len; i++) {
+                var_free_depth((var_t *)vec_at(arr, i), depth + 1U);
+            }
+        }
+        vec_deinit(arr);
+        ros_mem_free(arr);
+    } else if (v->type == VAR_OBJECT && v->value.obj != NULL) {
+        map_t *obj = v->value.obj;
+        map_iter_t it;
+        map_item_t item;
+
+        map_iter_begin(obj, &it);
+        while (map_iter_next(&it, &item)) {
+            var_t *elem = (var_t *)item.value;
+
+            if (elem != NULL) {
+                var_free_depth(elem, depth + 1U);
+                ros_mem_free(elem);
+            }
+        }
+        map_deinit(obj);
+        ros_mem_free(obj);
+    }
+
+    var_init(v);
+}
+
+void var_free(var_t *v)
+{
+    var_free_depth(v, 0U);
 }

@@ -1,20 +1,26 @@
 /*
- * var_json.h - var_t 与 JSON 的互转（基于 vendor/cjson）
+ * var_json.h - var_t 与 JSON 文本互转（不依赖 cJSON）
+ *
+ * 本模块自带精简 JSON 解析器/打印器：
+ *   - var_to_json()：按 JSON 语法输出紧凑文本（malloc 分配）；
+ *   - var_from_json()：解析标量 JSON，字符串复制到调用方缓冲。
  *
  * 序列化覆盖全部类型：
  *   NONE→null，BOOL→true/false，INT/FLOAT→number，STRING→string，
  *   ARRAY→array（约定 vec 元素为 var_t，elem_size == sizeof(var_t)），
  *   OBJECT→object（约定 map 的 value 为 var_t*）。
+ *   NaN/Inf 等非有限浮点输出为 null。
  *
  * 反序列化只支持标量（null/bool/number/string）：
  *   数组/对象需要调用方自行分配容器，本层不创建 vec_t/map_t。
+ *   支持 \" \\ \/ \b \f \n \r \t \uXXXX（含代理对）转义，
+ *   解析后要求整个输入只包含一个 JSON 值（可带首尾空白）。
  *
- * 引用语义：
- *   - var_from_cjson() 解析出的 STRING 指向 cJSON 节点，节点树必须保持存活；
- *   - var_from_json() 会把字符串复制到调用方缓冲，返回后即安全。
- *
- * 本模块依赖 cJSON 的内存分配（默认 malloc/free）：
- *   var_to_json() 返回的文本必须用 var_free_json() 释放。
+ * 内存约定：
+ *   - var_to_json() 返回的文本由 ros_mem 分配，必须用 var_free_json()
+ *     释放；
+ *   - var_from_json() 解析出的字符串落在调用方 strbuf，返回后无需
+ *     依赖任何中间状态，可安全长期使用。
  */
 
 #ifndef VAR_JSON_H
@@ -26,29 +32,14 @@
 extern "C" {
 #endif
 
-struct cJSON;
-
-/*
- * var -> cJSON 节点（调用者负责 cJSON_Delete）。
- * 失败（参数非法、数组元素类型不符、嵌套过深等）返回 NULL。
- */
-struct cJSON *var_to_cjson(const var_t *v);
-
-/*
- * cJSON 节点 -> var（仅标量）。
- * 数字：能精确表示为 int32 的按 VAR_INT，否则按 VAR_FLOAT。
- * 字符串：借用节点的 valuestring，节点树释放后失效。
- * 数组/对象或参数非法返回 false（out 保持原值）。
- */
-bool var_from_cjson(const struct cJSON *json, var_t *out);
-
 /* var -> 紧凑 JSON 文本；返回串用 var_free_json 释放，失败返回 NULL */
 char *var_to_json(const var_t *v);
 
 /*
  * JSON 文本 -> var（仅标量）。
- * 字符串会复制到 strbuf（截断到 strcap-1）；strbuf 为 NULL 时
- * 只接受非字符串类型，否则返回 false。
+ * 数字：无小数/指数且落在 int32 范围按 VAR_INT，否则按 VAR_FLOAT。
+ * 字符串：复制到 strbuf（截断到 strcap-1）；strbuf 为 NULL 时
+ * 只接受非字符串类型，否则返回 false（out 保持原值）。
  */
 bool var_from_json(const char *text, var_t *out, char *strbuf, uint32_t strcap);
 

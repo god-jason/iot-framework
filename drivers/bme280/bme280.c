@@ -106,23 +106,23 @@ static uint32_t bme280_compensate_pressure(bme280_handle_t *handle, int32_t adc_
     return (uint32_t)p;
 }
 
-/* 湿度补偿：datasheet 双精度参考算法，返回 %RH */
-static double bme280_compensate_humidity(bme280_handle_t *handle, int32_t adc_h)
+/* 湿度补偿：datasheet 参考算法（单精度实现），返回 %RH */
+static float bme280_compensate_humidity(bme280_handle_t *handle, int32_t adc_h)
 {
     const bme280_calib_t *c = &handle->calib;
-    double var_h;
+    float var_h;
 
-    var_h = (double)handle->t_fine - 76800.0;
-    var_h = ((double)adc_h - ((double)c->h4 * 64.0 + (double)c->h5 / 16384.0 * var_h)) *
-            ((double)c->h2 / 65536.0 *
-             (1.0 + (double)c->h6 / 67108864.0 * var_h *
-              (1.0 + (double)c->h3 / 67108864.0 * var_h)));
-    var_h = var_h * (1.0 - (double)c->h1 * var_h / 524288.0);
+    var_h = (float)handle->t_fine - 76800.0f;
+    var_h = ((float)adc_h - ((float)c->h4 * 64.0f + (float)c->h5 / 16384.0f * var_h)) *
+            ((float)c->h2 / 65536.0f *
+             (1.0f + (float)c->h6 / 67108864.0f * var_h *
+              (1.0f + (float)c->h3 / 67108864.0f * var_h)));
+    var_h = var_h * (1.0f - (float)c->h1 * var_h / 524288.0f);
 
-    if (var_h > 100.0) {
-        var_h = 100.0;
-    } else if (var_h < 0.0) {
-        var_h = 0.0;
+    if (var_h > 100.0f) {
+        var_h = 100.0f;
+    } else if (var_h < 0.0f) {
+        var_h = 0.0f;
     }
     return var_h;
 }
@@ -247,7 +247,7 @@ int bme280_read(bme280_handle_t *handle, bme280_data_t *data)
     int32_t adc_h = 0;
     int32_t temp01;
     uint32_t pressure;
-    double humidity;
+    float humidity;
     int ret;
 
     if (handle == NULL || data == NULL || !handle->initialized) {

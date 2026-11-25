@@ -42,7 +42,7 @@ int acs712_init(acs712_handle_t *handle, hal_adc_t *adc, uint8_t channel)
     handle->initialized = true;
 
     LOG_I("acs712", "init ok, ch=%u, sens=%.0fmV/A, zero=%.0fmV",
-          (unsigned)channel, (double)handle->sens_mv_per_a, (double)handle->zero_mv);
+          (unsigned)channel, (float)handle->sens_mv_per_a, (float)handle->zero_mv);
     return HAL_OK;
 }
 
@@ -96,7 +96,7 @@ int acs712_read(acs712_handle_t *handle, float *amps)
     current = (mv - handle->zero_mv) / handle->sens_mv_per_a;
 
     if (current > ACS712_CURRENT_LIMIT_A || current < -ACS712_CURRENT_LIMIT_A) {
-        LOG_W("acs712", "current %.1fA out of range, check vref/divider", (double)current);
+        LOG_W("acs712", "current %.1fA out of range, check vref/divider", (float)current);
         current = (current > 0.0f) ? ACS712_CURRENT_LIMIT_A
                                    : -ACS712_CURRENT_LIMIT_A;
     }

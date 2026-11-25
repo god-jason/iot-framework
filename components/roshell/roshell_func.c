@@ -473,7 +473,7 @@ int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn)
     return RS_OK;
 }
 
-int rs_const_register(const char *name, double value)
+int rs_const_register(const char *name, float value)
 {
     rs_ext_const_t x;
     uint16_t len;
@@ -507,7 +507,7 @@ int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn)
     return RS_ERR_UNSUPPORTED;
 }
 
-int rs_const_register(const char *name, double value)
+int rs_const_register(const char *name, float value)
 {
     (void)name; (void)value;
     return RS_ERR_UNSUPPORTED;

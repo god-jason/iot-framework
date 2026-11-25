@@ -11,6 +11,7 @@
  *   st_qprod/qcons prio 5 队列生产者/消费者，序列号与 CRC 逐条校验
  *   st_sync0/1   prio 4  两个信号量乒乓，检验唤醒/阻塞不丢事件
  *   st_poll      prio 5  任务通知收发 + 短睡眠/让出轮转
+ *   st_json      prio 5  复杂 var（数组+对象+子数组）与 JSON 文本互转校验
  *   st_mon       prio 1  每秒检查心跳与不变量，每 10s 打印一次汇总
  *
  * 所有数学均为整数运算：本工程未保存 FPU 的 s16-s31，浮点跨任务不可靠。
@@ -25,6 +26,9 @@
 #include "ros.h"
 #include "log.h"
 #include "crc32.h"
+#include "ros_mem.h"
+#include "var.h"
+#include "var_json.h"
 
 #include <string.h>
 
@@ -39,6 +43,7 @@ enum {
     ST_QPROD, ST_QCONS,
     ST_SYNC0, ST_SYNC1,
     ST_POLL,
+    ST_JSON,
     ST_MON,
     ST_TASK_COUNT
 };
@@ -67,6 +72,7 @@ static const struct {
     { "st_qprod", 5U, 1024U }, { "st_qcons", 5U, 1024U },
     { "st_sync0", 4U, 1024U }, { "st_sync1", 4U, 1024U },
     { "st_poll",  5U, 1024U },
+    { "st_json",  5U, 2048U },
     { "st_mon",   1U, 1024U },
 };
 
@@ -327,6 +333,293 @@ static void st_poll_entry(void *arg)
     }
 }
 
+/* ============================================================================
+ * JSON / var 互转负载
+ *
+ * 构建一个复杂 var：
+ *   [ 42, "hello", true,
+ *     { "id":7, "name":"sensor", "ok":true, "level":3 },
+ *     [ 1, "x" ] ]
+ * 每轮序列化并与首次文本逐字节比较；同时解析标量 JSON 校验结果；
+ * 每 200 轮递归释放并重建，覆盖 var_free 与 ros_mem 分配/回收。
+ * ==========================================================================*/
+
+#define ST_JSON_REBUILD     200U
+
+static var_t s_json_root;               /* 复杂 var（数组/对象/子数组） */
+static char *s_json_expect;             /* 首次序列化文本，用于逐轮比对 */
+
+static var_t *st_var_new(void)
+{
+    return (var_t *)ros_mem_calloc(1U, sizeof(var_t));
+}
+
+static vec_t *st_vec_new(uint32_t cap)
+{
+    vec_t *v = (vec_t *)ros_mem_calloc(1U, sizeof(vec_t));
+
+    if (v == NULL) {
+        return NULL;
+    }
+    if (vec_init(v, (uint32_t)sizeof(var_t), cap) != 0) {
+        ros_mem_free(v);
+        return NULL;
+    }
+    return v;
+}
+
+static map_t *st_map_new(void)
+{
+    map_t *m = (map_t *)ros_mem_calloc(1U, sizeof(map_t));
+
+    if (m == NULL) {
+        return NULL;
+    }
+    if (map_init(m) != 0) {
+        ros_mem_free(m);
+        return NULL;
+    }
+    return m;
+}
+
+/* 把堆上的 var 挂进数组：内容拷贝进数组后释放外壳 */
+static int st_vec_push_own(vec_t *a, var_t *item)
+{
+    int rc;
+
+    if (a == NULL || item == NULL) {
+        return -1;
+    }
+    rc = vec_push(a, item);
+    if (rc != 0) {
+        var_free(item);
+    }
+    ros_mem_free(item);
+    return rc;
+}
+
+/* { "id":7, "name":"sensor", "ok":true, "level":3 } */
+static var_t *st_make_object(void)
+{
+    var_t *obj = st_var_new();
+    map_t *m = st_map_new();
+
+    if (obj == NULL || m == NULL) {
+        if (m != NULL) {
+            map_deinit(m);
+            ros_mem_free(m);
+        }
+        ros_mem_free(obj);
+        return NULL;
+    }
+
+    {
+        var_t *v = st_var_new();
+
+        if (v == NULL) {
+            goto fail;
+        }
+        var_set_int(v, 7);
+        if (!map_put(m, "id", v)) {
+            ros_mem_free(v);
+            goto fail;
+        }
+    }
+    {
+        var_t *v = st_var_new();
+
+        if (v == NULL) {
+            goto fail;
+        }
+        var_set_string(v, "sensor");
+        if (!map_put(m, "name", v)) {
+            ros_mem_free(v);
+            goto fail;
+        }
+    }
+    {
+        var_t *v = st_var_new();
+
+        if (v == NULL) {
+            goto fail;
+        }
+        var_set_bool(v, true);
+        if (!map_put(m, "ok", v)) {
+            ros_mem_free(v);
+            goto fail;
+        }
+    }
+    {
+        var_t *v = st_var_new();
+
+        if (v == NULL) {
+            goto fail;
+        }
+        var_set_int(v, 3);
+        if (!map_put(m, "level", v)) {
+            ros_mem_free(v);
+            goto fail;
+        }
+    }
+
+    var_set_object(obj, m);
+    return obj;
+
+fail:
+    var_set_object(obj, m);             /* 由 var_free 统一释放 map 与已挂 value */
+    var_free(obj);
+    ros_mem_free(obj);
+    return NULL;
+}
+
+/* [ 1, "x" ] */
+static var_t *st_make_sub_array(void)
+{
+    var_t *v = st_var_new();
+    vec_t *a = st_vec_new(4);
+    var_t item;
+
+    if (v == NULL || a == NULL) {
+        if (a != NULL) {
+            vec_deinit(a);
+            ros_mem_free(a);
+        }
+        ros_mem_free(v);
+        return NULL;
+    }
+    var_set_array(v, a);
+
+    var_set_int(&item, 1);
+    if (vec_push(a, &item) != 0) {
+        goto fail;
+    }
+    var_set_string(&item, "x");
+    if (vec_push(a, &item) != 0) {
+        goto fail;
+    }
+    return v;
+
+fail:
+    var_free(v);
+    ros_mem_free(v);
+    return NULL;
+}
+
+/* 根数组：标量 + 嵌套对象 + 嵌套数组 */
+static var_t *st_make_root(void)
+{
+    var_t *v = st_var_new();
+    vec_t *a = st_vec_new(8);
+    var_t item;
+
+    if (v == NULL || a == NULL) {
+        if (a != NULL) {
+            vec_deinit(a);
+            ros_mem_free(a);
+        }
+        ros_mem_free(v);
+        return NULL;
+    }
+    var_set_array(v, a);
+
+    var_set_int(&item, 42);
+    if (vec_push(a, &item) != 0) {
+        goto fail;
+    }
+    var_set_string(&item, "hello");
+    if (vec_push(a, &item) != 0) {
+        goto fail;
+    }
+    var_set_bool(&item, true);
+    if (vec_push(a, &item) != 0) {
+        goto fail;
+    }
+    if (st_vec_push_own(a, st_make_object()) != 0) {
+        goto fail;
+    }
+    if (st_vec_push_own(a, st_make_sub_array()) != 0) {
+        goto fail;
+    }
+    return v;
+
+fail:
+    var_free(v);
+    ros_mem_free(v);
+    return NULL;
+}
+
+/* 释放旧结构并重建（s_json_expect 保留，用于比对） */
+static void st_json_rebuild(void)
+{
+    var_t *root;
+
+    var_free(&s_json_root);
+    root = st_make_root();
+    if (root == NULL) {
+        return;                         /* s_json_root 保持 VAR_NONE */
+    }
+    s_json_root = *root;
+    ros_mem_free(root);
+}
+
+static void st_json_entry(void *arg)
+{
+    uint32_t idx = (uint32_t)(uintptr_t)arg;
+    char strbuf[32];
+    uint32_t round = 0u;
+
+    while (s_running == 0u) {
+        ros_sleep_ms(5U);
+    }
+
+    st_json_rebuild();
+    s_json_expect = var_to_json(&s_json_root);
+    if (s_json_expect == NULL) {
+        s_stat[idx].errors++;
+    } else {
+        ros_sleep_ms(200);          /* 避开启动日志洪峰，减少 HAL UART 并发写丢行 */
+        LOG_I("st", "json root: %s", s_json_expect);
+    }
+
+    for (;;) {
+        char *text = var_to_json(&s_json_root);
+
+        /* 1) var -> JSON：与首次结果逐字节一致 */
+        if (text == NULL || s_json_expect == NULL ||
+            strcmp(text, s_json_expect) != 0) {
+            s_stat[idx].errors++;
+        }
+        var_free_json(text);
+
+        /* 2) JSON -> var：标量解析结果校验 */
+        {
+            var_t parsed;
+
+            if (!var_from_json("-12345", &parsed, strbuf, sizeof(strbuf)) ||
+                parsed.type != VAR_INT || parsed.value.i != -12345) {
+                s_stat[idx].errors++;
+            }
+        }
+        {
+            var_t parsed;
+
+            if (!var_from_json("\"stress\"", &parsed, strbuf, sizeof(strbuf)) ||
+                strcmp(var_get_string(&parsed), "stress") != 0) {
+                s_stat[idx].errors++;
+            }
+        }
+
+        /* 3) 周期重建：覆盖递归释放 + 重新分配 */
+        round++;
+        if ((round % ST_JSON_REBUILD) == 0u) {
+            st_json_rebuild();
+        }
+
+        s_stat[idx].loops++;
+        ros_sleep_ms(1U);
+    }
+}
+
 static uint32_t st_total_loops(void)
 {
     uint32_t i;
@@ -428,7 +721,7 @@ static void st_monitor_entry(void *arg)
 
             if (elapsed >= detail_at + 60000U) {
                 detail_at = elapsed;
-                LOG_I("st", "c=%u,%u,%u,%u m=%u,%u q=%u,%u s=%u,%u p=%u",
+                LOG_I("st", "c=%u,%u,%u,%u m=%u,%u q=%u,%u s=%u,%u p=%u j=%u",
                       (unsigned)s_stat[ST_CALC0].loops,
                       (unsigned)s_stat[ST_CALC1].loops,
                       (unsigned)s_stat[ST_CALC2].loops,
@@ -439,7 +732,8 @@ static void st_monitor_entry(void *arg)
                       (unsigned)s_stat[ST_QCONS].loops,
                       (unsigned)s_stat[ST_SYNC0].loops,
                       (unsigned)s_stat[ST_SYNC1].loops,
-                      (unsigned)s_stat[ST_POLL].loops);
+                      (unsigned)s_stat[ST_POLL].loops,
+                      (unsigned)s_stat[ST_JSON].loops);
             }
         }
 
@@ -469,6 +763,7 @@ static const ros_entry_t s_entry[ST_TASK_COUNT] = {
     st_queue_prod_entry, st_queue_cons_entry,
     st_sync_entry, st_sync_entry,
     st_poll_entry,
+    st_json_entry,
     st_monitor_entry,
 };
 

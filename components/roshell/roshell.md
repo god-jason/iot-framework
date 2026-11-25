@@ -150,7 +150,7 @@ end
 typedef rs_arg_t (*rs_func_fn_t)(const rs_arg_t *args,
                                            uint32_t nargs);
 int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn);
-int rs_const_register(const char *name, double value);
+int rs_const_register(const char *name, float value);
 ```
 
 - 扩展函数在脚本中以 `name(实参...)` 调用，不绑定实例；查找优先级：
