@@ -1,5 +1,5 @@
 /*
- * config_test.c - 基于 kvfs 的配置存储测试（单例接口）
+ * config_test.c - 基于 fkv 的配置存储测试（单例接口）
  *
  * 用 RAM 模拟 Flash（编程只能 1→0、擦除按扇区），覆盖：
  *   空设备、保存/读取/长度校验、重新挂载、写满压缩、删除与再写。
@@ -25,7 +25,7 @@ typedef struct {
 static uint8_t s_flash[T_TOTAL];
 static uint32_t s_erase_count;
 static uint8_t s_work[T_MAX_VALUE];
-static kvfs_t s_kv;
+static fkv_t s_kv;
 
 /* ============================== RAM Flash ============================== */
 
@@ -66,7 +66,7 @@ static int t_erase(void *ctx, uint32_t addr, uint32_t size)
     return 0;
 }
 
-static const kvfs_blockdev_t s_dev = {
+static const fkv_blockdev_t s_dev = {
     .read = t_read,
     .program = t_program,
     .erase = t_erase,
@@ -78,7 +78,7 @@ static const kvfs_blockdev_t s_dev = {
     .program_size = 4U
 };
 
-static const kvfs_config_t s_kv_cfg = {
+static const fkv_config_t s_kv_cfg = {
     .workbuf = s_work,
     .workbuf_size = sizeof(s_work),
     .max_value = T_MAX_VALUE,
@@ -97,15 +97,15 @@ static void store_reset(void)
 /* 上电：初始化并挂载 KV，擦除态时自动格式化 */
 static void kv_open(void)
 {
-    int rc = kvfs_init(&s_kv, &s_dev, &s_kv_cfg);
+    int rc = fkv_init(&s_kv, &s_dev, &s_kv_cfg);
 
-    TF_CHECK_INT(rc, KVFS_OK);
-    rc = kvfs_mount(&s_kv);
-    if (rc == KVFS_ERR_FORMAT) {
-        TF_CHECK_INT(kvfs_format(&s_kv), KVFS_OK);
-        rc = KVFS_OK;
+    TF_CHECK_INT(rc, FKV_OK);
+    rc = fkv_mount(&s_kv);
+    if (rc == FKV_ERR_FORMAT) {
+        TF_CHECK_INT(fkv_format(&s_kv), FKV_OK);
+        rc = FKV_OK;
     }
-    TF_CHECK_INT(rc, KVFS_OK);
+    TF_CHECK_INT(rc, FKV_OK);
 }
 
 static int cfg_init(void)
@@ -198,7 +198,7 @@ void ut_config(void)
     TF_CHECK_INT(save_value(33U), CONFIG_OK);
 
     /* 模拟复位：卸载后重新挂载（不擦除），再绑定一次 */
-    TF_CHECK_INT(kvfs_unmount(&s_kv), KVFS_OK);
+    TF_CHECK_INT(fkv_unmount(&s_kv), FKV_OK);
     kv_open();
     TF_CHECK_INT(cfg_init(), CONFIG_OK);
     TF_CHECK_INT(load_value(&value), CONFIG_OK);

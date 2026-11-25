@@ -1,7 +1,7 @@
 /*
  * boot_meta.h - STM32 启动状态与升级进度（F1/F4 共用，存于 KV）
  *
- * 启动状态与 OTA 进度都保存在 KV 区（components/kvfs）：
+ * 启动状态与 OTA 进度都保存在 KV 区（components/fkv）：
  *   BOOT_KV_KEY_STATE : boot_state_t  启动状态（tries / crash / ota 标识）
  *   BOOT_KV_KEY_OTA   : uint32_t      OTA 拷贝进度（已写入 App 的字节数）
  *

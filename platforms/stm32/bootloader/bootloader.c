@@ -6,7 +6,7 @@
  *   - F407：单 App 槽，Boot 16K / KV 16K×2 / 错误日志 16K /
  *            App 192K / 升级包 256K。
  *
- * 启动状态与 OTA 进度存于 KV 区（components/kvfs）；应用配置由 App 通过
+ * 启动状态与 OTA 进度存于 KV 区（components/fkv）；应用配置由 App 通过
  * components/config 读写同一 KV 区，Bootloader 不读取配置。
  *
  * 串口 OTA 协议（两板一致）：

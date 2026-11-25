@@ -1,7 +1,7 @@
 /*
  * boot_meta.c - STM32 启动状态、OTA 进度与 CRC32（F1/F4 共用）
  *
- * 启动状态与升级进度均存于 KV 区（components/kvfs）：
+ * 启动状态与升级进度均存于 KV 区（components/fkv）：
  *   BOOT_KV_KEY_STATE : boot_state_t
  *   BOOT_KV_KEY_OTA   : uint32_t（已写入 App 的字节数）
  * 单条记录自带 CRC + Commit，掉电只会丢弃未提交的新值，旧值仍可读。

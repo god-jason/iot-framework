@@ -4,7 +4,7 @@
 /*
  * app_config.h - STM32F407VET6 应用配置持久化（内部 Flash）
  *
- * 配置以结构体原始内存形式存放在 KV 区（components/kvfs，A/B 双区滚动），
+ * 配置以结构体原始内存形式存放在 KV 区（components/fkv，A/B 双区滚动），
  * 由 components/config 的 config_* 单例接口读写（KV 键 BOOT_KV_KEY_CONFIG）。
  * 本文件只描述配置内容并提供默认值/打印。
  *

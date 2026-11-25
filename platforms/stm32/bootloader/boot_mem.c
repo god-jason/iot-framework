@@ -1,7 +1,7 @@
 /*
  * boot_mem.c - Bootloader 专用最小 libc 子集（-nostdlib）
  *
- * components/kvfs 会用到 memcpy/memset/memcmp；Cortex-M3 上还会用到
+ * components/fkv 会用到 memcpy/memset/memcmp；Cortex-M3 上还会用到
  * 软件除法辅助 __aeabi_uidiv。Bootloader 不链接 libc/libgcc，
  * 因此在这里提供最小实现，只编入 boot-* 目标。
  *

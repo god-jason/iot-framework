@@ -50,7 +50,7 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
     })
 
     ros_bootloader("f407ve-boot", {
-        deps = { "boot-f407ve", "ros-cmp-kvfs" },
+        deps = { "boot-f407ve", "ros-cmp-fkv" },
         defines = { ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
         ldflags = {

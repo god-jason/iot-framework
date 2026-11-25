@@ -1,4 +1,4 @@
-# KVFS - 双区滚动日志键值存储
+# FKV - 双区滚动日志键值存储
 
 面向 MCU 的**小数据键值存储**：`u32 key → 一段小数据`，用于保存配置、标定参数、
 运行计数等场景。所有更新都是追加写，不原地覆盖；两个分区 A/B 轮流使用，
@@ -20,7 +20,7 @@
 ## 2. 存储布局
 
 ```
-介质分区（kvfs_blockdev_t.total_size）
+介质分区（fkv_blockdev_t.total_size）
 ┌──────────────────────────────┐  <- start_addr
 │ 分区 A（region_size）         │
 │   0x00: SUPER 32B（最后写入） │
@@ -41,8 +41,8 @@
 
 | 字段 | 长度 | 说明 |
 |---|---|---|
-| magic | 4 | `'K','V','F','S'`（"KVFS"） |
-| version | 2 | `KVFS_VERSION` |
+| magic | 4 | `'F','K','V','S'`（"FKVS"） |
+| version | 2 | `FKV_VERSION` |
 | hdr_size | 2 | 固定 32 |
 | generation | 4 | 分区代次，越大越新 |
 | data_start | 4 | 记录区起始（=32） |
@@ -58,8 +58,8 @@ SUPER 是分区的**提交点**：压缩时先复制全部有效记录，最后�
 
 | 字段 | 长度 | 说明 |
 |---|---|---|
-| magic | 4 | `'K','V','R','E'`（"KVRE"） |
-| version | 2 | `KVFS_VERSION` |
+| magic | 4 | `'F','K','V','R'`（"FKVR"） |
+| version | 2 | `FKV_VERSION` |
 | length | 2 | Payload 字节数（0 ~ max_value） |
 | sequence | 4 | 全局递增序号，越大越新 |
 | crc32 | 4 | Header（本字段按 0）+ Payload 的 CRC32 |
@@ -84,11 +84,11 @@ SUPER 是分区的**提交点**：压缩时先复制全部有效记录，最后�
 
 | 操作 | 行为 |
 |---|---|
-| `kvfs_put` | 追加一条记录（同 key 旧记录自动失效） |
-| `kvfs_get` / `kvfs_size` | 扫描日志，取同 key 中 `sequence` 最大者 |
-| `kvfs_del` | 追加一条墓碑记录（length = 0，flags bit0 = 1） |
-| `kvfs_foreach` | 扫描出每个 key 的最新存活记录，逐条回调 |
-| 写满 | 自动触发分区切换（压缩）；也可 `kvfs_gc` 手动触发 |
+| `fkv_put` | 追加一条记录（同 key 旧记录自动失效） |
+| `fkv_get` / `fkv_size` | 扫描日志，取同 key 中 `sequence` 最大者 |
+| `fkv_del` | 追加一条墓碑记录（length = 0，flags bit0 = 1） |
+| `fkv_foreach` | 扫描出每个 key 的最新存活记录，逐条回调 |
+| 写满 | 自动触发分区切换（压缩）；也可 `fkv_gc` 手动触发 |
 
 压缩（分区切换）流程：
 
@@ -108,39 +108,39 @@ SUPER 是分区的**提交点**：压缩时先复制全部有效记录，最后�
 初始化与生命周期：
 
 ```c
-int kvfs_init(kvfs_t *kv, const kvfs_blockdev_t *dev, const kvfs_config_t *cfg);
-int kvfs_format(kvfs_t *kv);      // 擦除两区并写 SUPER（代次 1）
-int kvfs_mount(kvfs_t *kv);       // 选更大代次的已提交分区
-int kvfs_unmount(kvfs_t *kv);
-int kvfs_sync(kvfs_t *kv);
-int kvfs_check(kvfs_t *kv);       // 全量校验 CRC（慢，建议诊断时调用）
-int kvfs_statfs(kvfs_t *kv, kvfs_statfs_t *stat);
-int kvfs_gc(kvfs_t *kv);          // 手动压缩
+int fkv_init(fkv_t *kv, const fkv_blockdev_t *dev, const fkv_config_t *cfg);
+int fkv_format(fkv_t *kv);      // 擦除两区并写 SUPER（代次 1）
+int fkv_mount(fkv_t *kv);       // 选更大代次的已提交分区
+int fkv_unmount(fkv_t *kv);
+int fkv_sync(fkv_t *kv);
+int fkv_check(fkv_t *kv);       // 全量校验 CRC（慢，建议诊断时调用）
+int fkv_statfs(fkv_t *kv, fkv_statfs_t *stat);
+int fkv_gc(fkv_t *kv);          // 手动压缩
 ```
 
 键值操作：
 
 ```c
-int kvfs_put(kvfs_t *kv, uint32_t key, const void *value, uint32_t len);
-int kvfs_get(kvfs_t *kv, uint32_t key, void *buf, uint32_t cap, uint32_t *len);
-int kvfs_size(kvfs_t *kv, uint32_t key, uint32_t *len);
-int kvfs_exists(kvfs_t *kv, uint32_t key);   // 1=存在，0=不存在，负值=错误
-int kvfs_del(kvfs_t *kv, uint32_t key);
-int kvfs_foreach(kvfs_t *kv, kvfs_visit_cb cb, void *ctx);
-const char *kvfs_strerror(int error);
+int fkv_put(fkv_t *kv, uint32_t key, const void *value, uint32_t len);
+int fkv_get(fkv_t *kv, uint32_t key, void *buf, uint32_t cap, uint32_t *len);
+int fkv_size(fkv_t *kv, uint32_t key, uint32_t *len);
+int fkv_exists(fkv_t *kv, uint32_t key);   // 1=存在，0=不存在，负值=错误
+int fkv_del(fkv_t *kv, uint32_t key);
+int fkv_foreach(fkv_t *kv, fkv_visit_cb cb, void *ctx);
+const char *fkv_strerror(int error);
 ```
 
 ### 4.1 使用示例
 
 ```c
-#include "kvfs.h"
+#include "fkv.h"
 
 #define KEY_WIFI_SSID   0x00010001u
 #define KEY_WIFI_PASS   0x00010002u
 #define KEY_BOOT_COUNT  0x00020001u
 
 static uint8_t s_work[128];       /* 工作缓冲：>= cfg.max_value */
-static kvfs_t  s_kv;
+static fkv_t  s_kv;
 
 /* 由 app 适配层实现：内部 Flash 或 W25Q */
 extern int board_flash_read(void *ctx, uint32_t addr, void *buf, uint32_t size);
@@ -149,7 +149,7 @@ extern int board_flash_erase(void *ctx, uint32_t addr, uint32_t size);
 
 int board_kv_init(void)
 {
-    kvfs_blockdev_t dev = {
+    fkv_blockdev_t dev = {
         .read = board_flash_read,
         .program = board_flash_program,
         .erase = board_flash_erase,
@@ -160,17 +160,17 @@ int board_kv_init(void)
         .erase_size = 16u * 1024u,     /* F4 最小擦除单位 */
         .program_size = 4u,            /* F4 字编程 */
     };
-    kvfs_config_t cfg = {
+    fkv_config_t cfg = {
         .workbuf = s_work,
         .workbuf_size = sizeof(s_work),
         .max_value = 96u,              /* 单条数据上限 */
     };
 
-    if (kvfs_init(&s_kv, &dev, &cfg) != KVFS_OK) {
+    if (fkv_init(&s_kv, &dev, &cfg) != FKV_OK) {
         return -1;
     }
-    if (kvfs_mount(&s_kv) == KVFS_ERR_FORMAT) {
-        if (kvfs_format(&s_kv) != KVFS_OK) {
+    if (fkv_mount(&s_kv) == FKV_ERR_FORMAT) {
+        if (fkv_format(&s_kv) != FKV_OK) {
             return -1;
         }
     }
@@ -179,15 +179,15 @@ int board_kv_init(void)
 
 void save_wifi(const char *ssid, const char *pass)
 {
-    kvfs_put(&s_kv, KEY_WIFI_SSID, ssid, (uint32_t)strlen(ssid));
-    kvfs_put(&s_kv, KEY_WIFI_PASS, pass, (uint32_t)strlen(pass));
+    fkv_put(&s_kv, KEY_WIFI_SSID, ssid, (uint32_t)strlen(ssid));
+    fkv_put(&s_kv, KEY_WIFI_PASS, pass, (uint32_t)strlen(pass));
 }
 
 int load_ssid(char *out, uint32_t cap)
 {
     uint32_t len = 0;
 
-    if (kvfs_get(&s_kv, KEY_WIFI_SSID, out, cap, &len) != KVFS_OK) {
+    if (fkv_get(&s_kv, KEY_WIFI_SSID, out, cap, &len) != FKV_OK) {
         return -1;
     }
     out[len] = '\0';
@@ -204,31 +204,31 @@ static int dump_one(void *ctx, uint32_t key, const void *value, uint32_t len)
     return 0;             /* 非 0 可提前结束遍历 */
 }
 
-kvfs_foreach(&s_kv, dump_one, NULL);
+fkv_foreach(&s_kv, dump_one, NULL);
 ```
 
 ## 5. 约束与注意事项
 
-1. **键数量上限**：压缩需要静态槽位表，默认 `KVFS_MAX_KEYS = 32`
+1. **键数量上限**：压缩需要静态槽位表，默认 `FKV_MAX_KEYS = 32`
    （可在编译选项或头文件覆盖）。超过后写入仍可继续，但压缩返回
-   `KVFS_ERR_NOSPC`；删除部分键后可恢复。
-2. **单条长度上限**：`KVFS_VALUE_MAX = 1024`，实际由 `cfg.max_value` 收紧；
+   `FKV_ERR_NOSPC`；删除部分键后可恢复。
+2. **单条长度上限**：`FKV_VALUE_MAX = 1024`，实际由 `cfg.max_value` 收紧；
    `cfg.workbuf` 必须不小于 `max_value`。
-3. **`kvfs_get` 的 `buf` 可以为 NULL**：只查询存在性；`cap` 不足返回
-   `KVFS_ERR_NOMEM`，但 `*len` 仍会写入实际长度。
-4. **kvfs 自身不加锁**：并发访问由调用方负责（本工程在 components/config 用
-   ROS 互斥量保护）。`kvfs_foreach` 回调执行期间静态槽位表与工作缓冲仍在使用，
-   回调内不要调用其它 `kvfs_*`，需要写回时先收集到本地数组。
-5. **容量语义**：`kvfs_statfs` 的 `used_bytes` 是活动区已追加字节数，
+3. **`fkv_get` 的 `buf` 可以为 NULL**：只查询存在性；`cap` 不足返回
+   `FKV_ERR_NOMEM`，但 `*len` 仍会写入实际长度。
+4. **fkv 自身不加锁**：并发访问由调用方负责（本工程在 components/config 用
+   ROS 互斥量保护）。`fkv_foreach` 回调执行期间静态槽位表与工作缓冲仍在使用，
+   回调内不要调用其它 `fkv_*`，需要写回时先收集到本地数组。
+5. **容量语义**：`fkv_statfs` 的 `used_bytes` 是活动区已追加字节数，
    包含尚未压缩的旧记录；`free_bytes` 到 0 前会自动压缩。
 6. **只读模式**：`cfg.readonly = 1` 时禁止 put/del/format/gc，只允许读。
-7. **`kvfs_check` 会读取整个分区数据**（校验每条记录 CRC），
+7. **`fkv_check` 会读取整个分区数据**（校验每条记录 CRC），
    上电挂载只做结构与 Commit 快速扫描，不做全量 CRC。
 8. **键建议用宏/枚举**（如 `0x0001xxxx` 按模块分段），不要用字符串哈希，
    避免升级后 key 冲突。
-9. **魔术字**（定义见 `kvfs_internal.h` 的 `KVFS_MAGIC4`）：
-   `KVFS`（分区 SUPER）、`KVRE`（记录头）、`KVCM`（提交标记）。
-   格式不兼容时会返回 `KVFS_ERR_FORMAT`（按未格式化处理）。
+9. **魔术字**（定义见 `fkv_internal.h` 的 `FKV_MAGIC4`）：
+   `FKVS`（分区 SUPER）、`FKVR`（记录头）、`FKVC`（提交标记）。
+   格式不兼容时会返回 `FKV_ERR_FORMAT`（按未格式化处理）。
 
 ## 6. 资源占用
 
@@ -236,15 +236,15 @@ ARM Cortex-M4（`-Os`）实测：
 
 | 项目 | 大小 |
 |---|---|
-| 代码（kvfs.c + kvfs_log.c + kvfs_store.c） | 约 3.9 KB Flash |
-| 键槽表（`KVFS_MAX_KEYS` = 32） | 640 B `.bss`（组件内静态） |
-| `kvfs_t` 实例 | 160 B（调用者静态分配） |
+| 代码（fkv.c + fkv_log.c + fkv_store.c） | 约 3.9 KB Flash |
+| 键槽表（`FKV_MAX_KEYS` = 32） | 640 B `.bss`（组件内静态） |
+| `fkv_t` 实例 | 160 B（调用者静态分配） |
 | 工作缓冲 | `>= cfg.max_value`（调用者提供） |
 | 栈占用 | 无递归、无大局部数组（最大局部缓冲为 32B 的 CRC 分块） |
 
 ## 7. 接入真实 Flash
 
-只需实现 `kvfs_blockdev_t` 的三个回调：
+只需实现 `fkv_blockdev_t` 的三个回调：
 
 | 回调 | 要求 |
 |---|---|
@@ -265,7 +265,7 @@ ARM Cortex-M4（`-Os`）实测：
 
 ## 8. 测试
 
-组件自带主机测试 [kvfs_test.c](kvfs_test.c)，用 RAM 模拟 Flash
+组件自带主机测试 [fkv_test.c](fkv_test.c)，用 RAM 模拟 Flash
 （编程只能 1→0、按扇区擦除），覆盖：
 
 - 未格式化挂载
@@ -283,5 +283,5 @@ xmake build ros-test && xmake run ros-test
 也可直接用主机编译器单独做语法检查（组件不依赖平台层）：
 
 ```bash
-gcc -std=c99 -fsyntax-only components/kvfs/kvfs*.c -Icomponents/kvfs -Icomponents/common
+gcc -std=c99 -fsyntax-only components/fkv/fkv*.c -Icomponents/fkv -Icomponents/common
 ```

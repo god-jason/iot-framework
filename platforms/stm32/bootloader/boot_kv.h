@@ -1,5 +1,5 @@
 /*
- * boot_kv.h - Bootloader/App 共享的 KV 存储（components/kvfs）
+ * boot_kv.h - Bootloader/App 共享的 KV 存储（components/fkv）
  *
  * KV 分区（A/B 两个等大区）地址与大小见各板 partition.h：
  *   FLASH_KV_BASE0 / FLASH_KV_BASE1 / FLASH_KV_SIZE
@@ -17,7 +17,7 @@
 #define BOOT_KV_H
 
 #include "partition.h"
-#include "kvfs.h"
+#include "fkv.h"
 
 #include <stdint.h>
 
@@ -30,7 +30,7 @@
 #define BOOT_KV_KEY_CONFIG      0x43464731U
 
 /* 实例指针（供诊断/统计使用，boot_kv_init 之后有效） */
-kvfs_t *boot_kv(void);
+fkv_t *boot_kv(void);
 
 /* 初始化 + 挂载（幂等）；KV 区无效时自动格式化。返回 0 成功 */
 int boot_kv_init(void);

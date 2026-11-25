@@ -1,19 +1,19 @@
 /*
- * kvfs_test.c - 双区滚动键值存储测试
+ * fkv_test.c - 双区滚动键值存储测试
  *
  * 用两段 RAM 模拟 Flash（编程只能 1→0、擦除按扇区），覆盖：
  *   空设备、格式化、读写覆盖、删除/墓碑、掉电半条记录、写满轮转、只读、遍历。
  */
 
 #include "test.h"
-#include "kvfs_internal.h"
+#include "fkv_internal.h"
 
 #define T_ERASE     1024u
 #define T_TOTAL     (T_ERASE * 2u)
 
 static uint8_t s_flash[T_TOTAL];
 static uint32_t s_erase_count;
-static kvfs_t s_kv;
+static fkv_t s_kv;
 static uint8_t s_work[128];
 
 /* ============================== RAM Flash ============================== */
@@ -57,7 +57,7 @@ static int t_erase(void *ctx, uint32_t addr, uint32_t size)
 
 /* ============================== 辅助 ============================== */
 
-static const kvfs_blockdev_t s_dev = {
+static const fkv_blockdev_t s_dev = {
     .read = t_read,
     .program = t_program,
     .erase = t_erase,
@@ -69,7 +69,7 @@ static const kvfs_blockdev_t s_dev = {
     .program_size = 1U
 };
 
-static const kvfs_config_t s_cfg = {
+static const fkv_config_t s_cfg = {
     .workbuf = s_work,
     .workbuf_size = sizeof(s_work),
     .max_value = 64U,
@@ -85,38 +85,38 @@ static void kv_reset(void)
 
 static int kv_open(uint8_t readonly)
 {
-    kvfs_config_t cfg = s_cfg;
+    fkv_config_t cfg = s_cfg;
 
     cfg.readonly = readonly;
     memset(&s_kv, 0, sizeof(s_kv));
-    return kvfs_init(&s_kv, &s_dev, &cfg);
+    return fkv_init(&s_kv, &s_dev, &cfg);
 }
 
 static int kv_format_open(void)
 {
     int rc = kv_open(0U);
 
-    if (rc != KVFS_OK) {
+    if (rc != FKV_OK) {
         return rc;
     }
-    rc = kvfs_format(&s_kv);
-    if (rc != KVFS_OK) {
+    rc = fkv_format(&s_kv);
+    if (rc != FKV_OK) {
         return rc;
     }
-    return kvfs_mount(&s_kv);
+    return fkv_mount(&s_kv);
 }
 
-/* 读取并比较；返回 KVFS_OK 表示一致 */
+/* 读取并比较；返回 FKV_OK 表示一致 */
 static int expect_value(uint32_t key, const void *want, uint32_t len)
 {
     uint8_t buf[64];
     uint32_t got = 0U;
-    int rc = kvfs_get(&s_kv, key, buf, sizeof(buf), &got);
+    int rc = fkv_get(&s_kv, key, buf, sizeof(buf), &got);
 
-    if (rc != KVFS_OK || got != len || memcmp(buf, want, len) != 0) {
+    if (rc != FKV_OK || got != len || memcmp(buf, want, len) != 0) {
         return -1;
     }
-    return KVFS_OK;
+    return FKV_OK;
 }
 
 /* 遍历回调：统计存活键数量与键值之和 */
@@ -139,75 +139,75 @@ static int visit_cb(void *ctx, uint32_t key, const void *value, uint32_t len)
 
 /* ============================== 测试 ============================== */
 
-void ut_kvfs(void)
+void ut_fkv(void)
 {
     uint8_t val[16];
     uint32_t len = 0U;
     uint32_t i;
 
-    tf_begin("kvfs/未格式化");
+    tf_begin("fkv/未格式化");
     kv_reset();
-    TF_CHECK_INT(kv_open(0U), KVFS_OK);
-    TF_CHECK_INT(kvfs_mount(&s_kv), KVFS_ERR_FORMAT);
-    TF_CHECK_INT(kvfs_put(&s_kv, 1U, "x", 1U), KVFS_ERR_STATE);
+    TF_CHECK_INT(kv_open(0U), FKV_OK);
+    TF_CHECK_INT(fkv_mount(&s_kv), FKV_ERR_FORMAT);
+    TF_CHECK_INT(fkv_put(&s_kv, 1U, "x", 1U), FKV_ERR_STATE);
     tf_end();
 
-    tf_begin("kvfs/格式化与读写");
+    tf_begin("fkv/格式化与读写");
     kv_reset();
-    TF_CHECK_INT(kv_format_open(), KVFS_OK);
+    TF_CHECK_INT(kv_format_open(), FKV_OK);
     {
-        kvfs_statfs_t st;
+        fkv_statfs_t st;
 
-        TF_CHECK_INT(kvfs_statfs(&s_kv, &st), KVFS_OK);
-        TF_CHECK_INT(st.total_bytes, T_ERASE - KVFS_SUPER_SIZE);
-        TF_CHECK_INT(st.free_bytes, T_ERASE - KVFS_SUPER_SIZE);
+        TF_CHECK_INT(fkv_statfs(&s_kv, &st), FKV_OK);
+        TF_CHECK_INT(st.total_bytes, T_ERASE - FKV_SUPER_SIZE);
+        TF_CHECK_INT(st.free_bytes, T_ERASE - FKV_SUPER_SIZE);
         TF_CHECK_INT(st.total_blocks, 2U);
     }
-    TF_CHECK_INT(kvfs_put(&s_kv, 1U, "abc", 3U), KVFS_OK);
-    TF_CHECK_INT(expect_value(1U, "abc", 3U), KVFS_OK);
-    TF_CHECK_INT(kvfs_size(&s_kv, 1U, &len), KVFS_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 1U, "abc", 3U), FKV_OK);
+    TF_CHECK_INT(expect_value(1U, "abc", 3U), FKV_OK);
+    TF_CHECK_INT(fkv_size(&s_kv, 1U, &len), FKV_OK);
     TF_CHECK_INT(len, 3U);
-    TF_CHECK_INT(kvfs_exists(&s_kv, 1U), 1);
+    TF_CHECK_INT(fkv_exists(&s_kv, 1U), 1);
 
     /* 覆盖写：读取返回最新值 */
-    TF_CHECK_INT(kvfs_put(&s_kv, 1U, "xy", 2U), KVFS_OK);
-    TF_CHECK_INT(expect_value(1U, "xy", 2U), KVFS_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 1U, "xy", 2U), FKV_OK);
+    TF_CHECK_INT(expect_value(1U, "xy", 2U), FKV_OK);
 
     /* 不存在 / 缓冲不足 / 超长 */
-    TF_CHECK_INT(kvfs_get(&s_kv, 2U, NULL, 0U, &len), KVFS_ERR_NOENT);
-    TF_CHECK_INT(kvfs_exists(&s_kv, 2U), 0);
-    TF_CHECK_INT(kvfs_get(&s_kv, 1U, val, 1U, &len), KVFS_ERR_NOMEM);
+    TF_CHECK_INT(fkv_get(&s_kv, 2U, NULL, 0U, &len), FKV_ERR_NOENT);
+    TF_CHECK_INT(fkv_exists(&s_kv, 2U), 0);
+    TF_CHECK_INT(fkv_get(&s_kv, 1U, val, 1U, &len), FKV_ERR_NOMEM);
     TF_CHECK_INT(len, 2U);
     {
         uint8_t big[80];
 
         memset(big, 0x5A, sizeof(big));
-        TF_CHECK_INT(kvfs_put(&s_kv, 3U, big, sizeof(big)), KVFS_ERR_INVAL);
+        TF_CHECK_INT(fkv_put(&s_kv, 3U, big, sizeof(big)), FKV_ERR_INVAL);
     }
-    TF_CHECK_INT(kvfs_check(&s_kv), KVFS_OK);
+    TF_CHECK_INT(fkv_check(&s_kv), FKV_OK);
     tf_end();
 
-    tf_begin("kvfs/删除与墓碑");
-    TF_CHECK_INT(kvfs_del(&s_kv, 1U), KVFS_OK);
-    TF_CHECK_INT(kvfs_exists(&s_kv, 1U), 0);
-    TF_CHECK_INT(kvfs_get(&s_kv, 1U, NULL, 0U, NULL), KVFS_ERR_NOENT);
-    TF_CHECK_INT(kvfs_del(&s_kv, 1U), KVFS_ERR_NOENT);
-    TF_CHECK_INT(kvfs_put(&s_kv, 1U, "new", 3U), KVFS_OK);
-    TF_CHECK_INT(expect_value(1U, "new", 3U), KVFS_OK);
+    tf_begin("fkv/删除与墓碑");
+    TF_CHECK_INT(fkv_del(&s_kv, 1U), FKV_OK);
+    TF_CHECK_INT(fkv_exists(&s_kv, 1U), 0);
+    TF_CHECK_INT(fkv_get(&s_kv, 1U, NULL, 0U, NULL), FKV_ERR_NOENT);
+    TF_CHECK_INT(fkv_del(&s_kv, 1U), FKV_ERR_NOENT);
+    TF_CHECK_INT(fkv_put(&s_kv, 1U, "new", 3U), FKV_OK);
+    TF_CHECK_INT(expect_value(1U, "new", 3U), FKV_OK);
     tf_end();
 
-    tf_begin("kvfs/掉电未提交记录");
+    tf_begin("fkv/掉电未提交记录");
     kv_reset();
-    TF_CHECK_INT(kv_format_open(), KVFS_OK);
-    TF_CHECK_INT(kvfs_put(&s_kv, 7U, "hello", 5U), KVFS_OK);
+    TF_CHECK_INT(kv_format_open(), FKV_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 7U, "hello", 5U), FKV_OK);
     {
         /* 在日志尾部伪造“Header+Payload 已写、Commit 未写”的半成品 */
-        kvfs_rec_hdr_t hdr;
+        fkv_rec_hdr_t hdr;
         uint32_t addr = s_kv.region_base[s_kv.active] + s_kv.write_off;
 
         memset(&hdr, 0, sizeof(hdr));
-        hdr.magic = KVFS_REC_MAGIC;
-        hdr.version = KVFS_VERSION;
+        hdr.magic = FKV_REC_MAGIC;
+        hdr.version = FKV_VERSION;
         hdr.length = 5U;
         hdr.sequence = 999U;
         hdr.key = 7U;
@@ -217,22 +217,22 @@ void ut_kvfs(void)
     }
 
     /* 重新上电：半成品不可见，旧值仍可读；该区被标记为需要压缩 */
-    TF_CHECK_INT(kv_open(0U), KVFS_OK);
-    TF_CHECK_INT(kvfs_mount(&s_kv), KVFS_OK);
-    TF_CHECK_INT(expect_value(7U, "hello", 5U), KVFS_OK);
+    TF_CHECK_INT(kv_open(0U), FKV_OK);
+    TF_CHECK_INT(fkv_mount(&s_kv), FKV_OK);
+    TF_CHECK_INT(expect_value(7U, "hello", 5U), FKV_OK);
     TF_CHECK_INT(s_kv.write_off, T_ERASE);
     {
         uint32_t before = s_erase_count;
 
-        TF_CHECK_INT(kvfs_put(&s_kv, 7U, "world", 5U), KVFS_OK);
+        TF_CHECK_INT(fkv_put(&s_kv, 7U, "world", 5U), FKV_OK);
         TF_CHECK(s_erase_count > before);       /* 触发滚动压缩 */
-        TF_CHECK_INT(expect_value(7U, "world", 5U), KVFS_OK);
+        TF_CHECK_INT(expect_value(7U, "world", 5U), FKV_OK);
     }
     tf_end();
 
-    tf_begin("kvfs/写满轮转");
+    tf_begin("fkv/写满轮转");
     kv_reset();
-    TF_CHECK_INT(kv_format_open(), KVFS_OK);
+    TF_CHECK_INT(kv_format_open(), FKV_OK);
     {
         uint32_t seq_no;
 
@@ -242,8 +242,8 @@ void ut_kvfs(void)
             memset(buf, 0, sizeof(buf));
             buf[0] = (uint8_t)seq_no;
             buf[1] = (uint8_t)(seq_no >> 8);
-            TF_CHECK_INT(kvfs_put(&s_kv, seq_no % 6U, buf, sizeof(buf)),
-                         KVFS_OK);
+            TF_CHECK_INT(fkv_put(&s_kv, seq_no % 6U, buf, sizeof(buf)),
+                         FKV_OK);
         }
         TF_CHECK(s_kv.generation > 1U);
         TF_CHECK(s_erase_count >= 3U);
@@ -260,47 +260,47 @@ void ut_kvfs(void)
             memset(buf, 0, sizeof(buf));
             buf[0] = (uint8_t)last;
             buf[1] = (uint8_t)(last >> 8);
-            TF_CHECK_INT(expect_value(i, buf, sizeof(buf)), KVFS_OK);
+            TF_CHECK_INT(expect_value(i, buf, sizeof(buf)), FKV_OK);
         }
-        TF_CHECK_INT(kvfs_check(&s_kv), KVFS_OK);
+        TF_CHECK_INT(fkv_check(&s_kv), FKV_OK);
     }
     tf_end();
 
-    tf_begin("kvfs/手动压缩与遍历");
+    tf_begin("fkv/手动压缩与遍历");
     kv_reset();
-    TF_CHECK_INT(kv_format_open(), KVFS_OK);
-    TF_CHECK_INT(kvfs_put(&s_kv, 10U, "aaa", 3U), KVFS_OK);
-    TF_CHECK_INT(kvfs_put(&s_kv, 20U, "bb", 2U), KVFS_OK);
-    TF_CHECK_INT(kvfs_put(&s_kv, 30U, "c", 1U), KVFS_OK);
-    TF_CHECK_INT(kvfs_del(&s_kv, 20U), KVFS_OK);
+    TF_CHECK_INT(kv_format_open(), FKV_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 10U, "aaa", 3U), FKV_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 20U, "bb", 2U), FKV_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 30U, "c", 1U), FKV_OK);
+    TF_CHECK_INT(fkv_del(&s_kv, 20U), FKV_OK);
     {
         uint32_t gen = s_kv.generation;
         uint32_t before = s_erase_count;
         visit_ctx_t v;
 
-        TF_CHECK_INT(kvfs_gc(&s_kv), KVFS_OK);
+        TF_CHECK_INT(fkv_gc(&s_kv), FKV_OK);
         TF_CHECK_INT(s_kv.generation, gen + 1U);
         TF_CHECK(s_erase_count > before);
-        TF_CHECK_INT(expect_value(10U, "aaa", 3U), KVFS_OK);
-        TF_CHECK_INT(expect_value(30U, "c", 1U), KVFS_OK);
-        TF_CHECK_INT(kvfs_exists(&s_kv, 20U), 0);
+        TF_CHECK_INT(expect_value(10U, "aaa", 3U), FKV_OK);
+        TF_CHECK_INT(expect_value(30U, "c", 1U), FKV_OK);
+        TF_CHECK_INT(fkv_exists(&s_kv, 20U), 0);
 
         /* 遍历：只剩 10 与 30 两个存活键 */
         memset(&v, 0, sizeof(v));
-        TF_CHECK_INT(kvfs_foreach(&s_kv, visit_cb, &v), KVFS_OK);
+        TF_CHECK_INT(fkv_foreach(&s_kv, visit_cb, &v), FKV_OK);
         TF_CHECK_INT(v.count, 2U);
         TF_CHECK_INT(v.key_sum, 40U);
         TF_CHECK_INT(v.bytes, 4U);
     }
     tf_end();
 
-    tf_begin("kvfs/只读挂载");
-    TF_CHECK_INT(kv_open(1U), KVFS_OK);
-    TF_CHECK_INT(kvfs_mount(&s_kv), KVFS_OK);
-    TF_CHECK_INT(kvfs_put(&s_kv, 10U, "zzz", 3U), KVFS_ERR_READONLY);
-    TF_CHECK_INT(kvfs_del(&s_kv, 10U), KVFS_ERR_READONLY);
-    TF_CHECK_INT(kvfs_format(&s_kv), KVFS_ERR_READONLY);
-    TF_CHECK_INT(expect_value(10U, "aaa", 3U), KVFS_OK);
-    TF_CHECK_INT(kvfs_check(&s_kv), KVFS_OK);
+    tf_begin("fkv/只读挂载");
+    TF_CHECK_INT(kv_open(1U), FKV_OK);
+    TF_CHECK_INT(fkv_mount(&s_kv), FKV_OK);
+    TF_CHECK_INT(fkv_put(&s_kv, 10U, "zzz", 3U), FKV_ERR_READONLY);
+    TF_CHECK_INT(fkv_del(&s_kv, 10U), FKV_ERR_READONLY);
+    TF_CHECK_INT(fkv_format(&s_kv), FKV_ERR_READONLY);
+    TF_CHECK_INT(expect_value(10U, "aaa", 3U), FKV_OK);
+    TF_CHECK_INT(fkv_check(&s_kv), FKV_OK);
     tf_end();
 }

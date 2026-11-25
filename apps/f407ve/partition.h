@@ -14,7 +14,7 @@
  * 5     APP 主程序        0x08010000      192KB     S4(64K) + S5(128K)
  * 6     OTA 升级包        0x08040000      256KB     S6 + S7
  *
- * KV 区由 components/kvfs 使用（双区滚动日志、掉电安全）：
+ * KV 区由 components/fkv 使用（双区滚动日志、掉电安全）：
  *   - A/B 两区轮流追加，写满后把有效记录搬到另一区并擦除旧区；
  *   - 启动状态（tries/crash/ota 标识）、OTA 进度、应用配置都存放在 KV 中。
  *
@@ -32,7 +32,7 @@
 #define FLASH_ROM_BASE               0x08000000U
 #define FLASH_ROM_SIZE               (16U * 1024U)
 
-/* KV 区：A/B 两个等大分区（components/kvfs 使用） */
+/* KV 区：A/B 两个等大分区（components/fkv 使用） */
 #define FLASH_KV_BASE0           0x08004000U
 #define FLASH_KV_BASE1           0x08008000U
 #define FLASH_KV_SIZE            (16U * 1024U)

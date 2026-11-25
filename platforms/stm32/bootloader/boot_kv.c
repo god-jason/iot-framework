@@ -1,5 +1,5 @@
 /*
- * boot_kv.c - KV 存储接入（kvfs + 内部 Flash 原语）
+ * boot_kv.c - KV 存储接入（fkv + 内部 Flash 原语）
  *
  * 读：内存映射直读（volatile 逐字节，避免依赖 libc）；
  * 写/擦：board_flash_write / board_flash_erase（platforms/stm32<family>）。
@@ -13,7 +13,7 @@
 
 /* 工作缓冲：不小于单条 value 上限 */
 static uint8_t s_work[BOOT_KV_MAX_VALUE];
-static kvfs_t s_kv;
+static fkv_t s_kv;
 static uint8_t s_ready;
 
 static int kv_flash_read(void *ctx, uint32_t addr, void *buf, uint32_t size)
@@ -45,7 +45,7 @@ static int kv_flash_erase(void *ctx, uint32_t addr, uint32_t size)
     return board_flash_erase(addr, size);
 }
 
-static const kvfs_blockdev_t s_dev = {
+static const fkv_blockdev_t s_dev = {
     .read = kv_flash_read,
     .program = kv_flash_program,
     .erase = kv_flash_erase,
@@ -57,14 +57,14 @@ static const kvfs_blockdev_t s_dev = {
     .program_size = 4U
 };
 
-static const kvfs_config_t s_cfg = {
+static const fkv_config_t s_cfg = {
     .workbuf = s_work,
     .workbuf_size = sizeof(s_work),
     .max_value = BOOT_KV_MAX_VALUE,
     .readonly = 0U
 };
 
-kvfs_t *boot_kv(void)
+fkv_t *boot_kv(void)
 {
     return &s_kv;
 }
@@ -76,20 +76,20 @@ int boot_kv_init(void)
     if (s_ready != 0U) {
         return 0;
     }
-    rc = kvfs_init(&s_kv, &s_dev, &s_cfg);
-    if (rc != KVFS_OK) {
+    rc = fkv_init(&s_kv, &s_dev, &s_cfg);
+    if (rc != FKV_OK) {
         return -1;
     }
 
-    rc = kvfs_mount(&s_kv);
-    if (rc == KVFS_ERR_FORMAT || rc == KVFS_ERR_VERSION) {
+    rc = fkv_mount(&s_kv);
+    if (rc == FKV_ERR_FORMAT || rc == FKV_ERR_VERSION) {
         /* 首次使用或格式不兼容：自动格式化 */
-        if (kvfs_format(&s_kv) != KVFS_OK) {
+        if (fkv_format(&s_kv) != FKV_OK) {
             return -1;
         }
-        rc = KVFS_OK;
+        rc = FKV_OK;
     }
-    if (rc != KVFS_OK) {
+    if (rc != FKV_OK) {
         return -1;
     }
 
@@ -102,7 +102,7 @@ int boot_kv_put(uint32_t key, const void *data, uint32_t len)
     if (boot_kv_init() != 0) {
         return -1;
     }
-    return (kvfs_put(&s_kv, key, data, len) == KVFS_OK) ? 0 : -1;
+    return (fkv_put(&s_kv, key, data, len) == FKV_OK) ? 0 : -1;
 }
 
 int boot_kv_get(uint32_t key, void *buf, uint32_t cap, uint32_t *len)
@@ -113,20 +113,20 @@ int boot_kv_get(uint32_t key, void *buf, uint32_t cap, uint32_t *len)
     if (boot_kv_init() != 0) {
         return -1;
     }
-    rc = kvfs_get(&s_kv, key, buf, cap, &n);
-    if (rc == KVFS_OK) {
+    rc = fkv_get(&s_kv, key, buf, cap, &n);
+    if (rc == FKV_OK) {
         if (len != NULL) {
             *len = n;
         }
         return 0;
     }
-    if (rc == KVFS_ERR_NOENT) {
+    if (rc == FKV_ERR_NOENT) {
         return -2;
     }
     if (len != NULL) {
         *len = n;
     }
-    return (rc == KVFS_ERR_NOMEM) ? -3 : -1;
+    return (rc == FKV_ERR_NOMEM) ? -3 : -1;
 }
 
 int boot_kv_del(uint32_t key)
@@ -136,8 +136,8 @@ int boot_kv_del(uint32_t key)
     if (boot_kv_init() != 0) {
         return -1;
     }
-    rc = kvfs_del(&s_kv, key);
-    return (rc == KVFS_OK || rc == KVFS_ERR_NOENT) ? 0 : -1;
+    rc = fkv_del(&s_kv, key);
+    return (rc == FKV_OK || rc == FKV_ERR_NOENT) ? 0 : -1;
 }
 
 int boot_kv_exists(uint32_t key)
@@ -147,6 +147,6 @@ int boot_kv_exists(uint32_t key)
     if (boot_kv_init() != 0) {
         return -1;
     }
-    rc = kvfs_exists(&s_kv, key);
+    rc = fkv_exists(&s_kv, key);
     return (rc < 0) ? -1 : rc;
 }

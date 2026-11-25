@@ -6,7 +6,7 @@
  *   - 启动时从 KV 区加载（无记录/校验失败/长度不符则用默认值）；
  *   - boot_count +1 并保存，复位后可见计数增长（验证掉电保持）。
  *
- * 存储：components/config 直接调用 components/kvfs（双区滚动 + Commit），
+ * 存储：components/config 直接调用 components/fkv（双区滚动 + Commit），
  * 键为 BOOT_KV_KEY_CONFIG；config 为单例，初始化一次后直接读写。
  */
 

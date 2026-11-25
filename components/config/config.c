@@ -1,13 +1,13 @@
 /*
- * config.c - 基于 kvfs 的配置存储（单例）
+ * config.c - 基于 fkv 的配置存储（单例）
  *
  * 配置结构体以原始内存形式作为 KV 的一条 value：
- *   save   -> kvfs_put：追加记录，写头与数据后回读校验，最后写 Commit；
- *   load   -> kvfs_get：取该键最新值；
- *   format -> kvfs_del：追加墓碑记录，旧记录由压缩回收。
+ *   save   -> fkv_put：追加记录，写头与数据后回读校验，最后写 Commit；
+ *   load   -> fkv_get：取该键最新值；
+ *   format -> fkv_del：追加墓碑记录，旧记录由压缩回收。
  *
  * 上下文只保留一份（config_init 绑定），双区滚动、CRC32、掉电恢复、
- * 空间压缩全部由 components/kvfs 负责；kvfs 本身不加锁，并发保护由本层
+ * 空间压缩全部由 components/fkv 负责；fkv 本身不加锁，并发保护由本层
  * 用一把 ROS 互斥量完成（调度器未启动时自动降级为无锁单线程访问）。
  */
 
@@ -18,7 +18,7 @@
 #include <stddef.h>
 
 static struct {
-    kvfs_t  *kv;
+    fkv_t  *kv;
     uint32_t key;
     uint32_t max_size;
     uint16_t version;
@@ -49,7 +49,7 @@ static void config_leave(int locked)
     }
 }
 
-int config_init(kvfs_t *kv, uint32_t key, uint16_t version, uint32_t max_size)
+int config_init(fkv_t *kv, uint32_t key, uint16_t version, uint32_t max_size)
 {
     if (kv == NULL || max_size == 0U) {
         return CONFIG_ERR_PARAM;
@@ -78,7 +78,7 @@ int config_check(void)
     }
 
     locked = config_enter();
-    rc = kvfs_exists(s_cfg.kv, s_cfg.key);
+    rc = fkv_exists(s_cfg.kv, s_cfg.key);
     config_leave(locked);
 
     if (rc == 1) {
@@ -104,16 +104,16 @@ int config_load(void *data, uint32_t size)
     }
 
     locked = config_enter();
-    rc = kvfs_get(s_cfg.kv, s_cfg.key, data, size, &len);
+    rc = fkv_get(s_cfg.kv, s_cfg.key, data, size, &len);
     config_leave(locked);
 
-    if (rc == KVFS_OK) {
+    if (rc == FKV_OK) {
         return (len == size) ? CONFIG_OK : CONFIG_ERR_SIZE;
     }
-    if (rc == KVFS_ERR_NOENT) {
+    if (rc == FKV_ERR_NOENT) {
         return CONFIG_NONE;
     }
-    return (rc == KVFS_ERR_NOMEM) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
+    return (rc == FKV_ERR_NOMEM) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
 }
 
 int config_load_raw(void *buf, uint32_t cap, uint32_t *len, uint16_t *version)
@@ -127,10 +127,10 @@ int config_load_raw(void *buf, uint32_t cap, uint32_t *len, uint16_t *version)
     }
 
     locked = config_enter();
-    rc = kvfs_get(s_cfg.kv, s_cfg.key, buf, cap, &n);
+    rc = fkv_get(s_cfg.kv, s_cfg.key, buf, cap, &n);
     config_leave(locked);
 
-    if (rc == KVFS_OK) {
+    if (rc == FKV_OK) {
         if (len != NULL) {
             *len = n;
         }
@@ -139,13 +139,13 @@ int config_load_raw(void *buf, uint32_t cap, uint32_t *len, uint16_t *version)
         }
         return CONFIG_OK;
     }
-    if (rc == KVFS_ERR_NOENT) {
+    if (rc == FKV_ERR_NOENT) {
         return CONFIG_NONE;
     }
     if (len != NULL) {
         *len = n;
     }
-    return (rc == KVFS_ERR_NOMEM) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
+    return (rc == FKV_ERR_NOMEM) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
 }
 
 int config_save(const void *data, uint32_t size)
@@ -161,13 +161,13 @@ int config_save(const void *data, uint32_t size)
     }
 
     locked = config_enter();
-    rc = kvfs_put(s_cfg.kv, s_cfg.key, data, size);
+    rc = fkv_put(s_cfg.kv, s_cfg.key, data, size);
     config_leave(locked);
 
-    if (rc == KVFS_OK) {
+    if (rc == FKV_OK) {
         return CONFIG_OK;
     }
-    return (rc == KVFS_ERR_INVAL) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
+    return (rc == FKV_ERR_INVAL) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
 }
 
 int config_format(void)
@@ -180,8 +180,8 @@ int config_format(void)
     }
 
     locked = config_enter();
-    rc = kvfs_del(s_cfg.kv, s_cfg.key);
+    rc = fkv_del(s_cfg.kv, s_cfg.key);
     config_leave(locked);
 
-    return (rc == KVFS_OK || rc == KVFS_ERR_NOENT) ? CONFIG_OK : CONFIG_ERR_IO;
+    return (rc == FKV_OK || rc == FKV_ERR_NOENT) ? CONFIG_OK : CONFIG_ERR_IO;
 }
