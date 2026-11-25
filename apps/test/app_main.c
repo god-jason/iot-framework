@@ -38,6 +38,7 @@ void ut_map(void);
 void ut_vec(void);
 void ut_queue(void);
 void ut_ringbuf(void);
+void ut_var(void);
 void ut_fsm(void);
 void ut_json(void);
 void ut_log(void);
@@ -135,6 +136,7 @@ void app_main(void *arg)
     ut_vec();
     ut_queue();
     ut_ringbuf();
+    ut_var();
     ut_fsm();
     ut_json();
     ut_log();

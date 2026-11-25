@@ -6,7 +6,7 @@
  *
  * 聚合通用能力：
  *   - 标准库：stdint.h / stddef.h / stdbool.h / string.h / stdlib.h
- *   - 基础组件：log / strings / list / fsm / queue / ringbuf / json
+ *   - 基础组件：log / strings / list / fsm / queue / ringbuf / var / json
  *
  * src 之外的代码包含 ros.h（或直接包含本文件）即可使用上述接口，
  * 无需再逐个包含基础组件的头文件。
@@ -26,6 +26,7 @@
 #include "fsm.h"      /* 表驱动状态机 */
 #include "queue.h"    /* 定长 FIFO 队列 */
 #include "ringbuf.h"  /* 字节环形缓冲 */
+#include "var.h"  /* 通用值容器（bool/int/uint/float/string） */
 #include "json.h"     /* cJSON 宏封装 */
 
 #endif /* COMMON_H */
