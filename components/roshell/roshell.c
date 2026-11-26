@@ -1,15 +1,15 @@
 ﻿/*
- * roshell.c - roshell 实例生命周期与公开 API
+ * roshell.c - roshell 实例生命周期、公开 API 与交互会话
  *
  * create / destroy、脚本加载扫描（rs_scan：块配对校验 + 函数登记）、
- * 同步执行（rs_exec / exec_line）、run 异步任务槽管理、
- * 顶层变量读取与错误 / 程序对象工具。
+ * 同步执行（rs_exec / exec_line）、顶层变量读取与错误 / 程序对象工具；
+ * 交互会话（接收缓冲 / 行编辑 / 输入任务 / start / shutdown）也在本文件。
  * 词法 / 求值 / 语句解释分别在 roshell_lexer.c / roshell_eval.c /
- * roshell_interp.c，内置函数表在 roshell_func.c。
+ * roshell_interp.c，内置函数表在 roshell_func.c，命令行分派在 roshell_cmd.c。
  */
 
 #include "roshell.h"
-#include "roshell_core.h"
+#include "roshell_interp.h"
 #include "roshell_func.h"
 #include "roshell_lexer.h"
 #include "ros.h"
@@ -447,133 +447,13 @@ fail:
     return NULL;
 }
 
-/* 把脚本 prog 登记为会话顶层 prog（接管调用方持有的引用）：
- * 函数在 rs_exec 结束后仍保留，供 run 命令查找（规格 §9 会话示例）。
- * 运行中的 run 任务另持引用，替换不会释放正在使用的脚本。 */
-void rs_hold_top_prog(rs_t *rs, rs_prog_t *prog)
-{
-    if (rs->top_prog == prog) {
-        return;
-    }
-    if (rs->top_prog != NULL) {
-        rs_prog_release(rs->top_prog);
-    }
-    rs->top_prog = prog;
-}
-
-/* ============================== run 槽位 / 任务 ============================== */
-
-static void rs_slot_reap(rs_slot_t *s)
-{
-    if (s->state == RS_RUN_RUNNING || s->task == NULL) {
-        return;
-    }
-    if (s->task->state == ROS_TASK_TERMINATED) {
-        ros_task_destroy(s->task);
-        s->task = NULL;
-        s->state = RS_RUN_FREE;
-        s->fname[0] = '\0';
-        list_remove(&s->link);              /* 归还槽位：摘除活跃表 */
-    }
-}
-
-static void rs_run_entry(void *arg)
-{
-    rs_slot_t *s = (rs_slot_t *)arg;
-    rs_err_t e;
-    rs_ctx_t ctx;
-    rs_env_t env;
-    int rc;
-    memset(&e, 0, sizeof(e));
-    memset(&ctx, 0, sizeof(ctx));
-    env.rs = s->owner;
-    env.prog = s->prog;
-    env.ctx = &ctx;
-    env.depth = 0U;
-    env.err = &e;
-    if (s->fname[0] != '\0') {
-        const rs_fn_t *f = rs_find_func(s->prog, s->fname,
-                                          (uint16_t)strlen(s->fname));
-        if (f == NULL) {
-            rc = RS_ERR_UNDEF_FUNC;
-        } else if (f->argc != s->argc) {
-            rc = RS_ERR_ARG_COUNT;
-        } else {
-            rc = rs_call_body(s->owner, s->prog, f, s->args, 0U, NULL, NULL, &e);
-        }
-    } else {
-        if (vec_init(&ctx.toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0) {
-            rc = RS_ERR_RESOURCE;
-        } else {
-            rc = rs_exec_unit(&env);
-        }
-        rs_vars_release(&ctx);
-        vec_deinit(&ctx.toks);
-    }
-    s->code = rc;
-    s->state = (rc == RS_OK) ? RS_RUN_DONE : RS_RUN_ERROR;
-    rs_prog_release(s->prog);
-    s->prog = NULL;
-    ros_task_exit();
-}
-
-static int rs_slot_start(rs_t *rs, rs_prog_t *prog, const char *fname,
-                         uint16_t flen, const rs_value_t *args, uint8_t argc)
-{
-    rs_slot_t *s = NULL;
-    ros_task_t *task;
-    uint32_t i;
-    uint32_t free_idx = RS_RUN_MAX;
-    for (i = 0U; i < RS_RUN_MAX; i++) {
-        rs_slot_reap(&rs->slots[i]);
-        if (s == NULL && rs->slots[i].state == RS_RUN_FREE) {
-            s = &rs->slots[i];
-            free_idx = i;
-        }
-    }
-    if (s == NULL) {
-        return RS_ERR_LIMIT;
-    }
-    memset(s, 0, sizeof(*s));
-    list_node_init(&s->link);               /* memset 后恢复游离态，待占槽成功后入表 */
-    s->owner = rs;
-    if (flen > 0U && flen < RS_NAME_MAX) {
-        memcpy(s->fname, fname, flen);
-        s->fname[flen] = '\0';
-    }
-    for (i = 0U; i < argc; i++) {
-        s->args[i] = args[i];
-        if (args[i].type == RS_VAL_STRING) {
-            memcpy(s->argstr[i], args[i].s, args[i].slen);
-            s->argstr[i][args[i].slen] = '\0';
-            s->args[i].s = s->argstr[i];
-        }
-    }
-    s->argc = argc;
-    task = ros_task_create_dynamic("roshell", RS_RUN_PRIO, rs_run_entry,
-                                   s, RS_RUN_STACK);
-    if (task == NULL) {
-        return RS_ERR_RESOURCE;
-    }
-    s->task = task;
-    s->prog = prog;
-    prog->refs++;
-    s->state = RS_RUN_RUNNING;
-    list_add_tail(&rs->active_list, &s->link);   /* 占槽成功：登记活跃表 */
-    return (int)free_idx;
-}
 /* ============================== 公开 API ============================== */
 
-rs_t *rs_create(void)
+roshell_t *rs_create(void)
 {
-    uint32_t i;
-    rs_t *rs = (rs_t *)ros_mem_calloc(1U, sizeof(*rs));
+    roshell_t *rs = (roshell_t *)ros_mem_calloc(1U, sizeof(*rs));
     if (rs == NULL) {
         return NULL;
-    }
-    list_init(&rs->active_list);
-    for (i = 0U; i < RS_RUN_MAX; i++) {
-        list_node_init(&rs->slots[i].link);
     }
     if (vec_init(&rs->top.toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0) {
         rs_destroy(rs);
@@ -582,44 +462,18 @@ rs_t *rs_create(void)
     return rs;
 }
 
-void rs_destroy(rs_t *rs)
+void rs_destroy(roshell_t *rs)
 {
-    list_node_t *pos;
     if (rs == NULL) {
         return;
     }
-    pos = list_first(&rs->active_list);
-    while (pos != NULL && pos != &rs->active_list.head) {
-        rs_slot_t *s = ROS_CONTAINER_OF(pos, rs_slot_t, link);
-        list_node_t *next = list_next(pos);
-
-        if (s->state == RS_RUN_RUNNING) {
-            pos = next;                     /* 运行中任务：跳过，由任务自行释放 */
-            continue;
-        }
-        list_remove(&s->link);
-        if (s->task != NULL) {
-            if (s->task->state == ROS_TASK_TERMINATED &&
-                ros_task_destroy(s->task) == ROS_OK) {
-                s->task = NULL;
-            }
-        }
-        if (s->prog != NULL) {
-            rs_prog_release(s->prog);
-            s->prog = NULL;
-        }
-        pos = next;
-    }
-    if (rs->top_prog != NULL) {
-        rs_prog_release(rs->top_prog);
-        rs->top_prog = NULL;
-    }
     rs_vars_release(&rs->top);
     vec_deinit(&rs->top.toks);
+    vec_deinit(&rs->sleeps);            /* 持续命令状态表（惰性初始化，未用则为空） */
     ros_mem_free(rs);
 }
 
-int rs_exec(rs_t *rs, const char *script, rs_err_t *err)
+int rs_exec(roshell_t *rs, const char *script, rs_err_t *err)
 {
     rs_prog_t *prog;
     rs_env_t env;
@@ -639,18 +493,17 @@ int rs_exec(rs_t *rs, const char *script, rs_err_t *err)
     memset(&rs->top.ret, 0, sizeof(rs->top.ret));
     env.rs = rs;
     env.prog = prog;
-    env.ctx = &rs->top;
+    env.unit = &rs->top;
     env.depth = 0U;
     env.err = err;
-    /* 登记为会话顶层脚本：其中定义的函数在执行后仍保留给 run 命令 */
-    rs_hold_top_prog(rs, prog);
-    prog->refs++;                         /* 执行帧自持引用 */
+    /* 执行帧自持引用：rs_scan 的引用在执行结束后统一释放 */
+    prog->refs++;
     rc = rs_exec_unit(&env);
     rs_prog_release(prog);
     return rc;
 }
 
-int rs_exec_line(rs_t *rs, const char *line, rs_err_t *err)
+int rs_exec_line(roshell_t *rs, const char *line, rs_err_t *err)
 {
     if (rs == NULL || line == NULL) {
         rs_err(err, RS_ERR_PARAM, 0U, "bad parameter");
@@ -667,7 +520,7 @@ int rs_exec_line(rs_t *rs, const char *line, rs_err_t *err)
     return rs_exec(rs, line, err);
 }
 
-void rs_set_cmd_hook(rs_t *rs, rs_cmd_hook_t hook, void *ctx)
+void rs_set_cmd_hook(roshell_t *rs, rs_cmd_hook_t hook, void *ctx)
 {
     if (rs == NULL) {
         return;
@@ -676,115 +529,10 @@ void rs_set_cmd_hook(rs_t *rs, rs_cmd_hook_t hook, void *ctx)
     rs->cmd_hook_ctx = ctx;
 }
 
-int rs_run_async(rs_t *rs, const char *fn,
-                      const rs_arg_t *args, int nargs)
-{
-    rs_prog_t *prog;
-    const rs_fn_t *f;
-    rs_value_t vargs[RS_FUNC_ARGS_MAX];
-    int slot;
-    int i;
-    if (rs == NULL || fn == NULL || nargs < 0 ||
-        (nargs > 0 && args == NULL) ||
-        nargs > (int)RS_FUNC_ARGS_MAX) {
-        return RS_ERR_PARAM;
-    }
-    prog = rs->top_prog;
-    if (prog == NULL) {
-        return RS_ERR_UNDEF_FUNC;
-    }
-    f = rs_find_func(prog, fn, strlen(fn));
-    if (f == NULL) {
-        return RS_ERR_UNDEF_FUNC;
-    }
-    if ((uint8_t)nargs != f->argc) {
-        return RS_ERR_ARG_COUNT;
-    }
-    for (i = 0; i < nargs; i++) {
-        memset(&vargs[i], 0, sizeof(vargs[i]));
-        switch (args[i].type) {
-        case RS_ARG_INT:
-            vargs[i].type = RS_VAL_INT;
-            vargs[i].i = args[i].i;
-            break;
-        case RS_ARG_FLOAT:
-            vargs[i].type = RS_VAL_FLOAT;
-            vargs[i].f = args[i].f;
-            break;
-        case RS_ARG_BOOL:
-            vargs[i].type = RS_VAL_BOOL;
-            vargs[i].b = args[i].b;
-            break;
-        case RS_ARG_STR:
-            vargs[i].type = RS_VAL_STRING;
-            vargs[i].s = args[i].s;
-            vargs[i].slen = args[i].slen;
-            break;
-        default:
-            return RS_ERR_PARAM;
-        }
-    }
-    slot = rs_slot_start(rs, prog, fn, strlen(fn), vargs, (uint8_t)nargs);
-    return slot;
-}
-
-int rs_run_wait(rs_t *rs, int slot, uint32_t timeout_ms)
-{
-    rs_slot_t *s;
-    uint32_t waited = 0U;
-    uint8_t st;
-    int code;
-    if (rs == NULL || slot < 0 || (uint32_t)slot >= RS_RUN_MAX) {
-        return RS_ERR_PARAM;
-    }
-    s = &rs->slots[slot];
-    while (s->state == RS_RUN_RUNNING) {
-        if (timeout_ms != ROS_TIMEOUT_FOREVER && waited >= timeout_ms) {
-            return RS_ERR_TIMEOUT;
-        }
-        ros_sleep_ms(1U);
-        waited++;
-    }
-    st = s->state;
-    code = s->code;
-    rs_slot_reap(s);
-    if (st == RS_RUN_DONE) {
-        return RS_OK;
-    }
-    if (st == RS_RUN_ERROR) {
-        return code;
-    }
-    return RS_ERR_PARAM;
-}
-
-int rs_run_state(const rs_t *rs, int slot)
-{
-    if (rs == NULL || slot < 0 || (uint32_t)slot >= RS_RUN_MAX) {
-        return RS_ERR_PARAM;
-    }
-    return (int)rs->slots[slot].state;
-}
-
-int rs_run_count(const rs_t *rs)
-{
-    if (rs == NULL) {
-        return 0;
-    }
-    return (int)list_size(&rs->active_list);
-}
-
-const char *rs_run_fname(const rs_t *rs, int slot)
-{
-    if (rs == NULL || slot < 0 || (uint32_t)slot >= RS_RUN_MAX) {
-        return "";
-    }
-    return rs->slots[slot].fname;
-}
-
 /* ============================== 顶层变量读取 ============================== */
 
 #if RS_ENABLE_EXPR
-static rs_var_t *rs_top_var(rs_t *rs, const char *name)
+static rs_var_t *rs_top_var(roshell_t *rs, const char *name)
 {
     if (name[0] == '$') {
         name++;
@@ -792,7 +540,7 @@ static rs_var_t *rs_top_var(rs_t *rs, const char *name)
     return rs_var_find(&rs->top, name, (uint16_t)strlen(name));
 }
 
-int rs_get_int(rs_t *rs, const char *name, int32_t *out)
+int rs_get_int(roshell_t *rs, const char *name, int32_t *out)
 {
     rs_var_t *v;
     if (rs == NULL || name == NULL || out == NULL) {
@@ -809,7 +557,7 @@ int rs_get_int(rs_t *rs, const char *name, int32_t *out)
     return RS_OK;
 }
 
-int rs_get_float(rs_t *rs, const char *name, float *out)
+int rs_get_float(roshell_t *rs, const char *name, float *out)
 {
     rs_var_t *v;
     if (rs == NULL || name == NULL || out == NULL) {
@@ -826,7 +574,7 @@ int rs_get_float(rs_t *rs, const char *name, float *out)
     return RS_OK;
 }
 
-int rs_get_bool(rs_t *rs, const char *name, bool *out)
+int rs_get_bool(roshell_t *rs, const char *name, bool *out)
 {
     rs_var_t *v;
     if (rs == NULL || name == NULL || out == NULL) {
@@ -843,7 +591,7 @@ int rs_get_bool(rs_t *rs, const char *name, bool *out)
     return RS_OK;
 }
 
-int rs_get_str(rs_t *rs, const char *name, char *buf, uint32_t cap)
+int rs_get_str(roshell_t *rs, const char *name, char *buf, uint32_t cap)
 {
     rs_var_t *v;
     uint32_t n;
@@ -868,29 +616,247 @@ int rs_get_str(rs_t *rs, const char *name, char *buf, uint32_t cap)
 
 #else /* !RS_ENABLE_EXPR */
 
-int rs_get_int(rs_t *rs, const char *name, int32_t *out)
+int rs_get_int(roshell_t *rs, const char *name, int32_t *out)
 {
     (void)rs; (void)name; (void)out;
     return RS_ERR_UNSUPPORTED;
 }
 
-int rs_get_float(rs_t *rs, const char *name, float *out)
+int rs_get_float(roshell_t *rs, const char *name, float *out)
 {
     (void)rs; (void)name; (void)out;
     return RS_ERR_UNSUPPORTED;
 }
 
-int rs_get_bool(rs_t *rs, const char *name, bool *out)
+int rs_get_bool(roshell_t *rs, const char *name, bool *out)
 {
     (void)rs; (void)name; (void)out;
     return RS_ERR_UNSUPPORTED;
 }
 
-int rs_get_str(rs_t *rs, const char *name, char *buf, uint32_t cap)
+int rs_get_str(roshell_t *rs, const char *name, char *buf, uint32_t cap)
 {
     (void)rs; (void)name; (void)buf; (void)cap;
     return RS_ERR_UNSUPPORTED;
 }
 
 #endif /* RS_ENABLE_EXPR */
+
+/* ============================== 交互会话 ============================== */
+/*
+ * 会话状态直接存放在实例中（见 roshell.h 的 struct roshell）：接收环形缓冲（feed）、
+ * 简化行编辑、输入任务（process）与生命周期（start / shutdown）。
+ * 命令行分派在 roshell_cmd.c。
+ */
+
+#define RS_SHELL_TASK_NAME     "roshell_io"
+
+static void rs_prompt(void)
+{
+    ros_io_write(NULL, "> ", 2U);
+}
+
+/* 处理一个输入字节；返回 true 表示提交了一行 */
+static bool rs_edit_byte(roshell_t *rs, uint8_t c)
+{
+    if (c == 0x03U) {                       /* Ctrl-C：清行 */
+        rs->line_len = 0U;
+        rs->last_cr = false;
+        rs->line[0] = '\0';
+        ros_puts("^C");
+        rs_prompt();
+        return false;
+    }
+    if (c == '\r' || c == '\n') {
+        /* 终端可能只发 CR、只发 LF 或发 CRLF：都按一次提交处理 */
+        if (c == '\n' && rs->last_cr) {
+            rs->last_cr = false;
+            return false;
+        }
+        rs->last_cr = (c == '\r');
+        ros_io_write(NULL, "\n", 1U);
+        rs->line[rs->line_len] = '\0';
+        if (rs->line_len > 0U) {
+            (void)rs_cmd_dispatch(rs, rs->line);
+        }
+        rs->line_len = 0U;
+        if (!rs->exit_req) {
+            rs_prompt();
+        }
+        return true;
+    }
+    rs->last_cr = false;
+    if (c == 0x08U || c == 0x7FU) {         /* 退格 */
+        if (rs->line_len > 0U) {
+            rs->line_len--;
+            rs->line[rs->line_len] = '\0';
+            ros_io_write(NULL, "\b \b", 3U);
+        }
+        return false;
+    }
+    if (c == 0x1BU) {                       /* ESC：吞掉方向键等控制序列 */
+        rs->last_esc = true;
+        return false;
+    }
+    if (rs->last_esc) {
+        if (c == '[' || (c >= '0' && c <= '9') || c == ';') {
+            return false;
+        }
+        rs->last_esc = false;
+        return false;
+    }
+    if (c >= 0x20U && c < 0x7FU) {
+        if (rs->line_len + 1U < RS_LINE_MAX) {   /* 超长行截断 */
+            rs->line[rs->line_len++] = (char)c;
+            rs->line[rs->line_len] = '\0';
+            ros_putchar((char)c);
+        }
+    }
+    return false;
+}
+
+uint32_t rs_shell_process(roshell_t *rs)
+{
+    uint32_t lines = 0U;
+    uint8_t c;
+
+    if (rs == NULL || !rs->started) {
+        return 0U;
+    }
+    /* 推进异步持续命令（'-' 启动），保证即使没有输入也在轮转 on_tick */
+    rs_cmd_tick_all();
+    /* 先排空本轮全部输入（含 EOF 前已到达的行），再响应退出请求 */
+    while (ringbuf_read(&rs->rx, &c, 1U) == 1U) {
+        if (rs_edit_byte(rs, c)) {
+            lines++;
+        }
+    }
+    if (rs->exit_req) {
+        rs->finished = true;        /* 输入任务据此退出 */
+    }
+    return lines;
+}
+
+void rs_shell_feed(roshell_t *rs, const char *data, uint32_t len)
+{
+    if (rs == NULL || !rs->started || data == NULL || len == 0U) {
+        return;
+    }
+    (void)ringbuf_write(&rs->rx, data, len);
+}
+
+static void rs_shell_task_entry(void *arg)
+{
+    roshell_t *rs = (roshell_t *)arg;
+
+    for (;;) {
+        (void)rs_shell_process(rs);
+        if (rs->finished) {
+            break;
+        }
+        if (ringbuf_available(&rs->rx) == 0U) {
+            /* 有异步持续命令时提高轮转频率，保证 sleep 等命令的精度 */
+            ros_sleep_ms(rs_cmd_has_async() ? 1U : 5U);
+        }
+    }
+    ros_task_exit();
+}
+
+roshell_t *rs_shell_start(const char *version)
+{
+    roshell_t *rs;
+
+    rs = rs_create();
+    if (rs == NULL) {
+        ros_printf("shell: out of memory\r\n");
+        return NULL;
+    }
+    rs_cmd_install(rs);              /* 块内命令路由（规格 §8） */
+    (void)ringbuf_init(&rs->rx, rs->rx_mem, sizeof(rs->rx_mem));
+    rs->line_len = 0U;
+    rs->line[0] = '\0';
+    rs->last_cr = false;
+    rs->last_esc = false;
+    rs->finished = false;
+    rs->exit_req = false;
+    rs->version = version;
+    rs->cwd[0] = '/';
+    rs->cwd[1] = '\0';
+
+    rs->task = ros_task_create_dynamic(RS_SHELL_TASK_NAME,
+                                       RS_SHELL_PRIO,
+                                       rs_shell_task_entry, rs,
+                                       RS_SHELL_STACK);
+    if (rs->task == NULL) {
+        ros_mem_info_t info;
+
+        (void)memset(&info, 0, sizeof(info));
+        (void)ros_mem_get_info(&info);
+        ros_printf("shell: task create failed (stack=%u, free=%u)\r\n",
+                   (unsigned)RS_SHELL_STACK, (unsigned)info.free_bytes);
+        rs_destroy(rs);
+        return NULL;
+    }
+    rs->started = true;
+    ros_printf("roshell ready (%s): type 'help'\n",
+               version != NULL ? version : "pc");
+    rs_prompt();
+    return rs;
+}
+
+bool rs_shell_started(const roshell_t *rs)
+{
+    return (rs != NULL) && rs->started;
+}
+
+/* 当前工作目录；rs 为空或会话未启动时视为根目录 */
+const char *rs_shell_cwd(const roshell_t *rs)
+{
+    return ((rs != NULL) && (rs->cwd[0] != '\0')) ? rs->cwd : "/";
+}
+
+/* 保存当前工作目录（调用者需先校验目录存在） */
+int rs_shell_cwd_set(roshell_t *rs, const char *path)
+{
+    size_t len;
+
+    if (rs == NULL || path == NULL || path[0] != '/') {
+        return -1;
+    }
+    len = strlen(path);
+    if (len + 1U > sizeof(rs->cwd)) {
+        return -1;
+    }
+    memcpy(rs->cwd, path, len + 1U);
+    return 0;
+}
+
+bool rs_shell_task_finished(const roshell_t *rs)
+{
+    return (rs != NULL) && rs->finished;
+}
+
+void rs_shell_request_exit(roshell_t *rs)
+{
+    if (rs != NULL) {
+        rs->exit_req = true;
+    }
+}
+
+int rs_shell_shutdown(roshell_t *rs)
+{
+    if (rs == NULL || !rs->started || !rs->finished) {
+        return -1;
+    }
+    if (rs->task != NULL) {
+        (void)ros_task_destroy(rs->task);
+    }
+    rs_destroy(rs);
+    return 0;
+}
+
+uint32_t rs_shell_line_pending(const roshell_t *rs)
+{
+    return (rs != NULL) ? rs->line_len : 0U;
+}
 

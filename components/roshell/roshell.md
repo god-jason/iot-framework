@@ -1,4 +1,4 @@
-# roshell 语法定义
+﻿# roshell 语法定义
 
 roshell 是机器人设备的脚本语言，上位机通过串口发送脚本，机器人执行。
 语法关键字**大小写敏感，全部为小写**。
@@ -22,8 +22,7 @@ roshell 是机器人设备的脚本语言，上位机通过串口发送脚本，
 
 - 常驻内存只有三部分：**源文本缓冲** + **块帧栈** + **变量表**；
   无 code 数组、无逐行指令缓存（行 token 与变量表使用可复用的内部容器，容量按上限固定，单行覆盖）。
-- 源文本按需持有：交互式输入逐行执行不留存全文；`run` 命令的脚本执行
-  结束即释放文本内存。
+- 源文本按需持有：交互式输入逐行执行不留存全文；脚本执行结束即释放文本内存。
 - 一切上限可编译期裁剪（见 §7），默认配置下 20K RAM 设备可运行。
 
 ## 2. 词法
@@ -247,11 +246,11 @@ while $try < 10
         break
     end
     $try++
-    wait 100
+    sleep 100
 end
 ```
 
-> `wait` 是内置命令（§9），在脚本中单独成行使用；低端裁剪掉表达式后
+> `sleep` 是内置命令（§9），在脚本中单独成行使用；低端裁剪掉表达式后
 > `while`/`if` 不可用，轮询逻辑由上位机分条下发命令实现。
 
 ### 4.4 循环控制
@@ -275,8 +274,7 @@ end
 $x = <名称>(<实参列表>)     ; 调用并把返回值赋给变量（也可参与任意表达式）
 ```
 
-- **没有 `call`/`run` 关键字**：行首为已登记函数名即构成调用语句，同步执行；
-  异步执行使用内置命令 `run`（见 §9）。
+- **没有 `call`/`run` 关键字**：行首为已登记函数名即构成调用语句，同步执行。
 - 形参为 `$name`，按位置**传值**（拷贝），函数体内形参即局部变量；实参为
   表达式，个数必须与形参一致（不匹配报 `arg count mismatch`）。
 - `return` 提前结束函数；`return <表达式>` 携带返回值，赋值到具体变量或
@@ -285,7 +283,7 @@ $x = <名称>(<实参列表>)     ; 调用并把返回值赋给变量（也可�
   每个最多 8 个参数。
 - 调用允许前向引用：加载扫描仅登记函数名与起始行号，执行时按名解析；
   目标未定义报 `undefined function`。
-- 调用嵌套上限 4 层（含 `run` 命令派生任务中的调用），超出报 `call stack
+- 调用嵌套上限 4 层，超出报 `call stack
   overflow`；`RS_ENABLE_EXPR=0` 时函数仅支持无参定义与无参调用。
 
 示例：
@@ -307,7 +305,7 @@ blink(3)                         ; 隐式调用，丢弃返回值
 function blink($n)               ; 前向调用合法：定义可在使用之后
     for $i = 1, $n do
         led_toggle()
-        wait 200
+        sleep 200
     end
 end
 ```
@@ -324,7 +322,7 @@ end
 
 | 宏 | 默认 | =0 时移除 |
 |---|---|---|
-| `RS_ENABLE_EXPR` | 1 | 变量、赋值语句、表达式求值器；`if`/`while`/`for` 的列表求值不可用（解析期报 `unsupported`），函数退化为无参定义与无参隐式调用；内置命令 `wait`/`run` 不受影响（参数为字面量/变量替换） |
+| `RS_ENABLE_EXPR` | 1 | 变量、赋值语句、表达式求值器；`if`/`while`/`for` 的列表求值不可用（解析期报 `unsupported`），函数退化为无参定义与无参隐式调用；内置命令 `sleep`/`wait` 不受影响（参数为字面量/变量替换） |
 | `RS_ENABLE_MATH` | =EXPR | 内置 math 函数库（§3.3）；`EXPR=0` 时强制为 0 |
 
 裁剪后预计节省：表达式求值器 + 词法变量分支 + 变量表 ≈ 4-6K Flash（参考现有 shell_expr 实现）。
@@ -342,7 +340,6 @@ end
 | 调用嵌套深度 | 4 | |
 | for 列表项数 | 16 | |
 | 变量数（宏开启时） | 16 | |
-| 并发 `run` 命令派生任务数 | 16 | 每任务独立块帧栈与变量表 |
 
 ## 8. 语法速查（EBNF）
 
@@ -358,7 +355,7 @@ statement  := assignment
             | 'function' IDENT '(' [ var { ',' var } ] ')' NEWLINE block 'end'
             | 'return' [ expr ]
             | func_call                       ; 隐式调用语句（丢弃返回值）
-            | command                         ; wait/run 等为内置命令，见 §9
+            | command                         ; sleep/wait 等为内置命令，见 §9
 assignment := var '=' expr | ( '++' | '--' ) var | var ( '++' | '--' )
 expr       := literal | var | func_call | unary | inc_dec | binary | logical | comparison
 func_call  := IDENT '(' [ expr { ',' expr } ] ')'
@@ -377,13 +374,11 @@ block      := { statement NEWLINE }
 | 命令 | 用法 | 说明 |
 |---|---|---|
 | `help` | `help [cmd]` | 列出全部命令（按 basic/task/sys/run/session 分组）；带参数显示单条详情 |
-| `ver` | `ver` | 固件版本与 roshell 配置（行/脚本/run 槽上限） |
+| `ver` | `ver` | 固件版本与 roshell 配置（行/脚本上限） |
 | `echo` | `echo <text\|$var>...` | 回显参数；`$var` 替换为变量值（需 `RS_ENABLE_EXPR=1`） |
-| `ps` | `ps` | 任务列表 + run 槽位状态表 |
-| `jobs` | `jobs` | 列出 `run` 命令派生的脚本任务（槽号、函数名、状态） |
-| `run` | `run <fn> [args...]` | 异步执行：新建任务运行已登记函数，立即返回槽号；实参为字面量或 `$var`（命令层替换，不做表达式求值），个数须与形参一致 |
-| `wait` | `wait <ms>` | 当前任务延时指定毫秒 |
-| `waitjob` | `waitjob <n> [timeout <ms>]` | 等待槽 n 结束，默认超时 30000ms；期间 Ctrl-C 可中断 |
+| `ps` | `ps` | 任务列表 |
+| `sleep` | `sleep <ms>` | 延时指定毫秒；持续命令，可被 `pause`/`resume` |
+| `wait` | `wait [cmd] [timeout <ms>]` | 等待 `-` 异步启动的持续命令结束；不带参数等待全部 |
 | `kill` | `kill <name\|#tid>` | 挂起并回收任务（拒绝操作 `roshell_io` 自身） |
 | `pause` | `pause <name\|#tid>` | 挂起任务 |
 | `resume` | `resume <name\|#tid>` | 恢复任务 |
@@ -392,7 +387,9 @@ block      := { statement NEWLINE }
 | `exit` | `exit` | 结束会话并回收 roshell 实例 |
 
 - 命令参数按空白分词，仅支持字面量与 `$var` 替换，**不做表达式求值**
-  （`wait 1000+500` 非法，`run f $x 3` 合法）。
+  （`sleep 1000+500` 非法）。
+- 命令前加 `-` 表示**不等待结束**（如 `-sleep 1000`）：启动后会话立即接受下一条
+  命令；运行中的异步持续命令由 shell 任务轮转 `on_tick` 推进，可用 `wait` 等待完成。
 - 内置命令名与函数命名空间冲突时命令优先：不允许定义与内置命令同名的函数
   （登记时报 `unknown function` 类错误）。
 
@@ -402,12 +399,10 @@ block      := { statement NEWLINE }
 > $cal = 45
 > echo 校准值 $cal 开始
 校准值 45 开始
-> run home_seq $cal 3        ; 异步执行已通过 rs_exec 登记的函数 home_seq($a,$b)
-job slot 0 started
-> jobs
-0  home_seq  running
-> waitjob 0                  ; 阻塞至结束（Ctrl-C 可中断）
-job 0 done
+> -sleep 1000        ; 后台延时，会话立即返回
+> echo busy          ; 不等待上一条命令
+busy
+> wait               ; 等待全部后台持续命令结束
 > exit
 ```
 
@@ -415,13 +410,14 @@ job 0 done
 
 ### 10.1 接入与启动
 
-- 平台层调用 `rs_shell_start(version)` 创建会话任务 `roshell_io`
-  （默认优先级 4、栈 3072B，宏 `RS_SHELL_PRIO/STACK` 可调）。
-- 输入字节经 `rs_shell_feed(data, len)` 投喂（串口中断/轮询或 PC
+- 平台层调用 `rs_shell_start(version)` 新建一个会话（独立上下文 + 会话任务
+  `roshell_io`，默认优先级 4、栈 3072B，宏 `RS_SHELL_PRIO/STACK` 可调），
+  返回会话句柄 `roshell_t*`；每次调用都是独立会话，可同时存在多个。
+- 输入字节经 `rs_shell_feed(sh, data, len)` 投喂（串口中断/轮询或 PC
   标准输入均可），内部组行后走 §9 三级分派。
 - 输出使用 `ros_printf` / `ros_puts`，与内核日志共用通道。
-- 生命周期查询：`rs_shell_started()`、`rs_shell_task_finished()`；
-  `exit` 或 EOF 后由平台胶水调用 `rs_shell_shutdown()` 回收。
+- 生命周期查询：`rs_shell_started(sh)`、`rs_shell_task_finished(sh)`；
+  `exit` 或 EOF 后由平台胶水调用 `rs_shell_shutdown(sh)` 回收。
 
 ### 10.2 交互操作
 
@@ -434,9 +430,8 @@ job 0 done
 ### 10.3 脚本执行
 
 - 同步：API `rs_exec(rs, text)`；脚本内函数用隐式调用语句同步执行。
-- 异步：`run <fn> [args...]` 命令新建任务执行函数，槽位上限 16
-  （`RS_RUN_MAX`，小内存平台建议收紧到 4）；用 `jobs` 查看、
-  `waitjob <n>` 等待。函数表取自最近一次 `rs_exec` 登记的脚本。
+- 持续命令：`sleep` 等以 `on_start/on_tick/on_stop` 实现；命令行加 `-` 前缀
+  可后台执行（如 `-sleep 1000`），用 `wait` 等待完成。
 - 顶层变量表在会话内持久（跨行可见），便于交互调试。
 
 ### 10.4 低端平台裁剪
@@ -453,7 +448,7 @@ job 0 done
 ; selfcheck.rs - 开机自检
 function beep_ok()
     buzzer(1)
-    wait 100
+    sleep 100
     buzzer(0)
 end
 
@@ -484,9 +479,9 @@ else
     echo selfcheck fail $pass / $total
 end
 
-; 后台启动巡检任务，不阻塞会话收尾
-run patrol 60
+; 后台启动巡检延时，不阻塞会话收尾
+-sleep 60
 ```
 
-要点：`;` 注释、函数带参与返回值、`for` 字符串列表迭代、`wait`/`echo`/`run`
+要点：`;` 注释、函数带参与返回值、`for` 字符串列表迭代、`sleep`/`wait`/`echo`
 命令在脚本行内使用、错误信息带行号（如 `[12] ...`）。

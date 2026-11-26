@@ -3,14 +3,11 @@
  *
  * 内建命令静态表（初始化时登记进全局命令表 map）+ 归属判断 + help 输出。
  * 关键字 / 命令名一律小写、大小写敏感（roshell.md §1）。
- * 会话、行编辑与命令分派在 roshell_context.c；
+ * 命令行分派在 roshell_cmd.c，会话与行编辑在 roshell.c；
  * 内置函数 / 常量表在 roshell_func.c。
  */
 
 #include "roshell.h"
-#include "roshell_core.h"
-#include "roshell_cmd_internal.h"
-#include "roshell_context.h"
 #include "ros.h"
 #include "common.h"
 
@@ -45,7 +42,7 @@ static const char *rs_unquote(const char *tok, uint16_t *len)
 }
 
 /* 读顶层变量并格式化为文本；找到返回 true */
-static bool rs_var_text(rs_t *rs, const char *name, uint16_t nlen,
+static bool rs_var_text(roshell_t *rs, const char *name, uint16_t nlen,
                         char *buf, uint32_t cap)
 {
     char nm[RS_VAR_NAME_MAX];
@@ -135,16 +132,6 @@ static const char *rs_task_state_name(ros_task_state_e state)
     }
 }
 
-static const char *rs_run_state_name(int state)
-{
-    switch (state) {
-    case RS_RUN_RUNNING: return "RUNNING";
-    case RS_RUN_DONE:    return "DONE";
-    case RS_RUN_ERROR:   return "ERROR";
-    default:             return "FREE";
-    }
-}
-
 /* ============================== 内建命令 ============================== */
 
 int rs_cmd_ver(const rs_cmd_ctx_t *ctx)
@@ -153,17 +140,15 @@ int rs_cmd_ver(const rs_cmd_ctx_t *ctx)
     const char *ver;
     int n;
 
-    (void)ctx;
-    ver = rs_session_version();
+    ver = rs_session_version(ctx->rs);
     ros_printf("roshell v1.0\n");
     ros_printf("Build: %s\n", ver != NULL ? ver : "-");
     n = ros_version_format(info, sizeof(info));
     if (n > 0) {
         (void)ros_io_write(NULL, info, (uint32_t)n);
     }
-    ros_printf("LINE=%u SCRIPT=%u RUN=%u\n",
-               (unsigned)RS_LINE_MAX, (unsigned)RS_SCRIPT_MAX,
-               (unsigned)RS_RUN_MAX);
+    ros_printf("LINE=%u SCRIPT=%u\n",
+               (unsigned)RS_LINE_MAX, (unsigned)RS_SCRIPT_MAX);
     return 0;
 }
 
@@ -220,37 +205,11 @@ int rs_cmd_echo(const rs_cmd_ctx_t *ctx)
     return 0;
 }
 
-static void rs_ps_run_slots(rs_t *rs)
-{
-    list_node_t *pos;
-    bool any = false;
-
-    ros_printf("run slots:\n");
-    if (rs == NULL) {
-        ros_printf("  (no instance)\n");
-        return;
-    }
-    /* 活跃槽链表：槽号仍按 slots 下标，顺序为启动先后 */
-    for (pos = list_first(&rs->active_list);
-         pos != NULL && pos != &rs->active_list.head;
-         pos = list_next(pos)) {
-        const rs_slot_t *s = ROS_CONTAINER_OF(pos, rs_slot_t, link);
-        uint32_t idx = (uint32_t)(s - &rs->slots[0]);
-
-        any = true;
-        ros_printf("  %2u  %-16s %s\n", (unsigned)idx,
-                   (s->fname[0] != '\0') ? s->fname : "-",
-                   rs_run_state_name((int)s->state));
-    }
-    if (!any) {
-        ros_printf("  (none)\n");
-    }
-}
-
 int rs_cmd_ps(const rs_cmd_ctx_t *ctx)
 {
     ros_task_t *task;
 
+    (void)ctx;
     ros_printf("TID  NAME          PRIO  STATE      STACK   CPU%%\n");
     ros_printf("---  ------------  ----  ---------  ------  -----\n");
     for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
@@ -273,108 +232,55 @@ int rs_cmd_ps(const rs_cmd_ctx_t *ctx)
                    (unsigned)task->priority,
                    rs_task_state_name(task->state), stack, cpu);
     }
-    rs_ps_run_slots(ctx->rs);
     return 0;
 }
 
-int rs_cmd_jobs(const rs_cmd_ctx_t *ctx)
-{
-    rs_ps_run_slots(ctx->rs);
-    return 0;
-}
-
-int rs_cmd_waitjob(const rs_cmd_ctx_t *ctx)
-{
-    int32_t slot = 0;
-    uint32_t timeout = RS_SHELL_WAITJOB_MS;
-    uint32_t waited = 0U;
-    int rc;
-    int i;
-
-    if (ctx->argc < 2 || !str_parse_int(ctx->argv[1], &slot)) {
-        rs_error(RS_ERR_PARAM, "usage: waitjob <n> [timeout <ms>]");
-        return -RS_ERR_PARAM;
-    }
-    for (i = 2; i + 1 < ctx->argc; i += 2) {
-        if (strcmp(ctx->argv[i], "timeout") == 0) {
-            uint32_t t;
-
-            if (str_parse_uint(ctx->argv[i + 1], &t)) {
-                timeout = t;
-            }
-        }
-    }
-    if (ctx->rs == NULL) {
-        rs_error(RS_ERR_PARAM, "no roshell instance");
-        return -RS_ERR_PARAM;
-    }
-    for (;;) {
-        rc = rs_run_wait(ctx->rs, (int)slot, 100U);
-        if (rc != RS_ERR_TIMEOUT) {
-            break;
-        }
-        if (rs_session_pump_ctrlc()) {
-            ros_puts("WARN: wait interrupted");
-            return 0;
-        }
-        waited += 100U;
-        if (timeout != 0U && waited >= timeout) {
-            rs_error(RS_ERR_TIMEOUT, "waitjob %d timeout", (int)slot);
-            return -RS_ERR_TIMEOUT;
-        }
-    }
-    if (rc == RS_OK) {
-        return 0;
-    }
-    if (rc == RS_ERR_PARAM) {
-        rs_error(RS_ERR_NOT_FOUND, "slot %d not found", (int)slot);
-        return -RS_ERR_NOT_FOUND;
-    }
-    rs_error(rc, "run %d failed", (int)slot);
-    return rc;
-}
-
-/* ---------------- wait 可暂停登记表 ---------------- */
+/* ---------------- sleep 可暂停状态 ---------------- */
 /*
- * wait <ms> 以 RS_WAIT_SLICE 分片延时并登记到会话上下文的 waits（vec）：
- *   on_pause  记录剩余时间 remain 并置 paused，任务在分片边界进入停放
- *             循环（暂停期间不推进 deadline，即不消耗 wait 时间）；
+ * sleep <ms> 是持续命令：等待信息登记在实例的上下文里（rs->sleeps，vec），
+ * 每个执行中的 sleep 一项，命令结束（on_stop）释放该表项。
+ *   on_pause  记录剩余时间 remain 并置 paused，tick 期间不推进 deadline；
  *   on_resume 以 now + remain 重设 deadline 并解除停放；
- *   on_kill   清表项，停放中的任务在下一分片边界退出等待。
- * pause 命令命中停放（rs_wait_is_parked）后不再做 OS 级挂起。
- * 登记表按 RS_WAIT_SLOTS 预分配、不扩容，保证 pause/kill 侧持有的
- * 表项指针不会因 realloc 失效。
+ *   on_tick   到期返回 0 结束；
+ *   on_stop   清表项（正常结束或被 kill 统一调用）。
+ * pause 命令命中停放（rs_sleep_is_parked）后不再做 OS 级挂起。
+ * 表按 RS_SLEEP_SLOTS 预分配、不扩容，保证 pause/kill 侧持有的表项指针
+ * 不会因 realloc 失效。
  */
-#define RS_WAIT_SLOTS   4U
-#define RS_WAIT_SLICE   50U
+#define RS_SLEEP_SLOTS  4U
 
 typedef struct {
-    ros_task_t *task;
+    ros_task_t *task;       /* 归属任务 */
     uint32_t deadline;      /* 本轮等待截止 tick */
     uint32_t remain;        /* 暂停时记录的剩余毫秒 */
-    bool     paused;
+    bool     paused;        /* 停放中：不消耗等待时间 */
     bool     used;
-} rs_wait_t;
+} rs_sleep_t;
 
-/* 会话 wait 登记表（vec 位于 rs_context_t，首次使用时按容量预分配） */
-static vec_t *rs_wait_vec(void)
+/* 会话上下文的 sleep 登记表（vec 位于 struct roshell，首次使用时预分配） */
+static vec_t *rs_sleep_vec(roshell_t *rs)
 {
-    vec_t *v = rs_session_waits();
-
-    if (v->elem_size == 0U &&
-        vec_init(v, sizeof(rs_wait_t), RS_WAIT_SLOTS) != 0) {
+    if (rs == NULL) {
         return NULL;
     }
-    return v;
+    if (rs->sleeps.elem_size == 0U &&
+        vec_init(&rs->sleeps, sizeof(rs_sleep_t), RS_SLEEP_SLOTS) != 0) {
+        return NULL;
+    }
+    return &rs->sleeps;
 }
 
-static rs_wait_t *rs_wait_find(const ros_task_t *task)
+/* 按任务查找表项 */
+static rs_sleep_t *rs_sleep_find(roshell_t *rs, const ros_task_t *task)
 {
-    vec_t *v = rs_session_waits();
+    vec_t *v = (rs != NULL) ? &rs->sleeps : NULL;
     uint32_t i;
 
+    if (v == NULL || v->elem_size == 0U || task == NULL) {
+        return NULL;
+    }
     for (i = 0U; i < vec_size(v); i++) {
-        rs_wait_t *w = (rs_wait_t *)vec_at(v, i);
+        rs_sleep_t *w = (rs_sleep_t *)vec_at(v, i);
 
         if (w != NULL && w->used && w->task == task) {
             return w;
@@ -383,21 +289,53 @@ static rs_wait_t *rs_wait_find(const ros_task_t *task)
     return NULL;
 }
 
-/* 任务当前是否处于 wait 停放态（pause 命令据此跳过 OS 挂起） */
-static bool rs_wait_is_parked(const ros_task_t *task)
+/* 取一个空闲表项（复用或追加）；无实例 / 表满返回 NULL */
+static rs_sleep_t *rs_sleep_alloc(roshell_t *rs, ros_task_t *task)
 {
-    const rs_wait_t *w = rs_wait_find(task);
+    vec_t *v = rs_sleep_vec(rs);
+    rs_sleep_t *w = NULL;
+    uint32_t i;
+
+    if (v == NULL || task == NULL) {
+        return NULL;
+    }
+    for (i = 0U; i < vec_size(v); i++) {
+        rs_sleep_t *e = (rs_sleep_t *)vec_at(v, i);
+
+        if (!e->used) {
+            w = e;
+            break;
+        }
+    }
+    /* 空槽用尽时追加一个（容量已预分配，不会 realloc） */
+    if (w == NULL && vec_size(v) < RS_SLEEP_SLOTS &&
+        vec_resize(v, vec_size(v) + 1U) == 0) {
+        w = (rs_sleep_t *)vec_at(v, vec_size(v) - 1U);
+    }
+    if (w != NULL) {
+        w->task = task;
+        w->deadline = 0U;
+        w->remain = 0U;
+        w->paused = false;
+    }
+    return w;
+}
+
+/* 指定任务当前是否有 sleep 处于停放态（pause 命令据此跳过 OS 挂起） */
+static bool rs_sleep_is_parked(roshell_t *rs, const ros_task_t *task)
+{
+    const rs_sleep_t *w = rs_sleep_find(rs, task);
 
     return (w != NULL) && w->paused;
 }
 
-static int rs_wait_on_pause(void *user, ros_task_t *task)
+static int rs_sleep_on_pause(void *user, roshell_t *rs, ros_task_t *task)
 {
-    rs_wait_t *w;
+    rs_sleep_t *w;
     uint32_t now;
 
     (void)user;
-    w = rs_wait_find(task);
+    w = rs_sleep_find(rs, task);
     if (w == NULL) {
         return -1;                      /* 未登记：调用方回退纯 OS 挂起 */
     }
@@ -410,12 +348,12 @@ static int rs_wait_on_pause(void *user, ros_task_t *task)
     return 0;
 }
 
-static int rs_wait_on_resume(void *user, ros_task_t *task)
+static int rs_sleep_on_resume(void *user, roshell_t *rs, ros_task_t *task)
 {
-    rs_wait_t *w;
+    rs_sleep_t *w;
 
     (void)user;
-    w = rs_wait_find(task);
+    w = rs_sleep_find(rs, task);
     if (w == NULL) {
         return -1;
     }
@@ -424,12 +362,12 @@ static int rs_wait_on_resume(void *user, ros_task_t *task)
     return 0;
 }
 
-static int rs_wait_on_kill(void *user, ros_task_t *task)
+static int rs_sleep_on_stop(void *user, roshell_t *rs, ros_task_t *task)
 {
-    rs_wait_t *w;
+    rs_sleep_t *w;
 
     (void)user;
-    w = rs_wait_find(task);
+    w = rs_sleep_find(rs, task);
     if (w == NULL) {
         return 0;
     }
@@ -439,174 +377,89 @@ static int rs_wait_on_kill(void *user, ros_task_t *task)
     return 0;
 }
 
-/* wait <ms>：可暂停延时当前任务（规格 §9；取代旧 wait time 语句）。
- * 分片循环至 deadline；暂停期间停放不消耗时间，恢复后只等剩余时间。 */
-int rs_cmd_wait(const rs_cmd_ctx_t *ctx)
+/* sleep <ms>：持续命令（on_start 只登记截止时间，由执行任务轮转 on_tick）。
+ * 暂停期间停放不消耗时间，恢复后只等剩余时间。 */
+static int rs_cmd_sleep(const rs_cmd_ctx_t *ctx)
 {
     uint32_t ms = 0U;
-    rs_wait_t *w = NULL;
-    uint32_t i;
+    rs_sleep_t *w;
 
     if (ctx->argc < 2 || !str_parse_uint(ctx->argv[1], &ms)) {
-        rs_error(RS_ERR_PARAM, "usage: wait <ms>");
+        rs_error(RS_ERR_PARAM, "usage: sleep <ms>");
         return -RS_ERR_PARAM;
     }
-    if (ros_current_task != NULL) {
-        vec_t *v = rs_wait_vec();
-
-        if (v != NULL) {
-            for (i = 0U; i < vec_size(v); i++) {
-                rs_wait_t *e = (rs_wait_t *)vec_at(v, i);
-
-                if (!e->used) {
-                    w = e;
-                    break;
-                }
-            }
-            /* 空槽用尽时追加一个（容量已预分配，不会 realloc） */
-            if (w == NULL && vec_size(v) < RS_WAIT_SLOTS &&
-                vec_resize(v, vec_size(v) + 1U) == 0) {
-                w = (rs_wait_t *)vec_at(v, vec_size(v) - 1U);
-            }
-        }
-    }
+    w = rs_sleep_alloc(ctx->rs, ros_current_task);
     if (w == NULL) {
-        ros_sleep_ms(ms);               /* 表满/无任务上下文：退化为不可暂停延时 */
+        ros_sleep_ms(ms);               /* 无实例 / 表满：退化为不可暂停延时 */
         return 0;
     }
-    w->task = ros_current_task;
     w->deadline = ros_tick_get() + ms;
-    w->remain = 0U;
-    w->paused = false;
     w->used = true;                     /* used 最后置位，保证表项内容完整可见 */
+    return RS_CMD_RUNNING;
+}
 
-    for (;;) {
-        uint32_t now = ros_tick_get();
+/* sleep 的轮转回调：到期或被停止时返回 0（结束） */
+static int rs_sleep_on_tick(void *user, roshell_t *rs, ros_task_t *task)
+{
+    rs_sleep_t *w;
 
-        if (!w->used || w->task != ros_current_task) {
-            break;                      /* kill 清表（或表项已被复用）：提前退出 */
-        }
-        if (w->paused) {
-            ros_sleep_ms(RS_WAIT_SLICE);    /* 停放：不推进 deadline */
-            continue;
-        }
-        if (!ROS_TICK_AFTER(w->deadline, now)) {
-            break;                          /* 正常到期 */
-        }
-        {
-            uint32_t left = w->deadline - now;
-
-            ros_sleep_ms((left > RS_WAIT_SLICE) ? RS_WAIT_SLICE : left);
-        }
+    (void)user;
+    w = rs_sleep_find(rs, task);
+    if (w == NULL) {
+        return 0;                       /* on_stop/kill 已清表：结束 */
     }
-    if (w->used && w->task == ros_current_task) {
+    if (w->paused) {
+        return RS_CMD_RUNNING;          /* 停放：不推进 deadline */
+    }
+    if (!ROS_TICK_AFTER(w->deadline, ros_tick_get())) {
         w->used = false;
         w->task = NULL;
+        return 0;                       /* 正常到期 */
     }
-    return 0;
+    return RS_CMD_RUNNING;
 }
 
-/* run <fn> [args...]：异步执行已登记函数（规格 §9）；
- * 实参为字面量或 $var（命令层替换，不做表达式求值）。
- * 注意：函数名避开命令表 API 导出的 rs_cmd_run。 */
-int rs_cmd_runjob(const rs_cmd_ctx_t *ctx)
+/* wait [<cmd>] [timeout <ms>]：等待 '-' 异步启动的持续命令结束；
+ * 不带 cmd 时等待全部异步命令。 */
+int rs_cmd_wait(const rs_cmd_ctx_t *ctx)
 {
-    rs_arg_t args[RS_FUNC_ARGS_MAX];
-    char sbuf[RS_FUNC_ARGS_MAX][RS_STR_MAX];
-    int nargs;
-    int slot;
+    const char *name = NULL;
+    uint32_t timeout = 0U;
     int i;
+    int rc;
 
-    if (ctx->rs == NULL) {
-        rs_error(RS_ERR_PARAM, "no roshell instance");
-        return -RS_ERR_PARAM;
+    if (ctx->argc >= 2 && strcmp(ctx->argv[1], "timeout") != 0) {
+        name = ctx->argv[1];
     }
-    if (ctx->argc < 2) {
-        rs_error(RS_ERR_PARAM, "usage: run <fn> [args...]");
-        return -RS_ERR_PARAM;
-    }
-    nargs = ctx->argc - 2;
-    if (nargs > (int)RS_FUNC_ARGS_MAX) {
-        rs_error(RS_ERR_LIMIT, "too many arguments");
-        return -RS_ERR_LIMIT;
-    }
-    (void)memset(args, 0, sizeof(args));
-    for (i = 0; i < nargs; i++) {
-        const char *a = ctx->argv[2 + i];
-        rs_arg_t *out = &args[i];
+    for (i = 2; i + 1 < ctx->argc; i += 2) {
+        if (strcmp(ctx->argv[i], "timeout") == 0) {
+            uint32_t t;
 
-        if (a[0] == '$' && a[1] != '\0') {
-            int32_t iv;
-            float fv;
-            bool bv;
-
-            if (rs_get_int(ctx->rs, a + 1, &iv) == RS_OK) {
-                out->type = RS_ARG_INT;
-                out->i = iv;
-            } else if (rs_get_float(ctx->rs, a + 1, &fv) == RS_OK) {
-                out->type = RS_ARG_FLOAT;
-                out->f = fv;
-            } else if (rs_get_bool(ctx->rs, a + 1, &bv) == RS_OK) {
-                out->type = RS_ARG_BOOL;
-                out->b = bv;
-            } else if (rs_get_str(ctx->rs, a + 1, sbuf[i],
-                                       RS_STR_MAX) == RS_OK) {
-                out->type = RS_ARG_STR;
-                out->s = sbuf[i];
-                out->slen = (uint16_t)strlen(sbuf[i]);
-            } else {
-                rs_error(RS_ERR_UNDEF_VAR, "undefined variable %s", a);
-                return -RS_ERR_UNDEF_VAR;
-            }
-        } else if (a[0] == '"') {
-            const char *body = a + 1;
-            size_t len = strlen(body);
-
-            if (len > 0U && body[len - 1U] == '"') {
-                len--;
-            }
-            if (len >= RS_STR_MAX) {
-                len = RS_STR_MAX - 1U;
-            }
-            (void)memcpy(sbuf[i], body, len);
-            sbuf[i][len] = '\0';
-            out->type = RS_ARG_STR;
-            out->s = sbuf[i];
-            out->slen = (uint16_t)len;
-        } else if (strcmp(a, "true") == 0 || strcmp(a, "false") == 0) {
-            out->type = RS_ARG_BOOL;
-            out->b = (a[4] == 'u');
-        } else {
-            int32_t iv;
-            float fv;
-
-            if (str_parse_int(a, &iv)) {
-                out->type = RS_ARG_INT;
-                out->i = iv;
-            } else if (str_parse_float(a, &fv)) {
-                out->type = RS_ARG_FLOAT;
-                out->f = fv;
-            } else {
-                rs_error(RS_ERR_PARAM, "bad run argument: %s", a);
-                return -RS_ERR_PARAM;
+            if (str_parse_uint(ctx->argv[i + 1], &t)) {
+                timeout = t;
             }
         }
     }
-    slot = rs_run_async(ctx->rs, ctx->argv[1], (nargs > 0) ? args : NULL, nargs);
-    if (slot < 0) {
-        rs_error(slot, "run %s failed", ctx->argv[1]);
-        return slot;
+    if (ctx->argc >= 3 && strcmp(ctx->argv[1], "timeout") == 0) {
+        uint32_t t;
+
+        if (str_parse_uint(ctx->argv[2], &t)) {
+            timeout = t;
+        }
     }
-    ros_printf("job slot %d started\n", slot);
-    return 0;
+
+    rc = rs_cmd_wait_async(rs_cmd_find_command("wait"), name, timeout);
+    if (rc == -RS_ERR_TIMEOUT) {
+        rs_error(RS_ERR_TIMEOUT, "wait timeout");
+    }
+    return rc;
 }
 
-/* 会话任务 / roshell run 任务 / idle / 自身不允许 kill */
-static bool rs_task_protected(const ros_task_t *task)
+/* 会话任务 / idle / 自身不允许 kill */
+static bool rs_task_protected(roshell_t *rs, const ros_task_t *task)
 {
     return (task == ros_current_task) || (task == ros_idle_task) ||
-           (task == rs_session_task()) ||
-           (task->name != NULL && strcmp(task->name, "roshell") == 0);
+           (task == rs_session_task(rs));
 }
 
 int rs_cmd_kill(const rs_cmd_ctx_t *ctx)
@@ -622,7 +475,7 @@ int rs_cmd_kill(const rs_cmd_ctx_t *ctx)
         rs_error(RS_ERR_NOT_FOUND, "task %s not found", ctx->argv[1]);
         return -RS_ERR_NOT_FOUND;
     }
-    if (rs_task_protected(task)) {
+    if (rs_task_protected(ctx->rs, task)) {
         rs_error(RS_ERR_PARAM, "refusing to kill this task");
         return -RS_ERR_PARAM;
     }
@@ -650,14 +503,14 @@ int rs_cmd_pause(const rs_cmd_ctx_t *ctx)
         return -RS_ERR_NOT_FOUND;
     }
     if (task == ros_current_task || task == ros_idle_task ||
-        task == rs_session_task()) {
+        task == rs_session_task(ctx->rs)) {
         rs_error(RS_ERR_PARAM, "refusing to pause this task");
         return -RS_ERR_PARAM;
     }
-    /* 双路：先通知命令钩子。wait 钩子命中（任务进入停放）则不做
+    /* 双路：先通知命令钩子。sleep 钩子命中（任务进入停放）则不做
      * OS 挂起；钩子返回 -1（未登记）回退 OS 挂起，其它负值拒绝暂停。 */
     rc = rs_cmd_notify_pause(task);
-    if (rs_wait_is_parked(task)) {
+    if (rs_sleep_is_parked(ctx->rs, task)) {
         return 0;
     }
     if (rc < 0 && rc != -1) {
@@ -685,8 +538,8 @@ int rs_cmd_resume(const rs_cmd_ctx_t *ctx)
         rs_error(RS_ERR_NOT_FOUND, "task %s not found", ctx->argv[1]);
         return -RS_ERR_NOT_FOUND;
     }
-    /* 双路：wait 停放态没有 OS 挂起，直接通知钩子解除停放 */
-    if (rs_wait_is_parked(task)) {
+    /* 双路：sleep 停放态没有 OS 挂起，直接通知钩子解除停放 */
+    if (rs_sleep_is_parked(ctx->rs, task)) {
         (void)rs_cmd_notify_resume(task);
         return 0;
     }
@@ -734,11 +587,12 @@ int rs_cmd_state(const rs_cmd_ctx_t *ctx)
     uint32_t blocked = 0U;
     uint32_t suspended = 0U;
     uint32_t total = 0U;
-    uint32_t run_busy = 0U;
     ros_stats_t sys;
     ros_task_t *task;
     uint32_t idle_pm;
     uint32_t busy_pm;
+
+    (void)ctx;
 
     for (task = ros_task_first(); task != NULL; task = ros_task_next(task)) {
         if (task->state == ROS_TASK_TERMINATED) {
@@ -769,30 +623,13 @@ int rs_cmd_state(const rs_cmd_ctx_t *ctx)
                (unsigned)sys.ctx_switches);
 
     rs_mem_line();
-
-    if (ctx->rs != NULL) {
-        list_node_t *pos;
-
-        for (pos = list_first(&ctx->rs->active_list);
-             pos != NULL && pos != &ctx->rs->active_list.head;
-             pos = list_next(pos)) {
-            const rs_slot_t *s = ROS_CONTAINER_OF(pos, rs_slot_t, link);
-
-            if (s->state == RS_RUN_RUNNING) {
-                run_busy++;
-            }
-        }
-    }
-    ros_printf("run slots : %u running / %u total\n",
-               (unsigned)run_busy, (unsigned)RS_RUN_MAX);
     return 0;
 }
 
 int rs_cmd_exit(const rs_cmd_ctx_t *ctx)
 {
-    (void)ctx;
     ros_puts("bye");
-    rs_shell_request_exit();
+    rs_shell_request_exit(ctx->rs);
     return 0;
 }
 
@@ -800,34 +637,30 @@ int rs_cmd_exit(const rs_cmd_ctx_t *ctx)
 
 static const rs_cmd_t s_cmds[] = {
     { "help",    NULL, "help [cmd]",                 "basic",   NULL, 0U,
-      rs_builtin_help,    NULL, NULL, NULL, NULL },
+      rs_builtin_help, NULL, NULL, NULL, NULL, NULL },
     { "ver",     NULL, "ver",                        "basic",   NULL, 0U,
-      rs_cmd_ver,     NULL, NULL, NULL, NULL },
+      rs_cmd_ver,      NULL, NULL, NULL, NULL, NULL },
     { "echo",    NULL, "echo <text|$var>...",        "basic",   NULL, 0U,
-      rs_cmd_echo,    NULL, NULL, NULL, NULL },
+      rs_cmd_echo,     NULL, NULL, NULL, NULL, NULL },
     { "ps",      NULL, "ps",                         "task",    NULL, 0U,
-      rs_cmd_ps,      NULL, NULL, NULL, NULL },
+      rs_cmd_ps,       NULL, NULL, NULL, NULL, NULL },
     { "kill",    NULL, "kill <name|#tid>",           "task",    NULL, 0U,
-      rs_cmd_kill,    NULL, NULL, NULL, NULL },
+      rs_cmd_kill,     NULL, NULL, NULL, NULL, NULL },
     { "pause",   NULL, "pause <name|#tid>",          "task",    NULL, 0U,
-      rs_cmd_pause,   NULL, NULL, NULL, NULL },
+      rs_cmd_pause,    NULL, NULL, NULL, NULL, NULL },
     { "resume",  NULL, "resume <name|#tid>",         "task",    NULL, 0U,
-      rs_cmd_resume,  NULL, NULL, NULL, NULL },
+      rs_cmd_resume,   NULL, NULL, NULL, NULL, NULL },
     { "mem",     NULL, "mem",                        "sys",     NULL, 0U,
-      rs_cmd_mem,     NULL, NULL, NULL, NULL },
+      rs_cmd_mem,      NULL, NULL, NULL, NULL, NULL },
     { "state",   NULL, "state",                      "sys",     NULL, 0U,
-      rs_cmd_state,   NULL, NULL, NULL, NULL },
-    { "jobs",    NULL, "jobs",                       "run",     NULL, 0U,
-      rs_cmd_jobs,    NULL, NULL, NULL, NULL },
-    { "waitjob", NULL, "waitjob <n> [timeout <ms>]", "run",     NULL, 0U,
-      rs_cmd_waitjob, NULL, NULL, NULL, NULL },
-    { "run",     NULL, "run <fn> [args...]",         "run",     NULL, 0U,
-      rs_cmd_runjob,  NULL, NULL, NULL, NULL },
-    { "wait",    NULL, "wait <ms>",                  "run",     NULL, 0U,
-      rs_cmd_wait,    NULL, rs_wait_on_pause, rs_wait_on_resume,
-      rs_wait_on_kill },
+      rs_cmd_state,    NULL, NULL, NULL, NULL, NULL },
+    { "sleep",   NULL, "sleep <ms>",                 "run",     NULL, 0U,
+      rs_cmd_sleep,    rs_sleep_on_tick, rs_sleep_on_pause, rs_sleep_on_resume,
+      rs_sleep_on_stop, NULL },
+    { "wait",    NULL, "wait [cmd] [timeout <ms>]",  "run",     NULL, 0U,
+      rs_cmd_wait,     NULL, NULL, NULL, NULL, NULL },
     { "exit",    NULL, "exit",                       "session", NULL, 0U,
-      rs_cmd_exit,    NULL, NULL, NULL, NULL }
+      rs_cmd_exit,     NULL, NULL, NULL, NULL, NULL }
 };
 
 #define RS_CMD_COUNT (sizeof(s_cmds) / sizeof(s_cmds[0]))

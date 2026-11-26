@@ -17,7 +17,10 @@
  * 显式控制在 ISR 尾部统一 yield 的工程。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_err.h"    /* 状态码 */
 #include "ros_task.h"   /* ros_task_t */
 #include "ros_sem.h"    /* ros_sem_t */
 #include "ros_queue.h"  /* ros_queue_t */

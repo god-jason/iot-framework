@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static rs_t *g_rs;
+static roshell_t *g_rs;
 
 /* ---------- 辅助 ---------- */
 
@@ -67,7 +67,7 @@ static bool rsb(const char *name)
 
 static void rs_t_lifecycle(void)
 {
-    rs_t *rs;
+    roshell_t *rs;
     rs_err_t e;
     int32_t v;
 
@@ -813,7 +813,7 @@ static void rs_t_errors(void)
     TF_CHECK_INT(rsexec("if true\nelse\nelseif false\nend"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("break"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("badcmd 5"), RS_ERR_PARSE);
-    TF_CHECK_INT(rsexec("wait time"), RS_ERR_PARSE);
+    TF_CHECK_INT(rsexec("sleep time"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("= 5"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("$x = 1 +"), RS_ERR_PARSE);
     TF_CHECK_INT(rsexec("IF true\nend"), RS_ERR_BLOCK);
@@ -846,78 +846,6 @@ static void rs_t_errors(void)
     tf_end();
 }
 
-static void rs_t_run(void)
-{
-    int slot;
-    int i;
-    int slots[RS_RUN_MAX];
-    rs_arg_t args[2];
-
-    tf_begin("roshell:run");
-    rs_cmd_install(g_rs);    /* 函数体内使用 wait 命令 */
-    /* 一次登记一组函数：top_prog 在 exec 结束后仍保留 */
-    TF_CHECK_INT(rsexec("function fast()\nend\n"
-                        "function bad()\n$x = $nope\nend\n"
-                        "function slow()\nwait 200\nend\n"
-                        "function two($a, $b)\nend\n"
-                        "function w()\nwait 200\nend"), RS_OK);
-    slot = rs_run_async(g_rs, "fast", NULL, 0);
-    TF_CHECK(slot >= 0);
-    TF_CHECK_INT(rs_run_state(g_rs, slot), RS_RUN_RUNNING);
-    TF_CHECK_INT(rs_run_wait(g_rs, slot, ROS_TIMEOUT_FOREVER), RS_OK);
-    /* 任务内错误 */
-    slot = rs_run_async(g_rs, "bad", NULL, 0);
-    TF_CHECK(slot >= 0);
-    TF_CHECK_INT(rs_run_wait(g_rs, slot, ROS_TIMEOUT_FOREVER), RS_ERR_UNDEF_VAR);
-    /* 超时后继续等待 */
-    slot = rs_run_async(g_rs, "slow", NULL, 0);
-    TF_CHECK(slot >= 0);
-    TF_CHECK_INT(rs_run_wait(g_rs, slot, 20), RS_ERR_TIMEOUT);
-    TF_CHECK_INT(rs_run_wait(g_rs, slot, ROS_TIMEOUT_FOREVER), RS_OK);
-    /* 未定义函数 / 实参个数不符 / 参数非法 */
-    TF_CHECK_INT(rs_run_async(g_rs, "nofunc", NULL, 0), RS_ERR_UNDEF_FUNC);
-    TF_CHECK_INT(rs_run_async(g_rs, "two", NULL, 0), RS_ERR_ARG_COUNT);
-    TF_CHECK_INT(rs_run_async(g_rs, "fast", NULL, 1), RS_ERR_PARAM);
-    TF_CHECK_INT(rs_run_async(NULL, "fast", NULL, 0), RS_ERR_PARAM);
-    /* 字面量实参（整型 + 字符串） */
-    memset(args, 0, sizeof(args));
-    args[0].type = RS_ARG_INT;
-    args[0].i = 1;
-    args[1].type = RS_ARG_STR;
-    args[1].s = "ab";
-    args[1].slen = 2;
-    slot = rs_run_async(g_rs, "two", args, 2);
-    TF_CHECK(slot >= 0);
-    TF_CHECK_INT(rs_run_wait(g_rs, slot, ROS_TIMEOUT_FOREVER), RS_OK);
-    /* run 内置命令（会话层分派） */
-    TF_CHECK_INT(rs_cmd_dispatch(g_rs, "run fast"), 0);
-    TF_CHECK_INT(rs_cmd_dispatch(g_rs, "run nope"), RS_ERR_UNDEF_FUNC);
-    /* 槽位参数 */
-    TF_CHECK_INT(rs_run_wait(g_rs, -1, 0), RS_ERR_PARAM);
-    TF_CHECK_INT(rs_run_state(g_rs, (int)RS_RUN_MAX), RS_ERR_PARAM);
-    /* 槽位表满：先让出 CPU，使前面派生的任务结束并可回收 */
-    ros_sleep_ms(50);
-    for (i = 0; i < (int)RS_RUN_MAX; i++) {
-        if (rs_run_state(g_rs, i) != RS_RUN_FREE) {
-            (void)rs_run_wait(g_rs, i, ROS_TIMEOUT_FOREVER);
-        }
-    }
-    for (i = 0; i < (int)RS_RUN_MAX; i++) {
-        slots[i] = rs_run_async(g_rs, "w", NULL, 0);
-        if (slots[i] < 0) {
-            break;
-        }
-    }
-    TF_CHECK_INT(i, (int)RS_RUN_MAX);
-    TF_CHECK_INT(rs_run_async(g_rs, "w", NULL, 0), RS_ERR_LIMIT);
-    TF_CHECK_INT(rs_run_count(g_rs), (int)RS_RUN_MAX);
-    for (i = 0; i < (int)RS_RUN_MAX; i++) {
-        TF_CHECK_INT(rs_run_wait(g_rs, slots[i], ROS_TIMEOUT_FOREVER), RS_OK);
-    }
-    rs_set_cmd_hook(g_rs, NULL, NULL);
-    tf_end();
-}
-
 static void rs_t_exec_line(void)
 {
     tf_begin("roshell:exec_line");
@@ -944,17 +872,16 @@ static void rs_t_cmd(void)
     rs_cmd_install(g_rs);
     /* if 块内 echo 命令 */
     TF_CHECK_INT(rsexec("if true\necho yes\nelse\necho no\nend"), RS_OK);
-    /* for 块内 wait 命令 */
-    TF_CHECK_INT(rsexec("for $i = 1, 2 do\nwait 5\nend"), RS_OK);
+    /* for 块内 sleep 命令 */
+    TF_CHECK_INT(rsexec("for $i = 1, 2 do\nsleep 5\nend"), RS_OK);
     /* 顶层命令行 */
-    TF_CHECK_INT(rsexec("wait 5"), RS_OK);
-    /* 旧 wait time 语句语法已删除：命令参数错误 */
-    TF_CHECK_INT(rsexec("wait time 5"), -RS_ERR_PARAM);
+    TF_CHECK_INT(rsexec("sleep 5"), RS_OK);
+    /* 参数错误 */
+    TF_CHECK_INT(rsexec("sleep time 5"), -RS_ERR_PARAM);
     /* 未知命令名且非表达式：解析错误 */
     TF_CHECK_INT(rsexec("nosuchcmd arg"), RS_ERR_PARSE);
-    /* 块内 run 命令：异步启动本脚本函数 */
-    TF_CHECK_INT(rsexec("function job()\nend\nif true\nrun job\nend"), RS_OK);
-    ros_sleep_ms(50);
+    /* 块内命令：wait（无异步命令时立即返回） */
+    TF_CHECK_INT(rsexec("if true\nwait\nend"), RS_OK);
     rs_set_cmd_hook(g_rs, NULL, NULL);
     tf_end();
 }
@@ -978,10 +905,8 @@ void ut_roshell(void)
         rs_t_funcs();
         rs_t_extfunc();
         rs_t_errors();
-        rs_t_run();
         rs_t_exec_line();
         rs_t_cmd();
-        ros_sleep_ms(100);       /* 让 run 命令派生的任务全部结束 */
         rs_destroy(g_rs);
         g_rs = NULL;
     }

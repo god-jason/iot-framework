@@ -23,6 +23,7 @@
 #include "app_stress.h"
 #include "app_memtest.h"
 #include "app_timing.h"
+#include "app_shelltest.h"
 
 void app_main(void *arg)
 {
@@ -47,6 +48,11 @@ void app_main(void *arg)
 #if APP_TIMING_ENABLE
     /* ros_sleep_ms 精度测试：压测启动前执行，减少抢占抖动 */
     app_timing_run();
+#endif
+
+#if APP_SHELLTEST_ENABLE
+    /* roshell 长命令：异步 tick / wait / pause / resume 自检 */
+    app_shelltest_run();
 #endif
 
 #if APP_STRESS_ENABLE

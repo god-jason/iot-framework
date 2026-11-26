@@ -16,6 +16,8 @@
 
 #include "ros_rtc.h"
 
+#include <stddef.h>
+
 static const ros_rtc_ops_t *s_ops;
 
 int ros_rtc_register(const ros_rtc_ops_t *ops)

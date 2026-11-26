@@ -6,7 +6,7 @@
  */
 
 #include "roshell.h"
-#include "roshell_core.h"
+#include "roshell_interp.h"
 #include "roshell_func.h"
 #include "roshell_lexer.h"
 #include "ros.h"
@@ -20,7 +20,7 @@ int rs_exec_unit(rs_env_t *env);
 
 #if RS_ENABLE_EXPR
 
-static int rs_frame_push(rs_ctx_t *ctx, uint8_t type, uint16_t start, uint16_t end)
+static int rs_frame_push(rs_unit_t *ctx, uint8_t type, uint16_t start, uint16_t end)
 {
     rs_frame_t *f;
     if (ctx->depth >= RS_BLOCK_DEPTH) {
@@ -39,7 +39,7 @@ static int rs_frame_push(rs_ctx_t *ctx, uint8_t type, uint16_t start, uint16_t e
 /* if/elseif 分支处理：本支被取则进体，否则跳到同级下一分支或 end 之后 */
 static void rs_if_advance(rs_env_t *env, uint16_t hdr)
 {
-    rs_ctx_t *ctx = env->ctx;
+    rs_unit_t *ctx = env->unit;
     rs_frame_t *f = &ctx->frames[ctx->depth - 1U];
     uint16_t i;
     int d = 0;
@@ -84,7 +84,7 @@ static int rs_stmt_assign(rs_env_t *env, const rs_tok_t *t, int tn)
             rs_err0(env->err, RS_ERR_TYPE, "no return value");
             return RS_ERR_TYPE;
         }
-        var = rs_var_alloc(env->ctx, t[0].p + 1, (uint16_t)(t[0].len - 1U));
+        var = rs_var_alloc(env->unit, t[0].p + 1, (uint16_t)(t[0].len - 1U));
         if (var == NULL) {
             rs_err0(env->err, RS_ERR_LIMIT, "too many variables");
             return RS_ERR_LIMIT;
@@ -92,7 +92,7 @@ static int rs_stmt_assign(rs_env_t *env, const rs_tok_t *t, int tn)
         rs_var_store(var, &v);
         return RS_OK;
     }
-    var = rs_var_find(env->ctx, t[0].p + 1, (uint16_t)(t[0].len - 1U));
+    var = rs_var_find(env->unit, t[0].p + 1, (uint16_t)(t[0].len - 1U));
     if (var == NULL) {
         rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
         return RS_ERR_UNDEF_VAR;
@@ -195,14 +195,14 @@ static int rs_for_step(rs_env_t *env, const rs_tok_t *t, int tn, uint16_t idx)
     }
     memcpy(ibuf, items[idx].p, items[idx].len);
     ibuf[items[idx].len] = '\0';
-    tn = rs_lex(ibuf, &env->ctx->toks);
-    rc = rs_eval_tokens(env, (const rs_tok_t *)vec_data(&env->ctx->toks),
+    tn = rs_lex(ibuf, &env->unit->toks);
+    rc = rs_eval_tokens(env, (const rs_tok_t *)vec_data(&env->unit->toks),
                         tn, 0, &v);
     if (rc != RS_OK) {
         return rc;
     }
     if (bp != NULL) {
-        rs_var_t *var = rs_var_alloc(env->ctx, bp, blen);
+        rs_var_t *var = rs_var_alloc(env->unit, bp, blen);
         if (var == NULL) {
             rs_err0(env->err, RS_ERR_LIMIT, "too many variables");
             return RS_ERR_LIMIT;
@@ -216,9 +216,9 @@ static int rs_for_step(rs_env_t *env, const rs_tok_t *t, int tn, uint16_t idx)
 
 /* 隐式函数调用语句的实参解析在 EXPR 段内；rs_call_body 前向声明紧随其后 */
 
-int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
+int rs_call_body(roshell_t *rs, rs_prog_t *prog, const rs_fn_t *f,
                         const rs_value_t *args, uint8_t depth,
-                        rs_ctx_t *caller, rs_value_t *out, rs_err_t *err);
+                        rs_unit_t *caller, rs_value_t *out, rs_err_t *err);
 
 #if RS_ENABLE_EXPR
 /* 隐式函数调用语句：行首 WORD + '('，丢弃返回值（规格 §4.5） */
@@ -267,7 +267,7 @@ static int rs_stmt_implicit_call(rs_env_t *env, const rs_tok_t *t, int tn)
         return RS_ERR_STACK_OVERFLOW;
     }
     return rs_call_body(env->rs, env->prog, f, args,
-                        (uint8_t)(env->depth + 1U), env->ctx, NULL, env->err);
+                        (uint8_t)(env->depth + 1U), env->unit, NULL, env->err);
 }
 
 #endif /* RS_ENABLE_EXPR */
@@ -291,17 +291,17 @@ static int rs_stmt_call0(rs_env_t *env, const rs_tok_t *t)
         return RS_ERR_STACK_OVERFLOW;
     }
     return rs_call_body(env->rs, env->prog, f, NULL,
-                        (uint8_t)(env->depth + 1U), env->ctx, NULL, env->err);
+                        (uint8_t)(env->depth + 1U), env->unit, NULL, env->err);
 }
 #endif /* !RS_ENABLE_EXPR */
 
 
 /* 函数体执行：私有变量表 + token 缓冲；返回字符串拷回 caller 临时槽 */
-int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
+int rs_call_body(roshell_t *rs, rs_prog_t *prog, const rs_fn_t *f,
                         const rs_value_t *args, uint8_t depth,
-                        rs_ctx_t *caller, rs_value_t *out, rs_err_t *err)
+                        rs_unit_t *caller, rs_value_t *out, rs_err_t *err)
 {
-    rs_ctx_t child;
+    rs_unit_t child;
     rs_env_t cenv;
     int rc;
 #if RS_ENABLE_EXPR
@@ -331,7 +331,7 @@ int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
 #endif
     cenv.rs = rs;
     cenv.prog = prog;
-    cenv.ctx = &child;
+    cenv.unit = &child;
     cenv.depth = depth;
     cenv.err = err;
     child.pc = (uint16_t)(f->start + 1U);
@@ -355,7 +355,7 @@ int rs_call_body(rs_t *rs, rs_prog_t *prog, const rs_fn_t *f,
 /* 按行号 PC 解释执行一个执行单元（脚本 / 函数体） */
 int rs_exec_unit(rs_env_t *env)
 {
-    rs_ctx_t *ctx = env->ctx;
+    rs_unit_t *ctx = env->unit;
     rs_prog_t *prog = env->prog;
     rs_err_t *err = env->err;
     int rc;

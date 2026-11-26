@@ -9,7 +9,6 @@
 
 #include "ros_version.h"
 #include "ros_config.h"
-#include "ros_types.h"      /* ROS_MAX_PRIORITY */
 #include "strings.h"
 
 #include <stdio.h>

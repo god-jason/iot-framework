@@ -8,7 +8,9 @@
  * 被调度次数、栈剩余空间。数据在 tick/switch 路径上累加，开销为常数。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+
+#include "ros_err.h"    /* 状态码 */
 #include "ros_task.h"   /* ros_task_t */
 
 #ifdef __cplusplus

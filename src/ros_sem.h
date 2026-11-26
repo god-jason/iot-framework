@@ -7,8 +7,11 @@
  * take 在计数为 0 时按 timeout 阻塞；give 直接交接给最高优先级等待者。
  */
 
-#include "ros_types.h"
-#include "ros_wait.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_err.h"    /* 状态码 */
+#include "ros_wait.h"   /* ros_wait_queue_t / ROS_TIMEOUT_* */
 
 #ifdef __cplusplus
 extern "C" {

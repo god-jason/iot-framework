@@ -1,4 +1,4 @@
-/*
+﻿/*
  * app_shell.c - PC 标准控制台进入 roshell（stdin/stdout，口令开启）
  *
  * 本文件强定义 rs_platform_start()，覆盖平台层弱默认实现
@@ -32,6 +32,7 @@
 #define STDIO_SHELL_PRIO        6U      /* 低于会话任务，高于 idle */
 
 static void *s_rx_task;
+static roshell_t *s_shell;                   /* 当前会话句柄（监听态为 NULL） */
 static const char *s_version;
 static size_t s_open_pos;               /* 口令匹配进度 */
 static char s_word[8];                  /* 监听态输入的单词（识别 quit/exit） */
@@ -93,9 +94,10 @@ static void stdio_shell_rx_task(void *arg)
 
     (void)arg;
     for (;;) {
-        if (rs_shell_task_finished()) {
+        if (rs_shell_task_finished(s_shell)) {
             /* exit 之后输入任务已退出：释放实例，回到监听 */
-            (void)rs_shell_shutdown();
+            (void)rs_shell_shutdown(s_shell);
+            s_shell = NULL;
             s_word_len = 0U;
             continue;
         }
@@ -104,10 +106,10 @@ static void stdio_shell_rx_task(void *arg)
             int n = ros_io_read(io, &ch, 1U);
 
             if (n < 0) {
-                if (rs_shell_started()) {
+                if (rs_shell_started(s_shell)) {
                     /* 会话激活时管道 EOF：关闭会话，下一轮 EOF 停内核。
                      * 必须让出 CPU，否则 EOF 读立即返回会饿死会话任务 */
-                    rs_shell_request_exit();
+                    rs_shell_request_exit(s_shell);
                     ros_sleep_ms(5U);
                     continue;
                 }
@@ -118,8 +120,8 @@ static void stdio_shell_rx_task(void *arg)
                 ros_sleep_ms(5U);   /* 无输入：让出 CPU 给调度器 */
                 continue;
             }
-            if (rs_shell_started()) {
-                rs_shell_feed((const char *)&ch, 1U);
+            if (rs_shell_started(s_shell)) {
+                rs_shell_feed(s_shell, (const char *)&ch, 1U);
                 continue;
             }
             {
@@ -128,7 +130,7 @@ static void stdio_shell_rx_task(void *arg)
                 if (stdio_shell_open_word_match(ch)) {
                     (void)fputs("hello!\n", stdout);
                     (void)fflush(stdout);
-                    (void)rs_shell_start(s_version);
+                    s_shell = rs_shell_start(s_version);
                     s_word_len = 0U;
                     continue;
                 }

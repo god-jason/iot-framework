@@ -13,7 +13,9 @@
  * 时间统一按 UTC 秒处理，显示本地时间由上层换算。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+
+#include "ros_err.h"    /* 状态码 */
 
 #ifdef __cplusplus
 extern "C" {

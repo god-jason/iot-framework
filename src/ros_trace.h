@@ -23,8 +23,10 @@
  *   ros_trace_enable();  ros_trace_disable();
  */
 
+#include <stdint.h>
+#include <stdbool.h>
+
 #include "ros_config.h"
-#include "ros_types.h"
 
 #ifdef __cplusplus
 extern "C" {

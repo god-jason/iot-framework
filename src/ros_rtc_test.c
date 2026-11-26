@@ -11,6 +11,8 @@
 #include "test.h"
 #include "ros_rtc.h"
 
+#include <stdbool.h>
+
 static uint32_t s_mock_unix;
 static bool s_mock_fail;
 

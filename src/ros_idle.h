@@ -8,7 +8,6 @@
  * ros_port_idle() 推进模拟时间或进入低功耗。
  */
 
-#include "ros_types.h"
 #include "ros_task.h"   /* ros_task_t */
 
 #ifdef __cplusplus

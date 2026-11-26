@@ -11,11 +11,37 @@
 
 #include "roshell.h"
 
-/* ------------------ 运行中命令登记（rs_cmd.c） ------------------ */
+struct ros_task;
 
-/* 记录 / 解除“某任务正在执行哪条命令”，供 pause/resume/kill 查找钩子 */
-void rs_cmd_active_push(struct ros_task *task, const rs_cmd_t *def);
-void rs_cmd_active_pop(struct ros_task *task, const rs_cmd_t *def);
+/* ------------------ 命令行分派与会话查询（roshell_cmd.c） ------------------ */
+
+/* 格式化错误输出：ERR <code>: <msg> */
+void rs_error(int code, const char *fmt, ...);
+
+/* 会话输入任务（未作为会话启动 / rs 为空时返回 NULL） */
+struct ros_task *rs_session_task(const roshell_t *rs);
+
+/* 会话启动时登记的版本串，供 ver 命令显示；rs 为空或无版本返回 NULL */
+const char *rs_session_version(const roshell_t *rs);
+
+/* ------------------ 运行中命令状态机（roshell_cmd.c） ------------------ */
+
+/* wait=true 同步执行到结束；wait=false '-' 异步启动，返回 RS_CMD_RUNNING */
+int rs_cmd_execute(const rs_cmd_t *def, rs_cmd_ctx_t *ctx, bool wait);
+
+/* 解析参数并执行（argv 不含命令名）；wait 语义同上 */
+int rs_cmd_exec_node(const rs_cmd_t *def, int argc, char **argv,
+                     roshell_t *rs, bool wait);
+
+/* shell 任务每轮调用：推进一步异步持续命令 */
+void rs_cmd_tick_all(void);
+
+/* 是否存在运行中的异步持续命令（shell 据此决定空闲轮询间隔） */
+bool rs_cmd_has_async(void);
+
+/* 等待异步持续命令结束；name 为 NULL 表示全部；timeout_ms=0 无限等待 */
+int rs_cmd_wait_async(const rs_cmd_t *self, const char *name,
+                      uint32_t timeout_ms);
 
 /* ------------------------------ 内建命令表（roshell_builtin.c） ------------------------------ */
 

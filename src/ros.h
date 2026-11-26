@@ -13,7 +13,7 @@
  *
  * 使用方只需包含本文件，其余声明按实现文件拆分在同名头文件中
  * （`src/` 下所有文件名统一带 `ros_` 前缀；每个内核对象的结构体
- *   定义在自身头文件中，ros_types.h 只放公共常量与前向声明）。
+ *   定义在自身头文件中，公共状态码见 ros_err.h，裁剪开关与常量见 ros_config.h）。
  * `src/` 之外的代码（components / modules / drivers / platforms 等）
  * 包含本文件即可获得内核声明；标准库与基础组件由
  * components/common/common.h 提供，使用到的地方需自行包含。
@@ -24,7 +24,7 @@
  *   ros_idle.h    空闲任务      ros_stats.h   运行时统计
  *   ros_isr.h     中断上下文 API                         ros_port.h    移植层接口
  *   ros_mem.h     内存分配
- *   ros_trace.h   事件跟踪宏    ros_types.h   公共常量/状态码/前向声明
+ *   ros_trace.h   事件跟踪宏    ros_err.h     公共状态码
  *   ros_rtc.h     实时时钟/Unix 时间
  *   ros_version.h 版本/构建时间/编译配置/许可证
  *   ros_config.h  编译期裁剪开关
@@ -35,7 +35,12 @@
  *   ros_sched_start();                // 启动调度（通常不返回）
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+#include "ros_config.h"  /* 裁剪开关与优先级常量 */
+#include "ros_err.h"     /* 状态码 */
 #include "ros_mem.h"
 #include "ros_io.h"
 #include "ros_task.h"
@@ -56,6 +61,37 @@
 #include "ros_rtc.h"
 #include "ros_version.h"
 #include "ros_port.h"
+
+/* ============================== 内核内部工具 ============================== */
+
+/* 内核日志 tag，避免各处重复字符串字面量 */
+#define ROS_TAG "ros"
+
+/* 对象是否已初始化（所有内核对象都带 initialized 字段） */
+#define ROS_OBJ_VALID(p) ((p) != NULL && (p)->initialized)
+
+/*
+ * 取 32 位整数最低置位编号（0..31），v 为 0 时返回 -1。
+ * 优先级 0 最高，因此结果直接就是最高优先级编号。
+ * 就绪位图与等待队列位图共用：GCC/Clang 走硬件指令，其他编译器用循环。
+ */
+static inline int ros_ctz32(uint32_t v)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return (v == 0U) ? -1 : __builtin_ctz(v);
+#else
+    int n = 0;
+
+    if (v == 0U) {
+        return -1;
+    }
+    while ((v & 1U) == 0U) {
+        v >>= 1;
+        n++;
+    }
+    return n;
+#endif
+}
 
 #ifdef __cplusplus
 extern "C" {

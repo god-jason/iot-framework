@@ -9,9 +9,13 @@
  * 仅供 roshell 各实现文件使用，平台 / 组件代码不应依赖。
  */
 
-#include "roshell.h"
-#include "roshell_lexer.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "vec.h"
 #include "map.h"
+#include "roshell_config.h"
+#include "roshell_lexer.h"
 
 /* 求值器与语句解释器共享的类型（后置定义，供跨模块原型前置声明） */
 struct rs_env;
@@ -62,7 +66,7 @@ typedef struct {
 
 #define RS_TMP_SLOTS 4
 
-typedef struct rs_ctx {
+typedef struct rs_unit {
     map_t       vars;                     /* 变量表：键=变量名，值=rs_var_t* 堆盒 */
     vec_t       toks;                     /* 单行 token 序列（容量 RS_TOKEN_MAX） */
     /* 块帧栈：栈语义、深度受 RS_BLOCK_DEPTH 约束，保留定长数组 */
@@ -74,10 +78,10 @@ typedef struct rs_ctx {
     rs_value_t  ret;
     char        sbuf[RS_TMP_SLOTS][RS_STR_MAX];
     uint8_t     sflip;
-} rs_ctx_t;
+} rs_unit_t;
 
 /* 释放变量表中的值盒并 deinit（执行单元销毁时调用；可重复调用） */
-void rs_vars_release(rs_ctx_t *ctx);
+void rs_vars_release(rs_unit_t *ctx);
 
 /* 表达式解析游标（求值器与隐式调用语句共用） */
 typedef struct {
@@ -98,16 +102,16 @@ int rs_type_err(struct rs_env *env, const char *msg);
 int rs_p_args(struct rs_env *env, rs_ps_t *ps, rs_value_t *args, uint8_t *argc);
 
 /* 在变量表中按名查找（不含 $）；未命中返回 NULL */
-rs_var_t *rs_var_find(rs_ctx_t *ctx, const char *name, uint16_t len);
+rs_var_t *rs_var_find(rs_unit_t *ctx, const char *name, uint16_t len);
 
 /* 查找或新建变量槽；表满返回 NULL */
-rs_var_t *rs_var_alloc(rs_ctx_t *ctx, const char *name, uint16_t len);
+rs_var_t *rs_var_alloc(rs_unit_t *ctx, const char *name, uint16_t len);
 
 /* 把求值结果写入变量槽 */
 void rs_var_store(rs_var_t *v, const rs_value_t *val);
 
 /* 临时字符串槽（ping-pong，供字面量 / 拼接 / 返回值拷贝） */
-const char *rs_tmp(rs_ctx_t *ctx, const char *src, uint16_t len,
+const char *rs_tmp(rs_unit_t *ctx, const char *src, uint16_t len,
                    uint16_t *out_len);
 
 /* 求值 toks[start..] 并要求全部消费 */

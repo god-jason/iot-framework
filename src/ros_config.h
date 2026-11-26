@@ -18,6 +18,17 @@
 #define ROS_TICK_HZ 1000U
 #endif
 
+/* 优先级数量：0..ROS_MAX_PRIORITY-1（数值越小优先级越高） */
+#ifndef ROS_MAX_PRIORITY
+#define ROS_MAX_PRIORITY 8
+#endif
+
+/* 最高优先级（最紧急） */
+#define ROS_PRIORITY_HIGHEST 0U
+
+/* 最低优先级，保留给内置空闲任务 */
+#define ROS_PRIORITY_IDLE (ROS_MAX_PRIORITY - 1)
+
 /* 同优先级时间片轮转：每 N 个 tick 把当前任务放回同优先级队尾 */
 #ifndef ROS_USE_TIME_SLICING
 #define ROS_USE_TIME_SLICING 1

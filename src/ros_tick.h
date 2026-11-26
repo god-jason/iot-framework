@@ -7,7 +7,8 @@
  * 时间单位由移植层决定（默认 1 tick = 1 ms）。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+
 #include "ros_task.h"   /* ros_task_t */
 
 #ifdef __cplusplus

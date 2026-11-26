@@ -16,7 +16,8 @@ static const rs_args_t s_ping_args[] = {
 };
 
 static const rs_cmd_t s_ping_def = {
-    "ping", "send ICMP echo", NULL, NULL, s_ping_args, 4U
+    "ping", "send ICMP echo", NULL, NULL, s_ping_args, 4U,
+    NULL, NULL, NULL, NULL, NULL, NULL
 };
 
 static int s_run_value;
@@ -35,7 +36,7 @@ static int ping_handler(const rs_cmd_ctx_t *ctx)
 
 static const rs_cmd_t s_table[] = {
     { "ping", "send ICMP echo", NULL, NULL, s_ping_args, 4U, ping_handler,
-      NULL, NULL, NULL, NULL }
+      NULL, NULL, NULL, NULL, NULL }
 };
 
 /* ---------------- 生命周期钩子 ---------------- */
@@ -44,25 +45,28 @@ static int s_hook_pause_calls;
 static int s_hook_resume_calls;
 static int s_hook_kill_calls;
 
-static int hook_pause(void *user, ros_task_t *task)
+static int hook_pause(void *user, roshell_t *rs, ros_task_t *task)
 {
     (void)user;
+    (void)rs;
     (void)task;
     s_hook_pause_calls++;
     return 0;
 }
 
-static int hook_resume(void *user, ros_task_t *task)
+static int hook_resume(void *user, roshell_t *rs, ros_task_t *task)
 {
     (void)user;
+    (void)rs;
     (void)task;
     s_hook_resume_calls++;
     return 0;
 }
 
-static int hook_kill(void *user, ros_task_t *task)
+static int hook_kill(void *user, roshell_t *rs, ros_task_t *task)
 {
     (void)user;
+    (void)rs;
     (void)task;
     s_hook_kill_calls++;
     return 0;
@@ -81,9 +85,10 @@ static int hook_handler(const rs_cmd_ctx_t *ctx)
     return 0;
 }
 
-static int deny_pause(void *user, ros_task_t *task)
+static int deny_pause(void *user, roshell_t *rs, ros_task_t *task)
 {
     (void)user;
+    (void)rs;
     (void)task;
     return -7;
 }
@@ -97,11 +102,11 @@ static int deny_handler(const rs_cmd_ctx_t *ctx)
 
 static const rs_cmd_t s_hook_def = {
     "hookcmd", "hook test", NULL, NULL, NULL, 0U,
-    hook_handler, NULL, hook_pause, hook_resume, hook_kill
+    hook_handler, NULL, hook_pause, hook_resume, hook_kill, NULL
 };
 static const rs_cmd_t s_deny_def = {
     "denycmd", "deny pause", NULL, NULL, NULL, 0U,
-    deny_handler, NULL, deny_pause, NULL, NULL
+    deny_handler, NULL, deny_pause, NULL, NULL, NULL
 };
 
 #define PARSE(argv_, argc_, out_) \
@@ -229,10 +234,10 @@ void ut_cmd(void)
         TF_CHECK(node != NULL);
         TF_CHECK(node->on_pause == hook_pause);
         TF_CHECK(node->on_resume == hook_resume);
-        TF_CHECK(node->on_kill == hook_kill);
+        TF_CHECK(node->on_stop == hook_kill);
         node = rs_cmd_find_command("denycmd");
         TF_CHECK(node != NULL && node->on_pause == deny_pause);
-        TF_CHECK(node->on_resume == NULL && node->on_kill == NULL);
+        TF_CHECK(node->on_resume == NULL && node->on_stop == NULL);
 
         /* 无任务/无登记：安全返回 0 */
         TF_CHECK_INT(rs_cmd_notify_pause(NULL), 0);

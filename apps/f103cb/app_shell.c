@@ -1,4 +1,4 @@
-/*
+﻿/*
  * app_shell.c - STM32F103CBT6 串口进入 roshell（UART1，口令开启）
  *
  * 本文件强定义 rs_platform_start()，覆盖平台层弱默认实现
@@ -57,6 +57,7 @@ static hal_uart_t *uart_shell_uart(void)
 }
 
 static void *s_watch_task;
+static roshell_t *s_shell;                   /* 当前会话句柄（监听态为 NULL） */
 static const char *s_version;
 static size_t s_open_pos;               /* 口令匹配进度 */
 
@@ -105,9 +106,10 @@ static void uart_shell_watch_task(void *arg)
     for (;;) {
         bool got = false;
 
-        if (rs_shell_task_finished()) {
+        if (rs_shell_task_finished(s_shell)) {
             /* exit 之后任务已退出：销毁任务并释放实例缓冲 */
-            (void)rs_shell_shutdown();
+            (void)rs_shell_shutdown(s_shell);
+            s_shell = NULL;
             s_open_pos = 0U;
             continue;
         }
@@ -119,11 +121,11 @@ static void uart_shell_watch_task(void *arg)
         while (hal_uart_receive != NULL &&
                hal_uart_receive(uart, &ch, 1U, 0U) == HAL_OK) {
             got = true;
-            if (rs_shell_started()) {
-                rs_shell_feed((const char *)&ch, 1U);
+            if (rs_shell_started(s_shell)) {
+                rs_shell_feed(s_shell, (const char *)&ch, 1U);
             } else if (uart_shell_open_word_match(ch)) {
                 (void)uart_shell_write(reply, sizeof(reply) - 1U, NULL);
-                (void)rs_shell_start(s_version);
+                s_shell = rs_shell_start(s_version);
             }
         }
 

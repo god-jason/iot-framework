@@ -7,8 +7,11 @@
  * 环形缓冲 + 阻塞收发，发送/接收优先与对方等待者直接握手。
  */
 
-#include "ros_types.h"
-#include "ros_wait.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_err.h"    /* 状态码 */
+#include "ros_wait.h"   /* ros_wait_queue_t / ROS_TIMEOUT_* */
 
 #ifdef __cplusplus
 extern "C" {

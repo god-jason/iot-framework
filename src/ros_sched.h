@@ -7,7 +7,10 @@
  * 固定优先级：就绪位图 + 每优先级一条环形链表，取值最小者为最高优先级。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_err.h"    /* 状态码 */
 #include "ros_task.h"   /* ros_task_t */
 
 #ifdef __cplusplus

@@ -42,6 +42,22 @@
 #ifndef RS_SCRIPT_MAX
 #define RS_SCRIPT_MAX    4096U   /* 脚本源文本最大字节数 */
 #endif
+#ifndef RS_SHELL_RX_MAX
+#define RS_SHELL_RX_MAX  256U    /* 会话接收环形缓冲字节数 */
+#endif
+#ifndef RS_SHELL_PRIO
+#define RS_SHELL_PRIO    4U      /* 会话输入任务优先级（0 最高） */
+#endif
+#ifndef RS_SHELL_STACK
+#if defined(ROS_STM32_F1)
+#define RS_SHELL_STACK   2048U   /* 输入任务栈字节数（F1 堆小，取较小值） */
+#else
+#define RS_SHELL_STACK   4096U   /* 输入任务栈字节数（ls 递归 + 嵌套扫描需要余量） */
+#endif
+#endif
+#ifndef RS_CWD_MAX
+#define RS_CWD_MAX       128U    /* 会话当前工作目录缓冲长度 */
+#endif
 
 /* ------------------------------ 结构上限 ------------------------------ */
 #ifndef RS_BLOCK_DEPTH
@@ -74,26 +90,6 @@
 #define RS_NAME_MAX      17U     /* 函数名最大长度（含 0） */
 #endif
 
-/* ------------------------------ run 任务 ------------------------------ */
-#ifndef RS_RUN_MAX
-#if defined(ROS_STM32_F1)
-/* F103CB 仅 8KB TLSF 堆：槽位结构较大（约 630B/槽），需收紧 */
-#define RS_RUN_MAX       2U
-#else
-#define RS_RUN_MAX       16U     /* 并发 run 任务槽数 */
-#endif
-#endif
-#ifndef RS_RUN_PRIO
-#define RS_RUN_PRIO      5U      /* run 任务默认优先级（0 最高） */
-#endif
-#ifndef RS_RUN_STACK
-#if defined(ROS_STM32_F1)
-#define RS_RUN_STACK     1024U   /* F1 堆受限，run 任务栈相应减小 */
-#else
-#define RS_RUN_STACK     4096U   /* run 任务默认栈字节数 */
-#endif
-#endif
-
 /* ------------------------------ 扩展注册 ------------------------------ */
 /* 全局扩展函数 / 常量注册表容量（EXPR；EXPR=0 时表被裁剪） */
 #ifndef RS_EXT_FUNC_MAX
@@ -104,9 +100,5 @@
 #endif
 
 /* ------------------------------ 会话 ------------------------------ */
-/* waitjob 默认超时（会话配置，内建命令使用） */
-#ifndef RS_SHELL_WAITJOB_MS
-#define RS_SHELL_WAITJOB_MS    30000U
-#endif
 
 #endif /* RS_CONFIG_H */

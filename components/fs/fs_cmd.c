@@ -1,4 +1,4 @@
-/*
+﻿/*
  * fs_cmd.c - 通用文件系统 Shell 命令（基于 VFS）
  * ============================================================================
  *
@@ -27,7 +27,7 @@
  * in 为空时取 cwd；相对路径拼接到 cwd 之后。
  * out 保证以 '/' 开头，形如 "/"、"/a"、"/a/b"。
  */
-static void fs_path_abs(const char *in, char *out, uint32_t cap)
+static void fs_path_abs(const roshell_t *rs, const char *in, char *out, uint32_t cap)
 {
     const char *p;
     uint32_t n = 0U;
@@ -42,7 +42,7 @@ static void fs_path_abs(const char *in, char *out, uint32_t cap)
     }
 
     if (in[0] != '/') {
-        const char *cwd = rs_shell_cwd();
+        const char *cwd = rs_shell_cwd(rs);
 
         while (*cwd != '\0' && n + 1U < cap) {
             out[n++] = *cwd++;
@@ -122,8 +122,7 @@ static int fs_path_join(const char *dir, const char *name, char *out,
 /* pwd：显示当前目录 */
 static int cmd_pwd(const rs_cmd_ctx_t *ctx)
 {
-    (void)ctx;
-    ros_printf("%s\n", rs_shell_cwd());
+    ros_printf("%s\n", rs_shell_cwd(ctx->rs));
     return 0;
 }
 
@@ -138,7 +137,7 @@ static int cmd_cd(const rs_cmd_ctx_t *ctx)
     if (path == NULL || path[0] == '\0') {
         path = "/";
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
 
     rc = vfs_isdir(abs);
     if (rc != 1) {
@@ -146,7 +145,7 @@ static int cmd_cd(const rs_cmd_ctx_t *ctx)
                    (rc == 0) ? "not a directory" : fs_strerror(rc));
         return -1;
     }
-    if (rs_shell_cwd_set(abs) != 0) {
+    if (rs_shell_cwd_set(ctx->rs, abs) != 0) {
         ros_puts("cd: path too long");
         return -1;
     }
@@ -209,7 +208,7 @@ static int cmd_ls(const rs_cmd_ctx_t *ctx)
     const char *path = NULL;
 
     (void)rs_args_get_str(ctx->parsed, 0U, &path);
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
     ls_dir(abs, 0U);
     return 0;
 }
@@ -228,7 +227,7 @@ static int cmd_cat(const rs_cmd_ctx_t *ctx)
         ros_puts("usage: cat <path>");
         return -1;
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
 
     memset(&f, 0, sizeof(f));
     rc = vfs_open(abs, FS_O_RDONLY, &f);
@@ -258,7 +257,7 @@ static int cmd_mkdir(const rs_cmd_ctx_t *ctx)
         ros_puts("usage: mkdir <path>");
         return -1;
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
     rc = vfs_mkdir(abs);
     if (rc != FS_OK) {
         ros_printf("mkdir: %s: %s\n", abs, fs_strerror(rc));
@@ -278,7 +277,7 @@ static int cmd_rm(const rs_cmd_ctx_t *ctx)
         ros_puts("usage: rm <path>");
         return -1;
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
     rc = vfs_unlink(abs);
     if (rc == FS_ERR_ISDIR) {
         ros_printf("rm: %s: is a directory (use rmdir)\n", abs);
@@ -302,7 +301,7 @@ static int cmd_rmdir(const rs_cmd_ctx_t *ctx)
         ros_puts("usage: rmdir <path>");
         return -1;
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
     rc = vfs_rmdir(abs);
     if (rc != FS_OK) {
         ros_printf("rmdir: %s: %s\n", abs, fs_strerror(rc));
@@ -323,7 +322,7 @@ static int cmd_stat(const rs_cmd_ctx_t *ctx)
         ros_puts("usage: stat <path>");
         return -1;
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
     rc = vfs_stat(abs, &st);
     if (rc != FS_OK) {
         ros_printf("stat: %s: %s\n", abs, fs_strerror(rc));
@@ -344,7 +343,7 @@ static int cmd_df(const rs_cmd_ctx_t *ctx)
     int rc;
 
     (void)rs_args_get_str(ctx->parsed, 0U, &path);
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
     rc = vfs_statfs(abs, &st);
     if (rc != FS_OK) {
         ros_printf("df: %s: %s\n", abs, fs_strerror(rc));
@@ -374,7 +373,7 @@ static int cmd_put(const rs_cmd_ctx_t *ctx)
         ros_puts("usage: put <path> <text>");
         return -1;
     }
-    fs_path_abs(path, abs, sizeof(abs));
+    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
 
     len = (uint32_t)strlen(text);
     memset(&f, 0, sizeof(f));

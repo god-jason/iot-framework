@@ -8,8 +8,12 @@
  * 典型用途：用一组位同时等待「网络就绪 + 配置完成 + 允许上报」。
  */
 
-#include "ros_types.h"
-#include "ros_wait.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_config.h"  /* ROS_USE_EVENT */
+#include "ros_err.h"     /* 状态码 */
+#include "ros_wait.h"    /* ros_wait_queue_t / ROS_TIMEOUT_* */
 
 #ifdef __cplusplus
 extern "C" {

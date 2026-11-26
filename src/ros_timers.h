@@ -7,7 +7,12 @@
  * 单次/周期定时器，按 deadline 升序挂入内部链表，由 tick 驱动。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_config.h"  /* ROS_USE_TIMER_TASK 等 */
+#include "ros_err.h"     /* 状态码 */
+#include "list.h"        /* list_node_t */
 
 #ifdef __cplusplus
 extern "C" {

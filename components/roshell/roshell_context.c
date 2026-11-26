@@ -86,37 +86,16 @@ static int rs_tokenize(char *buf, char **argv, int max)
 
 /* ============================== 会话状态 ============================== */
 
-static rs_context_t s_ctx;
+/* 会话状态直接存放在实例中（见 roshell_core.h），多会话即多实例 */
 
-/* ------------------------------ 会话状态访问（供内建命令） ------------------------------ */
-
-/* waitjob 等待期间消费输入：只识别 Ctrl-C，其余字节丢弃 */
-bool rs_session_pump_ctrlc(void)
+ros_task_t *rs_session_task(const roshell_t *rs)
 {
-    bool hit = false;
-    uint8_t c;
-
-    while (ringbuf_read(&s_ctx.rx, &c, 1U) == 1U) {
-        if (c == 0x03U) {
-            hit = true;
-        }
-    }
-    return hit;
+    return (rs != NULL) ? rs->task : NULL;
 }
 
-ros_task_t *rs_session_task(void)
+const char *rs_session_version(const roshell_t *rs)
 {
-    return s_ctx.task;
-}
-
-const char *rs_session_version(void)
-{
-    return s_ctx.version;
-}
-
-vec_t *rs_session_waits(void)
-{
-    return &s_ctx.waits;
+    return (rs != NULL) ? rs->version : NULL;
 }
 
 /* ============================== 引擎命令 hook ============================== */
@@ -128,10 +107,11 @@ vec_t *rs_session_waits(void)
  */
 static int rs_cmd_hook(void *ctx, const char *line, int *ret)
 {
-    rs_t *rs = (rs_t *)ctx;
+    roshell_t *rs = (roshell_t *)ctx;
     char buf[RS_LINE_MAX];
     char *argv[RS_CMD_ARGC_MAX];
     const rs_cmd_t *cmd;
+    bool bg = false;
     int argc;
     int rc;
 
@@ -143,21 +123,33 @@ static int rs_cmd_hook(void *ctx, const char *line, int *ret)
     if (argc <= 0) {
         return 0;
     }
-    cmd = rs_builtin_find(argv[0]);
+    /* '-' 前缀：持续命令不等待结束（异步启动） */
+    if (argv[0][0] == '-' && argv[0][1] != '\0') {
+        bg = true;
+        argv[0]++;
+    }
+    cmd = rs_cmd_find_command(argv[0]);
     if (cmd != NULL) {
-        rs_cmd_ctx_t cctx;
-        ros_task_t *self = ros_current_task;
+        if (rs_builtin_is(cmd)) {
+            rs_cmd_ctx_t cctx;
 
-        cctx.rs = rs;
-        cctx.argc = argc;
-        cctx.argv = argv;
-        cctx.parsed = NULL;
-        cctx.user = cmd->user;
-        /* 内建命令也登记 active，pause/resume/kill 才能找到钩子 */
-        rs_cmd_active_push(self, cmd);
-        *ret = cmd->fn(&cctx);
-        rs_cmd_active_pop(self, cmd);
+            cctx.rs = rs;
+            cctx.argc = argc;
+            cctx.argv = argv;
+            cctx.parsed = NULL;
+            cctx.user = cmd->user;
+            rc = rs_cmd_execute(cmd, &cctx, !bg);
+        } else {
+            rc = rs_cmd_exec_node(cmd, argc - 1, &argv[1], NULL, !bg);
+        }
+        if (bg && rc == RS_CMD_RUNNING) {
+            rc = 0;                     /* 已后台启动 */
+        }
+        *ret = rc;
         return 1;
+    }
+    if (bg) {
+        return 0;                       /* 不是命令：按脚本一元负号处理 */
     }
     rc = rs_builtin_dispatch(argc, argv);
     if (rc != RS_ARGS_ERR_UNKNOWN) {
@@ -167,7 +159,7 @@ static int rs_cmd_hook(void *ctx, const char *line, int *ret)
     return 0;
 }
 
-void rs_cmd_install(rs_t *rs)
+void rs_cmd_install(roshell_t *rs)
 {
     if (rs != NULL) {
         rs_set_cmd_hook(rs, rs_cmd_hook, rs);
@@ -176,12 +168,13 @@ void rs_cmd_install(rs_t *rs)
 
 /* ============================== 命令分派 ============================== */
 
-int rs_cmd_dispatch(rs_t *rs, const char *line)
+int rs_cmd_dispatch(roshell_t *rs, const char *line)
 {
     char buf[RS_LINE_MAX];
     char *argv[RS_CMD_ARGC_MAX];
     rs_err_t err;
     const rs_cmd_t *cmd;
+    bool bg = false;
     int argc;
     int rc;
 
@@ -194,30 +187,35 @@ int rs_cmd_dispatch(rs_t *rs, const char *line)
         return RS_OK;                       /* 空行 */
     }
 
-    cmd = rs_builtin_find(argv[0]);
-    if (cmd != NULL) {
-        rs_cmd_ctx_t cctx;
-        ros_task_t *self = ros_current_task;
-        int rc2;
-
-        cctx.rs = rs;
-        cctx.argc = argc;
-        cctx.argv = argv;
-        cctx.parsed = NULL;
-        cctx.user = cmd->user;
-        /* 内建命令也登记 active，pause/resume/kill 才能找到钩子 */
-        rs_cmd_active_push(self, cmd);
-        rc2 = cmd->fn(&cctx);
-        rs_cmd_active_pop(self, cmd);
-        return rc2;
+    /* '-' 前缀：持续命令不等待结束（异步启动），继续执行下一条命令 */
+    if (argv[0][0] == '-' && argv[0][1] != '\0') {
+        bg = true;
+        argv[0]++;
     }
+    cmd = rs_cmd_find_command(argv[0]);
+    if (cmd != NULL) {
+        if (rs_builtin_is(cmd)) {
+            rs_cmd_ctx_t cctx;
 
-    rc = rs_builtin_dispatch(argc, argv);
-    if (rc != RS_ARGS_ERR_UNKNOWN) {
-        if (rc < 0) {
-            rs_error(rc, "command '%s' failed", argv[0]);
+            cctx.rs = rs;
+            cctx.argc = argc;
+            cctx.argv = argv;
+            cctx.parsed = NULL;
+            cctx.user = cmd->user;
+            rc = rs_cmd_execute(cmd, &cctx, !bg);
+        } else {
+            rc = rs_cmd_exec_node(cmd, argc - 1, &argv[1], NULL, !bg);
+            if (rc < 0) {
+                rs_error(rc, "command '%s' failed", argv[0]);
+            }
+        }
+        if (bg && rc == RS_CMD_RUNNING) {
+            return RS_OK;                   /* 已后台启动 */
         }
         return rc;
+    }
+    if (bg) {
+        /* 不是命令：按脚本表达式（一元负号）处理，落到下方脚本路径 */
     }
 
     /* 非命令：整行交给脚本引擎 */
@@ -241,58 +239,58 @@ int rs_cmd_dispatch(rs_t *rs, const char *line)
 /* ============================== 行编辑 ============================== */
 
 /* 处理一个输入字节；返回 true 表示提交了一行 */
-static bool rs_edit_byte(uint8_t c)
+static bool rs_edit_byte(roshell_t *rs, uint8_t c)
 {
     if (c == 0x03U) {                       /* Ctrl-C：清行 */
-        s_ctx.line_len = 0U;
-        s_ctx.last_cr = false;
-        s_ctx.line[0] = '\0';
+        rs->line_len = 0U;
+        rs->last_cr = false;
+        rs->line[0] = '\0';
         ros_puts("^C");
         rs_prompt();
         return false;
     }
     if (c == '\r' || c == '\n') {
         /* 终端可能只发 CR、只发 LF 或发 CRLF：都按一次提交处理 */
-        if (c == '\n' && s_ctx.last_cr) {
-            s_ctx.last_cr = false;
+        if (c == '\n' && rs->last_cr) {
+            rs->last_cr = false;
             return false;
         }
-        s_ctx.last_cr = (c == '\r');
+        rs->last_cr = (c == '\r');
         ros_io_write(NULL, "\n", 1U);
-        s_ctx.line[s_ctx.line_len] = '\0';
-        if (s_ctx.line_len > 0U) {
-            (void)rs_cmd_dispatch(s_ctx.rs, s_ctx.line);
+        rs->line[rs->line_len] = '\0';
+        if (rs->line_len > 0U) {
+            (void)rs_cmd_dispatch(rs, rs->line);
         }
-        s_ctx.line_len = 0U;
-        if (!s_ctx.exit_req) {
+        rs->line_len = 0U;
+        if (!rs->exit_req) {
             rs_prompt();
         }
         return true;
     }
-    s_ctx.last_cr = false;
+    rs->last_cr = false;
     if (c == 0x08U || c == 0x7FU) {         /* 退格 */
-        if (s_ctx.line_len > 0U) {
-            s_ctx.line_len--;
-            s_ctx.line[s_ctx.line_len] = '\0';
+        if (rs->line_len > 0U) {
+            rs->line_len--;
+            rs->line[rs->line_len] = '\0';
             ros_io_write(NULL, "\b \b", 3U);
         }
         return false;
     }
     if (c == 0x1BU) {                       /* ESC：吞掉方向键等控制序列 */
-        s_ctx.last_esc = true;
+        rs->last_esc = true;
         return false;
     }
-    if (s_ctx.last_esc) {
+    if (rs->last_esc) {
         if (c == '[' || (c >= '0' && c <= '9') || c == ';') {
             return false;
         }
-        s_ctx.last_esc = false;
+        rs->last_esc = false;
         return false;
     }
     if (c >= 0x20U && c < 0x7FU) {
-        if (s_ctx.line_len + 1U < RS_LINE_MAX) {   /* 超长行截断 */
-            s_ctx.line[s_ctx.line_len++] = (char)c;
-            s_ctx.line[s_ctx.line_len] = '\0';
+        if (rs->line_len + 1U < RS_LINE_MAX) {   /* 超长行截断 */
+            rs->line[rs->line_len++] = (char)c;
+            rs->line[rs->line_len] = '\0';
             ros_putchar((char)c);
         }
     }
@@ -301,160 +299,148 @@ static bool rs_edit_byte(uint8_t c)
 
 /* ============================== 会话 API ============================== */
 
-uint32_t rs_shell_process(void)
+uint32_t rs_shell_process(roshell_t *rs)
 {
     uint32_t lines = 0U;
     uint8_t c;
 
-    if (!s_ctx.started) {
+    if (rs == NULL || !rs->started) {
         return 0U;
     }
+    /* 推进异步持续命令（'-' 启动），保证即使没有输入也在轮转 on_tick */
+    rs_cmd_tick_all();
     /* 先排空本轮全部输入（含 EOF 前已到达的行），再响应退出请求 */
-    while (ringbuf_read(&s_ctx.rx, &c, 1U) == 1U) {
-        if (rs_edit_byte(c)) {
+    while (ringbuf_read(&rs->rx, &c, 1U) == 1U) {
+        if (rs_edit_byte(rs, c)) {
             lines++;
         }
     }
-    if (s_ctx.exit_req) {
-        s_ctx.finished = true;      /* 输入任务据此退出 */
+    if (rs->exit_req) {
+        rs->finished = true;        /* 输入任务据此退出 */
     }
     return lines;
 }
 
-void rs_shell_feed(const char *data, uint32_t len)
+void rs_shell_feed(roshell_t *rs, const char *data, uint32_t len)
 {
-    if (!s_ctx.started || data == NULL || len == 0U) {
+    if (rs == NULL || !rs->started || data == NULL || len == 0U) {
         return;
     }
-    (void)ringbuf_write(&s_ctx.rx, data, len);
+    (void)ringbuf_write(&rs->rx, data, len);
 }
 
 static void rs_shell_task_entry(void *arg)
 {
-    (void)arg;
+    roshell_t *rs = (roshell_t *)arg;
+
     for (;;) {
-        (void)rs_shell_process();
-        if (s_ctx.finished) {
+        (void)rs_shell_process(rs);
+        if (rs->finished) {
             break;
         }
-        if (ringbuf_available(&s_ctx.rx) == 0U) {
-            ros_sleep_ms(5U);
+        if (ringbuf_available(&rs->rx) == 0U) {
+            /* 有异步持续命令时提高轮转频率，保证 sleep 等命令的精度 */
+            ros_sleep_ms(rs_cmd_has_async() ? 1U : 5U);
         }
     }
     ros_task_exit();
 }
 
-int rs_shell_start(const char *version)
+roshell_t *rs_shell_start(const char *version)
 {
-    rs_t *rs;
+    roshell_t *rs;
 
-    if (s_ctx.started) {
-        return 0;
-    }
     rs = rs_create();
     if (rs == NULL) {
         ros_printf("shell: out of memory\r\n");
-        return -1;
+        return NULL;
     }
     rs_cmd_install(rs);              /* 块内命令路由（规格 §8） */
-    s_ctx.rs = rs;
-    rs->ctx = &s_ctx;
-    (void)ringbuf_init(&s_ctx.rx, s_ctx.rx_mem, sizeof(s_ctx.rx_mem));
-    s_ctx.line_len = 0U;
-    s_ctx.line[0] = '\0';
-    s_ctx.last_cr = false;
-    s_ctx.last_esc = false;
-    s_ctx.finished = false;
-    s_ctx.exit_req = false;
-    s_ctx.version = version;
-    s_ctx.cwd[0] = '/';
-    s_ctx.cwd[1] = '\0';
+    (void)ringbuf_init(&rs->rx, rs->rx_mem, sizeof(rs->rx_mem));
+    rs->line_len = 0U;
+    rs->line[0] = '\0';
+    rs->last_cr = false;
+    rs->last_esc = false;
+    rs->finished = false;
+    rs->exit_req = false;
+    rs->version = version;
+    rs->cwd[0] = '/';
+    rs->cwd[1] = '\0';
 
-    s_ctx.task = ros_task_create_dynamic(RS_SHELL_TASK_NAME,
-                                           RS_SHELL_PRIO,
-                                           rs_shell_task_entry, NULL,
-                                           RS_SHELL_STACK);
-    if (s_ctx.task == NULL) {
+    rs->task = ros_task_create_dynamic(RS_SHELL_TASK_NAME,
+                                       RS_SHELL_PRIO,
+                                       rs_shell_task_entry, rs,
+                                       RS_SHELL_STACK);
+    if (rs->task == NULL) {
         ros_mem_info_t info;
 
         (void)memset(&info, 0, sizeof(info));
         (void)ros_mem_get_info(&info);
         ros_printf("shell: task create failed (stack=%u, free=%u)\r\n",
                    (unsigned)RS_SHELL_STACK, (unsigned)info.free_bytes);
-        rs->ctx = NULL;
         rs_destroy(rs);
-        s_ctx.rs = NULL;
-        s_ctx.version = NULL;
-        return -1;
+        return NULL;
     }
-    s_ctx.started = true;
+    rs->started = true;
     ros_printf("roshell ready (%s): type 'help'\n",
                version != NULL ? version : "pc");
     rs_prompt();
-    return 0;
+    return rs;
 }
 
-bool rs_shell_started(void)
+bool rs_shell_started(const roshell_t *rs)
 {
-    return s_ctx.started;
+    return (rs != NULL) && rs->started;
 }
 
-/* 当前工作目录；会话未启动时视为根目录 */
-const char *rs_shell_cwd(void)
+/* 当前工作目录；rs 为空或会话未启动时视为根目录 */
+const char *rs_shell_cwd(const roshell_t *rs)
 {
-    return (s_ctx.cwd[0] != '\0') ? s_ctx.cwd : "/";
+    return ((rs != NULL) && (rs->cwd[0] != '\0')) ? rs->cwd : "/";
 }
 
 /* 保存当前工作目录（调用者需先校验目录存在） */
-int rs_shell_cwd_set(const char *path)
+int rs_shell_cwd_set(roshell_t *rs, const char *path)
 {
     size_t len;
 
-    if (path == NULL || path[0] != '/') {
+    if (rs == NULL || path == NULL || path[0] != '/') {
         return -1;
     }
     len = strlen(path);
-    if (len + 1U > sizeof(s_ctx.cwd)) {
+    if (len + 1U > sizeof(rs->cwd)) {
         return -1;
     }
-    memcpy(s_ctx.cwd, path, len + 1U);
+    memcpy(rs->cwd, path, len + 1U);
     return 0;
 }
 
-bool rs_shell_task_finished(void)
+bool rs_shell_task_finished(const roshell_t *rs)
 {
-    return s_ctx.finished;
+    return (rs != NULL) && rs->finished;
 }
 
-void rs_shell_request_exit(void)
+void rs_shell_request_exit(roshell_t *rs)
 {
-    s_ctx.exit_req = true;
+    if (rs != NULL) {
+        rs->exit_req = true;
+    }
 }
 
-int rs_shell_shutdown(void)
+int rs_shell_shutdown(roshell_t *rs)
 {
-    if (!s_ctx.started || !s_ctx.finished) {
+    if (rs == NULL || !rs->started || !rs->finished) {
         return -1;
     }
-    if (s_ctx.task != NULL) {
-        (void)ros_task_destroy(s_ctx.task);
+    if (rs->task != NULL) {
+        (void)ros_task_destroy(rs->task);
     }
-    if (s_ctx.rs != NULL) {
-        s_ctx.rs->ctx = NULL;
-        rs_destroy(s_ctx.rs);
-    }
-    vec_deinit(&s_ctx.waits);           /* wait 登记表（惰性初始化，未用则为空） */
-    (void)memset(&s_ctx, 0, sizeof(s_ctx));
+    rs_destroy(rs);
     return 0;
 }
 
-rs_t *rs_shell_instance(void)
+uint32_t rs_shell_line_pending(const roshell_t *rs)
 {
-    return s_ctx.rs;
-}
-
-uint32_t rs_shell_line_pending(void)
-{
-    return s_ctx.line_len;
+    return (rs != NULL) ? rs->line_len : 0U;
 }
 

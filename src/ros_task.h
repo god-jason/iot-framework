@@ -5,16 +5,32 @@
  * ros_task.h - 任务管理（ros_task.c）
  *
  * 静态分配：任务控制块与栈由调用者提供，内核不申请内存。
- * 任务状态、入口回调类型与 ros_task_t 完整定义都在本文件。
+ * 任务状态、入口回调类型与 ros_task_t 的结构体定义都在本文件
+ * （ros_task_t 的 typedef 前置声明在 ros_wait.h，见下方说明）。
  */
 
-#include "ros_types.h"
-#include "ros_wait.h"
-#include "ros_io.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_config.h"   /* ROS_USE_* / 优先级常量 */
+#include "ros_err.h"      /* 状态码 */
+#include "list.h"         /* list_node_t */
+#include "ros_wait.h"     /* ros_wait_queue_t / ros_task_t 前置声明 */
+#include "ros_io.h"       /* ros_io_t */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* 任务名建议最大长度（仅约定，内核不强制截断） */
+#define ROS_NAME_MAX 16
+
+/*
+ * 互斥量在 TCB 中只以指针形式出现。
+ * ros_mutex_t 的 typedef 前置声明放在这里（完整定义见 ros_mutex.h），
+ * 避免 ros_task.h 与 ros_mutex.h 循环包含。
+ */
+typedef struct ros_mutex ros_mutex_t;
 
 /* ============================== 任务状态 ============================== */
 
@@ -33,7 +49,8 @@ typedef void (*ros_entry_t)(void *arg);        /* 任务入口 */
 
 /* ============================== 任务控制块 ============================== */
 
-typedef struct ros_task {
+/* ros_task_t 的 typedef 见 ros_wait.h（其 API 需要任务句柄） */
+struct ros_task {
     /* 移植层上下文：PC 端为 Fiber 句柄，STM32 端为保存的栈指针。
      * 必须是第一个成员：Cortex-M PendSV 汇编用 [tcb] 直接存取栈指针。 */
     void *stack_ptr;
@@ -73,7 +90,7 @@ typedef struct ros_task {
 #endif
 
 #if ROS_USE_PRIORITY_INHERIT
-    struct ros_mutex *wait_mutex;   /* 阻塞在哪个互斥量上（继承链传播用） */
+    ros_mutex_t *wait_mutex;        /* 阻塞在哪个互斥量上（继承链传播用） */
 #endif
 
 #if ROS_USE_EVENT
@@ -99,7 +116,7 @@ typedef struct ros_task {
     bool created;                   /* 是否已创建（调试用） */
     bool stack_owned;               /* 栈是否由 ros_task_create_dynamic 分配 */
     uint16_t tid;                   /* 任务 ID：注册时分配，0 表示未注册 */
-} ros_task_t;
+};
 
 /*
  * 移植层契约：Cortex-M 的 PendSV / ros_port_start_first 汇编用

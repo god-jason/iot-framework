@@ -9,7 +9,10 @@
  * 仅供 roshell 各实现文件使用，平台 / 组件代码不应依赖。
  */
 
-#include "roshell.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "vec.h"
 
 /* ------------------------------ token 类型 ------------------------------ */
 

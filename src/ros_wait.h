@@ -13,14 +13,27 @@
  * 所有带阻塞能力的对象（信号量/互斥量/队列/事件组/通知）都内嵌本结构。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "ros_config.h"   /* ROS_MAX_PRIORITY */
+#include "ros_err.h"      /* 状态码 */
+#include "list.h"         /* list_t */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 任务控制块定义见 ros_task.h；本文件只用指针，故仅前置声明标签 */
-struct ros_task;
+/*
+ * 任务控制块只以指针形式出现在本模块 API 中。
+ * ros_task_t 的 typedef 前置声明放在这里（完整定义见 ros_task.h），
+ * 因为 ros_task.h 需要包含本文件，二者不能互相包含。
+ */
+typedef struct ros_task ros_task_t;
+
+/* 无限等待 / 不等待 */
+#define ROS_TIMEOUT_FOREVER    UINT32_MAX
+#define ROS_TIMEOUT_NONE       0U
 
 typedef struct ros_wait_queue {
     uint32_t bitmap;                       /* bit i = 优先级 i 有等待者 */
@@ -31,20 +44,20 @@ typedef struct ros_wait_queue {
 void ros_wait_queue_init(ros_wait_queue_t *queue);
 
 /* 挂入当前任务（wait_node）；调用者需已持有临界区 */
-void ros_wait_queue_add(ros_wait_queue_t *queue, struct ros_task *task);
+void ros_wait_queue_add(ros_wait_queue_t *queue, ros_task_t *task);
 
 /* 摘除任务并维护位图；对未挂入的任务安全 */
-void ros_wait_queue_remove(ros_wait_queue_t *queue, struct ros_task *task);
+void ros_wait_queue_remove(ros_wait_queue_t *queue, ros_task_t *task);
 
 /* 取出优先级最高的等待者并摘链；空队列返回 NULL */
-struct ros_task *ros_wait_queue_pop_highest(ros_wait_queue_t *queue);
+ros_task_t *ros_wait_queue_pop_highest(ros_wait_queue_t *queue);
 
 /* 队列中最高优先级；空队列返回 0xFF */
 uint8_t ros_wait_queue_top_priority(const ros_wait_queue_t *queue);
 
 /* 任务是否正挂在指定等待队列上 */
 bool ros_wait_queue_contains(const ros_wait_queue_t *queue,
-                             const struct ros_task *task);
+                             const ros_task_t *task);
 
 /* 等待队列是否为空（无任何等待者） */
 bool ros_wait_queue_empty(const ros_wait_queue_t *queue);
@@ -87,7 +100,7 @@ void ros_block_current_locked(ros_wait_queue_t *wait_queue, uint32_t timeout);
 int ros_wait_retry(ros_wait_queue_t *queue, uint32_t deadline, uint32_t timeout);
 
 /* 唤醒任务：摘除等待/延时节点，写入结果并加入就绪表 */
-void ros_task_wake(struct ros_task *task, int result);
+void ros_task_wake(ros_task_t *task, int result);
 
 /*
  * 销毁对象前的统一收尾：等待队列均空时在临界区内把 *initialized 置 false。

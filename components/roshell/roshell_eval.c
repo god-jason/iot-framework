@@ -7,7 +7,7 @@
  */
 
 #include "roshell.h"
-#include "roshell_core.h"
+#include "roshell_interp.h"
 #include "roshell_func.h"
 #include "ros.h"
 #include "map.h"
@@ -29,7 +29,7 @@ static float rs_inf(bool neg)
 /* ============================== 变量表（EXPR） ============================== */
 
 /* 释放变量表中的值盒并 deinit；EXPR=0 时变量表未被使用，等价空操作 */
-void rs_vars_release(rs_ctx_t *ctx)
+void rs_vars_release(rs_unit_t *ctx)
 {
     map_iter_t it;
     map_item_t item;
@@ -47,7 +47,7 @@ void rs_vars_release(rs_ctx_t *ctx)
 #if RS_ENABLE_EXPR
 
 /* 变量表惰性初始化（首次分配变量时才建立跳表哨兵） */
-static bool rs_vars_ensure(rs_ctx_t *ctx)
+static bool rs_vars_ensure(rs_unit_t *ctx)
 {
     if (ctx->vars.head != NULL) {
         return true;
@@ -55,7 +55,7 @@ static bool rs_vars_ensure(rs_ctx_t *ctx)
     return map_init(&ctx->vars) == 0;
 }
 
-rs_var_t *rs_var_find(rs_ctx_t *ctx, const char *name, uint16_t len)
+rs_var_t *rs_var_find(rs_unit_t *ctx, const char *name, uint16_t len)
 {
     char key[RS_VAR_NAME_MAX];
 
@@ -67,7 +67,7 @@ rs_var_t *rs_var_find(rs_ctx_t *ctx, const char *name, uint16_t len)
     return (rs_var_t *)map_get_ptr(&ctx->vars, key);
 }
 
-rs_var_t *rs_var_alloc(rs_ctx_t *ctx, const char *name, uint16_t len)
+rs_var_t *rs_var_alloc(rs_unit_t *ctx, const char *name, uint16_t len)
 {
     char key[RS_VAR_NAME_MAX];
     rs_var_t *v;
@@ -114,7 +114,7 @@ void rs_var_store(rs_var_t *v, const rs_value_t *val)
 }
 
 /* 临时字符串槽（ping-pong，供字面量 / 拼接 / 返回值拷贝） */
-const char *rs_tmp(rs_ctx_t *ctx, const char *src, uint16_t len,
+const char *rs_tmp(rs_unit_t *ctx, const char *src, uint16_t len,
                           uint16_t *out_len)
 {
     char *buf = ctx->sbuf[ctx->sflip];
@@ -447,7 +447,7 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
             memcpy(cat + la, fb, lb);
             len = (uint16_t)(la + lb);
             out->type = RS_VAL_STRING;
-            out->s = rs_tmp(env->ctx, cat, len, &out->slen);
+            out->s = rs_tmp(env->unit, cat, len, &out->slen);
             return RS_OK;
         }
         if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
@@ -570,7 +570,7 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             return rs_parse_err(env, "unclosed string");
         }
         out->type = RS_VAL_STRING;
-        out->s = rs_tmp(env->ctx, sb, len, &out->slen);
+        out->s = rs_tmp(env->unit, sb, len, &out->slen);
         return RS_OK;
     }
     case RS_TOK_VAR: {
@@ -579,7 +579,7 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
         if (ps->noeval) {
             out->type = RS_VAL_INT;
         } else {
-            v = rs_var_find(env->ctx, t->p + 1, (uint16_t)(t->len - 1U));
+            v = rs_var_find(env->unit, t->p + 1, (uint16_t)(t->len - 1U));
             if (v == NULL) {
                 rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
                 return RS_ERR_UNDEF_VAR;
@@ -599,7 +599,7 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
                 if (out->type != RS_VAL_INT && out->type != RS_VAL_FLOAT) {
                     return rs_type_err(env, "type mismatch");
                 }
-                v = rs_var_find(env->ctx, t->p + 1, (uint16_t)(t->len - 1U));
+                v = rs_var_find(env->unit, t->p + 1, (uint16_t)(t->len - 1U));
                 if (v == NULL) {
                     rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
                     return RS_ERR_UNDEF_VAR;
@@ -669,7 +669,7 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
                 return RS_ERR_STACK_OVERFLOW;
             }
             return rs_call_body(env->rs, env->prog, f, args,
-                                (uint8_t)(env->depth + 1U), env->ctx, out,
+                                (uint8_t)(env->depth + 1U), env->unit, out,
                                 env->err);
         }
         /* 裸标识符：内置常量 -> 扩展常量（$x 变量为另一空间，不在此查找） */
@@ -758,7 +758,7 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             out->type = RS_VAL_INT;
             return RS_OK;
         }
-        v = rs_var_find(env->ctx, vt->p + 1, (uint16_t)(vt->len - 1U));
+        v = rs_var_find(env->unit, vt->p + 1, (uint16_t)(vt->len - 1U));
         if (v == NULL) {
             rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
             return RS_ERR_UNDEF_VAR;

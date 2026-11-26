@@ -12,7 +12,6 @@
 #include "ros_version.h"
 #include "strings.h"
 #include "ros_config.h"
-#include "ros_types.h"      /* ROS_MAX_PRIORITY */
 
 #include <string.h>
 #include <stdio.h>

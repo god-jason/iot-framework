@@ -24,7 +24,9 @@
  * 任务内可直接替换标准库的同名调用。
  */
 
-#include "ros_types.h"
+#include <stdint.h>
+
+#include "ros_err.h"      /* 状态码 */
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,12 +40,14 @@ extern "C" {
 #define ROS_IO_LINE_MAX         128U
 #endif
 
-typedef struct ros_io {
-    int (*read)(struct ros_io *io, void *buf, uint32_t len);
-    int (*write)(struct ros_io *io, const void *buf, uint32_t len);
-    int (*close)(struct ros_io *io);
+typedef struct ros_io ros_io_t;
+
+struct ros_io {
+    int (*read)(ros_io_t *io, void *buf, uint32_t len);
+    int (*write)(ros_io_t *io, const void *buf, uint32_t len);
+    int (*close)(ros_io_t *io);
     void *user;                 /* 实现私有上下文，可为 NULL */
-} ros_io_t;
+};
 
 /*
  * 平台默认 stdio 工厂：PC 为 stdin/stdout，STM32 为 UART1。
