@@ -49,9 +49,14 @@
 
 #include <stdio.h>
 
-static int cmd_quit(const rs_cmd_ctx_t *ctx)
+static int cmd_quit(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     app_fs_deinit();
     ros_puts("bye");
     ros_stop();

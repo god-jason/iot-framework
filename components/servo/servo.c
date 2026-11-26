@@ -38,13 +38,18 @@ static int servo_cmd_index(const servo_t *servo)
     return -1;
 }
 
-static int servo_cmd_handler(const rs_cmd_ctx_t *ctx)
+static int servo_cmd_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     uint32_t id;
     uint32_t angle = 0U;
     servo_t *servo;
 
-    if (!rs_args_get_uint(ctx->parsed, 0U, &id)) {
+    if (!rs_args_get_uint(parsed, 0U, &id)) {
         ros_puts("usage: servo <id> [angle]");
         return -1;
     }
@@ -54,7 +59,7 @@ static int servo_cmd_handler(const rs_cmd_ctx_t *ctx)
     }
     servo = s_servos[id];
 
-    if (!rs_args_get_uint(ctx->parsed, 1U, &angle)) {
+    if (!rs_args_get_uint(parsed, 1U, &angle)) {
         LOG_I("servo", "servo[%u] angle=%u range=%u..%u", (unsigned)id,
               (unsigned)servo->angle, (unsigned)servo->min_angle,
               (unsigned)servo->max_angle);

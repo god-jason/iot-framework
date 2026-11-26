@@ -7,7 +7,7 @@ roshell 是机器人设备的脚本语言，上位机通过串口发送脚本，
 
 - 脚本按**行**解析，一行一条语句；行号从 1 开始，用于错误定位。
 - 关键字必须作为一行的第一个 token 出现，且只认小写形式。
-- 变量与表达式由编译宏 `RS_ENABLE_EXPR` 控制（见 §6）。
+- 变量与表达式始终启用。
 
 ### 1.1 执行模型：直接解释，不生成字节码
 
@@ -34,10 +34,10 @@ roshell 是机器人设备的脚本语言，上位机通过串口发送脚本，
 | 字符串 | 双引号包围 `"..."`，内部 `\"` 转义；未闭合引号在求值时报错 |
 | 数字 | 整数 `123`；小数 `1.5`；科学计数 `1e3`、`1.5e-7`（指数可带符号） |
 | 标识符 | 字母或 `_` 开头，字母/数字/`_` 组成；**大小写敏感** |
-| 变量 | `$` 前缀 + 标识符（仅 `RS_ENABLE_EXPR=1` 时有效） |
+| 变量 | `$` 前缀 + 标识符 |
 | 空行 / 纯注释行 | 忽略 |
 
-## 3. 变量与表达式（宏开关，低端 MCU 不编译）
+## 3. 变量与表达式
 
 ### 3.1 变量
 
@@ -86,8 +86,7 @@ $m = $n++                 ; $m = 1，$n = 2（后缀先取值）
 
 ### 3.3 内置函数与常量
 
-表达式中可直接调用下列内置函数（宏 `RS_ENABLE_MATH`，默认跟随
-`RS_ENABLE_EXPR`）。函数名**全小写、大小写敏感**；整数实参自动提升为
+表达式中可直接调用下列内置函数。函数名**全小写、大小写敏感**；整数实参自动提升为
 浮点参与运算，`abs` / `min` / `max` 在**全部实参为整数**时返回整数，其余一律
 返回浮点。域错误交给 C 库处理（如 `sqrt(-1)` 得 `nan`），按现有浮点值语义传播。
 
@@ -137,22 +136,21 @@ end
 - `time()` / `date()` 优先使用平台 RTC（`hal_rtc_get_timestamp` /
   `hal_rtc_get_time`）；RTC 未设置或不可用时 `time()` 回退为开机秒数，
   `date()` 按公历由该秒数换算（开机不足一天即得 `1970-01-01`）。
-- 低端平台（如 `ROS_STM32_F1`，`RS_ENABLE_EXPR=0`）自动裁剪整个
-  内置函数表，零代码成本；也可显式 `-D RS_ENABLE_MATH=0` 单独裁掉。
 
 ### 3.4 扩展注册（函数 / 常量）
 
-平台 / 组件可向解释器注入全局函数与常量（`RS_ENABLE_EXPR=0` 时
-注册返回 `RS_ERR_UNSUPPORTED`）：
+平台 / 组件可向解释器注入全局函数与常量：
 
 ```c
-typedef rs_arg_t (*rs_func_fn_t)(const rs_arg_t *args,
-                                           uint32_t nargs);
+typedef rs_arg_t (*rs_func_fn_t)(roshell_t *rs, const rs_arg_t *args,
+                                 uint32_t nargs);
 int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn);
 int rs_const_register(const char *name, float value);
 ```
 
-- 扩展函数在脚本中以 `name(实参...)` 调用，不绑定实例；查找优先级：
+- `roshell_t` 是解释器的唯一上下文（类似 Lua 的 `lua_State`）；扩展函数
+  第一个参数即当前实例，可用于访问会话状态。
+- 扩展函数在脚本中以 `name(实参...)` 调用，注册表本身不绑定实例；查找优先级：
   内置函数 → 扩展函数 → 脚本 `function`。
 - 扩展常量以裸标识符引用，值为浮点；查找优先级：内置常量 → 扩展常量。
 - 实参以 `rs_arg_t` 值传递：INT / FLOAT 原样传入，BOOL 以 0/1 整数
@@ -181,7 +179,7 @@ end
 ```
 
 - `elseif` 可多次，`else` 至多一次且必须在 `elseif` 之后；`else`、`elseif` 均可省略。
-- 条件必须是布尔表达式（`RS_ENABLE_EXPR=0` 时本语句不可用）。
+- 条件必须是布尔表达式。
 
 示例：
 
@@ -284,7 +282,7 @@ $x = <名称>(<实参列表>)     ; 调用并把返回值赋给变量（也可�
 - 调用允许前向引用：加载扫描仅登记函数名与起始行号，执行时按名解析；
   目标未定义报 `undefined function`。
 - 调用嵌套上限 4 层，超出报 `call stack
-  overflow`；`RS_ENABLE_EXPR=0` 时函数仅支持无参定义与无参调用。
+  overflow`。
 
 示例：
 
@@ -318,14 +316,9 @@ end
 - 嵌套深度上限 8；未闭合块报 `unclosed block`，错配报 `unmatched end`。
 - 行首 token 不是已知关键字、也不是赋值语句/表达式语句时报 `unknown statement`。
 
-## 6. 编译宏与低端裁剪
+## 6. 能力开关
 
-| 宏 | 默认 | =0 时移除 |
-|---|---|---|
-| `RS_ENABLE_EXPR` | 1 | 变量、赋值语句、表达式求值器；`if`/`while`/`for` 的列表求值不可用（解析期报 `unsupported`），函数退化为无参定义与无参隐式调用；内置命令 `sleep`/`wait` 不受影响（参数为字面量/变量替换） |
-| `RS_ENABLE_MATH` | =EXPR | 内置 math 函数库（§3.3）；`EXPR=0` 时强制为 0 |
-
-裁剪后预计节省：表达式求值器 + 词法变量分支 + 变量表 ≈ 4-6K Flash（参考现有 shell_expr 实现）。
+表达式、变量、内置 math 与扩展注册始终全量启用，无裁剪宏。
 
 ## 7. 资源上限（编译期配置）
 
@@ -375,7 +368,7 @@ block      := { statement NEWLINE }
 |---|---|---|
 | `help` | `help [cmd]` | 列出全部命令（按 basic/task/sys/run/session 分组）；带参数显示单条详情 |
 | `ver` | `ver` | 固件版本与 roshell 配置（行/脚本上限） |
-| `echo` | `echo <text\|$var>...` | 回显参数；`$var` 替换为变量值（需 `RS_ENABLE_EXPR=1`） |
+| `echo` | `echo <text\|$var>...` | 回显参数；`$var` 替换为变量值 |
 | `ps` | `ps` | 任务列表 |
 | `sleep` | `sleep <ms>` | 延时指定毫秒；持续命令，可被 `pause`/`resume` |
 | `wait` | `wait [cmd] [timeout <ms>]` | 等待 `-` 异步启动的持续命令结束；不带参数等待全部 |
@@ -433,12 +426,6 @@ busy
 - 持续命令：`sleep` 等以 `on_start/on_tick/on_stop` 实现；命令行加 `-` 前缀
   可后台执行（如 `-sleep 1000`），用 `wait` 等待完成。
 - 顶层变量表在会话内持久（跨行可见），便于交互调试。
-
-### 10.4 低端平台裁剪
-
-- `ROS_STM32_F1` 系列默认 `RS_ENABLE_EXPR=0`：无变量/表达式，
-  `echo $var` 按原文输出，if/while/for/函数参数不可用；
-  会话与内置命令、顺序执行脚本仍可用。
 
 ## 11. 完整脚本示例
 

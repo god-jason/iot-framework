@@ -305,9 +305,14 @@ static int run_mqtt(const char *host, uint16_t port)
 
 /* ------------------------------------------------------------------ 命令 */
 
-static int cmd_all(const rs_cmd_ctx_t *ctx)
+static int cmd_all(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     if (demo_ensure() != 0) {
         return -1;
     }
@@ -321,47 +326,67 @@ static int cmd_all(const rs_cmd_ctx_t *ctx)
     return 0;
 }
 
-static int cmd_sim(const rs_cmd_ctx_t *ctx)
+static int cmd_sim(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     if (demo_ensure() != 0) {
         return -1;
     }
     return run_sim();
 }
 
-static int cmd_ntp(const rs_cmd_ctx_t *ctx)
+static int cmd_ntp(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *server = NULL;
 
     if (demo_ensure() != 0) {
         return -1;
     }
-    (void)rs_args_get_str(ctx->parsed, 0U, &server);
+    (void)rs_args_get_str(parsed, 0U, &server);
     return run_ntp((server != NULL && server[0] != '\0') ? server : NULL);
 }
 
-static int cmd_http(const rs_cmd_ctx_t *ctx)
+static int cmd_http(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *url = NULL;
 
     if (demo_ensure() != 0) {
         return -1;
     }
-    (void)rs_args_get_str(ctx->parsed, 0U, &url);
+    (void)rs_args_get_str(parsed, 0U, &url);
     return run_http((url != NULL && url[0] != '\0') ? url : DEMO_HTTP_URL);
 }
 
-static int cmd_net(const rs_cmd_ctx_t *ctx)
+static int cmd_net(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *host = NULL;
     uint32_t port = 0U;
 
     if (demo_ensure() != 0) {
         return -1;
     }
-    (void)rs_args_get_str(ctx->parsed, 0U, &host);
-    (void)rs_args_get_uint(ctx->parsed, 1U, &port);
+    (void)rs_args_get_str(parsed, 0U, &host);
+    (void)rs_args_get_uint(parsed, 1U, &port);
     if (host == NULL || host[0] == '\0') {
         host = DEMO_TCP_HOST;
     }
@@ -371,16 +396,21 @@ static int cmd_net(const rs_cmd_ctx_t *ctx)
     return run_net(host, (uint16_t)port);
 }
 
-static int cmd_mqtt(const rs_cmd_ctx_t *ctx)
+static int cmd_mqtt(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *host = NULL;
     uint32_t port = 0U;
 
     if (demo_ensure() != 0) {
         return -1;
     }
-    (void)rs_args_get_str(ctx->parsed, 0U, &host);
-    (void)rs_args_get_uint(ctx->parsed, 1U, &port);
+    (void)rs_args_get_str(parsed, 0U, &host);
+    (void)rs_args_get_uint(parsed, 1U, &port);
     if (host == NULL || host[0] == '\0') {
         host = DEMO_MQTT_HOST;
     }

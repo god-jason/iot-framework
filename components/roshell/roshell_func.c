@@ -1,9 +1,9 @@
 ﻿/*
  * roshell_func.c - roshell 内置函数 / 常量表与扩展注册表
  *
- * 内置 math 函数与系统函数表、内置常量表（RS_ENABLE_MATH 门控）；
- * 扩展函数 / 常量注册表与 rs_func_register / rs_const_register
- * 注册 API（RS_ENABLE_EXPR 门控）。求值器在 roshell_eval.c 查表调用。
+ * 内置 math 函数与系统函数表、内置常量表；
+ * 扩展函数 / 常量注册表与 rs_func_register / rs_const_register 注册 API。
+ * 求值器在 roshell_eval.c 查表调用。
  */
 
 #include "roshell.h"
@@ -13,15 +13,12 @@
 
 #include <string.h>
 #include <stdio.h>
-
-#if RS_ENABLE_MATH
 #include <math.h>
+
 #include "hal_rtc.h"      /* time() / date() 时间源 */
-#endif
 
 /* ========================= 内置函数 / 常量表（MATH） ========================= */
 /*
- * RS_ENABLE_MATH 门控。
  * 内置 math 函数表：名 + 形参个数 + numeric 标志 + 实现。
  * 实现假定 numeric 表项的 args 已由求值器（rs_func_apply）通过数值校验；
  * abs/min/max 在全部实参为整数时返回整数，其余一律返回浮点；
@@ -29,7 +26,6 @@
  * 系统函数（tick/uptime/time/date/empty，numeric=false）自行处理实参类型。
  * 求值器在 rs_eval.c 经 rs_func_find / rs_const_find 查本表。
  */
-#if RS_ENABLE_MATH
 
 /* 数值取值（整数提升为浮点） */
 static float rs_m_fnum(const rs_value_t *v)
@@ -44,8 +40,9 @@ static void rs_m_setf(rs_value_t *out, float v)
     out->f = v;
 }
 
-static void rs_m_abs(const rs_value_t *a, rs_value_t *out)
+static void rs_m_abs(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     if (a[0].type == RS_VAL_INT) {
         int32_t v = a[0].i;
         out->type = RS_VAL_INT;
@@ -55,84 +52,100 @@ static void rs_m_abs(const rs_value_t *a, rs_value_t *out)
     }
 }
 
-static void rs_m_floor(const rs_value_t *a, rs_value_t *out)
+static void rs_m_floor(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, floorf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_ceil(const rs_value_t *a, rs_value_t *out)
+static void rs_m_ceil(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, ceilf(rs_m_fnum(&a[0])));
 }
 
 /* roundf：C99 舍入到最近整数，.5 远离零方向 */
-static void rs_m_round(const rs_value_t *a, rs_value_t *out)
+static void rs_m_round(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, roundf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_sqrt(const rs_value_t *a, rs_value_t *out)
+static void rs_m_sqrt(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, sqrtf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_sin(const rs_value_t *a, rs_value_t *out)
+static void rs_m_sin(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, sinf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_cos(const rs_value_t *a, rs_value_t *out)
+static void rs_m_cos(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, cosf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_tan(const rs_value_t *a, rs_value_t *out)
+static void rs_m_tan(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, tanf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_asin(const rs_value_t *a, rs_value_t *out)
+static void rs_m_asin(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, asinf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_acos(const rs_value_t *a, rs_value_t *out)
+static void rs_m_acos(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, acosf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_atan(const rs_value_t *a, rs_value_t *out)
+static void rs_m_atan(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, atanf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_exp(const rs_value_t *a, rs_value_t *out)
+static void rs_m_exp(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, expf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_log(const rs_value_t *a, rs_value_t *out)
+static void rs_m_log(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, logf(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_log10(const rs_value_t *a, rs_value_t *out)
+static void rs_m_log10(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, log10f(rs_m_fnum(&a[0])));
 }
 
-static void rs_m_pow(const rs_value_t *a, rs_value_t *out)
+static void rs_m_pow(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, powf(rs_m_fnum(&a[0]), rs_m_fnum(&a[1])));
 }
 
-static void rs_m_atan2(const rs_value_t *a, rs_value_t *out)
+static void rs_m_atan2(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     rs_m_setf(out, atan2f(rs_m_fnum(&a[0]), rs_m_fnum(&a[1])));
 }
 
-static void rs_m_min(const rs_value_t *a, rs_value_t *out)
+static void rs_m_min(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     if (a[0].type == RS_VAL_INT && a[1].type == RS_VAL_INT) {
         out->type = RS_VAL_INT;
         out->i = (a[0].i < a[1].i) ? a[0].i : a[1].i;
@@ -141,8 +154,9 @@ static void rs_m_min(const rs_value_t *a, rs_value_t *out)
     }
 }
 
-static void rs_m_max(const rs_value_t *a, rs_value_t *out)
+static void rs_m_max(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     if (a[0].type == RS_VAL_INT && a[1].type == RS_VAL_INT) {
         out->type = RS_VAL_INT;
         out->i = (a[0].i > a[1].i) ? a[0].i : a[1].i;
@@ -154,16 +168,18 @@ static void rs_m_max(const rs_value_t *a, rs_value_t *out)
 /* ------------------------------ 系统函数 ------------------------------ */
 
 /* tick()：内核 tick 毫秒计数（回绕后为负值，与 ros_tick_get 位宽一致） */
-static void rs_f_tick(const rs_value_t *a, rs_value_t *out)
+static void rs_f_tick(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     (void)a;
     out->type = RS_VAL_INT;
     out->i = (int32_t)ros_tick_get();
 }
 
 /* uptime()：开机秒数 */
-static void rs_f_uptime(const rs_value_t *a, rs_value_t *out)
+static void rs_f_uptime(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     (void)a;
     out->type = RS_VAL_INT;
     out->i = (int32_t)(ros_tick_get() / 1000U);
@@ -181,8 +197,9 @@ static int32_t rs_time_seconds(void)
     return (int32_t)(ros_tick_get() / 1000U);
 }
 
-static void rs_f_time(const rs_value_t *a, rs_value_t *out)
+static void rs_f_time(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     (void)a;
     out->type = RS_VAL_INT;
     out->i = rs_time_seconds();
@@ -219,10 +236,11 @@ static void rs_date_from_days(int64_t z, int *year, unsigned *month, unsigned *d
  * time() 秒数换算。返回静态缓冲（求值期内只读、单行复用，12 字节） */
 static char s_date_buf[12];
 
-static void rs_f_date(const rs_value_t *a, rs_value_t *out)
+static void rs_f_date(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
     hal_rtc_time_t t;
 
+    (void)rs;
     (void)a;
     if (hal_rtc_get_time(&t) == HAL_OK && t.year >= 1970U) {
         (void)str_printf(s_date_buf, sizeof(s_date_buf), "%04u-%02u-%02u",
@@ -242,8 +260,9 @@ static void rs_f_date(const rs_value_t *a, rs_value_t *out)
 
 /* empty($x)：任意类型判空——字符串长度为 0 / 布尔为 false / 数值为 0。
  * 未定义变量在求值期即报 undefined variable，不会到达本函数 */
-static void rs_f_empty(const rs_value_t *a, rs_value_t *out)
+static void rs_f_empty(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
+    (void)rs;
     out->type = RS_VAL_BOOL;
     switch (a[0].type) {
     case RS_VAL_STRING:
@@ -326,9 +345,6 @@ const rs_const_t *rs_const_find(const char *name, uint16_t len)
     return NULL;
 }
 
-#endif /* RS_ENABLE_MATH */
-
-#if RS_ENABLE_EXPR
 /* ========================= 扩展函数 / 常量注册表（EXPR） ========================= */
 /*
  * 平台 / 组件通过 roshell.h 的 rs_func_register / rs_const_register
@@ -383,14 +399,12 @@ const rs_ext_const_t *rs_ext_const_find(const char *name, uint16_t len)
 /* 裸标识符常量查找：内置常量（MATH）优先，其次扩展常量；命中写出浮点值 */
 bool rs_find_const_num(const char *name, uint16_t len, float *v)
 {
-#if RS_ENABLE_MATH
     const rs_const_t *c = rs_const_find(name, len);
 
     if (c != NULL) {
         *v = c->v;
         return true;
     }
-#endif
     {
         const rs_ext_const_t *x = rs_ext_const_find(name, len);
 
@@ -401,16 +415,11 @@ bool rs_find_const_num(const char *name, uint16_t len, float *v)
     }
     return false;
 }
-#endif /* RS_ENABLE_EXPR */
 
 /* ============================== 扩展注册 API ============================== */
 /*
  * 向解释器注入全局函数 / 常量（规格：roshell.md 扩展注册）。
- * RS_ENABLE_EXPR=0 时表与求值路径均被裁剪，注册返回
- * RS_ERR_UNSUPPORTED（函数保留空实现，保证链接可用）。
  */
-
-#if RS_ENABLE_EXPR
 
 /* 扩展名合法性：标识符字符（字母 / 下划线开头），长度 < RS_NAME_MAX */
 static bool rs_ext_name_ok(const char *name, uint16_t *len)
@@ -437,11 +446,9 @@ static bool rs_ext_name_ok(const char *name, uint16_t *len)
  * 任一命中即视为重名（注册返回 RS_ERR_PARAM） */
 static bool rs_ext_taken(const char *name, uint16_t len)
 {
-#if RS_ENABLE_MATH
     if (rs_func_find(name, len) != NULL || rs_const_find(name, len) != NULL) {
         return true;
     }
-#endif
     return rs_ext_func_find(name, len) != NULL ||
            rs_ext_const_find(name, len) != NULL;
 }
@@ -499,18 +506,3 @@ int rs_const_register(const char *name, float value)
     return RS_OK;
 }
 
-#else /* !RS_ENABLE_EXPR */
-
-int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn)
-{
-    (void)name; (void)argc; (void)fn;
-    return RS_ERR_UNSUPPORTED;
-}
-
-int rs_const_register(const char *name, float value)
-{
-    (void)name; (void)value;
-    return RS_ERR_UNSUPPORTED;
-}
-
-#endif /* RS_ENABLE_EXPR */

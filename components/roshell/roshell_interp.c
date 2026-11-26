@@ -16,9 +16,7 @@
 
 /* ============================== 运行时 ============================== */
 
-int rs_exec_unit(rs_env_t *env);
-
-#if RS_ENABLE_EXPR
+int rs_exec_unit(roshell_t *rs);
 
 static int rs_frame_push(rs_unit_t *ctx, uint8_t type, uint16_t start, uint16_t end)
 {
@@ -37,9 +35,9 @@ static int rs_frame_push(rs_unit_t *ctx, uint8_t type, uint16_t start, uint16_t 
 }
 
 /* if/elseif 分支处理：本支被取则进体，否则跳到同级下一分支或 end 之后 */
-static void rs_if_advance(rs_env_t *env, uint16_t hdr)
+static void rs_if_advance(roshell_t *rs, uint16_t hdr)
 {
-    rs_unit_t *ctx = env->unit;
+    rs_unit_t *ctx = rs->unit;
     rs_frame_t *f = &ctx->frames[ctx->depth - 1U];
     uint16_t i;
     int d = 0;
@@ -48,7 +46,7 @@ static void rs_if_advance(rs_env_t *env, uint16_t hdr)
         return;
     }
     for (i = (uint16_t)(hdr + 1U); i < f->end; i++) {
-        int kind = rs_line_kind(env->prog->text + env->prog->line_off[i]);
+        int kind = rs_line_kind(rs->prog->text + rs->prog->line_off[i]);
         if (kind == K_IF || kind == K_FOR || kind == K_WHILE || kind == K_FUNCTION) {
             d++;
         } else if (kind == K_END) {
@@ -67,38 +65,38 @@ static void rs_if_advance(rs_env_t *env, uint16_t hdr)
     ctx->pc = (uint16_t)(f->end + 1U);
 }
 
-static int rs_stmt_assign(rs_env_t *env, const rs_tok_t *t, int tn)
+static int rs_stmt_assign(roshell_t *rs, const rs_tok_t *t, int tn)
 {
     rs_value_t v;
     rs_var_t *var;
     int rc;
     if (rs_op(&t[1], "=")) {
-        rc = rs_eval_tokens(env, t, tn, 2, &v);
+        rc = rs_eval_tokens(rs, t, tn, 2, &v);
         if (rc != RS_OK) {
             if (rc == RS_ERR_PARSE) {
-                rs_err0(env->err, rc, "bad assignment");
+                rs_err0(rs->err, rc, "bad assignment");
             }
             return rc;
         }
         if (v.type == RS_VAL_NONE) {
-            rs_err0(env->err, RS_ERR_TYPE, "no return value");
+            rs_err0(rs->err, RS_ERR_TYPE, "no return value");
             return RS_ERR_TYPE;
         }
-        var = rs_var_alloc(env->unit, t[0].p + 1, (uint16_t)(t[0].len - 1U));
+        var = rs_var_alloc(rs->unit, t[0].p + 1, (uint16_t)(t[0].len - 1U));
         if (var == NULL) {
-            rs_err0(env->err, RS_ERR_LIMIT, "too many variables");
+            rs_err0(rs->err, RS_ERR_LIMIT, "too many variables");
             return RS_ERR_LIMIT;
         }
         rs_var_store(var, &v);
         return RS_OK;
     }
-    var = rs_var_find(env->unit, t[0].p + 1, (uint16_t)(t[0].len - 1U));
+    var = rs_var_find(rs->unit, t[0].p + 1, (uint16_t)(t[0].len - 1U));
     if (var == NULL) {
-        rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
+        rs_err0(rs->err, RS_ERR_UNDEF_VAR, "undefined variable");
         return RS_ERR_UNDEF_VAR;
     }
     if (var->type != RS_VAL_INT && var->type != RS_VAL_FLOAT) {
-        return rs_type_err(env, "type mismatch");
+        return rs_type_err(rs, "type mismatch");
     }
     if (var->type == RS_VAL_INT) {
         var->i += rs_op(&t[1], "++") ? 1 : -1;
@@ -111,7 +109,7 @@ static int rs_stmt_assign(rs_env_t *env, const rs_tok_t *t, int tn)
 typedef struct { const char *p; uint16_t len; } rs_seg_t;
 
 /* 解析 for 行：顶层逗号切出列表段（指向 prog->text 原文），可选 $i= 绑定 */
-static int rs_for_parse(rs_env_t *env, const rs_tok_t *t, int tn,
+static int rs_for_parse(roshell_t *rs, const rs_tok_t *t, int tn,
                         rs_seg_t *items, uint16_t *count,
                         const char **bp, uint16_t *blen)
 {
@@ -125,7 +123,7 @@ static int rs_for_parse(rs_env_t *env, const rs_tok_t *t, int tn,
     *blen = 0U;
     *count = 0U;
     if (!rs_kw(&t[last], "do")) {
-        rs_err0(env->err, RS_ERR_PARSE, "for requires do");
+        rs_err0(rs->err, RS_ERR_PARSE, "for requires do");
         return RS_ERR_PARSE;
     }
     if (t[1].type == RS_TOK_VAR && rs_op(&t[2], "=")) {
@@ -143,11 +141,11 @@ static int rs_for_parse(rs_env_t *env, const rs_tok_t *t, int tn,
                 d--;
             } else if (rs_op(&t[i], ",") && d == 0) {
                 if (seg < 0) {
-                    rs_err0(env->err, RS_ERR_PARSE, "for requires list");
+                    rs_err0(rs->err, RS_ERR_PARSE, "for requires list");
                     return RS_ERR_PARSE;
                 }
                 if (c >= RS_FOR_ITEMS_MAX) {
-                    rs_err0(env->err, RS_ERR_LIMIT, "too many items");
+                    rs_err0(rs->err, RS_ERR_LIMIT, "too many items");
                     return RS_ERR_LIMIT;
                 }
                 items[c].p = t[seg].p;
@@ -162,11 +160,11 @@ static int rs_for_parse(rs_env_t *env, const rs_tok_t *t, int tn,
         }
     }
     if (seg < 0) {
-        rs_err0(env->err, RS_ERR_PARSE, "for requires list");
+        rs_err0(rs->err, RS_ERR_PARSE, "for requires list");
         return RS_ERR_PARSE;
     }
     if (c >= RS_FOR_ITEMS_MAX) {
-        rs_err0(env->err, RS_ERR_LIMIT, "too many items");
+        rs_err0(rs->err, RS_ERR_LIMIT, "too many items");
         return RS_ERR_LIMIT;
     }
     items[c].p = t[seg].p;
@@ -176,7 +174,7 @@ static int rs_for_parse(rs_env_t *env, const rs_tok_t *t, int tn,
 }
 
 /* 惰性求值第 idx 项：原文拷入栈缓冲后重新词法（覆盖 ctx->toks 安全） */
-static int rs_for_step(rs_env_t *env, const rs_tok_t *t, int tn, uint16_t idx)
+static int rs_for_step(roshell_t *rs, const rs_tok_t *t, int tn, uint16_t idx)
 {
     rs_seg_t items[RS_FOR_ITEMS_MAX];
     uint16_t count = 0U;
@@ -185,26 +183,26 @@ static int rs_for_step(rs_env_t *env, const rs_tok_t *t, int tn, uint16_t idx)
     rs_value_t v;
     char ibuf[RS_LINE_MAX];
     int rc;
-    rc = rs_for_parse(env, t, tn, items, &count, &bp, &blen);
+    rc = rs_for_parse(rs, t, tn, items, &count, &bp, &blen);
     if (rc != RS_OK || idx >= count) {
         return rc;
     }
     if (items[idx].len >= RS_LINE_MAX) {
-        rs_err0(env->err, RS_ERR_LIMIT, "item too long");
+        rs_err0(rs->err, RS_ERR_LIMIT, "item too long");
         return RS_ERR_LIMIT;
     }
     memcpy(ibuf, items[idx].p, items[idx].len);
     ibuf[items[idx].len] = '\0';
-    tn = rs_lex(ibuf, &env->unit->toks);
-    rc = rs_eval_tokens(env, (const rs_tok_t *)vec_data(&env->unit->toks),
+    tn = rs_lex(ibuf, &rs->unit->toks);
+    rc = rs_eval_tokens(rs, (const rs_tok_t *)vec_data(&rs->unit->toks),
                         tn, 0, &v);
     if (rc != RS_OK) {
         return rc;
     }
     if (bp != NULL) {
-        rs_var_t *var = rs_var_alloc(env->unit, bp, blen);
+        rs_var_t *var = rs_var_alloc(rs->unit, bp, blen);
         if (var == NULL) {
-            rs_err0(env->err, RS_ERR_LIMIT, "too many variables");
+            rs_err0(rs->err, RS_ERR_LIMIT, "too many variables");
             return RS_ERR_LIMIT;
         }
         rs_var_store(var, &v);
@@ -212,17 +210,13 @@ static int rs_for_step(rs_env_t *env, const rs_tok_t *t, int tn, uint16_t idx)
     return RS_OK;
 }
 
-#endif /* RS_ENABLE_EXPR */
-
 /* 隐式函数调用语句的实参解析在 EXPR 段内；rs_call_body 前向声明紧随其后 */
 
-int rs_call_body(roshell_t *rs, rs_prog_t *prog, const rs_fn_t *f,
-                        const rs_value_t *args, uint8_t depth,
-                        rs_unit_t *caller, rs_value_t *out, rs_err_t *err);
+int rs_call_body(roshell_t *rs, const rs_fn_t *f,
+                 const rs_value_t *args, rs_value_t *out);
 
-#if RS_ENABLE_EXPR
 /* 隐式函数调用语句：行首 WORD + '('，丢弃返回值（规格 §4.5） */
-static int rs_stmt_implicit_call(rs_env_t *env, const rs_tok_t *t, int tn)
+static int rs_stmt_implicit_call(roshell_t *rs, const rs_tok_t *t, int tn)
 {
     rs_value_t args[RS_FUNC_ARGS_MAX];
     uint8_t argc = 0U;
@@ -233,111 +227,73 @@ static int rs_stmt_implicit_call(rs_env_t *env, const rs_tok_t *t, int tn)
     ps.n = tn;
     ps.pos = 1;
     ps.noeval = false;
-    rc = rs_p_args(env, &ps, args, &argc);
+    rc = rs_p_args(rs, &ps, args, &argc);
     if (rc != RS_OK) {
         return rc;
     }
-#if RS_ENABLE_MATH
     {
         const rs_func_t *m = rs_func_find(t[0].p, t[0].len);
         if (m != NULL) {
             rs_value_t discard;                 /* 隐式调用语句：丢弃返回值 */
-            return rs_func_apply(env, m, args, argc, &discard);
+            return rs_func_apply(rs, m, args, argc, &discard);
         }
     }
-#endif
     {
         const rs_ext_fn_t *x = rs_ext_func_find(t[0].p, t[0].len);
         if (x != NULL) {
             rs_value_t discard;
-            return rs_ext_func_apply(env, x, args, argc, &discard);
+            return rs_ext_func_apply(rs, x, args, argc, &discard);
         }
     }
-    f = rs_find_func(env->prog, t[0].p, t[0].len);
+    f = rs_find_func(rs->prog, t[0].p, t[0].len);
     if (f == NULL) {
-        rs_err0(env->err, RS_ERR_UNDEF_FUNC, "undefined function");
+        rs_err0(rs->err, RS_ERR_UNDEF_FUNC, "undefined function");
         return RS_ERR_UNDEF_FUNC;
     }
     if (argc != f->argc) {
-        rs_err0(env->err, RS_ERR_ARG_COUNT, "arg count mismatch");
+        rs_err0(rs->err, RS_ERR_ARG_COUNT, "arg count mismatch");
         return RS_ERR_ARG_COUNT;
     }
-    if ((uint32_t)env->depth + 1U > RS_CALL_DEPTH) {
-        rs_err0(env->err, RS_ERR_STACK_OVERFLOW, "call stack overflow");
+    if ((uint32_t)rs->depth + 1U > RS_CALL_DEPTH) {
+        rs_err0(rs->err, RS_ERR_STACK_OVERFLOW, "call stack overflow");
         return RS_ERR_STACK_OVERFLOW;
     }
-    return rs_call_body(env->rs, env->prog, f, args,
-                        (uint8_t)(env->depth + 1U), env->unit, NULL, env->err);
+    return rs_call_body(rs, f, args, NULL);
 }
-
-#endif /* RS_ENABLE_EXPR */
-
-#if !RS_ENABLE_EXPR
-/* EXPR=0 路径的无参隐式调用语句（规格 §4.5 / §6：函数退化为无参形式） */
-static int rs_stmt_call0(rs_env_t *env, const rs_tok_t *t)
-{
-    const rs_fn_t *f;
-    f = rs_find_func(env->prog, t[0].p, t[0].len);
-    if (f == NULL) {
-        rs_err0(env->err, RS_ERR_UNDEF_FUNC, "undefined function");
-        return RS_ERR_UNDEF_FUNC;
-    }
-    if (f->argc != 0U) {
-        rs_err0(env->err, RS_ERR_ARG_COUNT, "arg count mismatch");
-        return RS_ERR_ARG_COUNT;
-    }
-    if ((uint32_t)env->depth + 1U > RS_CALL_DEPTH) {
-        rs_err0(env->err, RS_ERR_STACK_OVERFLOW, "call stack overflow");
-        return RS_ERR_STACK_OVERFLOW;
-    }
-    return rs_call_body(env->rs, env->prog, f, NULL,
-                        (uint8_t)(env->depth + 1U), env->unit, NULL, env->err);
-}
-#endif /* !RS_ENABLE_EXPR */
 
 
 /* 函数体执行：私有变量表 + token 缓冲；返回字符串拷回 caller 临时槽 */
-int rs_call_body(roshell_t *rs, rs_prog_t *prog, const rs_fn_t *f,
-                        const rs_value_t *args, uint8_t depth,
-                        rs_unit_t *caller, rs_value_t *out, rs_err_t *err)
+int rs_call_body(roshell_t *rs, const rs_fn_t *f,
+                 const rs_value_t *args, rs_value_t *out)
 {
     rs_unit_t child;
-    rs_env_t cenv;
+    rs_unit_t *caller = rs->unit;
+    uint8_t saved_depth = rs->depth;
     int rc;
-#if RS_ENABLE_EXPR
     uint8_t i;
-#endif
     memset(&child, 0, sizeof(child));
     if (vec_init(&child.toks, sizeof(rs_tok_t), RS_TOKEN_MAX) != 0) {
-        rs_err0(err, RS_ERR_RESOURCE, "out of memory");
+        rs_err0(rs->err, RS_ERR_RESOURCE, "out of memory");
         return RS_ERR_RESOURCE;
     }
-#if RS_ENABLE_EXPR
     for (i = 0U; i < f->argc; i++) {
         rs_var_t *v = rs_var_alloc(&child, f->args[i],
                                    (uint16_t)strlen(f->args[i]));
         if (v == NULL) {
             rs_vars_release(&child);
             vec_deinit(&child.toks);
-            rs_err0(err, RS_ERR_LIMIT, "too many variables");
+            rs_err0(rs->err, RS_ERR_LIMIT, "too many variables");
             return RS_ERR_LIMIT;
         }
         rs_var_store(v, &args[i]);
     }
-#else
-    (void)args;
-    (void)caller;
-    (void)out;
-#endif
-    cenv.rs = rs;
-    cenv.prog = prog;
-    cenv.unit = &child;
-    cenv.depth = depth;
-    cenv.err = err;
     child.pc = (uint16_t)(f->start + 1U);
     child.in_func = true;
-    rc = rs_exec_unit(&cenv);
-#if RS_ENABLE_EXPR
+    rs->unit = &child;
+    rs->depth = (uint8_t)(saved_depth + 1U);
+    rc = rs_exec_unit(rs);
+    rs->unit = caller;
+    rs->depth = saved_depth;
     if (out != NULL) {
         *out = child.ret;
         if (rc != RS_OK) {
@@ -346,18 +302,17 @@ int rs_call_body(roshell_t *rs, rs_prog_t *prog, const rs_fn_t *f,
             out->s = rs_tmp(caller, out->s, out->slen, &out->slen);
         }
     }
-#endif
     rs_vars_release(&child);
     vec_deinit(&child.toks);
     return rc;
 }
 
 /* 按行号 PC 解释执行一个执行单元（脚本 / 函数体） */
-int rs_exec_unit(rs_env_t *env)
+int rs_exec_unit(roshell_t *rs)
 {
-    rs_unit_t *ctx = env->unit;
-    rs_prog_t *prog = env->prog;
-    rs_err_t *err = env->err;
+    rs_unit_t *ctx = rs->unit;
+    rs_prog_t *prog = rs->prog;
+    rs_err_t *err = rs->err;
     int rc;
     while (!ctx->returned && ctx->pc < prog->line_count) {
         uint16_t ln = ctx->pc;
@@ -373,12 +328,7 @@ int rs_exec_unit(rs_env_t *env)
             continue;
         }
         if (t[0].type == RS_TOK_VAR) {
-#if RS_ENABLE_EXPR
-            rc = rs_stmt_assign(env, t, tn);
-#else
-            rs_err0(err, RS_ERR_UNSUPPORTED, "assignment requires expressions");
-            rc = RS_ERR_UNSUPPORTED;
-#endif
+            rc = rs_stmt_assign(rs, t, tn);
             if (rc != RS_OK) {
                 return rc;
             }
@@ -389,16 +339,7 @@ int rs_exec_unit(rs_env_t *env)
         case K_NONE:
             if (t[0].type == RS_TOK_WORD && rs_op(&t[1], "(")) {
                 /* 隐式函数调用语句（规格 §4.5）：行首已登记函数名 + '(' */
-#if RS_ENABLE_EXPR
-                rc = rs_stmt_implicit_call(env, t, tn);
-#else
-                if (t[2].type != RS_TOK_EOF) {
-                    rs_err0(err, RS_ERR_UNSUPPORTED, "arguments require expressions");
-                    rc = RS_ERR_UNSUPPORTED;
-                } else {
-                    rc = rs_stmt_call0(env, t);
-                }
-#endif
+                rc = rs_stmt_implicit_call(rs, t, tn);
                 if (rc != RS_OK) {
                     return rc;
                 }
@@ -407,9 +348,9 @@ int rs_exec_unit(rs_env_t *env)
             if (t[0].type == RS_TOK_WORD) {
                 /* 命令行（规格 §8 statement -> command）：交给命令 hook 分派 */
                 int handled = 0;
-                if (env->rs != NULL && env->rs->cmd_hook != NULL) {
+                if (rs->cmd_hook != NULL) {
                     int cret = 0;
-                    int hr = env->rs->cmd_hook(env->rs->cmd_hook_ctx, line, &cret);
+                    int hr = rs->cmd_hook(rs, line, &cret);
                     if (hr > 0) {
                         handled = 1;
                         if (cret != 0) {
@@ -426,27 +367,21 @@ int rs_exec_unit(rs_env_t *env)
                 }
                 /* 不是命令：WORD 开头无 '(' 的行继续按表达式处理（true 等） */
             }
-#if RS_ENABLE_EXPR
             {
                 rs_value_t v;
-                rc = rs_eval_tokens(env, t, tn, 0, &v);
+                rc = rs_eval_tokens(rs, t, tn, 0, &v);
                 if (rc == RS_ERR_PARSE) {
                     rs_err0(err, rc, "unknown statement");
                 }
             }
-#else
-            rs_err0(err, RS_ERR_UNSUPPORTED, "expressions disabled");
-            rc = RS_ERR_UNSUPPORTED;
-#endif
             if (rc != RS_OK) {
                 return rc;
             }
             break;
         case K_IF:
-#if RS_ENABLE_EXPR
             {
                 bool cond = false;
-                rc = rs_eval_cond(env, t, tn, 1, &cond);
+                rc = rs_eval_cond(rs, t, tn, 1, &cond);
                 if (rc != RS_OK) {
                     return rc;
                 }
@@ -455,12 +390,8 @@ int rs_exec_unit(rs_env_t *env)
                     return RS_ERR_LIMIT;
                 }
                 ctx->frames[ctx->depth - 1U].taken = cond;
-                rs_if_advance(env, ln);
+                rs_if_advance(rs, ln);
             }
-#else
-            rs_err0(err, RS_ERR_UNSUPPORTED, "if requires expressions");
-            return RS_ERR_UNSUPPORTED;
-#endif
             break;
         case K_ELSEIF:
         case K_ELSE: {
@@ -479,16 +410,11 @@ int rs_exec_unit(rs_env_t *env)
                 f->taken = true;
                 break;
             }
-#if RS_ENABLE_EXPR
-            rc = rs_eval_cond(env, t, tn, 1, &f->taken);
+            rc = rs_eval_cond(rs, t, tn, 1, &f->taken);
             if (rc != RS_OK) {
                 return rc;
             }
-            rs_if_advance(env, ln);
-#else
-            rs_err0(err, RS_ERR_UNSUPPORTED, "elseif requires expressions");
-            return RS_ERR_UNSUPPORTED;
-#endif
+            rs_if_advance(rs, ln);
             break;
         }
         case K_END: {
@@ -519,13 +445,12 @@ int rs_exec_unit(rs_env_t *env)
             break;
         }
         case K_FOR:
-#if RS_ENABLE_EXPR
             {
                 rs_frame_t *f;
                 if (ctx->depth > 0U) {
                     f = &ctx->frames[ctx->depth - 1U];
                     if (f->type == RS_BLK_FOR && f->start == ln) {
-                        rc = rs_for_step(env, t, tn, f->idx);
+                        rc = rs_for_step(rs, t, tn, f->idx);
                         if (rc != RS_OK) {
                             return rc;
                         }
@@ -538,7 +463,7 @@ int rs_exec_unit(rs_env_t *env)
                     uint16_t count = 0U;
                     const char *bp;
                     uint16_t blen;
-                    rc = rs_for_parse(env, t, tn, items, &count, &bp, &blen);
+                    rc = rs_for_parse(rs, t, tn, items, &count, &bp, &blen);
                     if (rc != RS_OK) {
                         return rc;
                     }
@@ -548,25 +473,20 @@ int rs_exec_unit(rs_env_t *env)
                     }
                     ctx->frames[ctx->depth - 1U].count = count;
                 }
-                rc = rs_for_step(env, t, tn, 0U);
+                rc = rs_for_step(rs, t, tn, 0U);
                 if (rc != RS_OK) {
                     return rc;
                 }
                 ctx->pc = (uint16_t)(ln + 1U);
             }
-#else
-            rs_err0(err, RS_ERR_UNSUPPORTED, "for requires expressions");
-            return RS_ERR_UNSUPPORTED;
-#endif
             break;
         case K_WHILE:
-#if RS_ENABLE_EXPR
             {
                 bool cond = false;
                 bool reentry = (ctx->depth > 0U &&
                                 ctx->frames[ctx->depth - 1U].type == RS_BLK_WHILE &&
                                 ctx->frames[ctx->depth - 1U].start == ln);
-                rc = rs_eval_cond(env, t, tn, 1, &cond);
+                rc = rs_eval_cond(rs, t, tn, 1, &cond);
                 if (rc != RS_OK) {
                     return rc;
                 }
@@ -583,10 +503,6 @@ int rs_exec_unit(rs_env_t *env)
                     ctx->pc = (uint16_t)(prog->end_of[ln] + 1U);
                 }
             }
-#else
-            rs_err0(err, RS_ERR_UNSUPPORTED, "while requires expressions");
-            return RS_ERR_UNSUPPORTED;
-#endif
             break;
         case K_BREAK: {
             int k = -1;
@@ -616,15 +532,10 @@ int rs_exec_unit(rs_env_t *env)
                 return RS_ERR_PARSE;
             }
             if (t[1].type != RS_TOK_EOF) {
-#if RS_ENABLE_EXPR
-                rc = rs_eval_tokens(env, t, tn, 1, &ctx->ret);
+                rc = rs_eval_tokens(rs, t, tn, 1, &ctx->ret);
                 if (rc != RS_OK) {
                     return rc;
                 }
-#else
-                rs_err0(err, RS_ERR_UNSUPPORTED, "return requires expressions");
-                return RS_ERR_UNSUPPORTED;
-#endif
             }
             ctx->returned = true;
             break;

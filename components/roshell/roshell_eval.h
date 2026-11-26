@@ -4,8 +4,10 @@
 /*
  * roshell_eval.h - roshell 表达式求值模块内部声明
  *
- * 表达式值表示、执行上下文（变量表 / 块帧栈 / token 缓冲）、求值游标，
+ * 表达式值表示、执行单元（变量表 / 块帧栈 / token 缓冲）、求值游标，
  * 以及变量表操作、临时字符串槽与递归下降求值入口。实现见 roshell_eval.c。
+ * 求值入口统一以 roshell_t *rs 为上下文（roshell_t 的 typedef 由
+ * roshell_cmd.h 提供，经 roshell.h 包含链可见）。
  * 仅供 roshell 各实现文件使用，平台 / 组件代码不应依赖。
  */
 
@@ -18,7 +20,6 @@
 #include "roshell_lexer.h"
 
 /* 求值器与语句解释器共享的类型（后置定义，供跨模块原型前置声明） */
-struct rs_env;
 struct rs_func;
 struct rs_ext_fn;
 
@@ -93,13 +94,11 @@ typedef struct {
 
 /* ------------------------------ 求值接口（EXPR） ------------------------------ */
 
-#if RS_ENABLE_EXPR
-
 /* type mismatch 错误填充 */
-int rs_type_err(struct rs_env *env, const char *msg);
+int rs_type_err(roshell_t *rs, const char *msg);
 
 /* 解析实参列表（逗号分隔表达式），argc 输出实参个数 */
-int rs_p_args(struct rs_env *env, rs_ps_t *ps, rs_value_t *args, uint8_t *argc);
+int rs_p_args(roshell_t *rs, rs_ps_t *ps, rs_value_t *args, uint8_t *argc);
 
 /* 在变量表中按名查找（不含 $）；未命中返回 NULL */
 rs_var_t *rs_var_find(rs_unit_t *ctx, const char *name, uint16_t len);
@@ -115,23 +114,19 @@ const char *rs_tmp(rs_unit_t *ctx, const char *src, uint16_t len,
                    uint16_t *out_len);
 
 /* 求值 toks[start..] 并要求全部消费 */
-int rs_eval_tokens(struct rs_env *env, const rs_tok_t *toks, int n, int start,
+int rs_eval_tokens(roshell_t *rs, const rs_tok_t *toks, int n, int start,
                    rs_value_t *out);
 
 /* 条件求值：结果必须为布尔 */
-int rs_eval_cond(struct rs_env *env, const rs_tok_t *t, int tn, int start,
+int rs_eval_cond(roshell_t *rs, const rs_tok_t *t, int tn, int start,
                  bool *out);
 
 /* 调用扩展函数：rs_value_t 实参转 rs_arg_t 值传递 */
-int rs_ext_func_apply(struct rs_env *env, const struct rs_ext_fn *x,
+int rs_ext_func_apply(roshell_t *rs, const struct rs_ext_fn *x,
                       const rs_value_t *args, uint8_t argc, rs_value_t *out);
 
-#if RS_ENABLE_MATH
 /* 调用内置函数：校验实参个数与数值性，结果写回 out */
-int rs_func_apply(struct rs_env *env, const struct rs_func *m,
+int rs_func_apply(roshell_t *rs, const struct rs_func *m,
                   const rs_value_t *args, uint8_t argc, rs_value_t *out);
-#endif /* RS_ENABLE_MATH */
-
-#endif /* RS_ENABLE_EXPR */
 
 #endif /* RS_EVAL_H */

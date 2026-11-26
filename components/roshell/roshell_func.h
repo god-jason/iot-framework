@@ -15,8 +15,6 @@
 
 /* ------------------------- 内置函数 / 常量表（MATH） ------------------------- */
 
-#if RS_ENABLE_MATH
-
 /*
  * 内置函数表项：numeric=true 为 math 函数（实参强制数值）；
  * 系统函数（tick/uptime/time/date/empty）自行处理实参类型。
@@ -25,7 +23,7 @@ typedef struct rs_func {
     const char *name;
     uint8_t     argc;
     bool        numeric;
-    void      (*fn)(const rs_value_t *args, rs_value_t *out);
+    void      (*fn)(roshell_t *rs, const rs_value_t *args, rs_value_t *out);
 } rs_func_t;
 
 /* 内置常量表项（脚本中裸标识符引用，浮点值） */
@@ -40,11 +38,7 @@ const rs_func_t *rs_func_find(const char *name, uint16_t len);
 /* 按名查内置常量表（大小写敏感），未命中返回 NULL */
 const rs_const_t *rs_const_find(const char *name, uint16_t len);
 
-#endif /* RS_ENABLE_MATH */
-
 /* -------------------- 扩展函数 / 常量注册表（EXPR） -------------------- */
-
-#if RS_ENABLE_EXPR
 
 typedef struct rs_ext_fn {
     char              name[RS_NAME_MAX];
@@ -65,7 +59,5 @@ const rs_ext_const_t *rs_ext_const_find(const char *name, uint16_t len);
 
 /* 裸标识符常量查找：内置常量（MATH）优先，其次扩展常量；命中写出浮点值 */
 bool rs_find_const_num(const char *name, uint16_t len, float *v);
-
-#endif /* RS_ENABLE_EXPR */
 
 #endif /* RS_FUNC_H */

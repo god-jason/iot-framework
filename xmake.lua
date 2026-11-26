@@ -215,7 +215,6 @@ local function ros_cross_defines(extra)
         add_defines("SCHEDULER_MAX_ENTRIES=4")
         add_cflags("-Oz", { force = true })
     elseif family == "f4" or family == "h7" then
-        add_defines("RS_ENABLE_EXPR=1", "RS_ENABLE_MATH=1")
         -- F4/H7 SRAM 充足：内核 TLSF 堆从默认 32KB 调到 64KB
         add_defines("ROS_MEM_HEAP_SIZE=65536")
         if family == "f4" then

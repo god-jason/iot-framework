@@ -120,24 +120,32 @@ static int fs_path_join(const char *dir, const char *name, char *out,
 }
 
 /* pwd：显示当前目录 */
-static int cmd_pwd(const rs_cmd_ctx_t *ctx)
+static int cmd_pwd(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    ros_printf("%s\n", rs_shell_cwd(ctx->rs));
+    (void)argc;
+    (void)argv;
+    (void)user;
+    ros_printf("%s\n", rs_shell_cwd(rs));
     return 0;
 }
 
 /* cd [path]：切换当前目录，缺省回根目录 */
-static int cmd_cd(const rs_cmd_ctx_t *ctx)
+static int cmd_cd(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
     int rc;
 
-    (void)rs_args_get_str(ctx->parsed, 0U, &path);
+    (void)rs_args_get_str(parsed, 0U, &path);
     if (path == NULL || path[0] == '\0') {
         path = "/";
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
 
     rc = vfs_isdir(abs);
     if (rc != 1) {
@@ -145,7 +153,7 @@ static int cmd_cd(const rs_cmd_ctx_t *ctx)
                    (rc == 0) ? "not a directory" : fs_strerror(rc));
         return -1;
     }
-    if (rs_shell_cwd_set(ctx->rs, abs) != 0) {
+    if (rs_shell_cwd_set(rs, abs) != 0) {
         ros_puts("cd: path too long");
         return -1;
     }
@@ -202,20 +210,28 @@ static void ls_dir(const char *path, uint32_t depth)
 }
 
 /* ls [path]：列出当前目录（或指定目录）及子目录内容 */
-static int cmd_ls(const rs_cmd_ctx_t *ctx)
+static int cmd_ls(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     char abs[RS_CWD_MAX];
     const char *path = NULL;
 
-    (void)rs_args_get_str(ctx->parsed, 0U, &path);
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    (void)rs_args_get_str(parsed, 0U, &path);
+    fs_path_abs(rs, path, abs, sizeof(abs));
     ls_dir(abs, 0U);
     return 0;
 }
 
 /* cat <path>：按原始字节输出文件内容 */
-static int cmd_cat(const rs_cmd_ctx_t *ctx)
+static int cmd_cat(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     vfs_file_t f;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
@@ -223,11 +239,11 @@ static int cmd_cat(const rs_cmd_ctx_t *ctx)
     int n;
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &path) || path == NULL) {
+    if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
         ros_puts("usage: cat <path>");
         return -1;
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
 
     memset(&f, 0, sizeof(f));
     rc = vfs_open(abs, FS_O_RDONLY, &f);
@@ -247,17 +263,21 @@ static int cmd_cat(const rs_cmd_ctx_t *ctx)
 }
 
 /* mkdir <path> */
-static int cmd_mkdir(const rs_cmd_ctx_t *ctx)
+static int cmd_mkdir(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &path) || path == NULL) {
+    if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
         ros_puts("usage: mkdir <path>");
         return -1;
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
     rc = vfs_mkdir(abs);
     if (rc != FS_OK) {
         ros_printf("mkdir: %s: %s\n", abs, fs_strerror(rc));
@@ -267,17 +287,21 @@ static int cmd_mkdir(const rs_cmd_ctx_t *ctx)
 }
 
 /* rm <path>：删除文件 */
-static int cmd_rm(const rs_cmd_ctx_t *ctx)
+static int cmd_rm(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &path) || path == NULL) {
+    if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
         ros_puts("usage: rm <path>");
         return -1;
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
     rc = vfs_unlink(abs);
     if (rc == FS_ERR_ISDIR) {
         ros_printf("rm: %s: is a directory (use rmdir)\n", abs);
@@ -291,17 +315,21 @@ static int cmd_rm(const rs_cmd_ctx_t *ctx)
 }
 
 /* rmdir <path>：删除空目录 */
-static int cmd_rmdir(const rs_cmd_ctx_t *ctx)
+static int cmd_rmdir(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &path) || path == NULL) {
+    if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
         ros_puts("usage: rmdir <path>");
         return -1;
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
     rc = vfs_rmdir(abs);
     if (rc != FS_OK) {
         ros_printf("rmdir: %s: %s\n", abs, fs_strerror(rc));
@@ -311,18 +339,22 @@ static int cmd_rmdir(const rs_cmd_ctx_t *ctx)
 }
 
 /* stat <path>：显示属性 */
-static int cmd_stat(const rs_cmd_ctx_t *ctx)
+static int cmd_stat(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     fs_stat_t st;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &path) || path == NULL) {
+    if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
         ros_puts("usage: stat <path>");
         return -1;
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
     rc = vfs_stat(abs, &st);
     if (rc != FS_OK) {
         ros_printf("stat: %s: %s\n", abs, fs_strerror(rc));
@@ -335,15 +367,19 @@ static int cmd_stat(const rs_cmd_ctx_t *ctx)
 }
 
 /* df [path]：显示空间统计，默认当前目录 */
-static int cmd_df(const rs_cmd_ctx_t *ctx)
+static int cmd_df(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     fs_statfs_t st;
     const char *path = NULL;
     char abs[RS_CWD_MAX];
     int rc;
 
-    (void)rs_args_get_str(ctx->parsed, 0U, &path);
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    (void)rs_args_get_str(parsed, 0U, &path);
+    fs_path_abs(rs, path, abs, sizeof(abs));
     rc = vfs_statfs(abs, &st);
     if (rc != FS_OK) {
         ros_printf("df: %s: %s\n", abs, fs_strerror(rc));
@@ -358,8 +394,12 @@ static int cmd_df(const rs_cmd_ctx_t *ctx)
 }
 
 /* put <path> <text>：创建/覆盖文件（便于验证读写） */
-static int cmd_put(const rs_cmd_ctx_t *ctx)
+static int cmd_put(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     vfs_file_t f;
     const char *path = NULL;
     const char *text = NULL;
@@ -367,13 +407,13 @@ static int cmd_put(const rs_cmd_ctx_t *ctx)
     uint32_t len;
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &path) ||
-        !rs_args_get_str(ctx->parsed, 1U, &text) ||
+    if (!rs_args_get_str(parsed, 0U, &path) ||
+        !rs_args_get_str(parsed, 1U, &text) ||
         path == NULL || text == NULL) {
         ros_puts("usage: put <path> <text>");
         return -1;
     }
-    fs_path_abs(ctx->rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, path, abs, sizeof(abs));
 
     len = (uint32_t)strlen(text);
     memset(&f, 0, sizeof(f));
@@ -393,12 +433,16 @@ static int cmd_put(const rs_cmd_ctx_t *ctx)
 }
 
 /* format [path]：格式化挂载点（清空数据），默认根挂载点 */
-static int cmd_format(const rs_cmd_ctx_t *ctx)
+static int cmd_format(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *path = NULL;
     int rc;
 
-    (void)rs_args_get_str(ctx->parsed, 0U, &path);
+    (void)rs_args_get_str(parsed, 0U, &path);
     if (path == NULL || path[0] == '\0') {
         path = "/";
     }

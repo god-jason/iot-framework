@@ -23,12 +23,17 @@ static const rs_cmd_t s_ping_def = {
 static int s_run_value;
 static int s_run_called;
 
-static int ping_handler(const rs_cmd_ctx_t *ctx)
+static int ping_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
     unsigned count = 0U;
 
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     s_run_called++;
-    if (rs_args_get_uint(ctx->parsed, 1U, &count)) {
+    if (rs_args_get_uint(parsed, 1U, &count)) {
         s_run_value = (int)count;
     }
     return 42;
@@ -45,37 +50,39 @@ static int s_hook_pause_calls;
 static int s_hook_resume_calls;
 static int s_hook_kill_calls;
 
-static int hook_pause(void *user, roshell_t *rs, ros_task_t *task)
+static int hook_pause(roshell_t *rs, void *user)
 {
     (void)user;
     (void)rs;
-    (void)task;
     s_hook_pause_calls++;
     return 0;
 }
 
-static int hook_resume(void *user, roshell_t *rs, ros_task_t *task)
+static int hook_resume(roshell_t *rs, void *user)
 {
     (void)user;
     (void)rs;
-    (void)task;
     s_hook_resume_calls++;
     return 0;
 }
 
-static int hook_kill(void *user, roshell_t *rs, ros_task_t *task)
+static int hook_kill(roshell_t *rs, void *user)
 {
     (void)user;
     (void)rs;
-    (void)task;
     s_hook_kill_calls++;
     return 0;
 }
 
 /* 在命令执行期间模拟 pause/resume/kill 通知 */
-static int hook_handler(const rs_cmd_ctx_t *ctx)
+static int hook_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
 
     TF_CHECK_INT(rs_cmd_notify_pause(ros_current_task), 0);
     TF_CHECK_INT(rs_cmd_notify_resume(ros_current_task), 0);
@@ -85,17 +92,21 @@ static int hook_handler(const rs_cmd_ctx_t *ctx)
     return 0;
 }
 
-static int deny_pause(void *user, roshell_t *rs, ros_task_t *task)
+static int deny_pause(roshell_t *rs, void *user)
 {
     (void)user;
     (void)rs;
-    (void)task;
     return -7;
 }
 
-static int deny_handler(const rs_cmd_ctx_t *ctx)
+static int deny_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     TF_CHECK_INT(rs_cmd_notify_pause(ros_current_task), -7);
     return 0;
 }
@@ -208,11 +219,11 @@ void ut_cmd(void)
 
         s_run_called = 0;
         s_run_value = 0;
-        TF_CHECK_INT(rs_cmd_run(s_table, 1U, 4, argv, NULL), 42);
+        TF_CHECK_INT(rs_cmd_run(NULL, s_table, 1U, 4, argv, NULL), 42);
         TF_CHECK_INT(s_run_called, 1);
         TF_CHECK_INT(s_run_value, 9);
-        TF_CHECK_INT(rs_cmd_run(s_table, 1U, 1, miss, NULL), RS_ARGS_ERR_UNKNOWN);
-        TF_CHECK_INT(rs_cmd_run(s_table, 1U, 0, NULL, NULL), RS_ARGS_ERR_PARAM);
+        TF_CHECK_INT(rs_cmd_run(NULL, s_table, 1U, 1, miss, NULL), RS_ARGS_ERR_UNKNOWN);
+        TF_CHECK_INT(rs_cmd_run(NULL, s_table, 1U, 0, NULL, NULL), RS_ARGS_ERR_PARAM);
     }
 
     tf_end();
@@ -252,7 +263,7 @@ void ut_cmd(void)
         s_hook_kill_calls = 0;
         ros_current_task = &fake;
 
-        TF_CHECK_INT(rs_builtin_dispatch(1, hook_argv), 0);
+        TF_CHECK_INT(rs_builtin_dispatch(NULL, 1, hook_argv), 0);
         TF_CHECK_INT(s_hook_pause_calls, 1);
         TF_CHECK_INT(s_hook_resume_calls, 1);
         TF_CHECK_INT(s_hook_kill_calls, 1);
@@ -260,7 +271,7 @@ void ut_cmd(void)
         TF_CHECK_INT(rs_cmd_notify_pause(&fake), 0);
 
         /* 钩子拒绝暂停：返回负错误码 */
-        TF_CHECK_INT(rs_builtin_dispatch(1, deny_argv), 0);
+        TF_CHECK_INT(rs_builtin_dispatch(NULL, 1, deny_argv), 0);
 
         ros_current_task = saved;
         rs_cmd_unregister_all();

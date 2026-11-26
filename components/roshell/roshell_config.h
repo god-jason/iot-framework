@@ -4,33 +4,12 @@
 /*
  * roshell_config.h - roshell 编译期配置
  *
- * 集中存放资源上限、缓冲区尺寸与能力裁剪开关，可独立包含。
+ * 集中存放资源上限、缓冲区尺寸，可独立包含。
  * roshell.h 首部包含本文件；内部模块头经 roshell.h 间接获得这些宏。
  * 默认配置面向 20K RAM 设备（规格 §7）。
+ *
+ * 功能（表达式/变量/内置 math/扩展注册）始终全量启用。
  */
-
-/* ------------------------------ 能力开关 ------------------------------ */
-/* 表达式/变量支持：0 时移除求值器与变量表，
- * if/while/for/赋值在扫描期报 unsupported，函数退化为无参形式。
- * 默认按平台选择：小 Flash 平台（stm32f1 系列）关闭，其余开放；
- * 仍可在构建时 -D RS_ENABLE_EXPR=0/1 覆盖 */
-#ifndef RS_ENABLE_EXPR
-#if defined(ROS_STM32_F1)
-#define RS_ENABLE_EXPR   0
-#else
-#define RS_ENABLE_EXPR   1
-#endif
-#endif
-
-/* 内置 math 函数库：依赖表达式求值器，默认跟随 RS_ENABLE_EXPR；
- * EXPR=0 时强制关闭（低端平台零成本），仍可显式 -D RS_ENABLE_MATH=0 裁剪 */
-#ifndef RS_ENABLE_MATH
-#define RS_ENABLE_MATH   RS_ENABLE_EXPR
-#endif
-#if !RS_ENABLE_EXPR
-#undef RS_ENABLE_MATH
-#define RS_ENABLE_MATH   0
-#endif
 
 /* ------------------------------ 缓冲区 ------------------------------ */
 #ifndef RS_LINE_MAX

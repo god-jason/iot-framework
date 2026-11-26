@@ -356,15 +356,20 @@ static void cmd_show(uint32_t ts)
                wd, (unsigned long)ts, src);
 }
 
-static int date_cmd_handler(const rs_cmd_ctx_t *ctx)
+static int date_cmd_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *action = NULL;
     const char *v1 = NULL;
     uint32_t ts;
     int rc;
 
-    (void)rs_args_get_str(ctx->parsed, 0U, &action);
-    (void)rs_args_get_str(ctx->parsed, 1U, &v1);
+    (void)rs_args_get_str(parsed, 0U, &action);
+    (void)rs_args_get_str(parsed, 1U, &v1);
 
     if (action == NULL || str_icmp(action, "get")) {
         cmd_show(ros_rtc_get_timestamp());

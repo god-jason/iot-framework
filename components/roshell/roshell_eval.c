@@ -3,7 +3,7 @@
  *
  * 变量表管理、值格式化与临时字符串槽、递归下降表达式解析求值
  * （字面量 / 变量 / 常量 / 内置与扩展函数调用 / 脚本函数调用 /
- * 算术、比较、逻辑）。整文件由 RS_ENABLE_EXPR 门控。
+ * 算术、比较、逻辑）。
  */
 
 #include "roshell.h"
@@ -14,7 +14,6 @@
 
 #include <string.h>
 
-#if RS_ENABLE_EXPR
 /* IEEE754 正无穷（不依赖 math.h，避免常量除零告警） */
 static float rs_inf(bool neg)
 {
@@ -24,11 +23,9 @@ static float rs_inf(bool neg)
     return neg ? -v : v;
 }
 
-#endif /* RS_ENABLE_EXPR */
-
 /* ============================== 变量表（EXPR） ============================== */
 
-/* 释放变量表中的值盒并 deinit；EXPR=0 时变量表未被使用，等价空操作 */
+/* 释放变量表中的值盒并 deinit */
 void rs_vars_release(rs_unit_t *ctx)
 {
     map_iter_t it;
@@ -44,7 +41,7 @@ void rs_vars_release(rs_unit_t *ctx)
     map_deinit(&ctx->vars);
 }
 
-#if RS_ENABLE_EXPR
+/* ============================== 变量表操作（EXPR） ============================== */
 
 /* 变量表惰性初始化（首次分配变量时才建立跳表哨兵） */
 static bool rs_vars_ensure(rs_unit_t *ctx)
@@ -245,24 +242,19 @@ static uint16_t rs_fmt_value(const rs_value_t *v, char *buf, uint16_t cap)
     }
 }
 
-#endif /* RS_ENABLE_EXPR */
-
 /* ============================== 表达式解析（EXPR） ============================== */
 
-#if RS_ENABLE_EXPR
+static int rs_p_expr(roshell_t *rs, rs_ps_t *ps, rs_value_t *out);
 
-
-static int rs_p_expr(rs_env_t *env, rs_ps_t *ps, rs_value_t *out);
-
-int rs_type_err(rs_env_t *env, const char *msg)
+int rs_type_err(roshell_t *rs, const char *msg)
 {
-    rs_err0(env->err, RS_ERR_TYPE, msg);
+    rs_err0(rs->err, RS_ERR_TYPE, msg);
     return RS_ERR_TYPE;
 }
 
-static int rs_parse_err(rs_env_t *env, const char *msg)
+static int rs_parse_err(roshell_t *rs, const char *msg)
 {
-    rs_err0(env->err, RS_ERR_PARSE, msg);
+    rs_err0(rs->err, RS_ERR_PARSE, msg);
     return RS_ERR_PARSE;
 }
 
@@ -272,36 +264,32 @@ static int rs_parse_err(rs_env_t *env, const char *msg)
  * 此处仅保留求值器侧的调用封装；扩展注册表数据在 rs_func.c。
  */
 
-#if RS_ENABLE_MATH
-
 /* 调用内置函数：校验实参个数；numeric 表项（math 函数）要求实参均为数值，
  * 系统函数（tick/uptime/time/date/empty）自行处理实参类型。结果写回 out */
-int rs_func_apply(rs_env_t *env, const rs_func_t *m,
+int rs_func_apply(roshell_t *rs, const rs_func_t *m,
                          const rs_value_t *args, uint8_t argc, rs_value_t *out)
 {
     uint8_t i;
 
     if (argc != m->argc) {
-        rs_err0(env->err, RS_ERR_ARG_COUNT, "arg count mismatch");
+        rs_err0(rs->err, RS_ERR_ARG_COUNT, "arg count mismatch");
         return RS_ERR_ARG_COUNT;
     }
     if (m->numeric) {
         for (i = 0U; i < argc; i++) {
             if (!rs_val_is_num(&args[i])) {
-                return rs_type_err(env, "math needs numbers");
+                return rs_type_err(rs, "math needs numbers");
             }
         }
     }
     memset(out, 0, sizeof(*out));
-    m->fn(args, out);
+    m->fn(rs, args, out);
     return RS_OK;
 }
 
-#endif /* RS_ENABLE_MATH */
-
 /* 调用扩展函数：rs_value_t 实参转 rs_arg_t 值传递（BOOL 以 0/1 整数
  * 传入，字符串实参拒绝），返回值仅接受 INT / FLOAT / BOOL */
-int rs_ext_func_apply(rs_env_t *env, const rs_ext_fn_t *x,
+int rs_ext_func_apply(roshell_t *rs, const rs_ext_fn_t *x,
                              const rs_value_t *args, uint8_t argc, rs_value_t *out)
 {
     rs_arg_t in[RS_FUNC_ARGS_MAX];
@@ -309,7 +297,7 @@ int rs_ext_func_apply(rs_env_t *env, const rs_ext_fn_t *x,
     uint8_t i;
 
     if (argc != x->argc) {
-        rs_err0(env->err, RS_ERR_ARG_COUNT, "arg count mismatch");
+        rs_err0(rs->err, RS_ERR_ARG_COUNT, "arg count mismatch");
         return RS_ERR_ARG_COUNT;
     }
     for (i = 0U; i < argc; i++) {
@@ -328,10 +316,10 @@ int rs_ext_func_apply(rs_env_t *env, const rs_ext_fn_t *x,
             in[i].i = args[i].b ? 1 : 0;
             break;
         default:
-            return rs_type_err(env, "extension function needs numbers");
+            return rs_type_err(rs, "extension function needs numbers");
         }
     }
-    r = x->fn(in, (uint32_t)argc);
+    r = x->fn(rs, in, (uint32_t)argc);
     memset(out, 0, sizeof(*out));
     switch (r.type) {
     case RS_ARG_INT:
@@ -347,7 +335,7 @@ int rs_ext_func_apply(rs_env_t *env, const rs_ext_fn_t *x,
         out->b = r.b;
         return RS_OK;
     default:
-        return rs_type_err(env, "extension function bad return");
+        return rs_type_err(rs, "extension function bad return");
     }
 }
 
@@ -363,7 +351,7 @@ static void rs_cmp_num(const rs_value_t *a, const rs_value_t *b, int *res)
     }
 }
 
-static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
+static int rs_binop(roshell_t *rs, const rs_tok_t *op, const rs_value_t *a,
                     const rs_value_t *b, rs_value_t *out)
 {
     char c0 = op->p[0];
@@ -378,14 +366,14 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
     if (op->len == 2U) {
         if (c0 == '&' || c0 == '|') {
             if (a->type != RS_VAL_BOOL || b->type != RS_VAL_BOOL) {
-                return rs_type_err(env, "logical operands must be boolean");
+                return rs_type_err(rs, "logical operands must be boolean");
             }
             out->type = RS_VAL_BOOL;
             out->b = (c0 == '&') ? (a->b && b->b) : (a->b || b->b);
             return RS_OK;
         }
         if (c0 == '+' || c0 == '-') {
-            return rs_parse_err(env, "unknown statement");
+            return rs_parse_err(rs, "unknown statement");
         }
         /* == != <= >= */
         if (c0 == '=' || c0 == '!') {
@@ -396,7 +384,7 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
                       memcmp(a->s, b->s, a->slen) == 0);
             } else if (a->type == RS_VAL_BOOL || b->type == RS_VAL_BOOL) {
                 if (a->type != RS_VAL_BOOL || b->type != RS_VAL_BOOL) {
-                    return rs_type_err(env, "type mismatch");
+                    return rs_type_err(rs, "type mismatch");
                 }
                 eq = (a->b == b->b);
             } else {
@@ -412,7 +400,7 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
         {
             int r;
             if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
-                return rs_type_err(env, "comparison needs numbers");
+                return rs_type_err(rs, "comparison needs numbers");
             }
             rs_cmp_num(a, b, &r);
             out->type = RS_VAL_BOOL;
@@ -424,7 +412,7 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
     case '<': case '>': {
         int r;
         if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
-            return rs_type_err(env, "comparison needs numbers");
+            return rs_type_err(rs, "comparison needs numbers");
         }
         rs_cmp_num(a, b, &r);
         out->type = RS_VAL_BOOL;
@@ -440,43 +428,43 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
             uint16_t lb = rs_fmt_value(b, fb, sizeof(fb));
             uint16_t len;
             if ((uint32_t)la + lb >= RS_STR_MAX) {
-                rs_err0(env->err, RS_ERR_LIMIT, "string too long");
+                rs_err0(rs->err, RS_ERR_LIMIT, "string too long");
                 return RS_ERR_LIMIT;
             }
             memcpy(cat, fa, la);
             memcpy(cat + la, fb, lb);
             len = (uint16_t)(la + lb);
             out->type = RS_VAL_STRING;
-            out->s = rs_tmp(env->unit, cat, len, &out->slen);
+            out->s = rs_tmp(rs->unit, cat, len, &out->slen);
             return RS_OK;
         }
         if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
-            return rs_type_err(env, "type mismatch");
+            return rs_type_err(rs, "type mismatch");
         }
         break;
     case '-':
         if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
-            return rs_type_err(env, "type mismatch");
+            return rs_type_err(rs, "type mismatch");
         }
         break;
     case '*': case '/':
         if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
-            return rs_type_err(env, "type mismatch");
+            return rs_type_err(rs, "type mismatch");
         }
         break;
     case '%':
         if (a->type != RS_VAL_INT || b->type != RS_VAL_INT) {
-            return rs_type_err(env, "type mismatch");
+            return rs_type_err(rs, "type mismatch");
         }
         if (b->i == 0) {
-            rs_err0(env->err, RS_ERR_DIV_ZERO, "modulo by zero");
+            rs_err0(rs->err, RS_ERR_DIV_ZERO, "modulo by zero");
             return RS_ERR_DIV_ZERO;
         }
         out->type = RS_VAL_INT;
         out->i = a->i % b->i;
         return RS_OK;
     default:
-        return rs_parse_err(env, "unknown statement");
+        return rs_parse_err(rs, "unknown statement");
     }
     /* 加 / 减 */
     if (a->type == RS_VAL_INT && b->type == RS_VAL_INT) {
@@ -491,17 +479,17 @@ static int rs_binop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
 }
 
 /* 乘 / 除（/ 单独处理：整除与除零 inf） */
-static int rs_mulop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
+static int rs_mulop(roshell_t *rs, const rs_tok_t *op, const rs_value_t *a,
                     const rs_value_t *b, rs_value_t *out)
 {
     char c0 = op->p[0];
     rs_value_t va;
     rs_value_t vb;
     if (c0 == '%') {
-        return rs_binop(env, op, a, b, out);
+        return rs_binop(rs, op, a, b, out);
     }
     if (!rs_val_is_num(a) || !rs_val_is_num(b)) {
-        return rs_type_err(env, "type mismatch");
+        return rs_type_err(rs, "type mismatch");
     }
     /* 调用方常以 rs_mulop(op, out, &b, out) 传参：先快照再清零 out */
     va = *a;
@@ -540,7 +528,7 @@ static int rs_mulop(rs_env_t *env, const rs_tok_t *op, const rs_value_t *a,
     return RS_OK;
 }
 
-static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_primary(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     const rs_tok_t *t = &ps->t[ps->pos];
     memset(out, 0, sizeof(*out));
@@ -564,13 +552,13 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             return RS_OK;
         }
         if (t->len > RS_STR_MAX + 1U) {
-            return rs_parse_err(env, "string too long");
+            return rs_parse_err(rs, "string too long");
         }
         if (!rs_str_unescape(t, sb, sizeof(sb), &len)) {
-            return rs_parse_err(env, "unclosed string");
+            return rs_parse_err(rs, "unclosed string");
         }
         out->type = RS_VAL_STRING;
-        out->s = rs_tmp(env->unit, sb, len, &out->slen);
+        out->s = rs_tmp(rs->unit, sb, len, &out->slen);
         return RS_OK;
     }
     case RS_TOK_VAR: {
@@ -579,9 +567,9 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
         if (ps->noeval) {
             out->type = RS_VAL_INT;
         } else {
-            v = rs_var_find(env->unit, t->p + 1, (uint16_t)(t->len - 1U));
+            v = rs_var_find(rs->unit, t->p + 1, (uint16_t)(t->len - 1U));
             if (v == NULL) {
-                rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
+                rs_err0(rs->err, RS_ERR_UNDEF_VAR, "undefined variable");
                 return RS_ERR_UNDEF_VAR;
             }
             out->type = v->type;
@@ -597,11 +585,11 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             ps->pos++;
             if (!ps->noeval) {
                 if (out->type != RS_VAL_INT && out->type != RS_VAL_FLOAT) {
-                    return rs_type_err(env, "type mismatch");
+                    return rs_type_err(rs, "type mismatch");
                 }
-                v = rs_var_find(env->unit, t->p + 1, (uint16_t)(t->len - 1U));
+                v = rs_var_find(rs->unit, t->p + 1, (uint16_t)(t->len - 1U));
                 if (v == NULL) {
-                    rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
+                    rs_err0(rs->err, RS_ERR_UNDEF_VAR, "undefined variable");
                     return RS_ERR_UNDEF_VAR;
                 }
                 if (v->type == RS_VAL_INT) {
@@ -626,7 +614,6 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             const rs_fn_t *f;
             const rs_ext_fn_t *x;
             int rc;
-#if RS_ENABLE_MATH
             const rs_func_t *m;
 
             /* 查找优先级：内置函数 -> 扩展函数 -> 脚本函数
@@ -634,13 +621,9 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             m = rs_func_find(t->p, t->len);
             x = (m != NULL) ? NULL : rs_ext_func_find(t->p, t->len);
             f = (m != NULL || x != NULL) ? NULL
-                                         : rs_find_func(env->prog, t->p, t->len);
-#else
-            x = rs_ext_func_find(t->p, t->len);
-            f = (x != NULL) ? NULL : rs_find_func(env->prog, t->p, t->len);
-#endif
+                                         : rs_find_func(rs->prog, t->p, t->len);
             ps->pos++;
-            rc = rs_p_args(env, ps, args, &argc);
+            rc = rs_p_args(rs, ps, args, &argc);
             if (rc != RS_OK) {
                 return rc;
             }
@@ -648,29 +631,25 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
                 out->type = RS_VAL_INT;
                 return RS_OK;
             }
-#if RS_ENABLE_MATH
             if (m != NULL) {
-                return rs_func_apply(env, m, args, argc, out);
+                return rs_func_apply(rs, m, args, argc, out);
             }
-#endif
             if (x != NULL) {
-                return rs_ext_func_apply(env, x, args, argc, out);
+                return rs_ext_func_apply(rs, x, args, argc, out);
             }
             if (f == NULL) {
-                rs_err0(env->err, RS_ERR_UNDEF_FUNC, "undefined function");
+                rs_err0(rs->err, RS_ERR_UNDEF_FUNC, "undefined function");
                 return RS_ERR_UNDEF_FUNC;
             }
             if (argc != f->argc) {
-                rs_err0(env->err, RS_ERR_ARG_COUNT, "arg count mismatch");
+                rs_err0(rs->err, RS_ERR_ARG_COUNT, "arg count mismatch");
                 return RS_ERR_ARG_COUNT;
             }
-            if ((uint32_t)env->depth + 1U > RS_CALL_DEPTH) {
-                rs_err0(env->err, RS_ERR_STACK_OVERFLOW, "call stack overflow");
+            if ((uint32_t)rs->depth + 1U > RS_CALL_DEPTH) {
+                rs_err0(rs->err, RS_ERR_STACK_OVERFLOW, "call stack overflow");
                 return RS_ERR_STACK_OVERFLOW;
             }
-            return rs_call_body(env->rs, env->prog, f, args,
-                                (uint8_t)(env->depth + 1U), env->unit, out,
-                                env->err);
+            return rs_call_body(rs, f, args, out);
         }
         /* 裸标识符：内置常量 -> 扩展常量（$x 变量为另一空间，不在此查找） */
         {
@@ -683,34 +662,34 @@ static int rs_p_primary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
                 return RS_OK;
             }
         }
-        return rs_parse_err(env, "unknown statement");
+        return rs_parse_err(rs, "unknown statement");
     case RS_TOK_OP:
         if (rs_op(t, "(")) {
             int rc;
             ps->pos++;
-            rc = rs_p_expr(env, ps, out);
+            rc = rs_p_expr(rs, ps, out);
             if (rc != RS_OK) {
                 return rc;
             }
             if (!rs_op(&ps->t[ps->pos], ")")) {
-                return rs_parse_err(env, "missing )");
+                return rs_parse_err(rs, "missing )");
             }
             ps->pos++;
             return RS_OK;
         }
-        return rs_parse_err(env, "unknown statement");
+        return rs_parse_err(rs, "unknown statement");
     default:
-        return rs_parse_err(env, "unknown statement");
+        return rs_parse_err(rs, "unknown statement");
     }
 }
 
-static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_unary(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     const rs_tok_t *t = &ps->t[ps->pos];
     if (rs_op(t, "!")) {
         int rc;
         ps->pos++;
-        rc = rs_p_unary(env, ps, out);
+        rc = rs_p_unary(rs, ps, out);
         if (rc != RS_OK) {
             return rc;
         }
@@ -718,7 +697,7 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             return RS_OK;
         }
         if (out->type != RS_VAL_BOOL) {
-            return rs_type_err(env, "! needs boolean");
+            return rs_type_err(rs, "! needs boolean");
         }
         out->b = !out->b;
         return RS_OK;
@@ -726,7 +705,7 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
     if (rs_op(t, "-") && t->len == 1U) {
         int rc;
         ps->pos++;
-        rc = rs_p_unary(env, ps, out);
+        rc = rs_p_unary(rs, ps, out);
         if (rc != RS_OK) {
             return rc;
         }
@@ -734,7 +713,7 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             return RS_OK;
         }
         if (!rs_val_is_num(out)) {
-            return rs_type_err(env, "type mismatch");
+            return rs_type_err(rs, "type mismatch");
         }
         if (out->type == RS_VAL_INT) {
             out->i = -out->i;
@@ -750,7 +729,7 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
         ps->pos++;
         vt = &ps->t[ps->pos];
         if (vt->type != RS_TOK_VAR) {
-            return rs_parse_err(env, "++/-- needs variable");
+            return rs_parse_err(rs, "++/-- needs variable");
         }
         ps->pos++;
         if (ps->noeval) {
@@ -758,13 +737,13 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
             out->type = RS_VAL_INT;
             return RS_OK;
         }
-        v = rs_var_find(env->unit, vt->p + 1, (uint16_t)(vt->len - 1U));
+        v = rs_var_find(rs->unit, vt->p + 1, (uint16_t)(vt->len - 1U));
         if (v == NULL) {
-            rs_err0(env->err, RS_ERR_UNDEF_VAR, "undefined variable");
+            rs_err0(rs->err, RS_ERR_UNDEF_VAR, "undefined variable");
             return RS_ERR_UNDEF_VAR;
         }
         if (v->type != RS_VAL_INT && v->type != RS_VAL_FLOAT) {
-            return rs_type_err(env, "type mismatch");
+            return rs_type_err(rs, "type mismatch");
         }
         if (v->type == RS_VAL_INT) {
             v->i += inc ? 1 : -1;
@@ -777,159 +756,159 @@ static int rs_p_unary(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
         }
         return RS_OK;
     }
-    return rs_p_primary(env, ps, out);
+    return rs_p_primary(rs, ps, out);
 }
 
-static int rs_p_mul(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_mul(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     rs_value_t b;
-    int rc = rs_p_unary(env, ps, out);
+    int rc = rs_p_unary(rs, ps, out);
     while (rc == RS_OK && ps->t[ps->pos].type == RS_TOK_OP &&
            (ps->t[ps->pos].p[0] == '*' || ps->t[ps->pos].p[0] == '/' ||
             ps->t[ps->pos].p[0] == '%') && ps->t[ps->pos].len == 1U) {
         const rs_tok_t *op = &ps->t[ps->pos];
         ps->pos++;
-        rc = rs_p_unary(env, ps, &b);
+        rc = rs_p_unary(rs, ps, &b);
         if (rc != RS_OK) {
             return rc;
         }
         if (ps->noeval) {
             continue;
         }
-        rc = rs_mulop(env, op, out, &b, out);
+        rc = rs_mulop(rs, op, out, &b, out);
     }
     return rc;
 }
 
-static int rs_p_add(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_add(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     rs_value_t b;
-    int rc = rs_p_mul(env, ps, out);
+    int rc = rs_p_mul(rs, ps, out);
     while (rc == RS_OK && ps->t[ps->pos].type == RS_TOK_OP &&
            (ps->t[ps->pos].p[0] == '+' || ps->t[ps->pos].p[0] == '-') &&
            ps->t[ps->pos].len == 1U) {
         const rs_tok_t *op = &ps->t[ps->pos];
         ps->pos++;
-        rc = rs_p_mul(env, ps, &b);
+        rc = rs_p_mul(rs, ps, &b);
         if (rc != RS_OK) {
             return rc;
         }
         if (ps->noeval) {
             continue;
         }
-        rc = rs_binop(env, op, out, &b, out);
+        rc = rs_binop(rs, op, out, &b, out);
     }
     return rc;
 }
 
-static int rs_p_rel(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_rel(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     rs_value_t b;
-    int rc = rs_p_add(env, ps, out);
+    int rc = rs_p_add(rs, ps, out);
     /* < <= > >=（规格 §3.2 关系运算） */
     while (rc == RS_OK && ps->t[ps->pos].type == RS_TOK_OP &&
            (ps->t[ps->pos].p[0] == '<' || ps->t[ps->pos].p[0] == '>') &&
            ps->t[ps->pos].len <= 2U) {
         const rs_tok_t *op = &ps->t[ps->pos];
         ps->pos++;
-        rc = rs_p_add(env, ps, &b);
+        rc = rs_p_add(rs, ps, &b);
         if (rc != RS_OK) {
             return rc;
         }
         if (ps->noeval) {
             continue;
         }
-        rc = rs_binop(env, op, out, &b, out);
+        rc = rs_binop(rs, op, out, &b, out);
     }
     return rc;
 }
 
-static int rs_p_eq(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_eq(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     rs_value_t b;
-    int rc = rs_p_rel(env, ps, out);
+    int rc = rs_p_rel(rs, ps, out);
     while (rc == RS_OK && ps->t[ps->pos].type == RS_TOK_OP &&
            (ps->t[ps->pos].p[0] == '=' || ps->t[ps->pos].p[0] == '!') &&
            ps->t[ps->pos].len == 2U) {
         const rs_tok_t *op = &ps->t[ps->pos];
         ps->pos++;
-        rc = rs_p_rel(env, ps, &b);
+        rc = rs_p_rel(rs, ps, &b);
         if (rc != RS_OK) {
             return rc;
         }
         if (ps->noeval) {
             continue;
         }
-        rc = rs_binop(env, op, out, &b, out);
+        rc = rs_binop(rs, op, out, &b, out);
     }
     return rc;
 }
 
-static int rs_p_and(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_and(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     rs_value_t b;
-    int rc = rs_p_eq(env, ps, out);
+    int rc = rs_p_eq(rs, ps, out);
     while (rc == RS_OK && rs_op(&ps->t[ps->pos], "&&")) {
         const rs_tok_t *op = &ps->t[ps->pos];
         ps->pos++;
         if (!ps->noeval && out->type == RS_VAL_BOOL && !out->b) {
             rs_value_t dummy;
             ps->noeval = true;
-            rc = rs_p_eq(env, ps, &dummy);
+            rc = rs_p_eq(rs, ps, &dummy);
             ps->noeval = false;
             if (rc != RS_OK) {
                 return rc;
             }
             continue;                       /* 短路：保持 false */
         }
-        rc = rs_p_eq(env, ps, &b);
+        rc = rs_p_eq(rs, ps, &b);
         if (rc != RS_OK) {
             return rc;
         }
         if (ps->noeval) {
             continue;
         }
-        rc = rs_binop(env, op, out, &b, out);
+        rc = rs_binop(rs, op, out, &b, out);
     }
     return rc;
 }
 
-static int rs_p_or(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_or(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
     rs_value_t b;
-    int rc = rs_p_and(env, ps, out);
+    int rc = rs_p_and(rs, ps, out);
     while (rc == RS_OK && rs_op(&ps->t[ps->pos], "||")) {
         const rs_tok_t *op = &ps->t[ps->pos];
         ps->pos++;
         if (!ps->noeval && out->type == RS_VAL_BOOL && out->b) {
             rs_value_t dummy;
             ps->noeval = true;
-            rc = rs_p_and(env, ps, &dummy);
+            rc = rs_p_and(rs, ps, &dummy);
             ps->noeval = false;
             if (rc != RS_OK) {
                 return rc;
             }
             continue;
         }
-        rc = rs_p_and(env, ps, &b);
+        rc = rs_p_and(rs, ps, &b);
         if (rc != RS_OK) {
             return rc;
         }
         if (ps->noeval) {
             continue;
         }
-        rc = rs_binop(env, op, out, &b, out);
+        rc = rs_binop(rs, op, out, &b, out);
     }
     return rc;
 }
 
-static int rs_p_expr(rs_env_t *env, rs_ps_t *ps, rs_value_t *out)
+static int rs_p_expr(roshell_t *rs, rs_ps_t *ps, rs_value_t *out)
 {
-    return rs_p_or(env, ps, out);
+    return rs_p_or(rs, ps, out);
 }
 
 /* 实参列表：ps->pos 指向 '(' */
-int rs_p_args(rs_env_t *env, rs_ps_t *ps, rs_value_t *args, uint8_t *argc)
+int rs_p_args(roshell_t *rs, rs_ps_t *ps, rs_value_t *args, uint8_t *argc)
 {
     int rc;
     *argc = 0;
@@ -940,10 +919,10 @@ int rs_p_args(rs_env_t *env, rs_ps_t *ps, rs_value_t *args, uint8_t *argc)
     }
     for (;;) {
         if (*argc >= RS_FUNC_ARGS_MAX) {
-            return rs_err0(env->err, RS_ERR_LIMIT, "too many arguments"),
+            return rs_err0(rs->err, RS_ERR_LIMIT, "too many arguments"),
                    RS_ERR_LIMIT;
         }
-        rc = rs_p_expr(env, ps, &args[*argc]);
+        rc = rs_p_expr(rs, ps, &args[*argc]);
         if (rc != RS_OK) {
             return rc;
         }
@@ -956,12 +935,12 @@ int rs_p_args(rs_env_t *env, rs_ps_t *ps, rs_value_t *args, uint8_t *argc)
             ps->pos++;
             return RS_OK;
         }
-        return rs_parse_err(env, "bad argument list");
+        return rs_parse_err(rs, "bad argument list");
     }
 }
 
 /* 求值 toks[start..] 并要求全部消费 */
-int rs_eval_tokens(rs_env_t *env, const rs_tok_t *toks, int n, int start,
+int rs_eval_tokens(roshell_t *rs, const rs_tok_t *toks, int n, int start,
                           rs_value_t *out)
 {
     rs_ps_t ps;
@@ -970,29 +949,28 @@ int rs_eval_tokens(rs_env_t *env, const rs_tok_t *toks, int n, int start,
     ps.n = n;
     ps.pos = start;
     ps.noeval = false;
-    rc = rs_p_expr(env, &ps, out);
+    rc = rs_p_expr(rs, &ps, out);
     if (rc != RS_OK) {
         return rc;
     }
     if (ps.pos != n - 1) {
-        return rs_parse_err(env, "syntax error");
+        return rs_parse_err(rs, "syntax error");
     }
     return RS_OK;
 }
 
-int rs_eval_cond(rs_env_t *env, const rs_tok_t *t, int tn, int start,
+int rs_eval_cond(roshell_t *rs, const rs_tok_t *t, int tn, int start,
                         bool *out)
 {
     rs_value_t v;
-    int rc = rs_eval_tokens(env, t, tn, start, &v);
+    int rc = rs_eval_tokens(rs, t, tn, start, &v);
     if (rc != RS_OK) {
         return rc;
     }
     if (v.type != RS_VAL_BOOL) {
-        return rs_type_err(env, "condition must be boolean");
+        return rs_type_err(rs, "condition must be boolean");
     }
     *out = v.b;
     return RS_OK;
 }
 
-#endif /* RS_ENABLE_EXPR */

@@ -72,9 +72,9 @@ void rs_err0(rs_err_t *e, int code, const char *msg);
 
 /* ============================== 实例 ============================== */
 
-typedef struct roshell roshell_t;
-
+/* roshell_t 的 typedef 见 roshell_cmd.h（本文件先包含该头） */
 struct ros_task;
+struct rs_prog;
 
 /*
  * 命令 hook（规格 §8 statement -> command / §9 内置命令）：
@@ -85,17 +85,22 @@ struct ros_task;
  *   返回 0：不是命令（引擎按表达式语句继续处理）；
  *   返回负值：hook 自身错误，引擎中止脚本执行。
  */
-typedef int (*rs_cmd_hook_t)(void *ctx, const char *line, int *ret);
+typedef int (*rs_cmd_hook_t)(roshell_t *rs, const char *line, int *ret);
 
 /*
- * 实例即唯一的上下文：顶层执行单元 + 命令 hook + 交互会话状态。
+ * 实例即唯一的上下文：顶层执行单元 + 运行状态 + 命令 hook + 交互会话状态。
  * rs_shell_start 新建一个实例就是一个独立 shell，会话数据不需要额外结构。
  */
 struct roshell {
     rs_unit_t            top;             /* 顶层执行单元（变量表 / token 缓冲 / 块帧） */
     rs_cmd_hook_t        cmd_hook;        /* 块内命令路由（规格 §8 / §9） */
-    void                *cmd_hook_ctx;
-    vec_t                sleeps;          /* 可暂停持续命令状态表（rs_sleep_t 序列，惰性初始化） */
+    vec_t                sleeps;          /* sleep 持续命令状态（单表项，惰性初始化） */
+
+    /* -------------------- 运行期执行状态（单实例即单 context） -------------------- */
+    struct rs_prog      *prog;            /* 当前程序对象（rs_exec 期间有效） */
+    rs_unit_t           *unit;            /* 当前执行单元：&top 或函数调用子单元 */
+    uint8_t              depth;           /* 函数调用深度 */
+    rs_err_t            *err;             /* 当前错误输出，可为 NULL */
 
     /* -------------------- 交互会话（rs_shell_start 初始化） -------------------- */
     struct ros_task     *task;            /* 会话输入任务 */
@@ -112,8 +117,8 @@ struct roshell {
     volatile bool        exit_req;        /* exit 命令 / 平台 EOF 请求 */
 };
 
-/* 注册 / 清除命令 hook（hook 传 NULL 清除）；ctx 原样回传给 hook */
-void rs_set_cmd_hook(roshell_t *rs, rs_cmd_hook_t hook, void *ctx);
+/* 注册 / 清除命令 hook（hook 传 NULL 清除）；hook 直接收到实例 rs */
+void rs_set_cmd_hook(roshell_t *rs, rs_cmd_hook_t hook);
 
 /* 创建实例（堆分配词法缓冲 / 变量表）；失败返回 NULL */
 roshell_t *rs_create(void);
@@ -170,16 +175,16 @@ typedef struct {
  * nargs 与注册时的 argc 一致。返回值仅接受 RS_ARG_INT /
  * RS_ARG_FLOAT / RS_ARG_BOOL（其余按 type mismatch 处理）。
  */
-typedef rs_arg_t (*rs_func_fn_t)(const rs_arg_t *args,
-                                           uint32_t nargs);
+typedef rs_arg_t (*rs_func_fn_t)(roshell_t *rs, const rs_arg_t *args,
+                                 uint32_t nargs);
 
 /*
  * 注册全局扩展函数：脚本中以 name(实参...) 调用，不绑定实例。
  * 查找优先级：内置函数 -> 扩展函数 -> 脚本 function。
  * name 需为标识符（字母 / 下划线开头，长度 < RS_NAME_MAX）。
  * 返回 RS_OK；name / argc 非法或与内置函数、内置常量、已注册扩展名
- * 重名返回 RS_ERR_PARAM；表满（RS_EXT_FUNC_MAX）返回 RS_ERR_LIMIT；
- * RS_ENABLE_EXPR=0 时返回 RS_ERR_UNSUPPORTED。不支持反注册。
+ * 重名返回 RS_ERR_PARAM；表满（RS_EXT_FUNC_MAX）返回 RS_ERR_LIMIT。
+ * 不支持反注册。
  */
 int rs_func_register(const char *name, uint8_t argc, rs_func_fn_t fn);
 

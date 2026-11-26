@@ -26,8 +26,13 @@ static void net_ping_reply(uint32_t seq, uint32_t rtt, bool ok, void *user)
     }
 }
 
-static int net_ping_cmd(const rs_cmd_ctx_t *ctx)
+static int net_ping_cmd(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *host = NULL;
     uint32_t count = 4U;
     uint32_t timeout = 1000U;
@@ -37,14 +42,14 @@ static int net_ping_cmd(const rs_cmd_ctx_t *ctx)
     char ip[32];
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &host) || host == NULL) {
+    if (!rs_args_get_str(parsed, 0U, &host) || host == NULL) {
         ros_puts("usage: ping <host> [--count|-c n] [--timeout|-t ms] "
                  "[--interval|-i ms]");
         return -1;
     }
-    (void)rs_args_get_uint(ctx->parsed, 1U, &count);
-    (void)rs_args_get_uint(ctx->parsed, 2U, &timeout);
-    (void)rs_args_get_uint(ctx->parsed, 3U, &interval);
+    (void)rs_args_get_uint(parsed, 1U, &count);
+    (void)rs_args_get_uint(parsed, 2U, &timeout);
+    (void)rs_args_get_uint(parsed, 3U, &interval);
     if (count == 0U) {
         count = 4U;
     }

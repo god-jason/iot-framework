@@ -40,13 +40,18 @@ static int fan_cmd_index(const fan_t *fan)
     return -1;
 }
 
-static int fan_cmd_handler(const rs_cmd_ctx_t *ctx)
+static int fan_cmd_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     uint32_t id;
     uint32_t duty = 0U;
     fan_t *fan;
 
-    if (!rs_args_get_uint(ctx->parsed, 0U, &id)) {
+    if (!rs_args_get_uint(parsed, 0U, &id)) {
         ros_puts("usage: fan <id> [duty]");
         return -1;
     }
@@ -56,7 +61,7 @@ static int fan_cmd_handler(const rs_cmd_ctx_t *ctx)
     }
     fan = s_fans[id];
 
-    if (!rs_args_get_uint(ctx->parsed, 1U, &duty)) {
+    if (!rs_args_get_uint(parsed, 1U, &duty)) {
         ros_printf("fan[%u] duty=%u rpm=%u\n", (unsigned)id,
                    (unsigned)fan->duty, (unsigned)fan->rpm);
         return 0;

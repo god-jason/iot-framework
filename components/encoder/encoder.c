@@ -38,14 +38,19 @@ static int encoder_cmd_index(const encoder_t *enc)
     return -1;
 }
 
-static int encoder_cmd_handler(const rs_cmd_ctx_t *ctx)
+static int encoder_cmd_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     uint32_t id;
     const char *action = NULL;
     const char *value = NULL;
     encoder_t *enc;
 
-    if (!rs_args_get_uint(ctx->parsed, 0U, &id) || !rs_args_get_str(ctx->parsed, 1U, &action)) {
+    if (!rs_args_get_uint(parsed, 0U, &id) || !rs_args_get_str(parsed, 1U, &action)) {
         ros_puts("usage: encoder <id> read | reset | speed <dt_ms> | info");
         return -1;
     }
@@ -54,7 +59,7 @@ static int encoder_cmd_handler(const rs_cmd_ctx_t *ctx)
         return -1;
     }
     enc = s_encoders[id];
-    (void)rs_args_get_str(ctx->parsed, 2U, &value);
+    (void)rs_args_get_str(parsed, 2U, &value);
 
     if (str_icmp(action, "read")) {
         int32_t count = 0;

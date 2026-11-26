@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-struct roshell;
+typedef struct roshell roshell_t;
 struct ros_task;
 
 enum {
@@ -37,27 +37,21 @@ enum {
 #define RS_CMD_NAME_MAX        24U     /* 命令名最大长度（含结尾 0） */
 #endif
 
-/* 命令执行上下文（内建与扩展命令统一入口参数） */
-typedef struct {
-    struct roshell *rs;            /* 会话实例；非会话来源为 NULL */
-    int argc;
-    char **argv;
-    const rs_args_parsed_t *parsed;/* 参数表解析结果；无参数表为 NULL */
-    void *user;                    /* def->user */
-} rs_cmd_ctx_t;
-
-/* 命令处理函数（on_start，内建与扩展命令统一签名） */
-typedef int (*rs_cmd_fn_t)(const rs_cmd_ctx_t *ctx);
+/* 命令处理函数（on_start，内建与扩展命令统一签名）
+ *   rs     : 会话实例（唯一上下文）
+ *   argc   : 实参个数（含命令名）
+ *   argv   : 实参（argv[0] 为命令名）
+ *   parsed : 参数表解析结果；命令未定义参数表时为 NULL
+ *   user   : def->user（为 NULL 时使用调用方默认 user） */
+typedef int (*rs_cmd_fn_t)(roshell_t *rs, int argc, char **argv,
+                           const rs_args_parsed_t *parsed, void *user);
 
 /* 持续命令轮转回调（on_tick）：返回 RS_CMD_RUNNING 表示继续，其它值表示结束 */
-typedef int (*rs_cmd_tick_fn_t)(void *user, struct roshell *rs,
-                                struct ros_task *task);
+typedef int (*rs_cmd_tick_fn_t)(roshell_t *rs, void *user);
 
 /* 命令生命周期回调（可选）：user 为命令定义中的处理函数上下文 def->user，
- * rs 为命令所属实例（状态存于实例，如 sleep 的等待登记表），
- * task 为命令正在执行的任务（由 rs_cmd_notify_* 传入） */
-typedef int (*rs_cmd_hook_fn_t)(void *user, struct roshell *rs,
-                                struct ros_task *task);
+ * rs 为命令所属实例（状态存于实例，如 sleep 的等待登记表） */
+typedef int (*rs_cmd_hook_fn_t)(roshell_t *rs, void *user);
 
 /* 命令定义（内建与扩展命令共用；usage 为空时帮助文本由参数表动态生成） */
 typedef struct rs_cmd {
@@ -112,7 +106,7 @@ int rs_cmd_help(const rs_cmd_t *def, char *buf, uint32_t size);
  * 返回处理函数返回值；未找到命令返回 RS_ARGS_ERR_UNKNOWN；
  * 解析失败返回对应 RS_ARGS_ERR_*。
  */
-int rs_cmd_run(const rs_cmd_t *table, uint32_t count,
+int rs_cmd_run(roshell_t *rs, const rs_cmd_t *table, uint32_t count,
             int argc, char **argv, void *user);
 
 /* ============================== 全局命令表 ============================== */
@@ -142,7 +136,7 @@ const rs_cmd_t *rs_cmd_first(void);
 const rs_cmd_t *rs_cmd_next(const rs_cmd_t *def);
 
 /* 解析参数并执行一条已找到的命令 */
-int rs_cmd_run_node(const rs_cmd_t *def, int argc, char **argv);
+int rs_cmd_run_node(roshell_t *rs, const rs_cmd_t *def, int argc, char **argv);
 
 /*
  * 按 argv[0] 在全局命令表中查找并执行。
@@ -151,7 +145,7 @@ int rs_cmd_run_node(const rs_cmd_t *def, int argc, char **argv);
  * 未找到返回 RS_ARGS_ERR_UNKNOWN；解析失败返回 RS_ARGS_ERR_*；
  * 否则返回处理函数的返回值。
  */
-int rs_builtin_dispatch(int argc, char **argv);
+int rs_builtin_dispatch(roshell_t *rs, int argc, char **argv);
 
 /* ============================== 生命周期通知 ============================== */
 /*
@@ -174,27 +168,29 @@ int rs_cmd_notify_kill(const struct ros_task *task);
 void rs_error(int code, const char *fmt, ...);
 
 /* 会话输入任务（未作为会话启动 / rs 为空时返回 NULL） */
-struct ros_task *rs_session_task(const struct roshell *rs);
+struct ros_task *rs_session_task(const roshell_t *rs);
 
 /* 会话启动时登记的版本串，供 ver 命令显示；rs 为空或无版本返回 NULL */
-const char *rs_session_version(const struct roshell *rs);
+const char *rs_session_version(const roshell_t *rs);
 
 /* 执行一条命令：wait=true 同步执行到结束；
  * wait=false '-' 异步启动，on_start 返回 RS_CMD_RUNNING 后立即返回。 */
-int rs_cmd_execute(const rs_cmd_t *def, rs_cmd_ctx_t *ctx, bool wait);
+int rs_cmd_execute(roshell_t *rs, const rs_cmd_t *def, int argc, char **argv,
+                   const rs_args_parsed_t *parsed, void *default_user,
+                   bool wait);
 
 /* 解析参数并执行（argv 不含命令名）；wait 语义同上 */
-int rs_cmd_exec_node(const rs_cmd_t *def, int argc, char **argv,
-                     struct roshell *rs, bool wait);
+int rs_cmd_exec_node(roshell_t *rs, const rs_cmd_t *def, int argc,
+                     char **argv, bool wait);
 
-/* shell 任务每轮调用：推进一步异步持续命令 */
-void rs_cmd_tick_all(void);
+/* shell 任务每轮调用：推进一步本实例的异步持续命令 */
+void rs_cmd_tick_all(roshell_t *rs);
 
-/* 是否存在运行中的异步持续命令（shell 据此决定空闲轮询间隔） */
-bool rs_cmd_has_async(void);
+/* 本实例是否存在运行中的异步持续命令（shell 据此决定空闲轮询间隔） */
+bool rs_cmd_has_async(roshell_t *rs);
 
-/* 等待异步持续命令结束；name 为 NULL 表示全部；timeout_ms=0 无限等待 */
-int rs_cmd_wait_async(const rs_cmd_t *self, const char *name,
+/* 等待本实例的异步持续命令结束；name 为 NULL 表示全部；timeout_ms=0 无限等待 */
+int rs_cmd_wait_async(roshell_t *rs, const rs_cmd_t *self, const char *name,
                       uint32_t timeout_ms);
 
 /* 内建命令静态表（命令表初始化时登记到全局 map）；
@@ -208,7 +204,8 @@ bool rs_builtin_is(const rs_cmd_t *def);
 const rs_cmd_t *rs_builtin_find(const char *name);
 
 /* help 内建命令：输出内建命令与 rs_cmd 全局命令表的用法 */
-int rs_builtin_help(const rs_cmd_ctx_t *ctx);
+int rs_builtin_help(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user);
 
 #ifdef __cplusplus
 }

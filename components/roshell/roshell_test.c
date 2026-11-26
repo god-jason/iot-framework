@@ -677,10 +677,11 @@ static void rs_t_funcs(void)
 
 /* ------------------------------ 扩展注册辅助 ------------------------------ */
 
-static rs_arg_t ext_add(const rs_arg_t *args, uint32_t nargs)
+static rs_arg_t ext_add(roshell_t *rs, const rs_arg_t *args, uint32_t nargs)
 {
     rs_arg_t r;
 
+    (void)rs;
     (void)nargs;
     memset(&r, 0, sizeof(r));
     if (args[0].type == RS_ARG_FLOAT || args[1].type == RS_ARG_FLOAT) {
@@ -696,10 +697,11 @@ static rs_arg_t ext_add(const rs_arg_t *args, uint32_t nargs)
     return r;
 }
 
-static rs_arg_t ext_flag(const rs_arg_t *args, uint32_t nargs)
+static rs_arg_t ext_flag(roshell_t *rs, const rs_arg_t *args, uint32_t nargs)
 {
     rs_arg_t r;
 
+    (void)rs;
     (void)args;
     (void)nargs;
     memset(&r, 0, sizeof(r));
@@ -708,10 +710,11 @@ static rs_arg_t ext_flag(const rs_arg_t *args, uint32_t nargs)
     return r;
 }
 
-static rs_arg_t ext_badret(const rs_arg_t *args, uint32_t nargs)
+static rs_arg_t ext_badret(roshell_t *rs, const rs_arg_t *args, uint32_t nargs)
 {
     rs_arg_t r;
 
+    (void)rs;
     (void)args;
     (void)nargs;
     memset(&r, 0, sizeof(r));
@@ -882,7 +885,7 @@ static void rs_t_cmd(void)
     TF_CHECK_INT(rsexec("nosuchcmd arg"), RS_ERR_PARSE);
     /* 块内命令：wait（无异步命令时立即返回） */
     TF_CHECK_INT(rsexec("if true\nwait\nend"), RS_OK);
-    rs_set_cmd_hook(g_rs, NULL, NULL);
+    rs_set_cmd_hook(g_rs, NULL);
     tf_end();
 }
 

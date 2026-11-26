@@ -98,8 +98,13 @@ static int gpio_apply(int rc, const char *what, uint16_t pin)
 
 /* ============================== gpio 命令 ============================== */
 
-static int gpio_cmd(const rs_cmd_ctx_t *ctx)
+static int gpio_cmd(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     const char *action = NULL;
     const char *pin_s = NULL;
     const char *a1 = NULL;
@@ -107,16 +112,16 @@ static int gpio_cmd(const rs_cmd_ctx_t *ctx)
     uint16_t pin;
     int rc;
 
-    if (!rs_args_get_str(ctx->parsed, 0U, &action) ||
-        !rs_args_get_str(ctx->parsed, 1U, &pin_s) ||
+    if (!rs_args_get_str(parsed, 0U, &action) ||
+        !rs_args_get_str(parsed, 1U, &pin_s) ||
         action == NULL || pin_s == NULL ||
         !gpio_parse_pin(pin_s, &pin)) {
         ros_puts("usage: gpio mode <pin> in|out [pull] | set <pin> <0|1> | "
                  "get <pin> | toggle <pin> | deinit <pin>");
         return -1;
     }
-    (void)rs_args_get_str(ctx->parsed, 2U, &a1);
-    (void)rs_args_get_str(ctx->parsed, 3U, &a2);
+    (void)rs_args_get_str(parsed, 2U, &a1);
+    (void)rs_args_get_str(parsed, 3U, &a2);
 
     if (str_icmp(action, "mode")) {
         if (a1 == NULL) {

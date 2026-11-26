@@ -42,8 +42,13 @@ static int stepper_cmd_index(const stepper_t *st)
     return -1;
 }
 
-static int stepper_cmd_handler(const rs_cmd_ctx_t *ctx)
+static int stepper_cmd_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)user;
     uint32_t id;
     const char *action = NULL;
     const char *value = NULL;
@@ -51,7 +56,7 @@ static int stepper_cmd_handler(const rs_cmd_ctx_t *ctx)
     int32_t v = 0;
     int rc;
 
-    if (!rs_args_get_uint(ctx->parsed, 0U, &id) || !rs_args_get_str(ctx->parsed, 1U, &action)) {
+    if (!rs_args_get_uint(parsed, 0U, &id) || !rs_args_get_str(parsed, 1U, &action)) {
         ros_puts("usage: stepper <id> dir|move|moveto|pos|info [value]");
         return -1;
     }
@@ -60,7 +65,7 @@ static int stepper_cmd_handler(const rs_cmd_ctx_t *ctx)
         return -1;
     }
     st = s_steppers[id];
-    (void)rs_args_get_str(ctx->parsed, 2U, &value);
+    (void)rs_args_get_str(parsed, 2U, &value);
 
     if (str_icmp(action, "pos")) {
         int32_t pos = 0;

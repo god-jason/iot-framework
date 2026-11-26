@@ -90,8 +90,9 @@ typedef struct {
     bool     has_else;
 } rs_pend_t;
 
-rs_prog_t *rs_scan(const char *script, rs_err_t *err)
+rs_prog_t *rs_scan(roshell_t *rs, const char *script)
 {
+    rs_err_t *err = rs->err;
     rs_prog_t *p;
     vec_t toks;                           /* 行 token 暂存：容量 RS_TOKEN_MAX，逐行复用 */
     rs_pend_t pend[RS_BLOCK_DEPTH];
@@ -162,7 +163,6 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
             continue;                     /* 空行 / 纯注释行 */
         }
         if (t[0].type == RS_TOK_VAR) {    /* 赋值 / 后缀自增减语句 */
-#if RS_ENABLE_EXPR
             if (rs_op(&t[1], "=")) {
                 if (t[2].type == RS_TOK_EOF) {
                     rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "bad assignment");
@@ -177,27 +177,15 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
                 rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "bad assignment");
                 goto fail;
             }
-#else
-            rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U),
-                   "assignment requires expressions");
-            goto fail;
-#endif
             continue;
         }
         if (t[0].type != RS_TOK_WORD) {   /* 表达式语句 */
-#if !RS_ENABLE_EXPR
-            rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U),
-                   "expressions disabled");
-            goto fail;
-#else
             (void)last;
-#endif
             continue;
         }
         kind = rs_line_kind(line);
         switch (kind) {
         case K_IF:
-#if RS_ENABLE_EXPR
             if (t[1].type == RS_TOK_EOF) {
                 rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "if requires condition");
                 goto fail;
@@ -210,13 +198,8 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
             pend[depth].line = k;
             pend[depth].has_else = false;
             depth++;
-#else
-            rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U), "if requires expressions");
-            goto fail;
-#endif
             break;
         case K_FOR:
-#if RS_ENABLE_EXPR
             if (!rs_kw(&t[last], "do")) {
                 rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "for requires do");
                 goto fail;
@@ -236,13 +219,8 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
             pend[depth].line = k;
             pend[depth].has_else = false;
             depth++;
-#else
-            rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U), "for requires expressions");
-            goto fail;
-#endif
             break;
         case K_WHILE:
-#if RS_ENABLE_EXPR
             if (t[1].type == RS_TOK_EOF) {
                 rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "while requires condition");
                 goto fail;
@@ -255,10 +233,6 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
             pend[depth].line = k;
             pend[depth].has_else = false;
             depth++;
-#else
-            rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U), "while requires expressions");
-            goto fail;
-#endif
             break;
         case K_FUNCTION: {
             uint16_t j;
@@ -295,33 +269,22 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
                 rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "bad function header");
                 goto fail;
             }
-#if !RS_ENABLE_EXPR
-            if (argc > 0U) {
-                rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U),
-                       "function arguments require expressions");
-                goto fail;
-            }
-#endif
             if (rs_find_func(p, t[1].p, t[1].len) != NULL) {
                 rs_err(err, RS_ERR_DUPLICATE, (uint16_t)(k + 1U), "duplicate function");
                 goto fail;
             }
-#if RS_ENABLE_MATH
             /* 内置函数 / 常量名保留，不允许被 function 重定义 */
             if (rs_func_find(t[1].p, t[1].len) != NULL ||
                 rs_const_find(t[1].p, t[1].len) != NULL) {
                 rs_err(err, RS_ERR_DUPLICATE, (uint16_t)(k + 1U), "duplicate function");
                 goto fail;
             }
-#endif
-#if RS_ENABLE_EXPR
             /* 扩展注册函数 / 常量名同样保留 */
             if (rs_ext_func_find(t[1].p, t[1].len) != NULL ||
                 rs_ext_const_find(t[1].p, t[1].len) != NULL) {
                 rs_err(err, RS_ERR_DUPLICATE, (uint16_t)(k + 1U), "duplicate function");
                 goto fail;
             }
-#endif
             if (vec_size(&p->funcs) >= RS_FUNC_MAX) {
                 rs_err(err, RS_ERR_LIMIT, (uint16_t)(k + 1U), "too many functions");
                 goto fail;
@@ -366,12 +329,10 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
                     rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "elseif after else");
                     goto fail;
                 }
-#if RS_ENABLE_EXPR
                 if (t[1].type == RS_TOK_EOF) {
                     rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "elseif requires condition");
                     goto fail;
                 }
-#endif
             } else {
                 if (pend[depth - 1U].has_else) {
                     rs_err(err, RS_ERR_PARSE, (uint16_t)(k + 1U), "duplicate else");
@@ -419,16 +380,7 @@ rs_prog_t *rs_scan(const char *script, rs_err_t *err)
             break;
         }
         default:                           /* 非关键字 WORD：隐式调用语句或命令行 */
-            if (rs_op(&t[1], "(")) {
-                /* 隐式函数调用语句（规格 §4.5）：执行期按名解析（允许前向引用） */
-#if !RS_ENABLE_EXPR
-                if (tn != 4) {
-                    rs_err(err, RS_ERR_UNSUPPORTED, (uint16_t)(k + 1U),
-                           "arguments require expressions");
-                    goto fail;
-                }
-#endif
-            }
+            /* 隐式函数调用语句（规格 §4.5）：执行期按名解析（允许前向引用） */
             /* 其余 WORD 行视为命令行（规格 §8 statement -> command）：
              * 命令表不在引擎内，扫描期放行，运行期由 hook 分派并校验 */
             break;
@@ -475,31 +427,47 @@ void rs_destroy(roshell_t *rs)
 
 int rs_exec(roshell_t *rs, const char *script, rs_err_t *err)
 {
+    struct rs_prog *sp;
+    rs_unit_t *su;
+    uint8_t sd;
+    rs_err_t *se;
     rs_prog_t *prog;
-    rs_env_t env;
     int rc;
+
     if (rs == NULL || script == NULL) {
         rs_err(err, RS_ERR_PARAM, 0U, "bad parameter");
         return RS_ERR_PARAM;
     }
-    prog = rs_scan(script, err);
+    /* 保存外层运行状态：允许命令 handler 内重入 rs_exec */
+    sp = rs->prog;
+    su = rs->unit;
+    sd = rs->depth;
+    se = rs->err;
+
+    rs->err = err;
+    prog = rs_scan(rs, script);
     if (prog == NULL) {
-        return (err != NULL) ? err->code : RS_ERR_PARSE;
+        rc = (err != NULL) ? err->code : RS_ERR_PARSE;
+        rs->err = se;
+        return rc;
     }
     rs->top.pc = 0U;
     rs->top.depth = 0U;
     rs->top.returned = false;
     rs->top.in_func = false;
     memset(&rs->top.ret, 0, sizeof(rs->top.ret));
-    env.rs = rs;
-    env.prog = prog;
-    env.unit = &rs->top;
-    env.depth = 0U;
-    env.err = err;
+    rs->prog = prog;
+    rs->unit = &rs->top;
+    rs->depth = 0U;
     /* 执行帧自持引用：rs_scan 的引用在执行结束后统一释放 */
     prog->refs++;
-    rc = rs_exec_unit(&env);
+    rc = rs_exec_unit(rs);
     rs_prog_release(prog);
+
+    rs->prog = sp;
+    rs->unit = su;
+    rs->depth = sd;
+    rs->err = se;
     return rc;
 }
 
@@ -520,18 +488,16 @@ int rs_exec_line(roshell_t *rs, const char *line, rs_err_t *err)
     return rs_exec(rs, line, err);
 }
 
-void rs_set_cmd_hook(roshell_t *rs, rs_cmd_hook_t hook, void *ctx)
+void rs_set_cmd_hook(roshell_t *rs, rs_cmd_hook_t hook)
 {
     if (rs == NULL) {
         return;
     }
     rs->cmd_hook = hook;
-    rs->cmd_hook_ctx = ctx;
 }
 
 /* ============================== 顶层变量读取 ============================== */
 
-#if RS_ENABLE_EXPR
 static rs_var_t *rs_top_var(roshell_t *rs, const char *name)
 {
     if (name[0] == '$') {
@@ -614,34 +580,6 @@ int rs_get_str(roshell_t *rs, const char *name, char *buf, uint32_t cap)
     return RS_OK;
 }
 
-#else /* !RS_ENABLE_EXPR */
-
-int rs_get_int(roshell_t *rs, const char *name, int32_t *out)
-{
-    (void)rs; (void)name; (void)out;
-    return RS_ERR_UNSUPPORTED;
-}
-
-int rs_get_float(roshell_t *rs, const char *name, float *out)
-{
-    (void)rs; (void)name; (void)out;
-    return RS_ERR_UNSUPPORTED;
-}
-
-int rs_get_bool(roshell_t *rs, const char *name, bool *out)
-{
-    (void)rs; (void)name; (void)out;
-    return RS_ERR_UNSUPPORTED;
-}
-
-int rs_get_str(roshell_t *rs, const char *name, char *buf, uint32_t cap)
-{
-    (void)rs; (void)name; (void)buf; (void)cap;
-    return RS_ERR_UNSUPPORTED;
-}
-
-#endif /* RS_ENABLE_EXPR */
-
 /* ============================== 交互会话 ============================== */
 /*
  * 会话状态直接存放在实例中（见 roshell.h 的 struct roshell）：接收环形缓冲（feed）、
@@ -723,8 +661,8 @@ uint32_t rs_shell_process(roshell_t *rs)
     if (rs == NULL || !rs->started) {
         return 0U;
     }
-    /* 推进异步持续命令（'-' 启动），保证即使没有输入也在轮转 on_tick */
-    rs_cmd_tick_all();
+    /* 推进本实例的异步持续命令（'-' 启动），保证即使没有输入也在轮转 on_tick */
+    rs_cmd_tick_all(rs);
     /* 先排空本轮全部输入（含 EOF 前已到达的行），再响应退出请求 */
     while (ringbuf_read(&rs->rx, &c, 1U) == 1U) {
         if (rs_edit_byte(rs, c)) {
@@ -756,7 +694,7 @@ static void rs_shell_task_entry(void *arg)
         }
         if (ringbuf_available(&rs->rx) == 0U) {
             /* 有异步持续命令时提高轮转频率，保证 sleep 等命令的精度 */
-            ros_sleep_ms(rs_cmd_has_async() ? 1U : 5U);
+            ros_sleep_ms(rs_cmd_has_async(rs) ? 1U : 5U);
         }
     }
     ros_task_exit();

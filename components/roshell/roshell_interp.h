@@ -31,15 +31,6 @@ typedef struct rs_prog {
     uint16_t  refs;
 } rs_prog_t;
 
-/* 执行环境：实例 + 程序对象 + 执行单元 + 调用深度 + 错误输出 */
-typedef struct rs_env {
-    roshell_t      *rs;
-    rs_prog_t      *prog;
-    rs_unit_t      *unit;                 /* 当前执行单元（顶层 / 函数体） */
-    uint8_t         depth;
-    rs_err_t  *err;
-} rs_env_t;
-
 /* ---------------------- 程序对象工具（roshell.c） ---------------------- */
 
 /* 释放程序对象引用（refs 归零时回收） */
@@ -48,17 +39,16 @@ void rs_prog_release(rs_prog_t *p);
 /* 在已登记脚本中按名查找 function，未命中返回 NULL */
 const rs_fn_t *rs_find_func(const rs_prog_t *p, const char *name, uint16_t len);
 
-/* 扫描脚本源文本（块配对校验 + 函数登记），失败返回 NULL 并填 err */
-rs_prog_t *rs_scan(const char *script, rs_err_t *err);
-
 /* ------------------------------ 解释接口 ------------------------------ */
 
-/* 按行号 PC 解释执行一个执行单元（脚本 / 函数体） */
-int rs_exec_unit(rs_env_t *env);
+/* 扫描脚本源文本（块配对校验 + 函数登记），失败返回 NULL 并写 rs->err */
+rs_prog_t *rs_scan(roshell_t *rs, const char *script);
+
+/* 按行号 PC 解释执行当前执行单元（脚本 / 函数体） */
+int rs_exec_unit(roshell_t *rs);
 
 /* 函数体执行：私有变量表 + token 缓冲；返回字符串拷回 caller 临时槽 */
-int rs_call_body(roshell_t *rs, rs_prog_t *prog, const rs_fn_t *f,
-                 const rs_value_t *args, uint8_t depth,
-                 rs_unit_t *caller, rs_value_t *out, rs_err_t *err);
+int rs_call_body(roshell_t *rs, const rs_fn_t *f,
+                 const rs_value_t *args, rs_value_t *out);
 
 #endif /* RS_INTERP_H */

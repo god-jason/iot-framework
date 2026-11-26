@@ -26,9 +26,14 @@
 
 static bool s_rct_hit;
 
-static int rct_handler(const rs_cmd_ctx_t *ctx)
+static int rct_handler(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     s_rct_hit = true;
     return 0;
 }
@@ -354,27 +359,30 @@ static void rs_t_wait_pause_10s(void)
 static int s_tick_calls;
 static int s_stop_calls;
 
-static int tick_start(const rs_cmd_ctx_t *ctx)
+static int tick_start(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     s_tick_calls = 0;
     return RS_CMD_RUNNING;
 }
 
-static int tick_on_tick(void *user, roshell_t *rs, ros_task_t *task)
+static int tick_on_tick(roshell_t *rs, void *user)
 {
     (void)user;
     (void)rs;
-    (void)task;
     s_tick_calls++;
     return (s_tick_calls >= 3) ? 0 : RS_CMD_RUNNING;
 }
 
-static int tick_on_stop(void *user, roshell_t *rs, ros_task_t *task)
+static int tick_on_stop(roshell_t *rs, void *user)
 {
     (void)user;
     (void)rs;
-    (void)task;
     s_stop_calls++;
     return 0;
 }
@@ -399,7 +407,7 @@ static void rs_t_async_tick(void)
 
     /* shell 轮转推进：3 次 tick 后结束，on_stop 调用一次 */
     for (i = 0; i < 3; i++) {
-        rs_cmd_tick_all();
+        rs_cmd_tick_all(NULL);
     }
     TF_CHECK_INT(s_tick_calls, 3);
     TF_CHECK_INT(s_stop_calls, 1);

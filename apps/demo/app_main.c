@@ -27,9 +27,14 @@ static void led_entry(void *arg)
 }
 
 /* quit：结束演示进程 */
-static int demo_quit(const rs_cmd_ctx_t *ctx)
+static int demo_quit(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
 {
-    (void)ctx;
+    (void)rs;
+    (void)argc;
+    (void)argv;
+    (void)parsed;
+    (void)user;
     ros_puts("bye");
     ros_stop();
     return 0;
