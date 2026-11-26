@@ -98,7 +98,7 @@ static int rec_check_payload(mfs_t *fs, uint32_t addr, uint32_t size,
         if (chunk > fs->workbuf_size) {
             chunk = fs->workbuf_size;
         }
-        err = mfs_read(fs, addr, fs->workbuf, chunk);
+        err = mfs_dev_read(fs, addr, fs->workbuf, chunk);
         if (err != MFS_OK) {
             return err;
         }
@@ -337,19 +337,19 @@ int mfs_rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
     base = mfs_blk_addr(fs, fs->active_block);
 
     /* 1) Header */
-    err = mfs_prog(fs, base + fs->active_off, hb, sizeof(hb));
+    err = mfs_dev_prog(fs, base + fs->active_off, hb, sizeof(hb));
     /* 2) Payload 第一段 */
     if (err == MFS_OK) {
-        err = mfs_prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE, p1, l1);
+        err = mfs_dev_prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE, p1, l1);
     }
     /* 3) Payload 第二段 */
     if (err == MFS_OK) {
-        err = mfs_prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE + l1,
+        err = mfs_dev_prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE + l1,
                          p2, l2);
     }
     /* 4) 先把数据落盘 */
     if (err == MFS_OK) {
-        err = mfs_sync(fs);
+        err = mfs_dev_sync(fs);
     }
     if (err != MFS_OK) {
         return err;
@@ -357,11 +357,11 @@ int mfs_rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
 
     /* 5) 最后写入提交标记，这一步完成才代表记录生效 */
     mfs_put_u32(marker, MFS_CMT_MAGIC);
-    err = mfs_prog(fs, base + marker_off, marker, sizeof(marker));
+    err = mfs_dev_prog(fs, base + marker_off, marker, sizeof(marker));
     if (err != MFS_OK) {
         return err;
     }
-    err = mfs_sync(fs);
+    err = mfs_dev_sync(fs);
     if (err != MFS_OK) {
         return err;
     }
@@ -410,7 +410,7 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
         return MFS_ERR_PARAM;
     }
 
-    err = mfs_read(fs, rec_addr, hb, sizeof(hb));
+    err = mfs_dev_read(fs, rec_addr, hb, sizeof(hb));
     if (err != MFS_OK) {
         return err;
     }
@@ -432,7 +432,7 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
         return MFS_ERR_CRC;
     }
 
-    err = mfs_read(fs, base + marker_off, marker, sizeof(marker));
+    err = mfs_dev_read(fs, base + marker_off, marker, sizeof(marker));
     if (err != MFS_OK) {
         return err;
     }
@@ -444,7 +444,7 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
         if (hdr->payload_size > cap) {
             return MFS_ERR_PARAM;
         }
-        err = mfs_read(fs, rec_addr + MFS_REC_HDR_SIZE, payload,
+        err = mfs_dev_read(fs, rec_addr + MFS_REC_HDR_SIZE, payload,
                          hdr->payload_size);
         if (err != MFS_OK) {
             return err;
@@ -501,7 +501,7 @@ int mfs_rec_read_raw(mfs_t *fs, uint32_t rec_addr,
     if (len == 0u) {
         return MFS_OK;
     }
-    return mfs_read(fs, rec_addr + MFS_REC_HDR_SIZE + payload_off, dst, len);
+    return mfs_dev_read(fs, rec_addr + MFS_REC_HDR_SIZE + payload_off, dst, len);
 }
 
 /*

@@ -14,7 +14,7 @@
 #include "mfs_internal.h"
 
 /* 读取；len 为 0 时直接成功 */
-int mfs_read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len)
+int mfs_dev_read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len)
 {
     if (fs == NULL || fs->dev.read == NULL) {
         return MFS_ERR_PARAM;
@@ -32,7 +32,7 @@ int mfs_read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len)
 }
 
 /* 编程；介质只允许 1 -> 0，调用者保证地址已擦除或可追加 */
-int mfs_prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len)
+int mfs_dev_prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len)
 {
     if (fs == NULL || fs->dev.program == NULL) {
         return MFS_ERR_PARAM;
@@ -50,7 +50,7 @@ int mfs_prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len)
 }
 
 /* 擦除；addr/len 的块对齐由调用者保证 */
-int mfs_erase(mfs_t *fs, uint32_t addr, uint32_t len)
+int mfs_dev_erase(mfs_t *fs, uint32_t addr, uint32_t len)
 {
     if (fs == NULL || fs->dev.erase == NULL) {
         return MFS_ERR_PARAM;
@@ -62,7 +62,7 @@ int mfs_erase(mfs_t *fs, uint32_t addr, uint32_t len)
 }
 
 /* 同步；未提供 sync 回调时视为成功 */
-int mfs_sync(mfs_t *fs)
+int mfs_dev_sync(mfs_t *fs)
 {
     if (fs == NULL) {
         return MFS_ERR_PARAM;

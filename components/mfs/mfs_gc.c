@@ -491,7 +491,7 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
             return err;
         }
     }
-    err = mfs_sync(fs);
+    err = mfs_dev_sync(fs);
     if (err != MFS_OK) {
         fs->gc_block = MFS_BLOCK_NONE;
         fs->gc_running = 0u;
@@ -499,7 +499,7 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
     }
 
     /* 3. 擦除牺牲块并写 FREE 头（沿用原擦除次数 + 1） */
-    err = mfs_erase(fs, mfs_blk_addr(fs, victim), fs->block_size);
+    err = mfs_dev_erase(fs, mfs_blk_addr(fs, victim), fs->block_size);
     if (err != MFS_OK) {
         /* 尽量持久化坏块标记；原数据已被复制，文件系统仍可用 */
         (void)mfs_blk_mark_bad(fs, victim, victim_erase + 1u);

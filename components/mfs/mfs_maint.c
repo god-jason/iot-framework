@@ -171,7 +171,7 @@ int mfs_mark_bad(mfs_t *fs, uint32_t block)
         empty = 1u;                      /* 头无效：挂载时已按空闲块统计 */
     }
 
-    err = mfs_erase(fs, mfs_blk_addr(fs, block), fs->block_size);
+    err = mfs_dev_erase(fs, mfs_blk_addr(fs, block), fs->block_size);
     if (err != MFS_OK) {
         mfs_unlock(fs);
         return err;

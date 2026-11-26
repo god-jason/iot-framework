@@ -655,7 +655,7 @@ int mfs_fsync(mfs_file_t *file)
     }
     mfs_lock(file->fs);
     if (file->fs->mounted) {
-        (void)mfs_sync(file->fs);
+        (void)mfs_dev_sync(file->fs);
     }
     mfs_unlock(file->fs);
     return MFS_OK;

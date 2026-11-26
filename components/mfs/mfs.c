@@ -73,7 +73,7 @@ static int sb_read(mfs_t *fs, uint32_t slot, mfs_sb_t *sb)
     uint8_t buf[MFS_SB_SIZE];
     int err;
 
-    err = mfs_read(fs, sb_addr(fs, slot), buf, sizeof(buf));
+    err = mfs_dev_read(fs, sb_addr(fs, slot), buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
@@ -120,11 +120,11 @@ static int sb_write(mfs_t *fs)
     mfs_put_u32(&buf[20], crc32(buf, 20u));
 
     for (slot = 0; slot < 2u; slot++) {
-        err = mfs_prog(fs, sb_addr(fs, slot), buf, sizeof(buf));
+        err = mfs_dev_prog(fs, sb_addr(fs, slot), buf, sizeof(buf));
         if (err != MFS_OK) {
             return err;
         }
-        err = mfs_sync(fs);
+        err = mfs_dev_sync(fs);
         if (err != MFS_OK) {
             return err;
         }
@@ -295,7 +295,7 @@ int mfs_format(mfs_t *fs)
             }
         }
 
-        err = mfs_erase(fs, mfs_blk_addr(fs, block), fs->block_size);
+        err = mfs_dev_erase(fs, mfs_blk_addr(fs, block), fs->block_size);
         if (err != MFS_OK) {
             (void)mfs_blk_mark_bad(fs, block, old_count);
             fs->bad_blocks++;
@@ -319,7 +319,7 @@ int mfs_format(mfs_t *fs)
 
     /* 擦除 Superblock A/B */
     for (block = 0; block < 2u; block++) {
-        err = mfs_erase(fs, sb_addr(fs, block), fs->block_size);
+        err = mfs_dev_erase(fs, sb_addr(fs, block), fs->block_size);
         if (err != MFS_OK) {
             fs->mounted = 0u;
             mfs_unlock(fs);
@@ -528,7 +528,7 @@ int mfs_unmount(mfs_t *fs)
 
     mfs_lock(fs);
     if (fs->mounted) {
-        (void)mfs_sync(fs);
+        (void)mfs_dev_sync(fs);
     }
     for (i = 0; i < MFS_MAX_OPEN_FILES; i++) {
         fs->files[i].used = 0u;
@@ -550,7 +550,7 @@ int mfs_sync(mfs_t *fs)
         return MFS_ERR_STATE;
     }
     mfs_lock(fs);
-    err = mfs_sync(fs);
+    err = mfs_dev_sync(fs);
     mfs_unlock(fs);
     return err;
 }

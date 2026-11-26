@@ -187,10 +187,10 @@ static inline uint32_t mfs_align_up(uint32_t v, uint32_t a)
  * 这些函数不负责加锁，锁由公开 API 层的 mfs_lock/mfs_unlock 负责。
  * ==========================================================================*/
 
-int mfs_read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len);
-int mfs_prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len);
-int mfs_erase(mfs_t *fs, uint32_t addr, uint32_t len);
-int mfs_sync(mfs_t *fs);
+int mfs_dev_read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len);
+int mfs_dev_prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len);
+int mfs_dev_erase(mfs_t *fs, uint32_t addr, uint32_t len);
+int mfs_dev_sync(mfs_t *fs);
 
 /* ============================================================================
  * 锁

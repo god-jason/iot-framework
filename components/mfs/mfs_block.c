@@ -51,7 +51,7 @@ int mfs_blk_read_hdr(mfs_t *fs, uint32_t block, mfs_blk_hdr_t *hdr)
         return MFS_ERR_PARAM;
     }
 
-    err = mfs_read(fs, mfs_blk_addr(fs, block), buf, sizeof(buf));
+    err = mfs_dev_read(fs, mfs_blk_addr(fs, block), buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
@@ -99,11 +99,11 @@ int mfs_blk_write_hdr(mfs_t *fs, uint32_t block, uint32_t sequence,
     mfs_put_u32(&buf[16], crc32(buf, 16u));
     mfs_put_u32(&buf[20], 0u);
 
-    err = mfs_prog(fs, mfs_blk_addr(fs, block), buf, sizeof(buf));
+    err = mfs_dev_prog(fs, mfs_blk_addr(fs, block), buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
-    return mfs_sync(fs);
+    return mfs_dev_sync(fs);
 }
 
 /* 判断块内是否还没有任何记录（首个 4 字节仍为 0xFF） */
@@ -112,7 +112,7 @@ int mfs_blk_is_empty(mfs_t *fs, uint32_t block, uint8_t *empty)
     uint32_t magic;
     int err;
 
-    err = mfs_read(fs, mfs_blk_addr(fs, block) + MFS_BLK_HDR_SIZE,
+    err = mfs_dev_read(fs, mfs_blk_addr(fs, block) + MFS_BLK_HDR_SIZE,
                      &magic, 4u);
     if (err != MFS_OK) {
         return err;
@@ -223,7 +223,7 @@ static int blk_alloc_impl(mfs_t *fs, bool allow_reserve)
 
         /* 未初始化块：擦除并写 FREE 头，擦除次数从 1 开始 */
         if (best_uninit != 0u) {
-            err = mfs_erase(fs, mfs_blk_addr(fs, best), fs->block_size);
+            err = mfs_dev_erase(fs, mfs_blk_addr(fs, best), fs->block_size);
             if (err != MFS_OK) {
                 (void)mfs_blk_mark_bad(fs, best, 1u);
                 fs->bad_blocks++;
