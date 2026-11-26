@@ -68,15 +68,6 @@ int datetime_compare(const datetime_t *a, const datetime_t *b);
 /* 秒级偏移（可为负），会正确处理跨月跨年并保留毫秒；返回 0，-1 表示失败 */
 int datetime_add_seconds(datetime_t *dt, int32_t seconds);
 
-/*
- * 注册 roshell 的 date 命令（幂等）：
- *   date                         显示系统时间
- *   date get                     显示系统时间
- *   date set <unix>              按 Unix 秒设置
- * 返回 0 成功；-1 注册失败。
- */
-int datetime_cmd_register(void);
-
 #ifdef __cplusplus
 }
 #endif

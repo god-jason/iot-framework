@@ -7,6 +7,7 @@
 
 #include "test.h"
 #include "datetime.h"
+#include "datetime_cmd.h"
 #include "roshell.h"
 #include "ros_rtc.h"
 

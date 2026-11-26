@@ -10,6 +10,7 @@
  */
 
 #include "net.h"
+#include "net_cmd.h"
 
 
 #include <stdio.h>

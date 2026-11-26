@@ -41,7 +41,7 @@
 
 /*
  * 读取一个 Chunk 的有效数据到 buf。
- * 最新 DATA 记录的查找复用 mfs__data_locate（与 GC 判定逻辑一致）。
+ * 最新 DATA 记录的查找复用 mfs_data_locate（与 GC 判定逻辑一致）。
  * 返回：
  *   正数：实际字节数；
  *   0   ：空洞（没有有效数据，调用者补 0）；
@@ -63,21 +63,21 @@ static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
      * O(Chunk×日志) 降到近似 O(Chunk)）。
      */
     if (hint != NULL && *hint != 0u) {
-        err = mfs__rec_read_fast(fs, *hint, &hdr, &next);
+        err = mfs_rec_read_fast(fs, *hint, &hdr, &next);
         if (err == MFS_OK && hdr.type == MFS_REC_DATA &&
             hdr.object_id == inode &&
             hdr.payload_size >= MFS_DATA_PREFIX &&
             hdr.payload_size <= MFS_DATA_PREFIX + MFS_CHUNK_SIZE) {
             uint8_t pre[MFS_DATA_PREFIX];
 
-            if (mfs__rec_read_raw(fs, *hint, &hdr, 0u, pre, sizeof(pre)) == MFS_OK &&
-                mfs__get_u32(&pre[4]) == chunk &&
-                mfs__get_u32(&pre[12]) == epoch) {
+            if (mfs_rec_read_raw(fs, *hint, &hdr, 0u, pre, sizeof(pre)) == MFS_OK &&
+                mfs_get_u32(&pre[4]) == chunk &&
+                mfs_get_u32(&pre[12]) == epoch) {
                 size = hdr.payload_size - MFS_DATA_PREFIX;
                 if (size > cap) {
                     size = cap;
                 }
-                err = mfs__rec_read_raw(fs, *hint, &hdr,
+                err = mfs_rec_read_raw(fs, *hint, &hdr,
                                         MFS_DATA_PREFIX, buf, size);
                 if (err == MFS_OK) {
                     *hint = next;
@@ -87,7 +87,7 @@ static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
         }
     }
 
-    err = mfs__data_locate(fs, inode, chunk, epoch, &loc);
+    err = mfs_data_locate(fs, inode, chunk, epoch, &loc);
     if (err != MFS_OK) {
         return err;
     }
@@ -99,7 +99,7 @@ static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
     }
 
     /* 扫描阶段已校验过 CRC，这里再确认一次记录完整性 */
-    err = mfs__rec_read(fs, loc.addr, &hdr, NULL, 0u, &next);
+    err = mfs_rec_read(fs, loc.addr, &hdr, NULL, 0u, &next);
     if (err != MFS_OK) {
         return err;
     }
@@ -112,7 +112,7 @@ static int data_read(mfs_t *fs, uint32_t inode, uint32_t chunk,
         size = cap;
     }
     /* 只读取 Payload 的数据部分，跳过 24B 前缀 */
-    err = mfs__rec_read_raw(fs, loc.addr, &hdr, MFS_DATA_PREFIX, buf, size);
+    err = mfs_rec_read_raw(fs, loc.addr, &hdr, MFS_DATA_PREFIX, buf, size);
     if (err != MFS_OK) {
         return err;
     }
@@ -132,15 +132,15 @@ static int data_write(mfs_t *fs, uint32_t inode, uint32_t chunk,
         return MFS_ERR_PARAM;
     }
 
-    mfs__put_u32(&prefix[0], inode);
-    mfs__put_u32(&prefix[4], chunk);
-    mfs__put_u32(&prefix[8], fs->seq);      /* generation */
-    mfs__put_u32(&prefix[12], epoch);
-    mfs__put_u16(&prefix[16], (uint16_t)size);
-    mfs__put_u16(&prefix[18], 0u);
-    mfs__put_u32(&prefix[20], 0u);
+    mfs_put_u32(&prefix[0], inode);
+    mfs_put_u32(&prefix[4], chunk);
+    mfs_put_u32(&prefix[8], fs->seq);      /* generation */
+    mfs_put_u32(&prefix[12], epoch);
+    mfs_put_u16(&prefix[16], (uint16_t)size);
+    mfs_put_u16(&prefix[18], 0u);
+    mfs_put_u32(&prefix[20], 0u);
 
-    return mfs__rec_write(fs, MFS_REC_DATA, inode,
+    return mfs_rec_write(fs, MFS_REC_DATA, inode,
                            prefix, sizeof(prefix), data, size);
 }
 
@@ -156,11 +156,11 @@ static int data_delete(mfs_t *fs, uint32_t inode, uint32_t epoch,
     if (count == 0u) {
         return MFS_OK;
     }
-    mfs__put_u32(&prefix[0], inode);
-    mfs__put_u32(&prefix[4], start_chunk);
-    mfs__put_u32(&prefix[8], count);
-    mfs__put_u32(&prefix[12], epoch);
-    return mfs__rec_write(fs, MFS_REC_DATA_DELETE, inode,
+    mfs_put_u32(&prefix[0], inode);
+    mfs_put_u32(&prefix[4], start_chunk);
+    mfs_put_u32(&prefix[8], count);
+    mfs_put_u32(&prefix[12], epoch);
+    return mfs_rec_write(fs, MFS_REC_DATA_DELETE, inode,
                            prefix, sizeof(prefix), NULL, 0u);
 }
 
@@ -219,7 +219,7 @@ static int inode_truncate(mfs_t *fs, mfs_ii_t *info, uint32_t new_size)
     }
 
     info->size = new_size;
-    return mfs__inode_update(fs, info);
+    return mfs_inode_update(fs, info);
 }
 
 /* 从内部句柄池分配一个空闲文件句柄 */
@@ -265,54 +265,54 @@ int mfs_open(mfs_t *fs, const char *path, uint32_t flags, mfs_file_t **file)
         return MFS_ERR_PARAM;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
 
-    err = mfs__path_parent(fs, path, &parent, name);
+    err = mfs_path_parent(fs, path, &parent, name);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
     if (parent.type != MFS_TYPE_DIR) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_NOTDIR;
     }
 
-    err = mfs__inode_lookup(fs, parent.inode, name, &info);
+    err = mfs_inode_lookup(fs, parent.inode, name, &info);
     if (err == MFS_OK) {
         if (info.type == MFS_TYPE_DIR) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return MFS_ERR_ISDIR;
         }
         if ((flags & MFS_O_CREAT) && (flags & MFS_O_EXCL)) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return MFS_ERR_EXIST;
         }
         if ((flags & MFS_O_TRUNC) && (mode & 2u) != 0u) {
             /* 清空文件：走与 truncate 相同的失效流程 */
             err = inode_truncate(fs, &info, 0u);
             if (err != MFS_OK) {
-                mfs__unlock(fs);
+                mfs_unlock(fs);
                 return err;
             }
         }
     } else if (err == MFS_ERR_NOENT) {
         if ((flags & MFS_O_CREAT) == 0u) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return MFS_ERR_NOENT;
         }
-        err = mfs__inode_create(fs, parent.inode, name, MFS_TYPE_FILE, &info);
+        err = mfs_inode_create(fs, parent.inode, name, MFS_TYPE_FILE, &info);
         if (err != MFS_OK) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return err;
         }
     } else {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
     slot = file_alloc(fs);
     if (slot == NULL) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_NOMEM;
     }
 
@@ -330,7 +330,7 @@ int mfs_open(mfs_t *fs, const char *path, uint32_t flags, mfs_file_t **file)
     memcpy(slot->name, info.name, info.name_len + 1u);
 
     *file = slot;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -343,9 +343,9 @@ int mfs_close(mfs_file_t *file)
         return MFS_ERR_BADF;
     }
     fs = file->fs;
-    mfs__lock(fs);
+    mfs_lock(fs);
     file->used = 0u;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -379,9 +379,9 @@ mfs_ssize_t mfs_read(mfs_file_t *file, void *buffer, uint32_t size)
     }
     fs = file->fs;
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     if (file->pos >= file->size) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return 0;
     }
     if (size > file->size - file->pos) {
@@ -400,7 +400,7 @@ mfs_ssize_t mfs_read(mfs_file_t *file, void *buffer, uint32_t size)
         got = data_read(fs, file->inode, chunk, file->epoch,
                         fs->workbuf, MFS_CHUNK_SIZE, &file->rcache);
         if (got < 0) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             /* 已经读到部分数据时优先返回已读字节数 */
             return (done > 0u) ? (mfs_ssize_t)done : (mfs_ssize_t)got;
         }
@@ -424,7 +424,7 @@ mfs_ssize_t mfs_read(mfs_file_t *file, void *buffer, uint32_t size)
         }
     }
 
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return (mfs_ssize_t)done;
 }
 
@@ -465,9 +465,9 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
     }
     fs = file->fs;
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     if (fs->readonly) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_READONLY;
     }
     if ((file->flags & MFS_O_APPEND) != 0u) {
@@ -497,7 +497,7 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
                 got = data_read(fs, file->inode, chunk, file->epoch,
                                 fs->workbuf, MFS_CHUNK_SIZE, NULL);
                 if (got < 0) {
-                    mfs__unlock(fs);
+                    mfs_unlock(fs);
                     return (done > 0u) ? (mfs_ssize_t)done : (mfs_ssize_t)got;
                 }
                 old_len = (uint32_t)got;
@@ -526,7 +526,7 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
              * 提交文件大小，对调用者不可见；因此返回错误而不是“部分成功”，
              * 避免调用者误以为数据已经落盘。
              */
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return (mfs_ssize_t)err;
         }
 
@@ -536,13 +536,13 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
 
     /* 文件变大：追加一条 INODE_UPDATE 提交新的 size */
     if (file->pos > file->size) {
-        err = mfs__inode_find(fs, file->inode, &info);
+        err = mfs_inode_find(fs, file->inode, &info);
         if (err == MFS_OK) {
             info.size = file->pos;
-            err = mfs__inode_update(fs, &info);
+            err = mfs_inode_update(fs, &info);
         }
         if (err != MFS_OK) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return (mfs_ssize_t)err;    /* size 未提交：本次写入不可见 */
         }
         file->size = info.size;
@@ -550,7 +550,7 @@ mfs_ssize_t mfs_write(mfs_file_t *file, const void *buffer, uint32_t size)
         file->epoch = info.epoch;
     }
 
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return (mfs_ssize_t)done;
 }
 
@@ -583,10 +583,10 @@ int mfs_seek(mfs_file_t *file, mfs_off_t offset, int whence)
         return MFS_ERR_INVAL;
     }
 
-    mfs__lock(file->fs);
+    mfs_lock(file->fs);
     file->pos = (uint32_t)pos;
     file->rcache = 0u;               /* 位置变化后顺序读提示失效 */
-    mfs__unlock(file->fs);
+    mfs_unlock(file->fs);
     return MFS_OK;
 }
 
@@ -630,8 +630,8 @@ int mfs_truncate(mfs_file_t *file, mfs_size_t size)
         return MFS_OK;
     }
 
-    mfs__lock(file->fs);
-    err = mfs__inode_find(file->fs, file->inode, &info);
+    mfs_lock(file->fs);
+    err = mfs_inode_find(file->fs, file->inode, &info);
     if (err == MFS_OK) {
         err = inode_truncate(file->fs, &info, size);
     }
@@ -643,7 +643,7 @@ int mfs_truncate(mfs_file_t *file, mfs_size_t size)
             file->pos = size;
         }
     }
-    mfs__unlock(file->fs);
+    mfs_unlock(file->fs);
     return err;
 }
 
@@ -653,10 +653,10 @@ int mfs_fsync(mfs_file_t *file)
     if (file == NULL || file->used == 0u) {
         return MFS_ERR_BADF;
     }
-    mfs__lock(file->fs);
+    mfs_lock(file->fs);
     if (file->fs->mounted) {
-        (void)mfs__sync(file->fs);
+        (void)mfs_sync(file->fs);
     }
-    mfs__unlock(file->fs);
+    mfs_unlock(file->fs);
     return MFS_OK;
 }

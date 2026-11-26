@@ -8,7 +8,7 @@
  *
  * 数据流与依赖：
  *   历法换算只依赖标准头文件，无平台接口与动态内存；
- *   date 命令额外依赖内核 ros_rtc（系统时间）与 roshell（命令注册）。
+ *   date 命令（datetime_cmd.c）额外依赖内核 ros_rtc 与 roshell（命令注册）。
  *   历法换算采用 Howard Hinnant 的 civil_from_days / days_from_civil 算法，
  *   以 1970-01-01 为纪元，按 400 年 = 146097 天的周期处理闰年规则。
  *
@@ -22,7 +22,6 @@
 #include "datetime.h"
 #include "ros.h"
 #include "common.h"
-#include "roshell.h"
 
 /* 软件时钟：无 RTC 时的当前日期时间，可由 datetime_set() 更新 */
 static datetime_t s_now;
@@ -326,95 +325,3 @@ int datetime_add_seconds(datetime_t *dt, int32_t seconds)
     return 0;
 }
 
-/* ============================== date 命令 ============================== */
-
-static const char *const s_weekday_name[] = {
-    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-};
-
-/* 打印系统时间，并同步模块内的软件时钟 */
-static void cmd_show(uint32_t ts)
-{
-    datetime_t dt;
-    const char *src;
-    const char *wd;
-
-    if (timestamp_to_datetime((int64_t)ts, &dt) != 0) {
-        return;
-    }
-    (void)datetime_set(&dt);
-
-    wd = (dt.weekday < 7U) ? s_weekday_name[dt.weekday] : "?";
-    switch (ros_rtc_source()) {
-    case ROS_RTC_SOURCE_HW:   src = "hw";   break;
-    case ROS_RTC_SOURCE_TICK: src = "tick"; break;
-    default:                  src = "none"; break;
-    }
-    ros_printf("%04u-%02u-%02u %02u:%02u:%02u %s unix=%lu src=%s\n",
-               (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day,
-               (unsigned)dt.hour, (unsigned)dt.minute, (unsigned)dt.second,
-               wd, (unsigned long)ts, src);
-}
-
-static int date_cmd_handler(roshell_t *rs, int argc, char **argv,
-                    const rs_args_parsed_t *parsed, void *user)
-{
-    (void)rs;
-    (void)argc;
-    (void)argv;
-    (void)user;
-    const char *action = NULL;
-    const char *v1 = NULL;
-    uint32_t ts;
-    int rc;
-
-    (void)rs_args_get_str(parsed, 0U, &action);
-    (void)rs_args_get_str(parsed, 1U, &v1);
-
-    if (action == NULL || str_icmp(action, "get")) {
-        cmd_show(ros_rtc_get_timestamp());
-        return 0;
-    }
-    if (!str_icmp(action, "set") || v1 == NULL) {
-        ros_puts("usage: date [get] | date set <unix>");
-        return -1;
-    }
-
-    if (!str_parse_uint(v1, &ts)) {
-        ros_printf("ERR: invalid unix time '%s'\n", v1);
-        return -1;
-    }
-
-    rc = ros_rtc_set_timestamp(ts);
-    if (rc != ROS_OK) {
-        ros_printf("ERR: rtc backend unavailable (%d)\n", rc);
-        return -1;
-    }
-    cmd_show(ts);
-    return 0;
-}
-
-static const rs_args_t s_date_args[] = {
-    { "action", 0, RS_ARGS_TYPE_STR, true, false, NULL, "get|set" },
-    { "value", 0, RS_ARGS_TYPE_STR, true, false, NULL, "unix seconds" }
-};
-
-static const rs_cmd_t s_date_def = {
-    "date", "get / set system time",
-    "date [get] | date set <unix>",
-    NULL, s_date_args, 2U, date_cmd_handler, NULL, NULL, NULL, NULL
-};
-
-int datetime_cmd_register(void)
-{
-    static bool registered;
-
-    if (registered) {
-        return 0;
-    }
-    if (rs_cmd_register(&s_date_def) != 0) {
-        return -1;
-    }
-    registered = true;
-    return 0;
-}

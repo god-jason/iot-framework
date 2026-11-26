@@ -233,9 +233,9 @@ Record 类型：
 
 ## 5. 写入路径
 
-`mfs__rec_write(fs, type, object_id, p1, l1, p2, l2)`：
+`mfs_rec_write(fs, type, object_id, p1, l1, p2, l2)`：
 
-1. 无活动块时调用 `mfs__blk_alloc`；
+1. 无活动块时调用 `mfs_blk_alloc`；
    - 无可用块且 `cfg.auto_gc != 0` 且当前不在 GC 中 → 先强制 GC 一次再重试；
 2. 计算 `marker_off = align_up(active_off + 32 + payload_size, align)`；
    - 若 `marker_off + 4 > block_size`：放弃当前块尾部，分配新块；
@@ -264,7 +264,7 @@ Record 类型：
   2. 后续完整 Chunk 写一条 DATA_DELETE；
   3. 更新 Inode.size。
 
-`mfs__data_locate` 统一了“最新 DATA + DATA_DELETE”的判定，
+`mfs_data_locate` 统一了“最新 DATA + DATA_DELETE”的判定，
 文件读取与 GC 有效记录判定共用同一套语义，避免两处逻辑漂移。
 
 ---
@@ -273,9 +273,9 @@ Record 类型：
 
 - 目录也是 Inode；子项通过 `(parent, name)` 关联，不维护常驻目录树；
 - 路径必须以 `/` 开头，禁止空分量、`.`、`..` 和结尾 `/`；
-- `mfs__inode_lookup(parent, name)`：
+- `mfs_inode_lookup(parent, name)`：
   1. 扫描所有 INODE_CREATE/UPDATE 记录，按 `(parent, name)` 收集候选 Inode；
-  2. 对每个候选调用 `mfs__inode_find` 取最新版本；
+  2. 对每个候选调用 `mfs_inode_find` 取最新版本；
   3. 最新版本仍匹配 `(parent, name)` 才命中，防止改名后的历史记录干扰；
 - `mfs_readdir` 按日志 sequence 升序逐条返回：
   - 只考虑 sequence > `iter_seq`；
@@ -345,7 +345,7 @@ Record 类型：
 
 - BAD 状态写入 Block Header（state=2）并带 CRC；
 - mount 统计 `bad_blocks`，format 保留 BAD（不会复活）；
-- `mfs__blk_alloc`、GC 选块、`mfs_erase_stat` 全部跳过 BAD；
+- `mfs_blk_alloc`、GC 选块、`mfs_erase_stat` 全部跳过 BAD；
 - 已标记的块再次标记返回 `MFS_ERR_INVAL`，避免重复计数；
 - 活动块、正在 GC 的块、越界块不允许标记。
 
@@ -365,7 +365,7 @@ used_bytes  = total_bytes - free_bytes - bad_blocks * block_size
 
 - 若 `cfg.lock/unlock` 非空，所有公开 API 进入时加锁、退出时解锁；
 - 块设备回调本身不重复加锁，避免非递归互斥量死锁；
-- 内部函数（`mfs__*`）假定调用者已持有锁；
+- 内部函数（`mfs_*`）假定调用者已持有锁；
 - GC 与写路径共享 `gc_running` / `gc_block` 状态，禁止重入。
 
 ---

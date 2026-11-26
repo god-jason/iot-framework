@@ -14,7 +14,7 @@
 
 #include "ros.h"
 #include "roshell.h"
-#include "datetime.h"
+#include "datetime_cmd.h"
 #include "app.h"
 #include "boot_meta.h"
 

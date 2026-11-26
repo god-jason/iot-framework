@@ -79,8 +79,7 @@ typedef struct {
 int net_init(void);
 int net_deinit(void);
 
-/* 注册 net 相关命令（ping）到 cmd 全局命令表；由 net_init 调用 */
-void net_register_commands(void);
+/* 命令注册见 net_cmd.h（net_register_commands） */
 
 /*
  * 建立连接。

@@ -28,7 +28,7 @@
 #include "mfs_internal.h"
 
 /* 数据池块的绝对地址：前两个块留给 Superblock A/B */
-uint32_t mfs__blk_addr(mfs_t *fs, uint32_t block)
+uint32_t mfs_blk_addr(mfs_t *fs, uint32_t block)
 {
     return fs->dev.start_addr + (block + 2u) * fs->block_size;
 }
@@ -41,7 +41,7 @@ uint32_t mfs__blk_addr(mfs_t *fs, uint32_t block)
  *   MFS_ERR_CRC    CRC 错误；
  *   MFS_ERR_IO     读取失败。
  */
-int mfs__blk_read_hdr(mfs_t *fs, uint32_t block, mfs_blk_hdr_t *hdr)
+int mfs_blk_read_hdr(mfs_t *fs, uint32_t block, mfs_blk_hdr_t *hdr)
 {
     uint8_t buf[MFS_BLK_HDR_SIZE];
     uint32_t crc;
@@ -51,17 +51,17 @@ int mfs__blk_read_hdr(mfs_t *fs, uint32_t block, mfs_blk_hdr_t *hdr)
         return MFS_ERR_PARAM;
     }
 
-    err = mfs__read(fs, mfs__blk_addr(fs, block), buf, sizeof(buf));
+    err = mfs_read(fs, mfs_blk_addr(fs, block), buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
 
-    hdr->magic = mfs__get_u32(&buf[0]);
-    hdr->sequence = mfs__get_u32(&buf[4]);
-    hdr->erase_count = mfs__get_u32(&buf[8]);
-    hdr->state = mfs__get_u32(&buf[12]);
-    hdr->crc = mfs__get_u32(&buf[16]);
-    hdr->reserved = mfs__get_u32(&buf[20]);
+    hdr->magic = mfs_get_u32(&buf[0]);
+    hdr->sequence = mfs_get_u32(&buf[4]);
+    hdr->erase_count = mfs_get_u32(&buf[8]);
+    hdr->state = mfs_get_u32(&buf[12]);
+    hdr->crc = mfs_get_u32(&buf[16]);
+    hdr->reserved = mfs_get_u32(&buf[20]);
 
     if (hdr->magic != MFS_BLK_MAGIC) {
         return MFS_ERR_NOENT;
@@ -81,7 +81,7 @@ int mfs__blk_read_hdr(mfs_t *fs, uint32_t block, mfs_blk_hdr_t *hdr)
  * 写入 Block Header 并同步。
  * 只能在擦除后的块上调用（或用于覆盖一个已知无效的头部）。
  */
-int mfs__blk_write_hdr(mfs_t *fs, uint32_t block, uint32_t sequence,
+int mfs_blk_write_hdr(mfs_t *fs, uint32_t block, uint32_t sequence,
                         uint32_t erase_count, uint32_t state)
 {
     uint8_t buf[MFS_BLK_HDR_SIZE];
@@ -91,28 +91,28 @@ int mfs__blk_write_hdr(mfs_t *fs, uint32_t block, uint32_t sequence,
         return MFS_ERR_PARAM;
     }
 
-    mfs__put_u32(&buf[0], MFS_BLK_MAGIC);
-    mfs__put_u32(&buf[4], sequence);
-    mfs__put_u32(&buf[8], erase_count);
-    mfs__put_u32(&buf[12], state);
+    mfs_put_u32(&buf[0], MFS_BLK_MAGIC);
+    mfs_put_u32(&buf[4], sequence);
+    mfs_put_u32(&buf[8], erase_count);
+    mfs_put_u32(&buf[12], state);
     /* CRC 只覆盖 magic/sequence/erase_count/state，不包含自身与保留字段 */
-    mfs__put_u32(&buf[16], crc32(buf, 16u));
-    mfs__put_u32(&buf[20], 0u);
+    mfs_put_u32(&buf[16], crc32(buf, 16u));
+    mfs_put_u32(&buf[20], 0u);
 
-    err = mfs__prog(fs, mfs__blk_addr(fs, block), buf, sizeof(buf));
+    err = mfs_prog(fs, mfs_blk_addr(fs, block), buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
-    return mfs__sync(fs);
+    return mfs_sync(fs);
 }
 
 /* 判断块内是否还没有任何记录（首个 4 字节仍为 0xFF） */
-int mfs__blk_is_empty(mfs_t *fs, uint32_t block, uint8_t *empty)
+int mfs_blk_is_empty(mfs_t *fs, uint32_t block, uint8_t *empty)
 {
     uint32_t magic;
     int err;
 
-    err = mfs__read(fs, mfs__blk_addr(fs, block) + MFS_BLK_HDR_SIZE,
+    err = mfs_read(fs, mfs_blk_addr(fs, block) + MFS_BLK_HDR_SIZE,
                      &magic, 4u);
     if (err != MFS_OK) {
         return err;
@@ -126,9 +126,9 @@ int mfs__blk_is_empty(mfs_t *fs, uint32_t block, uint8_t *empty)
  * 调用者应保证块已被擦除；本函数只写 BAD 头。
  * 返回头写入结果。
  */
-int mfs__blk_mark_bad(mfs_t *fs, uint32_t block, uint32_t erase_count)
+int mfs_blk_mark_bad(mfs_t *fs, uint32_t block, uint32_t erase_count)
 {
-    return mfs__blk_write_hdr(fs, block, fs->seq++, erase_count,
+    return mfs_blk_write_hdr(fs, block, fs->seq++, erase_count,
                                MFS_BLK_STATE_BAD);
 }
 
@@ -186,7 +186,7 @@ static int blk_alloc_impl(mfs_t *fs, bool allow_reserve)
                 continue;
             }
 
-            err = mfs__blk_read_hdr(fs, block, &bh);
+            err = mfs_blk_read_hdr(fs, block, &bh);
             if (err == MFS_ERR_NOENT || err == MFS_ERR_CRC) {
                 /* 未初始化：按擦除次数 0 处理，优先使用 */
                 if (best == MFS_BLOCK_NONE || best_count > 0u) {
@@ -203,7 +203,7 @@ static int blk_alloc_impl(mfs_t *fs, bool allow_reserve)
                 continue;
             }
 
-            err = mfs__blk_is_empty(fs, block, &empty);
+            err = mfs_blk_is_empty(fs, block, &empty);
             if (err != MFS_OK) {
                 return err;
             }
@@ -223,13 +223,13 @@ static int blk_alloc_impl(mfs_t *fs, bool allow_reserve)
 
         /* 未初始化块：擦除并写 FREE 头，擦除次数从 1 开始 */
         if (best_uninit != 0u) {
-            err = mfs__erase(fs, mfs__blk_addr(fs, best), fs->block_size);
+            err = mfs_erase(fs, mfs_blk_addr(fs, best), fs->block_size);
             if (err != MFS_OK) {
-                (void)mfs__blk_mark_bad(fs, best, 1u);
+                (void)mfs_blk_mark_bad(fs, best, 1u);
                 fs->bad_blocks++;
                 continue;                /* 换下一个候选 */
             }
-            err = mfs__blk_write_hdr(fs, best, fs->seq++, 1u,
+            err = mfs_blk_write_hdr(fs, best, fs->seq++, 1u,
                                       MFS_BLK_STATE_FREE);
             if (err != MFS_OK) {
                 return err;
@@ -252,13 +252,13 @@ static int blk_alloc_impl(mfs_t *fs, bool allow_reserve)
 }
 
 /* 普通数据分配：保留 GC 预留块 */
-int mfs__blk_alloc(mfs_t *fs)
+int mfs_blk_alloc(mfs_t *fs)
 {
     return blk_alloc_impl(fs, false);
 }
 
 /* 元数据/删除记录分配：空间不足时允许使用 GC 预留块 */
-int mfs__blk_alloc_meta(mfs_t *fs)
+int mfs_blk_alloc_meta(mfs_t *fs)
 {
     return blk_alloc_impl(fs, true);
 }

@@ -16,7 +16,7 @@
  *   会发现旧块已无有效记录并直接回收。
  *
  * 有效数据判定（1.2 起）：
- *   旧实现逐条记录调用 mfs__inode_find()/mfs__data_locate()，每条记录
+ *   旧实现逐条记录调用 mfs_inode_find()/mfs_data_locate()，每条记录
  *   都要全盘扫描，整体退化为 O(记录数²)，2MB 写满时几乎无法完成。
  *   现在先收集候选块的全部记录，再对整个日志做一次扫描：
  *     - 同 (inode, chunk, epoch) 的更新记录使旧记录失效；
@@ -31,7 +31,7 @@
  *   - 有效数据为 0（纯垃圾/坏记录头）的块立即选中。
  *
  * 空间预留：
- *   mfs__blk_alloc() 在 free_blocks <= MFS_GC_RESERVE 时拒绝普通分配
+ *   mfs_blk_alloc() 在 free_blocks <= MFS_GC_RESERVE 时拒绝普通分配
  *   （GC 自身除外），保证 GC 总有一个块可以承载复制出的有效记录。
  *
  * 约束：
@@ -123,14 +123,14 @@ static int gc_collect_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
             r->live = 0u;               /* 坏记录，直接可回收 */
             return MFS_OK;
         }
-        err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, need);
+        err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, need);
         if (err != MFS_OK) {
             return err;
         }
-        r->epoch = mfs__get_u32(&buf[12]);
-        r->chunk = mfs__get_u32(&buf[4]);
+        r->epoch = mfs_get_u32(&buf[12]);
+        r->chunk = mfs_get_u32(&buf[4]);
         if (hdr->type == MFS_REC_DATA_DELETE) {
-            r->count = mfs__get_u32(&buf[8]);
+            r->count = mfs_get_u32(&buf[8]);
         }
     }
     return MFS_OK;
@@ -191,14 +191,14 @@ static int gc_eval_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
             if (hdr->payload_size < need) {
                 return MFS_OK;           /* 坏记录：不影响其它候选 */
             }
-            err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, need);
+            err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, need);
             if (err != MFS_OK) {
                 return err;
             }
-            r_epoch = mfs__get_u32(&buf[12]);
-            r_chunk = mfs__get_u32(&buf[4]);
+            r_epoch = mfs_get_u32(&buf[12]);
+            r_chunk = mfs_get_u32(&buf[4]);
             if (hdr->type == MFS_REC_DATA_DELETE) {
-                r_count = mfs__get_u32(&buf[8]);
+                r_count = mfs_get_u32(&buf[8]);
             }
             prefix_ok = true;
         }
@@ -223,11 +223,11 @@ static int gc_read_inode(mfs_t *fs, uint32_t rec_addr, mfs_ii_t *info)
     uint8_t buf[MFS_GC_INODE_BUF];
     int err;
 
-    err = mfs__rec_read(fs, rec_addr, &hdr, buf, sizeof(buf), NULL);
+    err = mfs_rec_read(fs, rec_addr, &hdr, buf, sizeof(buf), NULL);
     if (err != MFS_OK) {
         return err;
     }
-    return mfs__inode_parse(buf, hdr.payload_size, info);
+    return mfs_inode_parse(buf, hdr.payload_size, info);
 }
 
 /* 根据单遍扫描结果确定候选记录是否有效，并累计有效字节数 */
@@ -278,7 +278,7 @@ static int gc_resolve(mfs_t *fs, gc_block_t *b, gc_eval_t *e,
             }
         }
         if (c->live != 0u) {
-            live += mfs__rec_total_size(fs, c->addr - b->base,
+            live += mfs_rec_total_size(fs, c->addr - b->base,
                                          c->payload_size);
         }
     }
@@ -311,17 +311,17 @@ static int gc_copy_record(mfs_t *fs, const mfs_rec_hdr_t *hdr,
         if (data_size > MFS_CHUNK_SIZE || data_size > fs->workbuf_size) {
             return MFS_ERR_CORRUPT;
         }
-        err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, prefix,
+        err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, prefix,
                                  sizeof(prefix));
         if (err != MFS_OK) {
             return err;
         }
-        err = mfs__rec_read_raw(fs, rec_addr, hdr, MFS_DATA_PREFIX,
+        err = mfs_rec_read_raw(fs, rec_addr, hdr, MFS_DATA_PREFIX,
                                  fs->workbuf, data_size);
         if (err != MFS_OK) {
             return err;
         }
-        return mfs__rec_write(fs, hdr->type, hdr->object_id,
+        return mfs_rec_write(fs, hdr->type, hdr->object_id,
                                prefix, sizeof(prefix),
                                fs->workbuf, data_size);
     }
@@ -329,11 +329,11 @@ static int gc_copy_record(mfs_t *fs, const mfs_rec_hdr_t *hdr,
     if (size > fs->workbuf_size) {
         return MFS_ERR_CORRUPT;
     }
-    err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, fs->workbuf, size);
+    err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, fs->workbuf, size);
     if (err != MFS_OK) {
         return err;
     }
-    return mfs__rec_write(fs, hdr->type, hdr->object_id,
+    return mfs_rec_write(fs, hdr->type, hdr->object_id,
                            fs->workbuf, size, NULL, 0u);
 }
 
@@ -351,7 +351,7 @@ static int gc_has_open_dir(mfs_t *fs)
     return 0;
 }
 
-int mfs__gc_run(mfs_t *fs, uint8_t force)
+int mfs_gc_run(mfs_t *fs, uint8_t force)
 {
     static gc_block_t s_blk;
     static gc_eval_t  s_eval;
@@ -397,7 +397,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
             if (block == fs->active_block || block == fs->gc_block) {
                 continue;
             }
-            if (mfs__blk_read_hdr(fs, block, &bh) != MFS_OK) {
+            if (mfs_blk_read_hdr(fs, block, &bh) != MFS_OK) {
                 continue;               /* 未初始化/无效块头 */
             }
             if (bh.state == MFS_BLK_STATE_BAD) {
@@ -415,8 +415,8 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
         min_seq = pick_seq;
 
         memset(&s_blk, 0, sizeof(s_blk));
-        s_blk.base = mfs__blk_addr(fs, pick);
-        err = mfs__scan_block_fast(fs, pick, gc_collect_cb, &s_blk, &last);
+        s_blk.base = mfs_blk_addr(fs, pick);
+        err = mfs_scan_block_fast(fs, pick, gc_collect_cb, &s_blk, &last);
         if (s_blk.overflow != 0u) {
             continue;                   /* 记录过多：本轮跳过该块 */
         }
@@ -426,7 +426,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
         if (s_blk.count == 0u) {
             uint8_t empty = 0u;
 
-            if (mfs__blk_is_empty(fs, pick, &empty) != MFS_OK) {
+            if (mfs_blk_is_empty(fs, pick, &empty) != MFS_OK) {
                 return MFS_ERR_IO;
             }
             if (empty != 0u) {
@@ -437,7 +437,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
             memset(&s_eval, 0, sizeof(s_eval));
             s_eval.recs = s_blk.recs;
             s_eval.count = s_blk.count;
-            err = mfs__scan_all_fast(fs, gc_eval_cb, &s_eval);
+            err = mfs_scan_all_fast(fs, gc_eval_cb, &s_eval);
             if (err != MFS_OK) {
                 return err;
             }
@@ -478,7 +478,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
         if (s_blk.recs[i].live == 0u) {
             continue;
         }
-        err = mfs__rec_read_fast(fs, s_blk.recs[i].addr, &hdr, NULL);
+        err = mfs_rec_read_fast(fs, s_blk.recs[i].addr, &hdr, NULL);
         if (err != MFS_OK) {
             fs->gc_block = MFS_BLOCK_NONE;
             fs->gc_running = 0u;
@@ -491,7 +491,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
             return err;
         }
     }
-    err = mfs__sync(fs);
+    err = mfs_sync(fs);
     if (err != MFS_OK) {
         fs->gc_block = MFS_BLOCK_NONE;
         fs->gc_running = 0u;
@@ -499,10 +499,10 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
     }
 
     /* 3. 擦除牺牲块并写 FREE 头（沿用原擦除次数 + 1） */
-    err = mfs__erase(fs, mfs__blk_addr(fs, victim), fs->block_size);
+    err = mfs_erase(fs, mfs_blk_addr(fs, victim), fs->block_size);
     if (err != MFS_OK) {
         /* 尽量持久化坏块标记；原数据已被复制，文件系统仍可用 */
-        (void)mfs__blk_mark_bad(fs, victim, victim_erase + 1u);
+        (void)mfs_blk_mark_bad(fs, victim, victim_erase + 1u);
         fs->bad_blocks++;
         fs->gc_block = MFS_BLOCK_NONE;
         fs->gc_running = 0u;
@@ -518,7 +518,7 @@ int mfs__gc_run(mfs_t *fs, uint8_t force)
         fs->used_bytes = 0u;
     }
 
-    err = mfs__blk_write_hdr(fs, victim, fs->seq++, victim_erase + 1u,
+    err = mfs_blk_write_hdr(fs, victim, fs->seq++, victim_erase + 1u,
                               MFS_BLK_STATE_FREE);
     fs->gc_block = MFS_BLOCK_NONE;
     fs->gc_running = 0u;

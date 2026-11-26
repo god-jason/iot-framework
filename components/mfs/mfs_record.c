@@ -51,29 +51,29 @@ static uint32_t rec_align(mfs_t *fs)
 /* 把内存中的 Record Header 序列化为 32B 小端字节流，并填入 header_crc */
 static void rec_hdr_serialize(const mfs_rec_hdr_t *hdr, uint8_t *buf)
 {
-    mfs__put_u32(&buf[0], hdr->magic);
-    mfs__put_u32(&buf[4], hdr->sequence);
-    mfs__put_u32(&buf[8], hdr->tx_id);
-    mfs__put_u32(&buf[12], hdr->object_id);
-    mfs__put_u16(&buf[16], hdr->type);
-    mfs__put_u16(&buf[18], hdr->flags);
-    mfs__put_u32(&buf[20], hdr->payload_size);
-    mfs__put_u32(&buf[24], hdr->payload_crc);
-    mfs__put_u32(&buf[28], crc32(buf, 28u));
+    mfs_put_u32(&buf[0], hdr->magic);
+    mfs_put_u32(&buf[4], hdr->sequence);
+    mfs_put_u32(&buf[8], hdr->tx_id);
+    mfs_put_u32(&buf[12], hdr->object_id);
+    mfs_put_u16(&buf[16], hdr->type);
+    mfs_put_u16(&buf[18], hdr->flags);
+    mfs_put_u32(&buf[20], hdr->payload_size);
+    mfs_put_u32(&buf[24], hdr->payload_crc);
+    mfs_put_u32(&buf[28], crc32(buf, 28u));
 }
 
 /* 解析 32B 小端字节流为 Record Header；CRC 校验由调用者完成 */
 static void rec_hdr_parse(const uint8_t *buf, mfs_rec_hdr_t *hdr)
 {
-    hdr->magic = mfs__get_u32(&buf[0]);
-    hdr->sequence = mfs__get_u32(&buf[4]);
-    hdr->tx_id = mfs__get_u32(&buf[8]);
-    hdr->object_id = mfs__get_u32(&buf[12]);
-    hdr->type = mfs__get_u16(&buf[16]);
-    hdr->flags = mfs__get_u16(&buf[18]);
-    hdr->payload_size = mfs__get_u32(&buf[20]);
-    hdr->payload_crc = mfs__get_u32(&buf[24]);
-    hdr->header_crc = mfs__get_u32(&buf[28]);
+    hdr->magic = mfs_get_u32(&buf[0]);
+    hdr->sequence = mfs_get_u32(&buf[4]);
+    hdr->tx_id = mfs_get_u32(&buf[8]);
+    hdr->object_id = mfs_get_u32(&buf[12]);
+    hdr->type = mfs_get_u16(&buf[16]);
+    hdr->flags = mfs_get_u16(&buf[18]);
+    hdr->payload_size = mfs_get_u32(&buf[20]);
+    hdr->payload_crc = mfs_get_u32(&buf[24]);
+    hdr->header_crc = mfs_get_u32(&buf[28]);
 }
 
 /*
@@ -98,7 +98,7 @@ static int rec_check_payload(mfs_t *fs, uint32_t addr, uint32_t size,
         if (chunk > fs->workbuf_size) {
             chunk = fs->workbuf_size;
         }
-        err = mfs__read(fs, addr, fs->workbuf, chunk);
+        err = mfs_read(fs, addr, fs->workbuf, chunk);
         if (err != MFS_OK) {
             return err;
         }
@@ -112,11 +112,11 @@ static int rec_check_payload(mfs_t *fs, uint32_t addr, uint32_t size,
 }
 
 /* 计算一条记录占用的总字节数，供 GC 统计块内有效数据量 */
-uint32_t mfs__rec_total_size(mfs_t *fs, uint32_t rec_off,
+uint32_t mfs_rec_total_size(mfs_t *fs, uint32_t rec_off,
                               uint32_t payload_size)
 {
     uint32_t align = rec_align(fs);
-    uint32_t marker_off = mfs__align_up(rec_off + MFS_REC_HDR_SIZE +
+    uint32_t marker_off = mfs_align_up(rec_off + MFS_REC_HDR_SIZE +
                                          payload_size, align);
 
     return marker_off + 4u - rec_off;
@@ -151,15 +151,15 @@ static int data_locate_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
         if (hdr->payload_size < 16u) {
             return MFS_OK;
         }
-        err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, 16u);
+        err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, 16u);
         if (err != MFS_OK) {
             return err;
         }
-        if (mfs__get_u32(&buf[12]) != loc->epoch) {
+        if (mfs_get_u32(&buf[12]) != loc->epoch) {
             return MFS_OK;              /* 不同 epoch 的删除不影响当前数据 */
         }
-        start = mfs__get_u32(&buf[4]);
-        count = mfs__get_u32(&buf[8]);
+        start = mfs_get_u32(&buf[4]);
+        count = mfs_get_u32(&buf[8]);
         if (loc->chunk >= start && loc->chunk - start < count &&
             hdr->sequence > loc->del_seq) {
             loc->del_seq = hdr->sequence;
@@ -172,19 +172,19 @@ static int data_locate_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
         hdr->payload_size < MFS_DATA_PREFIX) {
         return MFS_OK;
     }
-    err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, sizeof(buf));
+    err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
-    if (mfs__get_u32(&buf[4]) != loc->chunk ||
-        mfs__get_u32(&buf[12]) != loc->epoch) {
+    if (mfs_get_u32(&buf[4]) != loc->chunk ||
+        mfs_get_u32(&buf[12]) != loc->epoch) {
         return MFS_OK;
     }
-    if (mfs__get_u16(&buf[16]) > MFS_CHUNK_SIZE) {
+    if (mfs_get_u16(&buf[16]) > MFS_CHUNK_SIZE) {
         return MFS_OK;
     }
     {
-        uint32_t gen = mfs__get_u32(&buf[8]);
+        uint32_t gen = mfs_get_u32(&buf[8]);
 
         /* generation 大者优先；相同时取后写入者 */
         if (!loc->found || gen > loc->gen ||
@@ -193,7 +193,7 @@ static int data_locate_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
             loc->gen = gen;
             loc->seq = hdr->sequence;
             loc->addr = rec_addr;
-            loc->size = mfs__get_u16(&buf[16]);
+            loc->size = mfs_get_u16(&buf[16]);
         }
     }
     return MFS_OK;
@@ -203,7 +203,7 @@ static int data_locate_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
  * 定位指定 (inode, chunk, epoch) 的最新 DATA 与覆盖它的 DATA_DELETE。
  * 返回 MFS_OK 表示扫描完成（loc->found 才代表存在数据）。
  */
-int mfs__data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
+int mfs_data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
                       uint32_t epoch, mfs_data_loc_t *loc)
 {
     if (fs == NULL || loc == NULL) {
@@ -215,7 +215,7 @@ int mfs__data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
     loc->chunk = chunk;
     loc->epoch = epoch;
 
-    return mfs__scan_all_fast(fs, data_locate_cb, loc);
+    return mfs_scan_all_fast(fs, data_locate_cb, loc);
 }
 
 /*
@@ -234,7 +234,7 @@ int mfs__data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
  *   4. 在独立对齐位置写 Commit Marker，sync；
  *   5. 更新 active_off / seq。
  *
- * used_bytes 由 mfs__blk_alloc() 按整块累加，这里不能重复累加记录长度，
+ * used_bytes 由 mfs_blk_alloc() 按整块累加，这里不能重复累加记录长度，
  * 否则统计值会超过分区容量。
  *
  * 空间不足且开启 auto_gc 时，会先触发一次强制 GC 再重试分配。
@@ -242,7 +242,7 @@ int mfs__data_locate(mfs_t *fs, uint32_t inode, uint32_t chunk,
  *
  * 任何一步失败都会返回错误；此时记录没有 Marker，挂载时会被忽略。
  */
-int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
+int mfs_rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
                     const void *p1, uint32_t l1,
                     const void *p2, uint32_t l2)
 {
@@ -285,7 +285,7 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
              * （预留块留给元数据/GC），因此可能需要连续回收两个块。
              */
             for (tries = 0U; ; tries++) {
-                err = meta ? mfs__blk_alloc_meta(fs) : mfs__blk_alloc(fs);
+                err = meta ? mfs_blk_alloc_meta(fs) : mfs_blk_alloc(fs);
                 if (err == MFS_OK) {
                     break;
                 }
@@ -293,7 +293,7 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
                     fs->gc_running || tries >= 2U) {
                     return err;
                 }
-                err = mfs__gc_run(fs, 1u);
+                err = mfs_gc_run(fs, 1u);
                 if (err != MFS_OK) {
                     return err;
                 }
@@ -303,7 +303,7 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
             }
         }
 
-        marker_off = mfs__align_up(fs->active_off + MFS_REC_HDR_SIZE +
+        marker_off = mfs_align_up(fs->active_off + MFS_REC_HDR_SIZE +
                                     payload_size, align);
         end_off = marker_off + 4u;
 
@@ -334,34 +334,34 @@ int mfs__rec_write(mfs_t *fs, uint16_t type, uint32_t object_id,
     hdr.payload_crc = crc;
     rec_hdr_serialize(&hdr, hb);
 
-    base = mfs__blk_addr(fs, fs->active_block);
+    base = mfs_blk_addr(fs, fs->active_block);
 
     /* 1) Header */
-    err = mfs__prog(fs, base + fs->active_off, hb, sizeof(hb));
+    err = mfs_prog(fs, base + fs->active_off, hb, sizeof(hb));
     /* 2) Payload 第一段 */
     if (err == MFS_OK) {
-        err = mfs__prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE, p1, l1);
+        err = mfs_prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE, p1, l1);
     }
     /* 3) Payload 第二段 */
     if (err == MFS_OK) {
-        err = mfs__prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE + l1,
+        err = mfs_prog(fs, base + fs->active_off + MFS_REC_HDR_SIZE + l1,
                          p2, l2);
     }
     /* 4) 先把数据落盘 */
     if (err == MFS_OK) {
-        err = mfs__sync(fs);
+        err = mfs_sync(fs);
     }
     if (err != MFS_OK) {
         return err;
     }
 
     /* 5) 最后写入提交标记，这一步完成才代表记录生效 */
-    mfs__put_u32(marker, MFS_CMT_MAGIC);
-    err = mfs__prog(fs, base + marker_off, marker, sizeof(marker));
+    mfs_put_u32(marker, MFS_CMT_MAGIC);
+    err = mfs_prog(fs, base + marker_off, marker, sizeof(marker));
     if (err != MFS_OK) {
         return err;
     }
-    err = mfs__sync(fs);
+    err = mfs_sync(fs);
     if (err != MFS_OK) {
         return err;
     }
@@ -404,13 +404,13 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
     if (block >= fs->block_count) {
         return MFS_ERR_PARAM;
     }
-    base = mfs__blk_addr(fs, block);
+    base = mfs_blk_addr(fs, block);
     off = rec_addr - base;
     if (off + MFS_REC_HDR_SIZE > fs->block_size) {
         return MFS_ERR_PARAM;
     }
 
-    err = mfs__read(fs, rec_addr, hb, sizeof(hb));
+    err = mfs_read(fs, rec_addr, hb, sizeof(hb));
     if (err != MFS_OK) {
         return err;
     }
@@ -426,17 +426,17 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
 
     /* Marker 必须位于按编程粒度对齐的位置，且在块内 */
     align = rec_align(fs);
-    marker_off = mfs__align_up(off + MFS_REC_HDR_SIZE + hdr->payload_size,
+    marker_off = mfs_align_up(off + MFS_REC_HDR_SIZE + hdr->payload_size,
                                 align);
     if (marker_off + 4u > fs->block_size) {
         return MFS_ERR_CRC;
     }
 
-    err = mfs__read(fs, base + marker_off, marker, sizeof(marker));
+    err = mfs_read(fs, base + marker_off, marker, sizeof(marker));
     if (err != MFS_OK) {
         return err;
     }
-    if (mfs__get_u32(marker) != MFS_CMT_MAGIC) {
+    if (mfs_get_u32(marker) != MFS_CMT_MAGIC) {
         return MFS_ERR_CRC;             /* 未提交记录（掉电或写失败） */
     }
 
@@ -444,7 +444,7 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
         if (hdr->payload_size > cap) {
             return MFS_ERR_PARAM;
         }
-        err = mfs__read(fs, rec_addr + MFS_REC_HDR_SIZE, payload,
+        err = mfs_read(fs, rec_addr + MFS_REC_HDR_SIZE, payload,
                          hdr->payload_size);
         if (err != MFS_OK) {
             return err;
@@ -470,14 +470,14 @@ static int rec_read_impl(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
 }
 
 /* 完整读取：校验 Payload CRC */
-int mfs__rec_read(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
+int mfs_rec_read(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
                    void *payload, uint32_t cap, uint32_t *next_off)
 {
     return rec_read_impl(fs, rec_addr, hdr, payload, cap, next_off, true);
 }
 
 /* 快速读取：只校验 Header/Marker，跳过 Payload CRC（用于扫描/定位） */
-int mfs__rec_read_fast(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
+int mfs_rec_read_fast(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
                         uint32_t *next_off)
 {
     return rec_read_impl(fs, rec_addr, hdr, NULL, 0u, next_off, false);
@@ -485,9 +485,9 @@ int mfs__rec_read_fast(mfs_t *fs, uint32_t rec_addr, mfs_rec_hdr_t *hdr,
 
 /*
  * 直接读取 Payload 的指定区间。
- * 不做 CRC/边界之外的重复校验，调用者应已通过 mfs__rec_read 确认记录有效。
+ * 不做 CRC/边界之外的重复校验，调用者应已通过 mfs_rec_read 确认记录有效。
  */
-int mfs__rec_read_raw(mfs_t *fs, uint32_t rec_addr,
+int mfs_rec_read_raw(mfs_t *fs, uint32_t rec_addr,
                        const mfs_rec_hdr_t *hdr, uint32_t payload_off,
                        void *dst, uint32_t len)
 {
@@ -501,7 +501,7 @@ int mfs__rec_read_raw(mfs_t *fs, uint32_t rec_addr,
     if (len == 0u) {
         return MFS_OK;
     }
-    return mfs__read(fs, rec_addr + MFS_REC_HDR_SIZE + payload_off, dst, len);
+    return mfs_read(fs, rec_addr + MFS_REC_HDR_SIZE + payload_off, dst, len);
 }
 
 /*
@@ -531,19 +531,19 @@ static int scan_block_impl(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
     }
 
     /* 先确认 Block Header 有效；无效块由调用者按空闲块处理 */
-    err = mfs__blk_read_hdr(fs, block, &bh);
+    err = mfs_blk_read_hdr(fs, block, &bh);
     if (err != MFS_OK) {
         return err;
     }
 
-    base = mfs__blk_addr(fs, block);
+    base = mfs_blk_addr(fs, block);
     off = MFS_BLK_HDR_SIZE;
 
     while (off + MFS_REC_HDR_SIZE <= fs->block_size) {
         if (verify) {
-            err = mfs__rec_read(fs, base + off, &hdr, NULL, 0u, &next);
+            err = mfs_rec_read(fs, base + off, &hdr, NULL, 0u, &next);
         } else {
-            err = mfs__rec_read_fast(fs, base + off, &hdr, &next);
+            err = mfs_rec_read_fast(fs, base + off, &hdr, &next);
         }
         if (err != MFS_OK) {
             break;                       /* 未提交/损坏：块尾结束 */
@@ -566,13 +566,13 @@ static int scan_block_impl(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
     return MFS_OK;
 }
 
-int mfs__scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
+int mfs_scan_block(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
                      void *ctx, uint32_t *last_off)
 {
     return scan_block_impl(fs, block, cb, ctx, last_off, true);
 }
 
-int mfs__scan_block_fast(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
+int mfs_scan_block_fast(mfs_t *fs, uint32_t block, mfs_rec_cb_t cb,
                           void *ctx, uint32_t *last_off)
 {
     return scan_block_impl(fs, block, cb, ctx, last_off, false);
@@ -603,12 +603,12 @@ static int scan_all_impl(mfs_t *fs, mfs_rec_cb_t cb, void *ctx, bool verify)
     return MFS_OK;
 }
 
-int mfs__scan_all(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
+int mfs_scan_all(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
 {
     return scan_all_impl(fs, cb, ctx, true);
 }
 
-int mfs__scan_all_fast(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
+int mfs_scan_all_fast(mfs_t *fs, mfs_rec_cb_t cb, void *ctx)
 {
     return scan_all_impl(fs, cb, ctx, false);
 }

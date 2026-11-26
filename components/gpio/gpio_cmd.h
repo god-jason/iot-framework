@@ -1,10 +1,10 @@
-#ifndef GPIO_H
-#define GPIO_H
+#ifndef GPIO_CMD_H
+#define GPIO_CMD_H
 
 /*
- * gpio.h - GPIO Shell 命令
+ * gpio_cmd.h - GPIO Shell 命令注册
  *
- * 注册 gpio 命令到 cmd 全局命令表：
+ * 注册 gpio 命令到 roshell 全局命令表：
  *   gpio mode <pin> in|out [pull|level]
  *   gpio set <pin> <0|1>
  *   gpio get <pin>
@@ -25,4 +25,4 @@ int gpio_cmd_register(void);
 }
 #endif
 
-#endif /* GPIO_H */
+#endif /* GPIO_CMD_H */

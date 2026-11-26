@@ -96,7 +96,7 @@ static uint32_t path_component(const char *path, uint32_t *idx,
  * 解析完整路径，返回目标 Inode 信息。
  * "/" 直接返回根目录；中间分量必须是目录。
  */
-int mfs__path_lookup(mfs_t *fs, const char *path, mfs_ii_t *info)
+int mfs_path_lookup(mfs_t *fs, const char *path, mfs_ii_t *info)
 {
     mfs_ii_t cur;
     char name[MFS_NAME_MAX + 1];
@@ -110,7 +110,7 @@ int mfs__path_lookup(mfs_t *fs, const char *path, mfs_ii_t *info)
     }
     len = (uint32_t)strlen(path);
 
-    err = mfs__inode_find(fs, MFS_ROOT_INODE, &cur);
+    err = mfs_inode_find(fs, MFS_ROOT_INODE, &cur);
     if (err != MFS_OK) {
         return err;
     }
@@ -122,7 +122,7 @@ int mfs__path_lookup(mfs_t *fs, const char *path, mfs_ii_t *info)
     idx = 1u;
     while (idx < len) {
         path_component(path, &idx, name, sizeof(name));
-        err = mfs__inode_lookup(fs, cur.inode, name, &cur);
+        err = mfs_inode_lookup(fs, cur.inode, name, &cur);
         if (err != MFS_OK) {
             return err;
         }
@@ -141,7 +141,7 @@ int mfs__path_lookup(mfs_t *fs, const char *path, mfs_ii_t *info)
  * 用于 mkdir/open/rename 等需要“在某个目录下创建/查找子项”的操作。
  * 路径为 "/" 时返回 MFS_ERR_INVAL。
  */
-int mfs__path_parent(mfs_t *fs, const char *path, mfs_ii_t *parent,
+int mfs_path_parent(mfs_t *fs, const char *path, mfs_ii_t *parent,
                       char *name)
 {
     mfs_ii_t cur;
@@ -159,7 +159,7 @@ int mfs__path_parent(mfs_t *fs, const char *path, mfs_ii_t *parent,
         return MFS_ERR_INVAL;
     }
 
-    err = mfs__inode_find(fs, MFS_ROOT_INODE, &cur);
+    err = mfs_inode_find(fs, MFS_ROOT_INODE, &cur);
     if (err != MFS_OK) {
         return err;
     }
@@ -174,7 +174,7 @@ int mfs__path_parent(mfs_t *fs, const char *path, mfs_ii_t *parent,
             return MFS_OK;
         }
         /* 中间分量：必须存在且是目录 */
-        err = mfs__inode_lookup(fs, cur.inode, comp, &cur);
+        err = mfs_inode_lookup(fs, cur.inode, comp, &cur);
         if (err != MFS_OK) {
             return err;
         }
@@ -205,18 +205,18 @@ int mfs_mkdir(mfs_t *fs, const char *path)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_parent(fs, path, &parent, name);
+    mfs_lock(fs);
+    err = mfs_path_parent(fs, path, &parent, name);
     if (err == MFS_OK) {
-        err = mfs__inode_lookup(fs, parent.inode, name, &info);
+        err = mfs_inode_lookup(fs, parent.inode, name, &info);
         if (err == MFS_OK) {
             err = MFS_ERR_EXIST;
         } else if (err == MFS_ERR_NOENT) {
-            err = mfs__inode_create(fs, parent.inode, name, MFS_TYPE_DIR,
+            err = mfs_inode_create(fs, parent.inode, name, MFS_TYPE_DIR,
                                      &info);
         }
     }
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -233,18 +233,18 @@ int mfs_unlink(mfs_t *fs, const char *path)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_lookup(fs, path, &info);
+    mfs_lock(fs);
+    err = mfs_path_lookup(fs, path, &info);
     if (err == MFS_OK) {
         if (info.type == MFS_TYPE_DIR) {
             err = MFS_ERR_ISDIR;
         } else if (info.inode == MFS_ROOT_INODE) {
             err = MFS_ERR_INVAL;
         } else {
-            err = mfs__inode_delete(fs, &info);
+            err = mfs_inode_delete(fs, &info);
         }
     }
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -277,11 +277,11 @@ static int dir_child_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
     if (len > sizeof(buf) || len < MFS_INODE_PREFIX) {
         return MFS_OK;
     }
-    err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
+    err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
     if (err != MFS_OK) {
         return err;
     }
-    err = mfs__inode_parse(buf, len, &info);
+    err = mfs_inode_parse(buf, len, &info);
     if (err != MFS_OK) {
         return MFS_OK;                  /* 损坏的 Inode 记录跳过 */
     }
@@ -315,13 +315,13 @@ static int dir_is_empty(mfs_t *fs, mfs_inode_t inode)
     memset(&c, 0, sizeof(c));
     c.parent = inode;
 
-    err = mfs__scan_all_fast(fs, dir_child_cb, &c);
+    err = mfs_scan_all_fast(fs, dir_child_cb, &c);
     if (err != MFS_OK) {
         return err;
     }
 
     for (i = 0; i < c.count; i++) {
-        err = mfs__inode_find(fs, c.cand[i], &info);
+        err = mfs_inode_find(fs, c.cand[i], &info);
         if (err == MFS_OK && info.parent == inode) {
             return MFS_ERR_NOTEMPTY;
         }
@@ -342,8 +342,8 @@ int mfs_rmdir(mfs_t *fs, const char *path)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_lookup(fs, path, &info);
+    mfs_lock(fs);
+    err = mfs_path_lookup(fs, path, &info);
     if (err == MFS_OK) {
         if (info.type != MFS_TYPE_DIR) {
             err = MFS_ERR_NOTDIR;
@@ -352,11 +352,11 @@ int mfs_rmdir(mfs_t *fs, const char *path)
         } else {
             err = dir_is_empty(fs, info.inode);
             if (err == MFS_OK) {
-                err = mfs__inode_delete(fs, &info);
+                err = mfs_inode_delete(fs, &info);
             }
         }
     }
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -384,32 +384,32 @@ int mfs_rename(mfs_t *fs, const char *oldpath, const char *newpath)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
 
-    err = mfs__path_lookup(fs, oldpath, &old_info);
+    err = mfs_path_lookup(fs, oldpath, &old_info);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
     if (old_info.inode == MFS_ROOT_INODE) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_INVAL;
     }
 
-    err = mfs__path_parent(fs, newpath, &new_parent, name);
+    err = mfs_path_parent(fs, newpath, &new_parent, name);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
-    err = mfs__inode_lookup(fs, new_parent.inode, name, &info);
+    err = mfs_inode_lookup(fs, new_parent.inode, name, &info);
     if (err == MFS_OK) {
         err = (info.inode == old_info.inode) ? MFS_OK : MFS_ERR_EXIST;
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
     if (err != MFS_ERR_NOENT) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
@@ -418,10 +418,10 @@ int mfs_rename(mfs_t *fs, const char *oldpath, const char *newpath)
         tmp = new_parent;
         while (tmp.inode != MFS_ROOT_INODE && guard < 64u) {
             if (tmp.inode == old_info.inode) {
-                mfs__unlock(fs);
+                mfs_unlock(fs);
                 return MFS_ERR_INVAL;
             }
-            err = mfs__inode_find(fs, tmp.parent, &tmp);
+            err = mfs_inode_find(fs, tmp.parent, &tmp);
             if (err != MFS_OK) {
                 break;
             }
@@ -435,8 +435,8 @@ int mfs_rename(mfs_t *fs, const char *oldpath, const char *newpath)
     memcpy(old_info.name, name, old_info.name_len);
     old_info.name[old_info.name_len] = '\0';
 
-    err = mfs__inode_update(fs, &old_info);
-    mfs__unlock(fs);
+    err = mfs_inode_update(fs, &old_info);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -450,8 +450,8 @@ int mfs_stat(mfs_t *fs, const char *path, mfs_stat_t *stat)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_lookup(fs, path, &info);
+    mfs_lock(fs);
+    err = mfs_path_lookup(fs, path, &info);
     if (err == MFS_OK) {
         stat->inode = info.inode;
         stat->parent = info.parent;
@@ -462,7 +462,7 @@ int mfs_stat(mfs_t *fs, const char *path, mfs_stat_t *stat)
         stat->type = info.type;
         memcpy(stat->name, info.name, info.name_len + 1u);
     }
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -476,9 +476,9 @@ int mfs_exists(mfs_t *fs, const char *path)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_lookup(fs, path, &info);
-    mfs__unlock(fs);
+    mfs_lock(fs);
+    err = mfs_path_lookup(fs, path, &info);
+    mfs_unlock(fs);
 
     if (err == MFS_OK) {
         return 1;
@@ -496,9 +496,9 @@ int mfs_isdir(mfs_t *fs, const char *path)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_lookup(fs, path, &info);
-    mfs__unlock(fs);
+    mfs_lock(fs);
+    err = mfs_path_lookup(fs, path, &info);
+    mfs_unlock(fs);
 
     if (err == MFS_OK) {
         return (info.type == MFS_TYPE_DIR) ? 1 : 0;
@@ -522,14 +522,14 @@ int mfs_opendir(mfs_t *fs, const char *path, mfs_dir_t **dir)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
-    err = mfs__path_lookup(fs, path, &info);
+    mfs_lock(fs);
+    err = mfs_path_lookup(fs, path, &info);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
     if (info.type != MFS_TYPE_DIR) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_NOTDIR;
     }
 
@@ -540,7 +540,7 @@ int mfs_opendir(mfs_t *fs, const char *path, mfs_dir_t **dir)
         }
     }
     if (slot == NULL) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_NOMEM;
     }
 
@@ -549,7 +549,7 @@ int mfs_opendir(mfs_t *fs, const char *path, mfs_dir_t **dir)
     slot->iter_seq = 0u;
     slot->used = 1u;
     *dir = slot;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -570,7 +570,7 @@ typedef struct {
  * 由于日志中同一子项可能有多条历史记录，需要：
  *   1. 只考虑 sequence > iter_seq；
  *   2. 解析记录中的 (inode, parent, name)；
- *   3. 用 mfs__inode_find 找到该 Inode 的最新版本；
+ *   3. 用 mfs_inode_find 找到该 Inode 的最新版本；
  *   4. 最新版本仍匹配 parent+name 才作为候选；
  *   5. 在候选中选 sequence 最小者，实现稳定的逐条遍历。
  */
@@ -595,11 +595,11 @@ static int dir_read_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
     if (len > sizeof(buf) || len < MFS_INODE_PREFIX) {
         return MFS_OK;
     }
-    err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
+    err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
     if (err != MFS_OK) {
         return err;
     }
-    err = mfs__inode_parse(buf, len, &cand);
+    err = mfs_inode_parse(buf, len, &cand);
     if (err != MFS_OK) {
         return MFS_OK;                  /* 损坏的 Inode 记录跳过 */
     }
@@ -608,7 +608,7 @@ static int dir_read_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
     }
 
     /* 确认该 Inode 的最新版本仍在这个目录下且名称一致 */
-    err = mfs__inode_find(fs, cand.inode, &latest);
+    err = mfs_inode_find(fs, cand.inode, &latest);
     if (err != MFS_OK) {
         return (err == MFS_ERR_NOENT) ? MFS_OK : err;
     }
@@ -650,17 +650,17 @@ int mfs_readdir(mfs_dir_t *dir, mfs_dirent_t *entry)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(dir->fs);
+    mfs_lock(dir->fs);
     memset(&r, 0, sizeof(r));
     r.dir = dir;
 
-    err = mfs__scan_all_fast(dir->fs, dir_read_cb, &r);
+    err = mfs_scan_all_fast(dir->fs, dir_read_cb, &r);
     if (err != MFS_OK) {
-        mfs__unlock(dir->fs);
+        mfs_unlock(dir->fs);
         return err;
     }
     if (!r.found) {
-        mfs__unlock(dir->fs);
+        mfs_unlock(dir->fs);
         return 1;                        /* 遍历结束 */
     }
 
@@ -669,7 +669,7 @@ int mfs_readdir(mfs_dir_t *dir, mfs_dirent_t *entry)
     entry->size = r.best.size;
     entry->type = r.best.type;
     memcpy(entry->name, r.best.name, r.best.name_len + 1u);
-    mfs__unlock(dir->fs);
+    mfs_unlock(dir->fs);
     return 0;
 }
 
@@ -679,8 +679,8 @@ int mfs_closedir(mfs_dir_t *dir)
     if (dir == NULL || dir->used == 0u) {
         return MFS_ERR_BADF;
     }
-    mfs__lock(dir->fs);
+    mfs_lock(dir->fs);
     dir->used = 0u;
-    mfs__unlock(dir->fs);
+    mfs_unlock(dir->fs);
     return MFS_OK;
 }

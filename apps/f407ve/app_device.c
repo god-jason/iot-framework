@@ -12,7 +12,7 @@
 
 #include "board.h"
 #include "ros.h"
-#include "gpio.h"
+#include "gpio_cmd.h"
 #include "fan.h"
 #include "stepper.h"
 #include "hal_gpio.h"

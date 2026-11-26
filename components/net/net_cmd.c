@@ -4,6 +4,8 @@
  * 由 net_init() 调用 net_register_commands() 注册到 cmd 全局命令表。
  */
 
+#include "net_cmd.h"
+
 #include "net.h"
 #include "ros.h"
 #include "common.h"

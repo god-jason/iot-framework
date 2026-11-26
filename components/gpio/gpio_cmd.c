@@ -1,11 +1,11 @@
 /*
- * gpio.c - GPIO Shell 命令实现
+ * gpio_cmd.c - GPIO Shell 命令实现
  *
- * 命令注册在 cmd 全局命令表，所有 Shell 实例共享。
+ * 命令注册在 roshell 全局命令表，所有 Shell 实例共享。
  * 只依赖 HAL 的 hal_gpio_* 接口，不包含板级细节。
  */
 
-#include "gpio.h"
+#include "gpio_cmd.h"
 
 #include "hal.h"
 #include "roshell.h"

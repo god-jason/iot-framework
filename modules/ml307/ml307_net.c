@@ -17,6 +17,7 @@
  */
 
 #include "net.h"
+#include "net_cmd.h"
 #include "ml307.h"
 #include "at.h"
 #include "at_urc.h"

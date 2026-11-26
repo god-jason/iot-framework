@@ -32,9 +32,9 @@ int mfs_erase_stat(mfs_t *fs, uint32_t *min_count,
         return MFS_ERR_PARAM;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     for (block = 0; block < fs->block_count; block++) {
-        if (mfs__blk_read_hdr(fs, block, &bh) != MFS_OK) {
+        if (mfs_blk_read_hdr(fs, block, &bh) != MFS_OK) {
             continue;
         }
         if (bh.erase_count < min_v) {
@@ -46,7 +46,7 @@ int mfs_erase_stat(mfs_t *fs, uint32_t *min_count,
         sum += bh.erase_count;
         count++;
     }
-    mfs__unlock(fs);
+    mfs_unlock(fs);
 
     if (count == 0u) {
         return MFS_ERR_NOENT;
@@ -103,9 +103,9 @@ int mfs_gc(mfs_t *fs)
         return MFS_ERR_READONLY;
     }
 
-    mfs__lock(fs);
-    err = mfs__gc_run(fs, 0u);
-    mfs__unlock(fs);
+    mfs_lock(fs);
+    err = mfs_gc_run(fs, 0u);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -154,31 +154,31 @@ int mfs_mark_bad(mfs_t *fs, uint32_t block)
         return MFS_ERR_INVAL;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
 
-    if (mfs__blk_read_hdr(fs, block, &bh) == MFS_OK) {
+    if (mfs_blk_read_hdr(fs, block, &bh) == MFS_OK) {
         if (bh.state == MFS_BLK_STATE_BAD) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return MFS_ERR_INVAL;       /* 已经是坏块，避免重复计数 */
         }
         erase_count = bh.erase_count + 1u;
-        err = mfs__blk_is_empty(fs, block, &empty);
+        err = mfs_blk_is_empty(fs, block, &empty);
         if (err != MFS_OK) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return err;
         }
     } else {
         empty = 1u;                      /* 头无效：挂载时已按空闲块统计 */
     }
 
-    err = mfs__erase(fs, mfs__blk_addr(fs, block), fs->block_size);
+    err = mfs_erase(fs, mfs_blk_addr(fs, block), fs->block_size);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
-    err = mfs__blk_mark_bad(fs, block, erase_count);
+    err = mfs_blk_mark_bad(fs, block, erase_count);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
@@ -186,7 +186,7 @@ int mfs_mark_bad(mfs_t *fs, uint32_t block)
         fs->free_blocks--;
     }
     fs->bad_blocks++;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 

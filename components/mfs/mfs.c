@@ -39,15 +39,15 @@
  * ==========================================================================*/
 
 /* 若配置了 lock 回调则加锁；内部函数不再重复加锁 */
-void mfs__lock(mfs_t *fs)
+void mfs_lock(mfs_t *fs)
 {
     if (fs != NULL && fs->cfg.lock != NULL) {
         fs->cfg.lock(fs->cfg.mutex_ctx);
     }
 }
 
-/* 与 mfs__lock 对应 */
-void mfs__unlock(mfs_t *fs)
+/* 与 mfs_lock 对应 */
+void mfs_unlock(mfs_t *fs)
 {
     if (fs != NULL && fs->cfg.unlock != NULL) {
         fs->cfg.unlock(fs->cfg.mutex_ctx);
@@ -73,17 +73,17 @@ static int sb_read(mfs_t *fs, uint32_t slot, mfs_sb_t *sb)
     uint8_t buf[MFS_SB_SIZE];
     int err;
 
-    err = mfs__read(fs, sb_addr(fs, slot), buf, sizeof(buf));
+    err = mfs_read(fs, sb_addr(fs, slot), buf, sizeof(buf));
     if (err != MFS_OK) {
         return err;
     }
 
-    sb->magic = mfs__get_u32(&buf[0]);
-    sb->version = mfs__get_u32(&buf[4]);
-    sb->block_size = mfs__get_u32(&buf[8]);
-    sb->block_count = mfs__get_u32(&buf[12]);
-    sb->generation = mfs__get_u32(&buf[16]);
-    sb->crc = mfs__get_u32(&buf[20]);
+    sb->magic = mfs_get_u32(&buf[0]);
+    sb->version = mfs_get_u32(&buf[4]);
+    sb->block_size = mfs_get_u32(&buf[8]);
+    sb->block_count = mfs_get_u32(&buf[12]);
+    sb->generation = mfs_get_u32(&buf[16]);
+    sb->crc = mfs_get_u32(&buf[20]);
 
     if (sb->magic != MFS_SB_MAGIC) {
         return MFS_ERR_FORMAT;
@@ -112,19 +112,19 @@ static int sb_write(mfs_t *fs)
     uint32_t slot;
     int err;
 
-    mfs__put_u32(&buf[0], MFS_SB_MAGIC);
-    mfs__put_u32(&buf[4], (MFS_VERSION_MAJOR << 16) | MFS_VERSION_MINOR);
-    mfs__put_u32(&buf[8], fs->block_size);
-    mfs__put_u32(&buf[12], fs->block_count);
-    mfs__put_u32(&buf[16], fs->generation);
-    mfs__put_u32(&buf[20], crc32(buf, 20u));
+    mfs_put_u32(&buf[0], MFS_SB_MAGIC);
+    mfs_put_u32(&buf[4], (MFS_VERSION_MAJOR << 16) | MFS_VERSION_MINOR);
+    mfs_put_u32(&buf[8], fs->block_size);
+    mfs_put_u32(&buf[12], fs->block_count);
+    mfs_put_u32(&buf[16], fs->generation);
+    mfs_put_u32(&buf[20], crc32(buf, 20u));
 
     for (slot = 0; slot < 2u; slot++) {
-        err = mfs__prog(fs, sb_addr(fs, slot), buf, sizeof(buf));
+        err = mfs_prog(fs, sb_addr(fs, slot), buf, sizeof(buf));
         if (err != MFS_OK) {
             return err;
         }
-        err = mfs__sync(fs);
+        err = mfs_sync(fs);
         if (err != MFS_OK) {
             return err;
         }
@@ -266,7 +266,7 @@ int mfs_format(mfs_t *fs)
         return MFS_ERR_READONLY;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
 
     /* 尽量在旧代次基础上递增，便于区分多次格式化 */
     if (sb_read(fs, 0u, &sb) == MFS_OK ||
@@ -287,7 +287,7 @@ int mfs_format(mfs_t *fs)
      */
     for (block = 0; block < fs->block_count; block++) {
         old_count = 1u;
-        if (mfs__blk_read_hdr(fs, block, &bh) == MFS_OK) {
+        if (mfs_blk_read_hdr(fs, block, &bh) == MFS_OK) {
             old_count = bh.erase_count + 1u;
             if (bh.state == MFS_BLK_STATE_BAD) {
                 fs->bad_blocks++;
@@ -295,17 +295,17 @@ int mfs_format(mfs_t *fs)
             }
         }
 
-        err = mfs__erase(fs, mfs__blk_addr(fs, block), fs->block_size);
+        err = mfs_erase(fs, mfs_blk_addr(fs, block), fs->block_size);
         if (err != MFS_OK) {
-            (void)mfs__blk_mark_bad(fs, block, old_count);
+            (void)mfs_blk_mark_bad(fs, block, old_count);
             fs->bad_blocks++;
             continue;
         }
-        err = mfs__blk_write_hdr(fs, block, fs->seq++, old_count,
+        err = mfs_blk_write_hdr(fs, block, fs->seq++, old_count,
                                   MFS_BLK_STATE_FREE);
         if (err != MFS_OK) {
             fs->mounted = 0u;
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return err;
         }
         fs->free_blocks++;
@@ -313,34 +313,34 @@ int mfs_format(mfs_t *fs)
 
     if (fs->free_blocks == 0u) {
         fs->mounted = 0u;
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_NOSPC;
     }
 
     /* 擦除 Superblock A/B */
     for (block = 0; block < 2u; block++) {
-        err = mfs__erase(fs, sb_addr(fs, block), fs->block_size);
+        err = mfs_erase(fs, sb_addr(fs, block), fs->block_size);
         if (err != MFS_OK) {
             fs->mounted = 0u;
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return err;
         }
     }
 
     /* 选择一个空闲块作为初始活动块（按最低擦除次数） */
-    err = mfs__blk_alloc(fs);
+    err = mfs_blk_alloc(fs);
     if (err != MFS_OK) {
         fs->mounted = 0u;
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
     /* 创建根目录 Inode：next_inode 从 1 开始，因此根固定为 1 */
     fs->next_inode = 1u;
-    err = mfs__inode_create(fs, MFS_INVALID_INODE, "", MFS_TYPE_DIR, &root);
+    err = mfs_inode_create(fs, MFS_INVALID_INODE, "", MFS_TYPE_DIR, &root);
     if (err != MFS_OK) {
         fs->mounted = 0u;
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
@@ -348,11 +348,11 @@ int mfs_format(mfs_t *fs)
     err = sb_write(fs);
     if (err != MFS_OK) {
         fs->mounted = 0u;
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return err;
     }
 
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -415,7 +415,7 @@ int mfs_mount(mfs_t *fs)
         return MFS_ERR_PARAM;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     fs_reset_runtime(fs);
 
     /* 1. 选择 generation 更大的有效 Superblock */
@@ -429,7 +429,7 @@ int mfs_mount(mfs_t *fs)
     } else if (err_b == MFS_OK) {
         sb = sb_b;
     } else {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return (err_a == MFS_ERR_VERSION || err_b == MFS_ERR_VERSION)
                    ? MFS_ERR_VERSION : MFS_ERR_FORMAT;
     }
@@ -439,13 +439,13 @@ int mfs_mount(mfs_t *fs)
 
     /* 2. 逐块扫描，恢复日志状态并挑选活动块 */
     for (block = 0; block < fs->block_count; block++) {
-        err = mfs__blk_read_hdr(fs, block, &bh);
+        err = mfs_blk_read_hdr(fs, block, &bh);
         if (err == MFS_ERR_NOENT || err == MFS_ERR_CRC) {
             fs->free_blocks++;           /* 未初始化/已擦除：空闲块 */
             continue;
         }
         if (err != MFS_OK) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return err;
         }
         if (bh.state == MFS_BLK_STATE_BAD) {
@@ -453,9 +453,9 @@ int mfs_mount(mfs_t *fs)
             continue;
         }
 
-        err = mfs__scan_block_fast(fs, block, mount_cb, &m, &last);
+        err = mfs_scan_block_fast(fs, block, mount_cb, &m, &last);
         if (err != MFS_OK) {
-            mfs__unlock(fs);
+            mfs_unlock(fs);
             return err;
         }
 
@@ -463,9 +463,9 @@ int mfs_mount(mfs_t *fs)
         if (last == MFS_BLK_HDR_SIZE) {
             uint8_t empty = 0u;
 
-            err = mfs__blk_is_empty(fs, block, &empty);
+            err = mfs_blk_is_empty(fs, block, &empty);
             if (err != MFS_OK) {
-                mfs__unlock(fs);
+                mfs_unlock(fs);
                 return err;
             }
             if (empty != 0u) {
@@ -495,18 +495,18 @@ int mfs_mount(mfs_t *fs)
     }
 
     /* 3. 根目录必须存在且是目录 */
-    err = mfs__inode_find(fs, MFS_ROOT_INODE, &root);
+    err = mfs_inode_find(fs, MFS_ROOT_INODE, &root);
     if (err != MFS_OK) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return (err == MFS_ERR_NOENT) ? MFS_ERR_FORMAT : err;
     }
     if (root.type != MFS_TYPE_DIR) {
-        mfs__unlock(fs);
+        mfs_unlock(fs);
         return MFS_ERR_CORRUPT;
     }
 
     fs->mounted = 1u;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -526,9 +526,9 @@ int mfs_unmount(mfs_t *fs)
         return MFS_ERR_PARAM;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     if (fs->mounted) {
-        (void)mfs__sync(fs);
+        (void)mfs_sync(fs);
     }
     for (i = 0; i < MFS_MAX_OPEN_FILES; i++) {
         fs->files[i].used = 0u;
@@ -537,7 +537,7 @@ int mfs_unmount(mfs_t *fs)
         fs->dirs[i].used = 0u;
     }
     fs->mounted = 0u;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -549,9 +549,9 @@ int mfs_sync(mfs_t *fs)
     if (fs == NULL || !fs->mounted) {
         return MFS_ERR_STATE;
     }
-    mfs__lock(fs);
-    err = mfs__sync(fs);
-    mfs__unlock(fs);
+    mfs_lock(fs);
+    err = mfs_sync(fs);
+    mfs_unlock(fs);
     return err;
 }
 
@@ -574,7 +574,7 @@ int mfs_statfs(mfs_t *fs, mfs_statfs_t *stat)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     total = fs->block_count * fs->block_size;
     free_bytes = fs->free_blocks * fs->block_size;
     if (fs->active_block != MFS_BLOCK_NONE &&
@@ -590,7 +590,7 @@ int mfs_statfs(mfs_t *fs, mfs_statfs_t *stat)
     stat->free_blocks = fs->free_blocks;
     stat->bad_blocks = fs->bad_blocks;
     stat->block_size = fs->block_size;
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return MFS_OK;
 }
 
@@ -643,15 +643,15 @@ int mfs_check(mfs_t *fs)
         return MFS_ERR_STATE;
     }
 
-    mfs__lock(fs);
+    mfs_lock(fs);
     err = sb_read(fs, 0u, &sb);
     if (err != MFS_OK) {
         err = sb_read(fs, 1u, &sb);
     }
     if (err == MFS_OK) {
-        err = mfs__scan_all(fs, NULL, NULL);
+        err = mfs_scan_all(fs, NULL, NULL);
     }
-    mfs__unlock(fs);
+    mfs_unlock(fs);
     return err;
 }
 

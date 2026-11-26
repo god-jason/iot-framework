@@ -7,14 +7,14 @@
  *   - 把底层非 0 返回值映射为 MFS_ERR_IO；
  *   - 允许 len 为 0 的调用（便于拼接 Payload）。
  *
- * 本层不负责加锁：锁由公开 API（mfs__lock/mfs__unlock）负责，
+ * 本层不负责加锁：锁由公开 API（mfs_lock/mfs_unlock）负责，
  * 避免在块设备回调中重复加锁导致非递归互斥量死锁。
  */
 
 #include "mfs_internal.h"
 
 /* 读取；len 为 0 时直接成功 */
-int mfs__read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len)
+int mfs_read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len)
 {
     if (fs == NULL || fs->dev.read == NULL) {
         return MFS_ERR_PARAM;
@@ -32,7 +32,7 @@ int mfs__read(mfs_t *fs, uint32_t addr, void *buf, uint32_t len)
 }
 
 /* 编程；介质只允许 1 -> 0，调用者保证地址已擦除或可追加 */
-int mfs__prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len)
+int mfs_prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len)
 {
     if (fs == NULL || fs->dev.program == NULL) {
         return MFS_ERR_PARAM;
@@ -50,7 +50,7 @@ int mfs__prog(mfs_t *fs, uint32_t addr, const void *buf, uint32_t len)
 }
 
 /* 擦除；addr/len 的块对齐由调用者保证 */
-int mfs__erase(mfs_t *fs, uint32_t addr, uint32_t len)
+int mfs_erase(mfs_t *fs, uint32_t addr, uint32_t len)
 {
     if (fs == NULL || fs->dev.erase == NULL) {
         return MFS_ERR_PARAM;
@@ -62,7 +62,7 @@ int mfs__erase(mfs_t *fs, uint32_t addr, uint32_t len)
 }
 
 /* 同步；未提供 sync 回调时视为成功 */
-int mfs__sync(mfs_t *fs)
+int mfs_sync(mfs_t *fs)
 {
     if (fs == NULL) {
         return MFS_ERR_PARAM;

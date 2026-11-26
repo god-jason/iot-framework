@@ -39,7 +39,7 @@
  */
 
 #include "roshell.h"
-#include "gpio.h"
+#include "gpio_cmd.h"
 #include "hal.h"
 #include "fan.h"
 #include "ros.h"

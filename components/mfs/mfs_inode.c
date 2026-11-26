@@ -33,7 +33,7 @@
 #define MFS_INODE_BUF   (MFS_INODE_PREFIX + MFS_NAME_MAX)
 
 /* 读取 config.get_time；未提供时返回 0 */
-uint32_t mfs__now(mfs_t *fs)
+uint32_t mfs_now(mfs_t *fs)
 {
     if (fs != NULL && fs->cfg.get_time != NULL) {
         return fs->cfg.get_time();
@@ -49,14 +49,14 @@ static uint32_t inode_serialize(const mfs_ii_t *info, uint8_t *buf)
 {
     uint32_t len = MFS_INODE_PREFIX + info->name_len;
 
-    mfs__put_u32(&buf[0], info->inode);
-    mfs__put_u32(&buf[4], info->parent);
-    mfs__put_u32(&buf[8], info->size);
-    mfs__put_u32(&buf[12], info->version);
-    mfs__put_u32(&buf[16], info->create_time);
-    mfs__put_u32(&buf[20], info->modify_time);
-    mfs__put_u32(&buf[24], info->epoch);
-    mfs__put_u16(&buf[28], info->name_len);
+    mfs_put_u32(&buf[0], info->inode);
+    mfs_put_u32(&buf[4], info->parent);
+    mfs_put_u32(&buf[8], info->size);
+    mfs_put_u32(&buf[12], info->version);
+    mfs_put_u32(&buf[16], info->create_time);
+    mfs_put_u32(&buf[20], info->modify_time);
+    mfs_put_u32(&buf[24], info->epoch);
+    mfs_put_u16(&buf[28], info->name_len);
     buf[30] = info->type;
     buf[31] = info->flags;
     if (info->name_len > 0u) {
@@ -70,7 +70,7 @@ static uint32_t inode_serialize(const mfs_ii_t *info, uint8_t *buf)
  * 会校验长度与 name_len，异常数据返回 MFS_ERR_CORRUPT。
  * 该函数被 inode / dir 两个模块共用。
  */
-int mfs__inode_parse(const uint8_t *buf, uint32_t len, mfs_ii_t *info)
+int mfs_inode_parse(const uint8_t *buf, uint32_t len, mfs_ii_t *info)
 {
     uint16_t name_len;
 
@@ -79,14 +79,14 @@ int mfs__inode_parse(const uint8_t *buf, uint32_t len, mfs_ii_t *info)
     }
 
     memset(info, 0, sizeof(*info));
-    info->inode = mfs__get_u32(&buf[0]);
-    info->parent = mfs__get_u32(&buf[4]);
-    info->size = mfs__get_u32(&buf[8]);
-    info->version = mfs__get_u32(&buf[12]);
-    info->create_time = mfs__get_u32(&buf[16]);
-    info->modify_time = mfs__get_u32(&buf[20]);
-    info->epoch = mfs__get_u32(&buf[24]);
-    name_len = mfs__get_u16(&buf[28]);
+    info->inode = mfs_get_u32(&buf[0]);
+    info->parent = mfs_get_u32(&buf[4]);
+    info->size = mfs_get_u32(&buf[8]);
+    info->version = mfs_get_u32(&buf[12]);
+    info->create_time = mfs_get_u32(&buf[16]);
+    info->modify_time = mfs_get_u32(&buf[20]);
+    info->epoch = mfs_get_u32(&buf[24]);
+    name_len = mfs_get_u16(&buf[28]);
     info->type = buf[30];
     info->flags = buf[31];
 
@@ -104,9 +104,9 @@ int mfs__inode_parse(const uint8_t *buf, uint32_t len, mfs_ii_t *info)
 /*
  * 按指定记录类型写入一条 Inode 记录。
  * CREATE / UPDATE 使用完整 Payload；
- * DELETE 由 mfs__inode_delete 单独构造更短的 Payload。
+ * DELETE 由 mfs_inode_delete 单独构造更短的 Payload。
  */
-int mfs__inode_write(mfs_t *fs, uint16_t rec_type, const mfs_ii_t *info)
+int mfs_inode_write(mfs_t *fs, uint16_t rec_type, const mfs_ii_t *info)
 {
     uint8_t buf[MFS_INODE_BUF];
     uint32_t len;
@@ -115,7 +115,7 @@ int mfs__inode_write(mfs_t *fs, uint16_t rec_type, const mfs_ii_t *info)
         return MFS_ERR_PARAM;
     }
     len = inode_serialize(info, buf);
-    return mfs__rec_write(fs, rec_type, info->inode, buf, len, NULL, 0u);
+    return mfs_rec_write(fs, rec_type, info->inode, buf, len, NULL, 0u);
 }
 
 /* ---------------------------------------------------------------------------
@@ -161,19 +161,19 @@ static int inode_find_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
     if (len < 8u) {
         return MFS_OK;
     }
-    err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
+    err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
     if (err != MFS_OK) {
         return err;
     }
 
     if (hdr->type == MFS_REC_INODE_DELETE) {
         /* DELETE Payload: inode(4B) + version(4B) */
-        version = mfs__get_u32(&buf[4]);
+        version = mfs_get_u32(&buf[4]);
     } else {
         if (len < MFS_INODE_PREFIX) {
             return MFS_OK;
         }
-        version = mfs__get_u32(&buf[12]);
+        version = mfs_get_u32(&buf[12]);
     }
 
     /* 版本大者优先；版本相同则 sequence 大者优先 */
@@ -193,7 +193,7 @@ static int inode_find_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
  * deleted 输出 1 表示最新记录为 INODE_DELETE；
  * 删除时 info 仅 rec_seq 有效。
  */
-int mfs__inode_find_ex(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info,
+int mfs_inode_find_ex(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info,
                         uint8_t *deleted)
 {
     inode_find_ctx_t f;
@@ -212,7 +212,7 @@ int mfs__inode_find_ex(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info,
     memset(&f, 0, sizeof(f));
     f.inode = inode;
 
-    err = mfs__scan_all_fast(fs, inode_find_cb, &f);
+    err = mfs_scan_all_fast(fs, inode_find_cb, &f);
     if (err != MFS_OK) {
         return err;
     }
@@ -231,11 +231,11 @@ int mfs__inode_find_ex(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info,
         return MFS_OK;
     }
 
-    err = mfs__rec_read(fs, f.addr, &hdr, buf, sizeof(buf), &next);
+    err = mfs_rec_read(fs, f.addr, &hdr, buf, sizeof(buf), &next);
     if (err != MFS_OK) {
         return err;
     }
-    err = mfs__inode_parse(buf, hdr.payload_size, info);
+    err = mfs_inode_parse(buf, hdr.payload_size, info);
     if (err != MFS_OK) {
         return err;
     }
@@ -244,12 +244,12 @@ int mfs__inode_find_ex(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info,
 }
 
 /* 查找 Inode 的最新有效版本；已删除或不存在返回 NOENT */
-int mfs__inode_find(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info)
+int mfs_inode_find(mfs_t *fs, mfs_inode_t inode, mfs_ii_t *info)
 {
     uint8_t deleted = 0u;
     int err;
 
-    err = mfs__inode_find_ex(fs, inode, info, &deleted);
+    err = mfs_inode_find_ex(fs, inode, info, &deleted);
     if (err != MFS_OK) {
         return err;
     }
@@ -271,7 +271,7 @@ typedef struct {
 /*
  * 扫描回调：收集所有“父目录 + 名称”匹配的 Inode 编号。
  * 历史记录可能对应已改名的旧状态，因此这里只收集候选，
- * 最终由 mfs__inode_lookup 逐个确认其最新版本是否仍匹配。
+ * 最终由 mfs_inode_lookup 逐个确认其最新版本是否仍匹配。
  */
 static int inode_lookup_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
                            uint32_t rec_addr, void *ctx)
@@ -291,11 +291,11 @@ static int inode_lookup_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
     if (len > sizeof(buf)) {
         return MFS_OK;
     }
-    err = mfs__rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
+    err = mfs_rec_read_raw(fs, rec_addr, hdr, 0u, buf, len);
     if (err != MFS_OK) {
         return err;
     }
-    err = mfs__inode_parse(buf, len, &info);
+    err = mfs_inode_parse(buf, len, &info);
     if (err != MFS_OK) {
         return MFS_OK;
     }
@@ -323,7 +323,7 @@ static int inode_lookup_cb(mfs_t *fs, const mfs_rec_hdr_t *hdr,
  * 在 parent 目录下按名称查找子项。
  * 返回该子项最新 Inode 信息；名称已被改名或已删除时返回 NOENT。
  */
-int mfs__inode_lookup(mfs_t *fs, mfs_inode_t parent, const char *name,
+int mfs_inode_lookup(mfs_t *fs, mfs_inode_t parent, const char *name,
                        mfs_ii_t *info)
 {
     inode_lookup_ctx_t l;
@@ -343,13 +343,13 @@ int mfs__inode_lookup(mfs_t *fs, mfs_inode_t parent, const char *name,
     l.name = name;
     l.name_len = (uint32_t)strlen(name);
 
-    err = mfs__scan_all_fast(fs, inode_lookup_cb, &l);
+    err = mfs_scan_all_fast(fs, inode_lookup_cb, &l);
     if (err != MFS_OK) {
         return err;
     }
 
     for (i = 0; i < l.count; i++) {
-        err = mfs__inode_find(fs, l.cand[i], &tmp);
+        err = mfs_inode_find(fs, l.cand[i], &tmp);
         if (err != MFS_OK) {
             continue;
         }
@@ -376,7 +376,7 @@ int mfs__inode_lookup(mfs_t *fs, mfs_inode_t parent, const char *name,
  * parent 必须存在且为目录；parent == MFS_INVALID_INODE 用于格式化时创建根。
  * 新 Inode 编号来自 fs->next_inode，单调递增，不复用。
  */
-int mfs__inode_create(mfs_t *fs, mfs_inode_t parent, const char *name,
+int mfs_inode_create(mfs_t *fs, mfs_inode_t parent, const char *name,
                        uint8_t type, mfs_ii_t *info)
 {
     mfs_ii_t parent_info;
@@ -392,7 +392,7 @@ int mfs__inode_create(mfs_t *fs, mfs_inode_t parent, const char *name,
         return MFS_ERR_READONLY;
     }
     if (parent != MFS_INVALID_INODE) {
-        err = mfs__inode_find(fs, parent, &parent_info);
+        err = mfs_inode_find(fs, parent, &parent_info);
         if (err != MFS_OK) {
             return err;
         }
@@ -406,7 +406,7 @@ int mfs__inode_create(mfs_t *fs, mfs_inode_t parent, const char *name,
     info->parent = parent;
     info->size = 0u;
     info->version = 1u;
-    info->create_time = mfs__now(fs);
+    info->create_time = mfs_now(fs);
     info->modify_time = info->create_time;
     info->epoch = 1u;
     info->name_len = (uint16_t)strlen(name);
@@ -416,7 +416,7 @@ int mfs__inode_create(mfs_t *fs, mfs_inode_t parent, const char *name,
     }
     info->name[info->name_len] = '\0';
 
-    err = mfs__inode_write(fs, MFS_REC_INODE_CREATE, info);
+    err = mfs_inode_write(fs, MFS_REC_INODE_CREATE, info);
     if (err != MFS_OK) {
         return err;
     }
@@ -428,7 +428,7 @@ int mfs__inode_create(mfs_t *fs, mfs_inode_t parent, const char *name,
  * 更新 Inode：版本号 +1，刷新修改时间，写入 INODE_UPDATE。
  * 写入失败时回滚内存中的版本号，保持调用者视图一致。
  */
-int mfs__inode_update(mfs_t *fs, mfs_ii_t *info)
+int mfs_inode_update(mfs_t *fs, mfs_ii_t *info)
 {
     int err;
 
@@ -440,9 +440,9 @@ int mfs__inode_update(mfs_t *fs, mfs_ii_t *info)
     }
 
     info->version++;
-    info->modify_time = mfs__now(fs);
+    info->modify_time = mfs_now(fs);
 
-    err = mfs__inode_write(fs, MFS_REC_INODE_UPDATE, info);
+    err = mfs_inode_write(fs, MFS_REC_INODE_UPDATE, info);
     if (err != MFS_OK) {
         info->version--;
         return err;
@@ -456,7 +456,7 @@ int mfs__inode_update(mfs_t *fs, mfs_ii_t *info)
  * DELETE 记录使用 version + 1，确保删除状态一定是最新版本。
  * 物理空间不回收，留待后续 GC。
  */
-int mfs__inode_delete(mfs_t *fs, const mfs_ii_t *info)
+int mfs_inode_delete(mfs_t *fs, const mfs_ii_t *info)
 {
     uint8_t buf[8];
 
@@ -467,8 +467,8 @@ int mfs__inode_delete(mfs_t *fs, const mfs_ii_t *info)
         return MFS_ERR_READONLY;
     }
 
-    mfs__put_u32(&buf[0], info->inode);
-    mfs__put_u32(&buf[4], info->version + 1u);
-    return mfs__rec_write(fs, MFS_REC_INODE_DELETE, info->inode,
+    mfs_put_u32(&buf[0], info->inode);
+    mfs_put_u32(&buf[4], info->version + 1u);
+    return mfs_rec_write(fs, MFS_REC_INODE_DELETE, info->inode,
                            buf, sizeof(buf), NULL, 0u);
 }
