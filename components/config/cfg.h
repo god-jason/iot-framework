@@ -15,7 +15,7 @@
  *       X(int32,  id, 0) \
  *       X(bool,   enabled, true) \
  *       X(float32, temperature, 25.0f) \
- *       X(string, name, "device")
+ *       X(string, name, "device", 32)
  *
  *   CFG_DEFINE(dev, DEV_CFG)
  *
@@ -35,16 +35,19 @@
  *   uint32  -> uint32_t       int32  -> int32_t
  *   uint64  -> uint64_t       int64  -> int64_t
  *   float32 -> float          float64 -> double
- *   string  -> const char *
+ *   string  -> char[N]，N 的确定方式：
+ *              X(string, 成员, "默认值")        // N = sizeof(默认值)
+ *              X(string, 成员, "默认值", 容量)  // N = 容量
  *
  * 说明：
+ *   - 条目格式为 X(类型, 成员, 默认值)；string 可再跟一个容量参数；
+ *   - 容量省略时以默认值字面量的长度（含 '\0'）作为数组大小；
  *   - CFG_TO_VAR 会先 var_object_new(v)，v 原值不释放，调用前请确保 v 为空；
  *   - CFG_FROM_VAR 使用 var_to_* 转换，字段缺失/越界/类型不符时写入默认值；
  *   - CFG_FROM_JSON 解析失败时返回 false，但结构体仍会被填满默认值；
- *   - string 字段是借用指针：指向 var 的字符串区（如 var_from_json_ex 的
- *     arena）或默认字面量，不复制、不释放；因此 CFG_FROM_JSON 的 buf
- *     生命周期必须覆盖结构体的使用；
- *   - 不支持嵌套结构体与定长数组，需要时可在 X 宏外单独处理。
+ *   - string 字段是定长数组，转换时按容量复制并截断，不借用外部内存；
+ *     CFG_FROM_JSON 的 buf 只是解析临时区，调用返回后即可复用。
+ *   - 不支持嵌套结构体与可变长/多字符串数组，需要时可在 X 宏外单独处理。
  */
 
 #ifndef CFG_H
@@ -52,6 +55,7 @@
 
 #include "var.h"
 #include "var_json.h"
+#include "strings.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,24 +63,31 @@ extern "C" {
 
 /* ---------------- 字段声明 ---------------- */
 
-#define CFG_FIELD_DECL(type, member, def) CFG_DECL_##type(member)
+#define CFG_FIELD_DECL(type, member, ...) CFG_DECL_##type(member, __VA_ARGS__)
 
-#define CFG_DECL_bool(m)      bool m;
-#define CFG_DECL_int8(m)      int8_t m;
-#define CFG_DECL_uint8(m)     uint8_t m;
-#define CFG_DECL_int16(m)     int16_t m;
-#define CFG_DECL_uint16(m)    uint16_t m;
-#define CFG_DECL_int32(m)     int32_t m;
-#define CFG_DECL_uint32(m)    uint32_t m;
-#define CFG_DECL_int64(m)     int64_t m;
-#define CFG_DECL_uint64(m)    uint64_t m;
-#define CFG_DECL_float32(m)   float m;
-#define CFG_DECL_float64(m)   double m;
-#define CFG_DECL_string(m)    const char *m;
+#define CFG_DECL_bool(m, d)      bool m;
+#define CFG_DECL_int8(m, d)      int8_t m;
+#define CFG_DECL_uint8(m, d)     uint8_t m;
+#define CFG_DECL_int16(m, d)     int16_t m;
+#define CFG_DECL_uint16(m, d)    uint16_t m;
+#define CFG_DECL_int32(m, d)     int32_t m;
+#define CFG_DECL_uint32(m, d)    uint32_t m;
+#define CFG_DECL_int64(m, d)     int64_t m;
+#define CFG_DECL_uint64(m, d)    uint64_t m;
+#define CFG_DECL_float32(m, d)   float m;
+#define CFG_DECL_float64(m, d)   double m;
+#define CFG_DECL_string(m, ...)  char m[CFG_STR_CAP(__VA_ARGS__)];
+
+/* string 数组大小：给了容量用容量，否则用默认字面量的 sizeof */
+#define CFG_STR_CAP(...) \
+    CFG_STR_CAP_PICK(__VA_ARGS__, CFG_STR_CAP_2, CFG_STR_CAP_1)(__VA_ARGS__)
+#define CFG_STR_CAP_PICK(_1, _2, NAME, ...) NAME
+#define CFG_STR_CAP_1(d)      sizeof(d)
+#define CFG_STR_CAP_2(d, cap) (cap)
 
 /* ---------------- struct -> var ---------------- */
 
-#define CFG_FIELD_SET(type, member, def) CFG_SET_##type(v, s, member);
+#define CFG_FIELD_SET(type, member, ...) CFG_SET_##type(v, s, member);
 
 #define CFG_SET_bool(v, s, m) \
     (void)var_object_put_bool((v), #m, (s)->m)
@@ -105,7 +116,7 @@ extern "C" {
 
 /* ---------------- var -> struct（带默认值） ---------------- */
 
-#define CFG_FIELD_GET(type, member, def) CFG_GET_##type(v, s, member, def);
+#define CFG_FIELD_GET(type, member, ...) CFG_GET_##type(v, s, member, __VA_ARGS__);
 
 #define CFG_GET_bool(v, s, m, d) do { \
     if (!var_to_bool(var_object_get((v), #m), &(s)->m)) { \
@@ -173,9 +184,10 @@ extern "C" {
     } \
 } while (0)
 
-#define CFG_GET_string(v, s, m, d) do { \
+#define CFG_GET_string(v, s, m, d, ...) do { \
     const char *_cfg_s = var_get_string(var_object_get((v), #m)); \
-    (s)->m = (_cfg_s != NULL) ? _cfg_s : (d); \
+    (void)str_copy((s)->m, (uint32_t)sizeof((s)->m), \
+                   (_cfg_s != NULL) ? _cfg_s : (d)); \
 } while (0)
 
 /* ---------------- 生成结构体与转换函数 ---------------- */

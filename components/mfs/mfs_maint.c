@@ -106,7 +106,8 @@ int mfs_gc(mfs_t *fs)
     mfs_lock(fs);
     err = mfs_gc_run(fs, 0u);
     mfs_unlock(fs);
-    return err;
+    /* 没有可回收的块（全有效或只剩空块）对调用者不算失败 */
+    return (err == MFS_ERR_NOSPC) ? MFS_OK : err;
 }
 
 /* 空闲空间低于阈值或空闲块不足 2 个时建议执行 GC */

@@ -267,7 +267,8 @@ static int gc_resolve(mfs_t *fs, gc_block_t *b, gc_eval_t *e,
                 continue;
             }
         } else if (gc_is_inode_rec(c->type)) {
-            if (c->seq != e->inode_seq[i]) {
+            /* inode_seq 只统计候选之外的记录，因此 < 才表示存在更新版本 */
+            if (c->seq < e->inode_seq[i]) {
                 c->live = 0u;           /* 已有更新版本 */
                 continue;
             }
@@ -359,7 +360,7 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
     uint32_t min_seq = 0u;
     uint32_t victim = MFS_BLOCK_NONE;
     uint32_t victim_erase = 0u;
-    uint32_t attempt;
+    uint32_t tries;
     uint32_t i;
     uint32_t last = 0u;
     int err;
@@ -382,8 +383,10 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
     /*
      * 1. 选择牺牲块：按块头 sequence 从旧到新逐个尝试，
      *    最新的空闲块（刚被 GC 擦除）sequence 最大，不会被优先选中。
+     *    MFS_GC_TRY_BLOCKS 限制真正评估的块数，空块直接跳过、不计数，
+     *    否则开机后大量空块会让 GC 误判为“无可回收块”。
      */
-    for (attempt = 0u; attempt < MFS_GC_TRY_BLOCKS; attempt++) {
+    for (tries = 0u; tries < MFS_GC_TRY_BLOCKS; ) {
         uint32_t pick = MFS_BLOCK_NONE;
         uint32_t pick_seq = 0xFFFFFFFFu;
         uint32_t pick_erase = 0u;
@@ -418,7 +421,8 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
         s_blk.base = mfs_blk_addr(fs, pick);
         err = mfs_scan_block_fast(fs, pick, gc_collect_cb, &s_blk, &last);
         if (s_blk.overflow != 0u) {
-            continue;                   /* 记录过多：本轮跳过该块 */
+            tries++;                    /* 已评估：记录过多，跳过该块 */
+            continue;
         }
         if (err != MFS_OK && err != MFS_ERR_NOENT && err != MFS_ERR_CRC) {
             return err;
@@ -430,7 +434,7 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
                 return MFS_ERR_IO;
             }
             if (empty != 0u) {
-                continue;               /* 真正空块 */
+                continue;               /* 真正空块：不占用评估次数 */
             }
             live = 0u;                  /* 只有坏记录头：整块可回收 */
         } else {
@@ -446,6 +450,7 @@ int mfs_gc_run(mfs_t *fs, uint8_t force)
                 return err;
             }
         }
+        tries++;                        /* 已评估一个非空块 */
 
         ratio = (usable != 0u)
                     ? (uint32_t)(((uint64_t)live * 100u) / usable)

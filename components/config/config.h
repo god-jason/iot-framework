@@ -23,6 +23,7 @@
  */
 
 #include "fkv.h"
+#include "cfg.h"
 
 #include <stdint.h>
 
