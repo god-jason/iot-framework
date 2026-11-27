@@ -48,6 +48,9 @@ void ut_bytes(void);
 void ut_bcd(void);
 void ut_endian(void);
 void ut_hex(void);
+void ut_lzss(void);
+void ut_deflate(void);
+void ut_rle(void);
 
 void ut_crc(void);
 void ut_md5(void);
@@ -147,6 +150,9 @@ void app_main(void *arg)
     ut_bcd();
     ut_endian();
     ut_hex();
+    ut_lzss();
+    ut_deflate();
+    ut_rle();
     ut_crc();
     ut_md5();
     ut_sha256();
