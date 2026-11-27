@@ -137,52 +137,94 @@ static bool out_put_string(json_out_t *o, const char *s)
 }
 
 /* 写 int32；tmp[16] 足够容纳 "-2147483648" 及结尾（用自带 str_printf） */
-static bool out_put_int(json_out_t *o, int32_t v)
+/* 写 int64：手工十进制，避免依赖 libc 的 long long printf */
+static bool out_put_i64(json_out_t *o, int64_t v)
 {
-    char tmp[16];
-    int n = str_printf(tmp, (uint32_t)sizeof(tmp), "%ld", (long)v);
+    char digits[21];
+    char text[22];
+    uint32_t n = 0U;
+    uint32_t j = 0U;
+    bool neg = (v < 0);
+    uint64_t mag = neg ? (uint64_t)(-(v + 1)) + 1U : (uint64_t)v;
 
-    return (n > 0) ? out_put(o, tmp, (uint32_t)n) : false;
+    if (mag == 0U) {
+        return out_put(o, "0", 1U);
+    }
+    while (mag > 0U && n < sizeof(digits)) {
+        digits[n++] = (char)('0' + (uint32_t)(mag % 10U));
+        mag /= 10U;
+    }
+    if (neg) {
+        text[j++] = '-';
+    }
+    while (n > 0U) {
+        text[j++] = digits[--n];
+    }
+    return out_put(o, text, j);
+}
+
+/* 写 uint64：手工十进制，避免依赖 libc 的 long long printf */
+static bool out_put_u64(json_out_t *o, uint64_t v)
+{
+    char digits[21];
+    char text[21];
+    uint32_t n = 0U;
+    uint32_t j = 0U;
+
+    if (v == 0U) {
+        return out_put(o, "0", 1U);
+    }
+    while (v > 0U && n < sizeof(digits)) {
+        digits[n++] = (char)('0' + (uint32_t)(v % 10U));
+        v /= 10U;
+    }
+    while (n > 0U) {
+        text[j++] = digits[--n];
+    }
+    return out_put(o, text, j);
 }
 
 /*
- * 写 float：NaN/Inf 不是合法 JSON 数字，统一输出 null。
- * 不依赖 libc 浮点 printf：按 7 位有效数字（float 约 7 位十进制精度）
- * 自行拼装，指数 < -4 或 >= 7 时改用科学计数法（与 %g 的取舍一致）。
- * 例：3.25 -> "3.25"；25.0 -> "25"；0.001 -> "0.001"；1e8 -> "1e8"。
+ * 写浮点：NaN/Inf 不是合法 JSON 数字，统一输出 null。
+ * digits 为有效数字位数（float32 取 7，float64 取 15）。
+ * 不依赖 libc 浮点 printf，自行归一化并拼装十进制/科学计数法。
  */
-static bool out_put_float(json_out_t *o, float v)
+static bool out_put_double(json_out_t *o, double v, uint32_t digits)
 {
-    char tmp[40];
-    char rev[8];                    /* 逆序的十进制数字 */
+    char tmp[48];
+    char rev[16];                   /* 逆序的十进制数字 */
     uint32_t nr = 0U;
     uint32_t start = 0U;
     uint32_t n;
     uint32_t i;
     uint32_t p = 0U;
     int32_t exp10 = 0;
-    bool neg = (v < 0.0f);
-    float a = neg ? -v : v;
-    uint32_t m;
+    bool neg = (v < 0.0);
+    double a = neg ? -v : v;
+    uint64_t scale = 1U;
+    uint64_t m;
 
-    if (!isfinite((double)v)) {
+    if (!isfinite(v)) {
         return out_put(o, "null", 4U);      /* NaN/Inf 不是合法 JSON 数字 */
     }
-    if (a == 0.0f) {
+    if (a == 0.0) {
         return out_put(o, "0", 1U);
     }
     /* 归一化到 [1,10)，同时累计十进制指数 */
-    while (a >= 10.0f) {
-        a *= 0.1f;
+    while (a >= 10.0) {
+        a *= 0.1;
         exp10++;
     }
-    while (a < 1.0f) {
-        a *= 10.0f;
+    while (a < 1.0) {
+        a *= 10.0;
         exp10--;
     }
-    /* 取 7 位有效数字并四舍五入；进位到 1e7 时回退一位 */
-    m = (uint32_t)(a * 1000000.0f + 0.5f);
-    if (m >= 10000000U) {
+    for (i = 1U; i < digits; i++) {
+        scale *= 10U;
+    }
+    /* 取 digits 位有效数字并四舍五入；进位到 10^digits 时回退一位 */
+    m = (uint64_t)(a * (double)scale + 0.5);
+    if (m >= scale * 10U) {
         m /= 10U;
         exp10++;
     }
@@ -199,7 +241,7 @@ static bool out_put_float(json_out_t *o, float v)
     if (neg) {
         tmp[p++] = '-';
     }
-    if (exp10 < -4 || exp10 >= 7) {
+    if (exp10 < -4 || exp10 >= (int32_t)digits) {
         /* 科学计数法：d[.ddd]e[-]X */
         tmp[p++] = rev[nr - 1U];
         if (n > 1U) {
@@ -327,10 +369,26 @@ static bool var_write(const var_t *v, json_out_t *o, uint32_t depth)
         return out_put(o, "null", 4U);
     case VAR_BOOL:
         return out_puts(o, v->value.b ? "true" : "false");
-    case VAR_INT:
-        return out_put_int(o, v->value.i);
-    case VAR_FLOAT:
-        return out_put_float(o, v->value.f);
+    case VAR_INT8:
+        return out_put_i64(o, v->value.i8);
+    case VAR_UINT8:
+        return out_put_u64(o, v->value.u8);
+    case VAR_INT16:
+        return out_put_i64(o, v->value.i16);
+    case VAR_UINT16:
+        return out_put_u64(o, v->value.u16);
+    case VAR_INT32:
+        return out_put_i64(o, v->value.i32);
+    case VAR_UINT32:
+        return out_put_u64(o, v->value.u32);
+    case VAR_INT64:
+        return out_put_i64(o, v->value.i64);
+    case VAR_UINT64:
+        return out_put_u64(o, v->value.u64);
+    case VAR_FLOAT32:
+        return out_put_double(o, (double)v->value.f32, 7U);
+    case VAR_FLOAT64:
+        return out_put_double(o, v->value.f64, 15U);
     case VAR_STRING:
         return out_put_string(o, (v->value.s != NULL) ? v->value.s : "");
     case VAR_ARRAY:
@@ -554,8 +612,8 @@ static bool parse_string(json_in_t *in, char *buf, uint32_t cap, uint32_t *out_l
 
 /*
  * 解析 JSON 数字：
- *   - 纯整数且落在 int32 范围内 -> VAR_INT（含 -2147483648 边界）；
- *   - 带小数/指数，或超出 int32 范围 -> VAR_FLOAT（借 strtod 定值）；
+ *   - 纯整数且落在 int32 范围内 -> VAR_INT32（含 -2147483648 边界）；
+ *   - 带小数/指数，或超出 int32 范围 -> VAR_FLOAT32（借 str_parse_float 定值）；
  * 调用前 in->p 必须位于 '-' 或数字上；语法不完整返回 false。
  * 注意：strtod 会引入浮点库，嵌入式目标需确认体积可接受。
  */
@@ -611,12 +669,12 @@ static bool parse_number(json_in_t *in, var_t *out)
     if (!is_float && !overflow) {
         if (neg) {
             if (mag <= 2147483648ULL) {
-                var_set_int(out, (mag == 2147483648ULL) ? INT32_MIN
-                                                        : -(int32_t)mag);
+                var_set_int32(out, (mag == 2147483648ULL) ? INT32_MIN
+                                                          : -(int32_t)mag);
                 return true;
             }
         } else if (mag <= 2147483647ULL) {
-            var_set_int(out, (int32_t)mag);
+            var_set_int32(out, (int32_t)mag);
             return true;
         }
     }
@@ -635,7 +693,7 @@ static bool parse_number(json_in_t *in, var_t *out)
         if (!str_parse_float(num, &f)) {
             return false;
         }
-        var_set_float(out, f);
+        var_set_float32(out, f);
         return true;
     }
 }
@@ -705,6 +763,425 @@ bool var_from_json(const char *text, var_t *out, char *strbuf, uint32_t strcap)
     skip_ws(&in);
     if (*in.p != '\0') {
         return false;                       /* 只允许一个 JSON 值 */
+    }
+    *out = tmp;
+    return true;
+}
+
+/* ============================== 完整 JSON 解析 ============================== */
+
+/*
+ * 扩展解析：支持对象/数组，整数按 int32 -> int64 -> float 依次降级。
+ * 字符串（含对象键）顺序写入调用者提供的 strbuf 区域，容器通过
+ * ros_mem 分配；容器由 var_free 释放，字符串随 strbuf 生命周期。
+ */
+
+typedef struct {
+    char    *buf;
+    uint32_t cap;
+    uint32_t used;
+} json_arena_t;
+
+static bool arena_putc(json_arena_t *a, uint32_t *stored, char c)
+{
+    if (*stored + 1U >= a->cap) {
+        return false;                       /* 预留结尾 '\0' */
+    }
+    a->buf[*stored] = c;
+    (*stored)++;
+    return true;
+}
+
+static bool arena_utf8(json_arena_t *a, uint32_t *stored, uint32_t cp)
+{
+    if (cp < 0x80U) {
+        return arena_putc(a, stored, (char)cp);
+    }
+    if (cp < 0x800U) {
+        return arena_putc(a, stored, (char)(0xC0U | (cp >> 6))) &&
+               arena_putc(a, stored, (char)(0x80U | (cp & 0x3FU)));
+    }
+    if (cp < 0x10000U) {
+        return arena_putc(a, stored, (char)(0xE0U | (cp >> 12))) &&
+               arena_putc(a, stored, (char)(0x80U | ((cp >> 6) & 0x3FU))) &&
+               arena_putc(a, stored, (char)(0x80U | (cp & 0x3FU)));
+    }
+    return arena_putc(a, stored, (char)(0xF0U | (cp >> 18))) &&
+           arena_putc(a, stored, (char)(0x80U | ((cp >> 12) & 0x3FU))) &&
+           arena_putc(a, stored, (char)(0x80U | ((cp >> 6) & 0x3FU))) &&
+           arena_putc(a, stored, (char)(0x80U | (cp & 0x3FU)));
+}
+
+static bool arena_escape(json_in_t *in, json_arena_t *a, uint32_t *stored)
+{
+    char c = *in->p;
+
+    switch (c) {
+    case '"':  if (!arena_putc(a, stored, '"'))  return false; break;
+    case '\\': if (!arena_putc(a, stored, '\\')) return false; break;
+    case '/':  if (!arena_putc(a, stored, '/'))  return false; break;
+    case 'b':  if (!arena_putc(a, stored, '\b')) return false; break;
+    case 'f':  if (!arena_putc(a, stored, '\f')) return false; break;
+    case 'n':  if (!arena_putc(a, stored, '\n')) return false; break;
+    case 'r':  if (!arena_putc(a, stored, '\r')) return false; break;
+    case 't':  if (!arena_putc(a, stored, '\t')) return false; break;
+    case 'u': {
+        uint32_t cp;
+
+        in->p++;
+        if (!read_hex4(in, &cp)) {
+            return false;
+        }
+        if (cp >= 0xD800U && cp <= 0xDBFFU &&
+            in->p[0] == '\\' && in->p[1] == 'u') {
+            const char *save = in->p;
+            uint32_t low;
+
+            in->p += 2;
+            if (read_hex4(in, &low) && low >= 0xDC00U && low <= 0xDFFFU) {
+                cp = 0x10000U + ((cp - 0xD800U) << 10) + (low - 0xDC00U);
+            } else {
+                in->p = save;
+            }
+        }
+        return arena_utf8(a, stored, cp);
+    }
+    default:
+        return false;
+    }
+    in->p++;
+    return true;
+}
+
+/* 解析字符串并写入 arena；out 指向 arena 内 NUL 结尾串 */
+static bool arena_string(json_in_t *in, json_arena_t *a, const char **out)
+{
+    uint32_t start = a->used;
+    uint32_t stored = a->used;
+
+    if (*in->p != '"') {
+        return false;
+    }
+    in->p++;
+    while (*in->p != '\0') {
+        unsigned char c = (unsigned char)*in->p;
+
+        if (c == '"') {
+            in->p++;
+            if (stored >= a->cap) {
+                a->used = start;
+                return false;
+            }
+            a->buf[stored] = '\0';
+            a->used = stored + 1U;
+            *out = &a->buf[start];
+            return true;
+        }
+        if (c == '\\') {
+            in->p++;
+            if (!arena_escape(in, a, &stored)) {
+                a->used = start;
+                return false;
+            }
+            continue;
+        }
+        if (c < 0x20U) {
+            a->used = start;
+            return false;
+        }
+        if (!arena_putc(a, &stored, (char)c)) {
+            a->used = start;
+            return false;
+        }
+        in->p++;
+    }
+    a->used = start;
+    return false;
+}
+
+/* 完整数字解析：int32 -> int64 -> float */
+static bool parse_number_ex(json_in_t *in, var_t *out)
+{
+    const char *start = in->p;
+    uint64_t mag = 0U;
+    bool neg = false;
+    bool is_float = false;
+    bool overflow = false;
+
+    if (*in->p == '-') {
+        neg = true;
+        in->p++;
+    }
+    if (!is_digit(*in->p)) {
+        return false;
+    }
+    while (is_digit(*in->p)) {
+        uint32_t d = (uint32_t)(*in->p - '0');
+
+        if (mag > (UINT64_MAX - d) / 10U) {
+            overflow = true;
+        } else {
+            mag = mag * 10U + d;
+        }
+        in->p++;
+    }
+    if (*in->p == '.') {
+        is_float = true;
+        in->p++;
+        if (!is_digit(*in->p)) {
+            return false;
+        }
+        while (is_digit(*in->p)) {
+            in->p++;
+        }
+    }
+    if (*in->p == 'e' || *in->p == 'E') {
+        is_float = true;
+        in->p++;
+        if (*in->p == '+' || *in->p == '-') {
+            in->p++;
+        }
+        if (!is_digit(*in->p)) {
+            return false;
+        }
+        while (is_digit(*in->p)) {
+            in->p++;
+        }
+    }
+
+    if (!is_float && !overflow) {
+        if (neg) {
+            if (mag <= 2147483648ULL) {
+                var_set_int32(out, (mag == 2147483648ULL) ? INT32_MIN
+                                                          : -(int32_t)mag);
+                return true;
+            }
+            if (mag <= 9223372036854775808ULL) {
+                var_set_int64(out, (mag == 9223372036854775808ULL)
+                                       ? INT64_MIN
+                                       : (int64_t)(0U - mag));
+                return true;
+            }
+        } else {
+            if (mag <= 2147483647ULL) {
+                var_set_int32(out, (int32_t)mag);
+                return true;
+            }
+            if (mag <= 9223372036854775807ULL) {
+                var_set_int64(out, (int64_t)mag);
+                return true;
+            }
+            var_set_uint64(out, mag);
+            return true;
+        }
+    }
+
+    {
+        char num[48];
+        uint32_t len = (uint32_t)(in->p - start);
+        float f;
+
+        if (len >= (uint32_t)sizeof(num)) {
+            return false;
+        }
+        memcpy(num, start, len);
+        num[len] = '\0';
+        if (!str_parse_float(num, &f)) {
+            return false;
+        }
+        var_set_float32(out, f);
+        return true;
+    }
+}
+
+static bool parse_value_ex(json_in_t *in, var_t *out, json_arena_t *a,
+                           uint32_t depth);
+
+static bool parse_array_ex(json_in_t *in, var_t *out, json_arena_t *a,
+                           uint32_t depth)
+{
+    vec_t *arr;
+
+    if (depth > VAR_JSON_MAX_DEPTH) {
+        return false;
+    }
+    arr = (vec_t *)ros_mem_calloc(1U, sizeof(*arr));
+    if (arr == NULL) {
+        return false;
+    }
+    if (vec_init(arr, (uint32_t)sizeof(var_t), 0U) != 0) {
+        ros_mem_free(arr);
+        return false;
+    }
+    var_set_array(out, arr);
+
+    in->p++;
+    skip_ws(in);
+    if (*in->p == ']') {
+        in->p++;
+        return true;
+    }
+    for (;;) {
+        var_t elem;
+
+        if (!parse_value_ex(in, &elem, a, depth + 1U)) {
+            var_free(out);
+            return false;
+        }
+        if (vec_push(arr, &elem) != 0) {
+            var_free(&elem);
+            var_free(out);
+            return false;
+        }
+        skip_ws(in);
+        if (*in->p == ',') {
+            in->p++;
+            skip_ws(in);
+            continue;
+        }
+        if (*in->p == ']') {
+            in->p++;
+            return true;
+        }
+        var_free(out);
+        return false;
+    }
+}
+
+static bool parse_object_ex(json_in_t *in, var_t *out, json_arena_t *a,
+                            uint32_t depth)
+{
+    map_t *obj;
+
+    if (depth > VAR_JSON_MAX_DEPTH) {
+        return false;
+    }
+    obj = (map_t *)ros_mem_calloc(1U, sizeof(*obj));
+    if (obj == NULL) {
+        return false;
+    }
+    if (map_init(obj) != 0) {
+        ros_mem_free(obj);
+        return false;
+    }
+    var_set_object(out, obj);
+
+    in->p++;
+    skip_ws(in);
+    if (*in->p == '}') {
+        in->p++;
+        return true;
+    }
+    for (;;) {
+        const char *key;
+        var_t *val;
+
+        if (!arena_string(in, a, &key)) {
+            goto fail;
+        }
+        skip_ws(in);
+        if (*in->p != ':') {
+            goto fail;
+        }
+        in->p++;
+        val = (var_t *)ros_mem_calloc(1U, sizeof(*val));
+        if (val == NULL) {
+            goto fail;
+        }
+        if (!parse_value_ex(in, val, a, depth + 1U)) {
+            ros_mem_free(val);
+            goto fail;
+        }
+        if (!map_put(obj, key, val)) {
+            var_free(val);
+            ros_mem_free(val);
+            goto fail;
+        }
+        skip_ws(in);
+        if (*in->p == ',') {
+            in->p++;
+            skip_ws(in);
+            continue;
+        }
+        if (*in->p == '}') {
+            in->p++;
+            return true;
+        }
+        goto fail;
+    }
+
+fail:
+    var_free(out);
+    return false;
+}
+
+static bool parse_value_ex(json_in_t *in, var_t *out, json_arena_t *a,
+                           uint32_t depth)
+{
+    var_init(out);
+    skip_ws(in);
+
+    switch (*in->p) {
+    case 'n':
+        if (!parse_literal(in, "null")) {
+            return false;
+        }
+        return true;
+    case 't':
+        if (!parse_literal(in, "true")) {
+            return false;
+        }
+        var_set_bool(out, true);
+        return true;
+    case 'f':
+        if (!parse_literal(in, "false")) {
+            return false;
+        }
+        var_set_bool(out, false);
+        return true;
+    case '"': {
+        const char *s;
+
+        if (!arena_string(in, a, &s)) {
+            return false;
+        }
+        var_set_string(out, s);
+        return true;
+    }
+    case '{':
+        return parse_object_ex(in, out, a, depth);
+    case '[':
+        return parse_array_ex(in, out, a, depth);
+    default:
+        if (*in->p == '-' || is_digit(*in->p)) {
+            return parse_number_ex(in, out);
+        }
+        return false;
+    }
+}
+
+bool var_from_json_ex(const char *text, var_t *out, char *strbuf,
+                      uint32_t strcap)
+{
+    json_in_t in;
+    json_arena_t arena;
+    var_t tmp;
+
+    if (text == NULL || out == NULL) {
+        return false;
+    }
+    in.p = text;
+    arena.buf = strbuf;
+    arena.cap = strcap;
+    arena.used = 0U;
+
+    if (!parse_value_ex(&in, &tmp, &arena, 0U)) {
+        return false;
+    }
+    skip_ws(&in);
+    if (*in.p != '\0') {
+        var_free(&tmp);
+        return false;
     }
     *out = tmp;
     return true;

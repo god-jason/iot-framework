@@ -20,6 +20,7 @@
 #include "app_device.h"
 #include "app_fs.h"
 #include "app_ml307.h"
+#include "app_master.h"
 #include "app_stress.h"
 #include "app_memtest.h"
 #include "app_timing.h"
@@ -37,6 +38,7 @@ void app_main(void *arg)
     /* 先注册 ML307 演示命令：FS 初始化/自检可能耗时较长，
      * 提前注册可让 Shell 在文件系统就绪前就能使用 ml307/sim/http/net/mqtt */
     app_ml307_register();
+    app_master_register();
 
     ros_puts("ml307 demo app ready: type 'ml307' to run all tests");
 

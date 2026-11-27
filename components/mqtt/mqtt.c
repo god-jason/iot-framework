@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define MQTT_BUF_MAX        384U
+#define MQTT_BUF_MAX        1024U
 
 #define MQTT_CONNECT        0x10U
 #define MQTT_CONNACK        0x20U
@@ -214,6 +214,9 @@ static int mqtt_wait(mqtt_client_t *c, uint8_t expect, uint8_t *body,
         uint32_t len = 0U;
         int rc = mqtt_rx(c, &type, body, cap, &len, timeout_ms);
 
+        if (rc == NET_ERR_NOMEM) {
+            continue;               /* 超大入站报文已丢弃，继续等待目标报文 */
+        }
         if (rc != NET_OK) {
             return rc;
         }

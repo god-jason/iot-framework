@@ -8,13 +8,16 @@
  *   AT+MQTTDISC=0                                    清理旧连接（忽略结果）
  *   AT+MQTTCONN=0,"<host>",<port>,"<client_id>","<user>","<pass>"
  *   AT+MQTTSUB=0,"<topic>",<qos>
- *   AT+MQTTPUB=0,"<topic>",<qos>,<retain>,0,<len>   -> '>' -> 原始载荷
+ *   AT+MQTTPUB=0,"<topic>",<qos>,<retain>,0,<len>,[<message>]
+ *       短报文且内容可安全放入引号：内联 <message> 一次发送；
+ *       超过 200 字节或含引号/反斜杠：省略 <message>，等 '>' 后原样发送数据。
  *   AT+MQTTSTATE=0                                   查询连接状态
  *   AT+MQTTDISC=0
  * 入站消息 URC：
  *   +MQTTURC: "publish",<connect_id>,<qos>,"<topic>",<len>,<len>,<payload>
  *
- * 限制：载荷按文本传递（不允许 '"'、CR/LF、NUL），不支持 QoS2。
+ * 限制：载荷按文本传递（不允许 CR/LF、NUL；数据模式允许 JSON 引号），
+ *       单条上限 1024 字节；不支持 QoS2。
  *       模组 AT 引擎为全局单例，本文件的静态缓冲不可重入。
  */
 
@@ -33,7 +36,8 @@
 #define ML307_MQTT_CONN_ID          0U
 #define ML307_MQTT_DEFAULT_MS       10000U
 #define ML307_MQTT_CONNECT_MS       20000U     /* 域名解析 + 连接，留足时间 */
-#define ML307_MQTT_PAYLOAD_MAX      192U
+#define ML307_MQTT_PAYLOAD_MAX      1024U   /* 模组 message 上限 */
+#define ML307_MQTT_INLINE_MAX       200U    /* 超过此长度改用数据模式 */
 
 static bool s_urc;
 static bool s_connected;
@@ -165,6 +169,41 @@ static bool ml307_mqtt_text_ok(const char *s, uint32_t len)
     return true;
 }
 
+/*
+ * 校验发布载荷。
+ * 载荷在 '>' 提示后按原始字节发送，可包含 JSON 的引号；
+ * 只拒绝 NUL 与 CR/LF，避免破坏行长与文本模式边界。
+ */
+static bool ml307_mqtt_payload_ok(const char *s, uint32_t len)
+{
+    uint32_t i;
+
+    for (i = 0U; i < len; i++) {
+        char c = s[i];
+
+        if (c == '\0' || c == '\r' || c == '\n') {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* 是否可安全地作为 AT 引号内的 message 参数内联发送 */
+static bool ml307_mqtt_inline_ok(const char *s, uint32_t len)
+{
+    uint32_t i;
+
+    for (i = 0U; i < len; i++) {
+        char c = s[i];
+
+        if (c == '\0' || c == '"' || c == '\\' ||
+            c == '\r' || c == '\n') {
+            return false;
+        }
+    }
+    return true;
+}
+
 int mqtt_client_init(mqtt_client_t *c, mqtt_message_cb cb, void *user)
 {
     if (c == NULL) {
@@ -223,6 +262,7 @@ int mqtt_connect(mqtt_client_t *c, const char *host, uint16_t port,
     }
     if (at_exec(s_cmd, (wait < ML307_MQTT_CONNECT_MS)
                           ? ML307_MQTT_CONNECT_MS : wait) != AT_RESULT_OK) {
+        LOG_E("ml307", "MQTTCONN rejected: %s", at_get_response());
         return NET_ERR_IO;
     }
 
@@ -239,6 +279,8 @@ int mqtt_connect(mqtt_client_t *c, const char *host, uint16_t port,
         }
     }
     if (!s_conn_urc) {
+        LOG_E("ml307", "MQTT connect failed, urc_err=%d resp=%s",
+              s_conn_err, at_get_response());
         return NET_ERR_IO;
     }
 
@@ -259,9 +301,33 @@ int mqtt_publish(mqtt_client_t *c, const char *topic, const void *payload,
         !ml307_mqtt_text_ok(topic, (uint32_t)strlen(topic))) {
         return NET_ERR_PARAM;
     }
-    if (len != 0U && !ml307_mqtt_text_ok((const char *)payload, len)) {
-        return NET_ERR_PARAM;   /* 文本式 AT 发布不接受引号/换行 */
+    if (len != 0U && !ml307_mqtt_payload_ok((const char *)payload, len)) {
+        return NET_ERR_PARAM;   /* 拒绝 NUL/CR/LF，避免破坏 AT 文本边界 */
     }
+
+    /*
+     * 短报文且内容可安全放进 AT 引号时，使用一行内联发送；
+     * 超过 200 字节（或含引号/反斜杠等）时改为两步：
+     *   1) 省略 <message>，等待 '>' 进入数据模式；
+     *   2) 原始字节发送完毕后等待 OK。
+     */
+    if (len <= ML307_MQTT_INLINE_MAX &&
+        ml307_mqtt_inline_ok((const char *)((payload != NULL) ? payload : ""),
+                             len)) {
+        int n = str_printf(s_cmd, sizeof(s_cmd),
+                           "AT+MQTTPUB=%u,\"%s\",%u,%u,0,%u,\"%.*s\"",
+                           (unsigned)ML307_MQTT_CONN_ID, topic,
+                           (unsigned)qos, retain ? 1U : 0U,
+                           (unsigned)len, (int)len,
+                           (const char *)((payload != NULL) ? payload : ""));
+
+        if (n > 0 && (uint32_t)n < sizeof(s_cmd)) {
+            return (at_exec(s_cmd, ML307_MQTT_DEFAULT_MS) == AT_RESULT_OK)
+                       ? NET_OK : NET_ERR_IO;
+        }
+        /* 内联命令超长：回退到数据模式 */
+    }
+
     if (str_printf(s_cmd, sizeof(s_cmd),
                    "AT+MQTTPUB=%u,\"%s\",%u,%u,0,%u",
                    (unsigned)ML307_MQTT_CONN_ID, topic,

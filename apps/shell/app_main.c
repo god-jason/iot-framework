@@ -46,6 +46,7 @@
 #include "common.h"
 #include "app.h"
 #include "app_fs.h"
+#include "app_master.h"
 
 #include <stdio.h>
 
@@ -137,6 +138,7 @@ void app_main(void *arg)
         return;
     }
     (void)gpio_cmd_register();
+    app_master_register();
     (void)app_fs_init(APP_FS_IMG_PATH);
     if (rs_cmd_register(&s_quit_def) != 0) {
         printf("register quit failed\n");

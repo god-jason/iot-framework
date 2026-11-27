@@ -77,7 +77,7 @@ static void mt_cycle_var(void)
         s_oom++;
         goto cleanup;
     }
-    var_set_int(v, 7);
+    var_set_int32(v, 7);
     if (!map_put(m, "id", v)) {
         ros_mem_free(v);
         v = NULL;
@@ -123,7 +123,7 @@ static void mt_cycle_var(void)
         goto cleanup;
     }
     arr_inited = true;
-    var_set_int(&item, 1);
+    var_set_int32(&item, 1);
     if (vec_push(arr, &item) != 0) {
         s_err++;
         goto cleanup;
@@ -167,7 +167,7 @@ static void mt_cycle_var(void)
     var_free_json(text);
 
     if (!var_from_json("-12345", &parsed, sbuf, sizeof(sbuf)) ||
-        parsed.value.i != -12345) {
+        parsed.value.i32 != -12345) {
         s_err++;
     }
     if (!var_from_json("\"s\"", &parsed, sbuf, sizeof(sbuf)) ||

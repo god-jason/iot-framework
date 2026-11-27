@@ -23,8 +23,8 @@
 
 #include <string.h>
 
-#define ML307_RX_BUF_SIZE       64U     /* 单次从 USART2 泵取的字节数 */
-#define ML307_LINE_BUF_SIZE     224U    /* AT 命令行缓冲 */
+#define ML307_RX_BUF_SIZE       128U    /* 单次从 USART2 泵取的字节数 */
+#define ML307_LINE_BUF_SIZE     768U    /* AT 行缓冲：需容纳 MQTT 下行 JSON */
 
 #define DEMO_MQTT_HOST          "broker.emqx.io"
 #define DEMO_MQTT_PORT          1883U
@@ -44,7 +44,7 @@ static mqtt_client_t s_mqtt;
 /* ------------------------------------------------------------------ 初始化 */
 
 /* 首次使用时初始化 AT 引擎、模组握手与 net 后端（ping 命令也随之注册） */
-static int demo_ensure(void)
+int app_ml307_ensure(void)
 {
     at_config_t cfg;
 
@@ -87,8 +87,64 @@ static int demo_ensure(void)
         }
     }
     ros_puts("ml307: ready");
+    /*
+     * 确保射频功能开启，并打印 SIM 状态，便于定位“无信号/未注册”。
+     * CFUN=1 失败通常表示模组已在全功能模式，忽略即可。
+     */
+    (void)at_exec("AT+CFUN=1", 5000);
+    (void)at_exec("AT+CPIN?", 3000);
+    if (at_get_response() != NULL) {
+        ros_printf("ml307: cpin=%s\n", at_get_response());
+    }
+
+    /*
+     * 等待蜂窝网络注册：模组刚上电时通常需要数秒到数十秒。
+     * 未注册时 CGACT 必然失败，先等再激活 PDP。
+     */
+    {
+        int registered = 0;
+        int i;
+
+        for (i = 0; i < 60; i++) {
+            int16_t csq = 0;
+
+            if (ml307_network_is_registered()) {
+                registered = 1;
+                break;
+            }
+            if ((i % 5) == 4) {
+                (void)ml307_get_csq(&csq, NULL);
+                ros_printf("ml307: waiting registration (csq=%d)...\n",
+                           (int)csq);
+            }
+            ros_sleep_ms(1000U);
+        }
+        (void)at_exec("AT+COPS?", 3000);
+        if (at_get_response() != NULL) {
+            ros_printf("ml307: cops=%s\n", at_get_response());
+        }
+        if (!registered) {
+            ros_puts("ml307: network not registered (check SIM/antenna)");
+        }
+    }
+
     /* 激活 PDP；模组可能已激活而返回错误，忽略继续 */
-    (void)ml307_network_connect(NULL);
+    {
+        int pdp = -1;
+        char ip[48];
+        int16_t csq = 0;
+        int16_t ber = 0;
+
+        (void)ml307_set_apn("CMNET", NULL, NULL);
+        pdp = ml307_network_connect(NULL);
+        (void)ml307_get_csq(&csq, &ber);
+        if (ml307_get_ip(ip, sizeof(ip)) != 0) {
+            ip[0] = '\0';
+        }
+        ros_printf("ml307: pdp=%d reg=%d csq=%d ip=%s\n", pdp,
+                   ml307_network_is_registered() ? 1 : 0, (int)csq,
+                   (ip[0] != '\0') ? ip : "n/a");
+    }
     if (net_init() != NET_OK) {
         ros_puts("net: init failed");
         return -1;
@@ -299,7 +355,7 @@ static int cmd_all(roshell_t *rs, int argc, char **argv,
     (void)argv;
     (void)parsed;
     (void)user;
-    if (demo_ensure() != 0) {
+    if (app_ml307_ensure() != 0) {
         return -1;
     }
     (void)run_sim();
@@ -319,7 +375,7 @@ static int cmd_sim(roshell_t *rs, int argc, char **argv,
     (void)argv;
     (void)parsed;
     (void)user;
-    if (demo_ensure() != 0) {
+    if (app_ml307_ensure() != 0) {
         return -1;
     }
     return run_sim();
@@ -334,7 +390,7 @@ static int cmd_http(roshell_t *rs, int argc, char **argv,
     (void)user;
     const char *url = NULL;
 
-    if (demo_ensure() != 0) {
+    if (app_ml307_ensure() != 0) {
         return -1;
     }
     (void)rs_args_get_str(parsed, 0U, &url);
@@ -351,7 +407,7 @@ static int cmd_net(roshell_t *rs, int argc, char **argv,
     const char *host = NULL;
     uint32_t port = 0U;
 
-    if (demo_ensure() != 0) {
+    if (app_ml307_ensure() != 0) {
         return -1;
     }
     (void)rs_args_get_str(parsed, 0U, &host);
@@ -375,7 +431,7 @@ static int cmd_mqtt(roshell_t *rs, int argc, char **argv,
     const char *host = NULL;
     uint32_t port = 0U;
 
-    if (demo_ensure() != 0) {
+    if (app_ml307_ensure() != 0) {
         return -1;
     }
     (void)rs_args_get_str(parsed, 0U, &host);
@@ -400,7 +456,7 @@ static int cmd_ntp(roshell_t *rs, int argc, char **argv,
     const char *server = NULL;
     uint32_t ts = 0U;
 
-    if (demo_ensure() != 0) {
+    if (app_ml307_ensure() != 0) {
         return -1;
     }
     (void)rs_args_get_str(parsed, 0U, &server);

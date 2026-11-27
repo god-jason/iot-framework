@@ -43,12 +43,12 @@ void ut_var_json(void)
     TF_CHECK_STR(s, "true");
     var_free_json(s);
 
-    var_set_int(&v, -42);
+    var_set_int32(&v, -42);
     s = var_to_json(&v);
     TF_CHECK_STR(s, "-42");
     var_free_json(s);
 
-    var_set_float(&v, 1.5f);
+    var_set_float32(&v, 1.5f);
     s = var_to_json(&v);
     TF_CHECK_STR(s, "1.5");
     var_free_json(s);
@@ -62,7 +62,7 @@ void ut_var_json(void)
     tf_end();
 
     tf_begin("var_json/数组与对象");
-    var_set_int(&elem[0], 1);
+    var_set_int32(&elem[0], 1);
     var_set_string(&elem[1], "x");
     memset(&arr, 0, sizeof(arr));
     arr.data = (uint8_t *)elem;
@@ -88,10 +88,10 @@ void ut_var_json(void)
     TF_CHECK(v.type == VAR_BOOL);
     TF_CHECK(v.value.b);
     TF_CHECK(var_from_json("-7", &v, NULL, 0U));
-    TF_CHECK(v.type == VAR_INT);
-    TF_CHECK_INT(v.value.i, -7);
+    TF_CHECK(v.type == VAR_INT32);
+    TF_CHECK_INT(v.value.i32, -7);
     TF_CHECK(var_from_json("2.5", &v, NULL, 0U));
-    TF_CHECK(v.type == VAR_FLOAT);
+    TF_CHECK(v.type == VAR_FLOAT32);
 
     buf[0] = '\0';
     TF_CHECK(var_from_json("\"hello\"", &v, buf, sizeof(buf)));
@@ -118,20 +118,20 @@ void ut_var_json(void)
     tf_end();
 
     tf_begin("var_json/往返");
-    var_set_int(&v, INT32_MIN);
+    var_set_int32(&v, INT32_MIN);
     TF_CHECK(roundtrip(&v, &out, buf, sizeof(buf)));
-    TF_CHECK(out.type == VAR_INT);
-    TF_CHECK(out.value.i == INT32_MIN);
+    TF_CHECK(out.type == VAR_INT32);
+    TF_CHECK(out.value.i32 == INT32_MIN);
 
-    var_set_int(&v, INT32_MAX);
+    var_set_int32(&v, INT32_MAX);
     TF_CHECK(roundtrip(&v, &out, buf, sizeof(buf)));
-    TF_CHECK(out.type == VAR_INT);
-    TF_CHECK(out.value.i == INT32_MAX);
+    TF_CHECK(out.type == VAR_INT32);
+    TF_CHECK(out.value.i32 == INT32_MAX);
 
-    var_set_float(&v, 3.25f);
+    var_set_float32(&v, 3.25f);
     TF_CHECK(roundtrip(&v, &out, buf, sizeof(buf)));
-    TF_CHECK(out.type == VAR_FLOAT);
-    TF_CHECK(out.value.f == 3.25f);
+    TF_CHECK(out.type == VAR_FLOAT32);
+    TF_CHECK(out.value.f32 == 3.25f);
 
     var_set_bool(&v, false);
     TF_CHECK(roundtrip(&v, &out, buf, sizeof(buf)));
@@ -156,10 +156,10 @@ void ut_var_json(void)
     TF_CHECK(!var_from_json("", &v, NULL, 0U));           /* 空输入 */
 
     TF_CHECK(var_from_json("3000000000", &v, NULL, 0U));  /* 超 int32 -> 浮点 */
-    TF_CHECK(v.type == VAR_FLOAT);
+    TF_CHECK(v.type == VAR_FLOAT32);
     TF_CHECK(var_from_json("-2147483648", &v, NULL, 0U));
-    TF_CHECK(v.type == VAR_INT);
-    TF_CHECK(v.value.i == INT32_MIN);
+    TF_CHECK(v.type == VAR_INT32);
+    TF_CHECK(v.value.i32 == INT32_MIN);
 
     buf[0] = 'x';
     TF_CHECK(var_from_json("\"\"", &v, buf, sizeof(buf))); /* 空字符串 */

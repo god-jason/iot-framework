@@ -419,7 +419,7 @@ static var_t *st_make_object(void)
         if (v == NULL) {
             goto fail;
         }
-        var_set_int(v, 7);
+        var_set_int32(v, 7);
         if (!map_put(m, "id", v)) {
             ros_mem_free(v);
             goto fail;
@@ -455,7 +455,7 @@ static var_t *st_make_object(void)
         if (v == NULL) {
             goto fail;
         }
-        var_set_int(v, 3);
+        var_set_int32(v, 3);
         if (!map_put(m, "level", v)) {
             ros_mem_free(v);
             goto fail;
@@ -489,7 +489,7 @@ static var_t *st_make_sub_array(void)
     }
     var_set_array(v, a);
 
-    var_set_int(&item, 1);
+    var_set_int32(&item, 1);
     if (vec_push(a, &item) != 0) {
         goto fail;
     }
@@ -522,7 +522,7 @@ static var_t *st_make_root(void)
     }
     var_set_array(v, a);
 
-    var_set_int(&item, 42);
+    var_set_int32(&item, 42);
     if (vec_push(a, &item) != 0) {
         goto fail;
     }
@@ -596,7 +596,7 @@ static void st_json_entry(void *arg)
             var_t parsed;
 
             if (!var_from_json("-12345", &parsed, strbuf, sizeof(strbuf)) ||
-                parsed.type != VAR_INT || parsed.value.i != -12345) {
+                parsed.type != VAR_INT32 || parsed.value.i32 != -12345) {
                 s_stat[idx].errors++;
             }
         }

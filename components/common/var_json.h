@@ -6,9 +6,9 @@
  *   - var_from_json()：解析标量 JSON，字符串复制到调用方缓冲。
  *
  * 序列化覆盖全部类型：
- *   NONE→null，BOOL→true/false，INT/FLOAT→number，STRING→string，
- *   ARRAY→array（约定 vec 元素为 var_t，elem_size == sizeof(var_t)），
- *   OBJECT→object（约定 map 的 value 为 var_t*）。
+ *   NONE→null，BOOL→true/false，整数→number，FLOAT32/FLOAT64→number，
+ *   STRING→string，ARRAY→array（约定 vec 元素为 var_t，
+ *   elem_size == sizeof(var_t)），OBJECT→object（约定 map 的 value 为 var_t*）。
  *   NaN/Inf 等非有限浮点输出为 null。
  *
  * 反序列化只支持标量（null/bool/number/string）：
@@ -37,11 +37,23 @@ char *var_to_json(const var_t *v);
 
 /*
  * JSON 文本 -> var（仅标量）。
- * 数字：无小数/指数且落在 int32 范围按 VAR_INT，否则按 VAR_FLOAT。
+ * 数字：无小数/指数且落在 int32 范围按 VAR_INT32，否则按 VAR_FLOAT32。
  * 字符串：复制到 strbuf（截断到 strcap-1）；strbuf 为 NULL 时
  * 只接受非字符串类型，否则返回 false（out 保持原值）。
  */
 bool var_from_json(const char *text, var_t *out, char *strbuf, uint32_t strcap);
+
+/*
+ * 完整 JSON 解析：支持对象与数组。
+ *   - 整数按 int32 -> int64 -> uint64 -> float32 依次降级；
+ *   - 对象/数组通过 ros_mem 分配，所有权归 *out，使用后调用 var_free()；
+ *   - 所有字符串（含对象键）顺序写入 strbuf，解析结果中的 VAR_STRING
+ *     指向该区域，因此 strbuf 的生命周期必须覆盖 var 的使用；
+ *     空间不足时解析失败（不静默截断）。
+ * 返回 true 成功；false 时 *out 置为 VAR_NONE，已分配的容器全部释放。
+ */
+bool var_from_json_ex(const char *text, var_t *out, char *strbuf,
+                      uint32_t strcap);
 
 /* 释放 var_to_json() 返回的字符串 */
 void var_free_json(char *text);

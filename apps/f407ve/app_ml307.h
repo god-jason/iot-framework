@@ -22,6 +22,13 @@ extern "C" {
 /* 注册 ML307 演示命令（不访问硬件） */
 void app_ml307_register(void);
 
+/*
+ * 惰性初始化 AT 引擎 / 模组握手 / net 后端。
+ * 其它模块（如 master）在访问网络前应先调用本函数；已初始化时直接返回 0。
+ * 返回 0 成功；-1 失败。
+ */
+int app_ml307_ensure(void);
+
 #ifdef __cplusplus
 }
 #endif
