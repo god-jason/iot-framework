@@ -105,7 +105,9 @@ static int cfg_get(const config_item_t *item)
         ros_puts("cfg: to json failed");
         return -1;
     }
-    ros_printf("%s = %s\n", item->name, json);
+    /* ros_printf 单次输出上限 192B，JSON 较长时用 puts 整体输出 */
+    ros_printf("%s = ", item->name);
+    ros_puts(json);
     var_free_json(json);
     return 0;
 }
@@ -137,7 +139,8 @@ static int cfg_set(const config_item_t *item, const char *text)
     json = item->to_json(data);
     ros_mem_free(data);
     if (json != NULL) {
-        ros_printf("cfg: %s saved = %s\n", item->name, json);
+        ros_printf("cfg: %s saved = ", item->name);
+        ros_puts(json);
         var_free_json(json);
     } else {
         ros_printf("cfg: %s saved\n", item->name);
