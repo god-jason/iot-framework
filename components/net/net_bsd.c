@@ -287,6 +287,7 @@ int net_close(net_sock_t *sock)
     }
     sock->fd = (intptr_t)NET_INVALID_FD;
     sock->used = false;
+    sock->user = NULL;
     return NET_OK;
 }
 

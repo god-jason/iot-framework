@@ -103,8 +103,7 @@ static int64_t now_ms(void)
 static int publish_full_topic(const char *topic, const char *payload,
                               uint32_t len)
 {
-    if (!s_m.online || topic == NULL || payload == NULL || len == 0U ||
-        len > MASTER_PUBLISH_MAX) {
+    if (!s_m.online || topic == NULL || payload == NULL || len == 0U) {
         return -1;
     }
     return mqtt_publish(&s_m.mqtt, topic, payload, len, 1U, false);

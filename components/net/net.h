@@ -60,6 +60,7 @@ typedef struct {
     intptr_t fd;
     uint8_t  type;
     bool     used;
+    void    *user;   /* 后端私有数据，如 ML307 的 ml307_net_socket_t* */
 } net_sock_t;
 
 /* 流式连接：带发送 / 接收缓冲 */

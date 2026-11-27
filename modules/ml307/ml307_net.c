@@ -23,6 +23,7 @@
 #include "at_urc.h"
 #include "hal_def.h"
 #include "ros.h"
+#include "ros_mem.h"
 #include "common.h"
 
 #include <stdio.h>
@@ -37,6 +38,7 @@
 #define ML307_NET_DEFAULT_WAIT  30000U
 
 typedef struct {
+    int id;                /* 模组侧连接 id（0..ML307_NET_MAX_SOCKETS-1） */
     bool used;
     bool connected;
     uint8_t rx[ML307_NET_RX_MAX];
@@ -44,7 +46,8 @@ typedef struct {
     uint32_t rx_dropped;   /* 接收缓冲满时被丢弃的字节数（可观测） */
 } ml307_net_socket_t;
 
-static ml307_net_socket_t s_sockets[ML307_NET_MAX_SOCKETS];
+/* 按模组连接 id 索引的动态 socket；实际结构在 net_open 时分配 */
+static ml307_net_socket_t *s_sock_by_id[ML307_NET_MAX_SOCKETS];
 static bool s_urc_registered;
 
 /* AT+MIPOPEN 的连接结果以 URC 异步上报，net_open 需等它 */
@@ -135,7 +138,11 @@ static void ml307_net_urc(const char *line, uint32_t len, void *user)
     }
 
     if (strcmp(kind, "disconn") == 0) {
-        s_sockets[id].connected = false;
+        ml307_net_socket_t *s = s_sock_by_id[id];
+
+        if (s != NULL) {
+            s->connected = false;
+        }
         return;
     }
     if (strcmp(kind, "rtcp") != 0 && strcmp(kind, "rudp") != 0) {
@@ -143,12 +150,13 @@ static void ml307_net_urc(const char *line, uint32_t len, void *user)
     }
 
     {
+        ml307_net_socket_t *s = s_sock_by_id[id];
         int payload_len = ml307_net_int(&p, end);
         uint32_t avail;
         uint32_t copy;
         uint32_t room;
 
-        if (payload_len <= 0) {
+        if (s == NULL || payload_len <= 0) {
             return;
         }
         if (p < end && *p == ',') {
@@ -158,13 +166,13 @@ static void ml307_net_urc(const char *line, uint32_t len, void *user)
         copy = ((uint32_t)payload_len < avail) ? (uint32_t)payload_len : avail;
         /* rx_len/rx 与 net_read 消费者共享，需临界区保护 */
         ros_port_critical_enter();
-        room = ML307_NET_RX_MAX - s_sockets[id].rx_len;
+        room = ML307_NET_RX_MAX - s->rx_len;
         if (copy > room) {
-            s_sockets[id].rx_dropped += copy - room;   /* 缓冲满，记录丢弃 */
+            s->rx_dropped += copy - room;   /* 缓冲满，记录丢弃 */
             copy = room;
         }
-        memcpy(&s_sockets[id].rx[s_sockets[id].rx_len], p, copy);
-        s_sockets[id].rx_len += copy;
+        memcpy(&s->rx[s->rx_len], p, copy);
+        s->rx_len += copy;
         ros_port_critical_exit();
     }
 }
@@ -184,16 +192,44 @@ static bool ml307_net_host_valid(const char *host)
            strchr(host, '\n') == NULL;
 }
 
-static int ml307_net_alloc(void)
+/* 分配一个空闲连接 id，并按需分配 socket 结构；失败返回 NULL */
+static ml307_net_socket_t *ml307_net_alloc(int *id_out)
 {
     int i;
 
     for (i = 0; i < ML307_NET_MAX_SOCKETS; i++) {
-        if (!s_sockets[i].used) {
-            return i;
+        ml307_net_socket_t *s;
+
+        if (s_sock_by_id[i] != NULL) {
+            continue;
         }
+        s = (ml307_net_socket_t *)ros_mem_calloc(1U, sizeof(*s));
+        if (s == NULL) {
+            return NULL;
+        }
+        s->id = i;
+        s_sock_by_id[i] = s;
+        *id_out = i;
+        return s;
     }
-    return -1;
+    return NULL;
+}
+
+/* 释放 id 对应的 socket（先摘除索引，避免 URC 再访问） */
+static void ml307_net_free(int id)
+{
+    ml307_net_socket_t *s;
+
+    if (id < 0 || id >= ML307_NET_MAX_SOCKETS) {
+        return;
+    }
+    ros_port_critical_enter();
+    s = s_sock_by_id[id];
+    s_sock_by_id[id] = NULL;
+    ros_port_critical_exit();
+    if (s != NULL) {
+        ros_mem_free(s);
+    }
 }
 
 static bool ml307_net_ipv4(const char *s, size_t len)
@@ -263,7 +299,7 @@ int net_init(void)
         }
         s_urc_registered = true;
     }
-    memset(s_sockets, 0, sizeof(s_sockets));
+    memset(s_sock_by_id, 0, sizeof(s_sock_by_id));
     net_register_commands();
     return NET_OK;
 }
@@ -273,15 +309,12 @@ int net_deinit(void)
     int i;
 
     for (i = 0; i < ML307_NET_MAX_SOCKETS; i++) {
-        if (s_sockets[i].used) {
+        if (s_sock_by_id[i] != NULL) {
             char cmd[32];
 
             str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", i);
             (void)at_exec(cmd, 3000);
-            s_sockets[i].used = false;
-            s_sockets[i].connected = false;
-            s_sockets[i].rx_len = 0U;
-            s_sockets[i].rx_dropped = 0U;
+            ml307_net_free(i);
         }
     }
     if (s_urc_registered) {
@@ -300,8 +333,12 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     const char *proto;
     uint32_t wait = (timeout_ms != 0U) ? timeout_ms : ML307_NET_DEFAULT_WAIT;
     uint32_t start;
+    ml307_net_socket_t *s;
     int id;
 
+    if (!s_urc_registered) {
+        return NET_ERR_PARAM;           /* 必须先 net_init */
+    }
     if (sock == NULL || !ml307_net_host_valid(host)) {
         return NET_ERR_PARAM;
     }
@@ -309,9 +346,9 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     sock->fd = (intptr_t)(-1);
     proto = (type == NET_UDP) ? "UDP" : "TCP";
 
-    id = ml307_net_alloc();
-    if (id < 0) {
-        return NET_ERR_NOMEM;
+    s = ml307_net_alloc(&id);
+    if (s == NULL) {
+        return NET_ERR_NOMEM;           /* 连接数已满或堆不足 */
     }
 
     /* 先清结果，避免把上一条连接的 URC 当成这次的结果 */
@@ -326,6 +363,7 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
     str_printf(cmd, sizeof(cmd), "AT+MIPOPEN=%d,\"%s\",\"%s\",%u",
              id, proto, host, (unsigned)port);
     if (at_exec(cmd, wait) != AT_RESULT_OK) {
+        ml307_net_free(id);
         return NET_ERR_IO;
     }
 
@@ -340,36 +378,39 @@ int net_open(net_sock_t *sock, net_type_t type, const char *host,
         /* 清掉模组侧半开连接 */
         (void)str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", id);
         (void)at_exec(cmd, 3000U);
+        ml307_net_free(id);
         return NET_ERR_IO;
     }
 
-    s_sockets[id].used = true;
-    s_sockets[id].connected = true;
-    s_sockets[id].rx_len = 0U;
-    s_sockets[id].rx_dropped = 0U;
+    s->used = true;
+    s->connected = true;
+    s->rx_len = 0U;
+    s->rx_dropped = 0U;
     sock->fd = (intptr_t)id;
     sock->type = (uint8_t)type;
     sock->used = true;
+    sock->user = s;
     return NET_OK;
 }
 
 bool net_is_open(const net_sock_t *sock)
 {
-    return (sock != NULL && sock->used && sock->fd >= 0 &&
-            (int)sock->fd < ML307_NET_MAX_SOCKETS);
+    return (sock != NULL && sock->used && sock->user != NULL);
 }
 
 int net_send(net_sock_t *sock, const void *data, uint32_t len)
 {
     char cmd[48];
     at_request_t phase;
+    ml307_net_socket_t *s;
     int id;
 
     if (!net_is_open(sock) || (data == NULL && len != 0U)) {
         return NET_ERR_PARAM;
     }
-    id = (int)sock->fd;
-    if (!s_sockets[id].connected) {
+    s = (ml307_net_socket_t *)sock->user;
+    id = s->id;
+    if (!s->connected) {
         return NET_ERR_CLOSED;
     }
     if (len == 0U) {
@@ -403,31 +444,29 @@ int net_send(net_sock_t *sock, const void *data, uint32_t len)
 int net_recv(net_sock_t *sock, void *data, uint32_t len, uint32_t timeout_ms)
 {
     uint32_t start;
-    int id;
+    ml307_net_socket_t *s;
 
     if (!net_is_open(sock) || data == NULL || len == 0U) {
         return NET_ERR_PARAM;
     }
-    id = (int)sock->fd;
+    s = (ml307_net_socket_t *)sock->user;
 
     start = hal_tick_get();
     for (;;) {
         ros_port_critical_enter();
-        if (s_sockets[id].rx_len > 0U) {
-            uint32_t n = (s_sockets[id].rx_len < len) ? s_sockets[id].rx_len
-                                                      : len;
+        if (s->rx_len > 0U) {
+            uint32_t n = (s->rx_len < len) ? s->rx_len : len;
 
-            memcpy(data, s_sockets[id].rx, n);
-            s_sockets[id].rx_len -= n;
-            if (s_sockets[id].rx_len > 0U) {
-                memmove(s_sockets[id].rx, &s_sockets[id].rx[n],
-                        s_sockets[id].rx_len);
+            memcpy(data, s->rx, n);
+            s->rx_len -= n;
+            if (s->rx_len > 0U) {
+                memmove(s->rx, &s->rx[n], s->rx_len);
             }
             ros_port_critical_exit();
             return (int)n;
         }
         ros_port_critical_exit();
-        if (!s_sockets[id].connected) {
+        if (!s->connected) {
             return NET_ERR_CLOSED;
         }
         if (timeout_ms == 0U ||
@@ -442,22 +481,20 @@ int net_recv(net_sock_t *sock, void *data, uint32_t len, uint32_t timeout_ms)
 int net_close(net_sock_t *sock)
 {
     char cmd[32];
-    int id;
+    ml307_net_socket_t *s;
 
     if (sock == NULL) {
         return NET_ERR_PARAM;
     }
     if (net_is_open(sock)) {
-        id = (int)sock->fd;
-        str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", id);
+        s = (ml307_net_socket_t *)sock->user;
+        str_printf(cmd, sizeof(cmd), "AT+MIPCLOSE=%d", s->id);
         (void)at_exec(cmd, 3000);
-        s_sockets[id].used = false;
-        s_sockets[id].connected = false;
-        s_sockets[id].rx_len = 0U;
-        s_sockets[id].rx_dropped = 0U;
+        ml307_net_free(s->id);
     }
     sock->fd = (intptr_t)(-1);
     sock->used = false;
+    sock->user = NULL;
     return NET_OK;
 }
 

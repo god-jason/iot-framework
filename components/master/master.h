@@ -48,7 +48,6 @@ extern "C" {
 #define MASTER_ID_MAX          48U     /* device_id / model_id 缓冲长度 */
 #define MASTER_SECRET_MAX      64U     /* model_secret 缓冲长度 */
 #define MASTER_PAYLOAD_MAX     384U    /* 下行 JSON Payload 上限（解析缓冲） */
-#define MASTER_PUBLISH_MAX     1024U   /* 上行单条 Payload 上限（ML307 能力） */
 #define MASTER_ID_STR_MAX      40U     /* 消息 id 文本长度（UUID 形） */
 
 /* 下行操作类型 */

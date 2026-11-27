@@ -244,7 +244,7 @@ static char s_big_buf[BIG_PUB_BUF_SIZE];
 /*
  * bigpub [size]
  *   构造一个 size 字节的 params.blob 字符串，发布到 property/report。
- *   用于验证 ML307 超过 200 字节时的两步发送路径（上限 1024）。
+ *   超过 ML307 单条上限（1024）时由驱动直接返回错误。
  */
 static int cmd_bigpub(roshell_t *rs, int argc, char **argv,
                       const rs_args_parsed_t *parsed, void *user)
@@ -267,9 +267,6 @@ static int cmd_bigpub(roshell_t *rs, int argc, char **argv,
     (void)rs_args_get_uint(parsed, 0U, &size);
     if (size == 0U) {
         size = 900U;
-    }
-    if (size > MASTER_PUBLISH_MAX - head_len - tail_len) {
-        size = MASTER_PUBLISH_MAX - head_len - tail_len;
     }
     if (size > BIG_PUB_BUF_SIZE - head_len - tail_len) {
         size = BIG_PUB_BUF_SIZE - head_len - tail_len;

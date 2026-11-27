@@ -21,6 +21,8 @@
  *     释放；
  *   - var_from_json() 解析出的字符串落在调用方 strbuf，返回后无需
  *     依赖任何中间状态，可安全长期使用。
+ *
+ * 结构体字段映射宏见 cfg.h。
  */
 
 #ifndef VAR_JSON_H
