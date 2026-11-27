@@ -8,7 +8,8 @@
  * roshell.h 首部包含本文件；内部模块头经 roshell.h 间接获得这些宏。
  * 默认配置面向 20K RAM 设备（规格 §7）。
  *
- * 功能（表达式/变量/内置 math/扩展注册）始终全量启用。
+ * 功能（表达式/变量/扩展注册）始终启用；内置数学函数由
+ * RS_MATH_ENABLE 控制（默认关闭，关闭时不依赖 libm）。
  */
 
 /* ------------------------------ 缓冲区 ------------------------------ */
@@ -67,6 +68,18 @@
 #endif
 #ifndef RS_NAME_MAX
 #define RS_NAME_MAX      17U     /* 函数名最大长度（含 0） */
+#endif
+
+/* ------------------------------ 数学库 ------------------------------ */
+/*
+ * RS_MATH_ENABLE = 1：启用内置数学函数
+ *     floor/ceil/round/sqrt/sin/cos/tan/asin/acos/atan/exp/log/log10/
+ *     pow/atan2（依赖 libm，需链接 -lm）；
+ * RS_MATH_ENABLE = 0（默认）：不注册上述函数，构建时无需数学库；
+ *     abs/min/max 用纯 C 实现，始终可用。
+ */
+#ifndef RS_MATH_ENABLE
+#define RS_MATH_ENABLE   0
 #endif
 
 /* ------------------------------ 扩展注册 ------------------------------ */

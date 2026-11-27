@@ -47,7 +47,9 @@
  *   - CFG_FROM_JSON 解析失败时返回 false，但结构体仍会被填满默认值；
  *   - string 字段是定长数组，转换时按容量复制并截断，不借用外部内存；
  *     CFG_FROM_JSON 的 buf 只是解析临时区，调用返回后即可复用。
- *   - 不支持嵌套结构体与可变长/多字符串数组，需要时可在 X 宏外单独处理。
+ *   - 不支持嵌套结构体与可变长/多字符串数组，需要时可在 X 宏外单独处理；
+ *   - name##_to_json / name##_from_json 以 void* 接收结构体指针，
+ *     可直接注册到 config 的类型表（见 config.h 的 CFG_REGISTER）。
  */
 
 #ifndef CFG_H
@@ -208,7 +210,8 @@ extern "C" {
         LIST(CFG_FIELD_GET) \
     } \
     \
-    static inline char *name##_to_json(const name *s) { \
+    static inline char *name##_to_json(const void *p) { \
+        const name *s = (const name *)p; \
         var_t v; \
         char *text; \
         v.type = VAR_NONE; \
@@ -221,8 +224,9 @@ extern "C" {
         return text; \
     } \
     \
-    static inline bool name##_from_json(name *s, const char *text, \
+    static inline bool name##_from_json(void *p, const char *text, \
                                         char *buf, uint32_t cap) { \
+        name *s = (name *)p; \
         var_t v; \
         bool ok; \
         v.type = VAR_NONE; \

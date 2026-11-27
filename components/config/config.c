@@ -14,8 +14,39 @@
 #include "config.h"
 
 #include "ros_mutex.h"
+#include "vec.h"
 
 #include <stddef.h>
+#include <string.h>
+
+/*
+ * 已注册的配置类型表（CFG_REGISTER 登记，进程内单份）。
+ * 元素类型为 const config_item_t *，按需扩容，数量不设上限。
+ */
+static vec_t s_items;
+static bool s_items_ready;
+
+/* 首次注册时初始化 vec；失败返回 -1 */
+static int config_items_init(void)
+{
+    if (s_items_ready) {
+        return 0;
+    }
+    if (vec_init(&s_items, sizeof(const config_item_t *), 0U) != 0) {
+        return -1;
+    }
+    s_items_ready = true;
+    return 0;
+}
+
+/* 取下标元素（内部使用，调用方保证已初始化且越界检查） */
+static const config_item_t *config_item_get(uint32_t index)
+{
+    const config_item_t **slot = (const config_item_t **)vec_at(&s_items,
+                                                                index);
+
+    return (slot != NULL) ? *slot : NULL;
+}
 
 static struct {
     fkv_t  *kv;
@@ -181,6 +212,126 @@ int config_format(void)
 
     locked = config_enter();
     rc = fkv_del(s_cfg.kv, s_cfg.key);
+    config_leave(locked);
+
+    return (rc == FKV_OK || rc == FKV_ERR_NOENT) ? CONFIG_OK : CONFIG_ERR_IO;
+}
+
+/* ============================ 配置类型注册 ============================ */
+
+int config_register(const config_item_t *item)
+{
+    uint32_t i;
+    uint32_t n;
+
+    if (item == NULL || item->name == NULL || item->to_json == NULL ||
+        item->from_json == NULL || item->size == 0U) {
+        return CONFIG_ERR_PARAM;
+    }
+    if (config_items_init() != 0) {
+        return CONFIG_ERR_SIZE;             /* 内存不足 */
+    }
+    n = vec_size(&s_items);
+    for (i = 0U; i < n; i++) {
+        const config_item_t *it = config_item_get(i);
+
+        if (it == item) {
+            return CONFIG_OK;               /* 同一项重复注册 */
+        }
+        if (it->id == item->id || strcmp(it->name, item->name) == 0) {
+            return CONFIG_ERR_PARAM;        /* id 或名称冲突 */
+        }
+    }
+    if (vec_push(&s_items, &item) != 0) {
+        return CONFIG_ERR_SIZE;             /* 扩容失败 */
+    }
+    return CONFIG_OK;
+}
+
+const config_item_t *config_find(const char *name)
+{
+    uint32_t i;
+    uint32_t n;
+
+    if (name == NULL || !s_items_ready) {
+        return NULL;
+    }
+    n = vec_size(&s_items);
+    for (i = 0U; i < n; i++) {
+        const config_item_t *it = config_item_get(i);
+
+        if (it != NULL && strcmp(it->name, name) == 0) {
+            return it;
+        }
+    }
+    return NULL;
+}
+
+uint32_t config_item_count(void)
+{
+    return s_items_ready ? vec_size(&s_items) : 0U;
+}
+
+const config_item_t *config_item_at(uint32_t index)
+{
+    return s_items_ready ? config_item_get(index) : NULL;
+}
+
+/* ============================ 按键读写 ============================ */
+
+int config_key_load(uint32_t key, void *data, uint32_t size)
+{
+    uint32_t len = 0U;
+    int locked;
+    int rc;
+
+    if (config_ready() == 0 || data == NULL || size == 0U) {
+        return CONFIG_ERR_PARAM;
+    }
+
+    locked = config_enter();
+    rc = fkv_get(s_cfg.kv, key, data, size, &len);
+    config_leave(locked);
+
+    if (rc == FKV_OK) {
+        return (len == size) ? CONFIG_OK : CONFIG_ERR_SIZE;
+    }
+    if (rc == FKV_ERR_NOENT) {
+        return CONFIG_NONE;
+    }
+    return (rc == FKV_ERR_NOMEM) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
+}
+
+int config_key_save(uint32_t key, const void *data, uint32_t size)
+{
+    int locked;
+    int rc;
+
+    if (config_ready() == 0 || data == NULL || size == 0U) {
+        return CONFIG_ERR_PARAM;
+    }
+
+    locked = config_enter();
+    rc = fkv_put(s_cfg.kv, key, data, size);
+    config_leave(locked);
+
+    if (rc == FKV_OK) {
+        return CONFIG_OK;
+    }
+    return (rc == FKV_ERR_INVAL) ? CONFIG_ERR_SIZE : CONFIG_ERR_IO;
+}
+
+int config_key_delete(uint32_t key)
+{
+    int locked;
+    int rc;
+
+    if (config_ready() == 0) {
+        return CONFIG_ERR_PARAM;
+    }
+
+    locked = config_enter();
+    rc = fkv_del(s_cfg.kv, key);
     config_leave(locked);
 
     return (rc == FKV_OK || rc == FKV_ERR_NOENT) ? CONFIG_OK : CONFIG_ERR_IO;

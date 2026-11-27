@@ -15,6 +15,7 @@
 
 #include "app_master.h"
 
+#include "app_config.h"
 #include "app_ml307.h"
 #include "master.h"
 #include "net.h"
@@ -25,11 +26,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEMO_MASTER_HOST        "47.114.32.128"
-#define DEMO_MASTER_PORT        1883U
-#define DEMO_MASTER_DEVICE_ID   "abe3b1849d344789924e75adb249"
-#define DEMO_MASTER_MODEL_ID    "36e65ed9b72b4610acaa45b2561a"
-#define DEMO_MASTER_SECRET      "123456"
 #define DEMO_MASTER_SECONDS     60U
 
 /* --------------------------------------------------------- var 参数组装 */
@@ -165,6 +161,7 @@ static int cmd_master(roshell_t *rs, int argc, char **argv,
                       const rs_args_parsed_t *parsed, void *user)
 {
     master_config_t cfg;
+    const app_config_t *cc = app_config_get();
     const char *host = NULL;
     uint32_t port = 0U;
     uint32_t seconds = 0U;
@@ -188,19 +185,23 @@ static int cmd_master(roshell_t *rs, int argc, char **argv,
         return -1;
     }
 
-    cfg.host = (host != NULL && host[0] != '\0') ? host : DEMO_MASTER_HOST;
-    cfg.port = (port != 0U) ? (uint16_t)port : (uint16_t)DEMO_MASTER_PORT;
-    cfg.device_id = DEMO_MASTER_DEVICE_ID;
-    cfg.model_id = DEMO_MASTER_MODEL_ID;
-    cfg.model_secret = DEMO_MASTER_SECRET;
-    cfg.keepalive_s = 60U;
-    cfg.clean_session = true;
+    cfg.host = (host != NULL && host[0] != '\0') ? host : cc->mqtt_host;
+    cfg.port = (port != 0U) ? (uint16_t)port
+                            : ((cc->mqtt_port != 0U) ? cc->mqtt_port : 1883U);
+    cfg.device_id = cc->mqtt_device_id;
+    cfg.model_id = cc->mqtt_model_id;
+    cfg.model_secret = cc->mqtt_model_secret;
+    cfg.keepalive_s = cc->mqtt_keepalive_s;
+    cfg.clean_session = cc->mqtt_clean_session;
 
     if (master_init(&cfg, &s_master_cbs) != 0) {
         ros_puts("master: init failed");
         return -1;
     }
 
+    ros_printf("master: cfg host=%s port=%u id=%s model=%s keepalive=%u\n",
+               cfg.host, (unsigned)cfg.port, cfg.device_id, cfg.model_id,
+               (unsigned)cfg.keepalive_s);
     ros_printf("master: connect %s:%u id=%s\n", cfg.host, (unsigned)cfg.port,
                cfg.device_id);
     rc = master_start();
@@ -252,6 +253,7 @@ static int cmd_bigpub(roshell_t *rs, int argc, char **argv,
     static const char head[] = "{\"id\":\"big-test\",\"params\":{\"blob\":\"";
     static const char tail[] = "\"},\"time\":0}";
     master_config_t cfg;
+    const app_config_t *cc = app_config_get();
     uint32_t head_len = (uint32_t)(sizeof(head) - 1U);
     uint32_t tail_len = (uint32_t)(sizeof(tail) - 1U);
     uint32_t size = 0U;
@@ -277,13 +279,13 @@ static int cmd_bigpub(roshell_t *rs, int argc, char **argv,
         return -1;
     }
 
-    cfg.host = DEMO_MASTER_HOST;
-    cfg.port = (uint16_t)DEMO_MASTER_PORT;
-    cfg.device_id = DEMO_MASTER_DEVICE_ID;
-    cfg.model_id = DEMO_MASTER_MODEL_ID;
-    cfg.model_secret = DEMO_MASTER_SECRET;
-    cfg.keepalive_s = 60U;
-    cfg.clean_session = true;
+    cfg.host = cc->mqtt_host;
+    cfg.port = (cc->mqtt_port != 0U) ? cc->mqtt_port : 1883U;
+    cfg.device_id = cc->mqtt_device_id;
+    cfg.model_id = cc->mqtt_model_id;
+    cfg.model_secret = cc->mqtt_model_secret;
+    cfg.keepalive_s = cc->mqtt_keepalive_s;
+    cfg.clean_session = cc->mqtt_clean_session;
 
     memcpy(s_big_buf, head, head_len);
     memset(&s_big_buf[head_len], 'A', size);
@@ -315,8 +317,8 @@ static int cmd_bigpub(roshell_t *rs, int argc, char **argv,
 }
 
 static const rs_args_t s_master_args[] = {
-    { "host", 0, RS_ARGS_TYPE_STR, true, false, DEMO_MASTER_HOST, "broker host" },
-    { "port", 0, RS_ARGS_TYPE_UINT, true, false, "1883", "broker port" },
+    { "host", 0, RS_ARGS_TYPE_STR, true, false, NULL, "broker host (default: config)" },
+    { "port", 0, RS_ARGS_TYPE_UINT, true, false, "0", "broker port (default: config)" },
     { "seconds", 0, RS_ARGS_TYPE_UINT, true, false, "60", "poll seconds" }
 };
 

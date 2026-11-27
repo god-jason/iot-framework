@@ -7,7 +7,7 @@
  * 存放内容（key 固定，value 为结构体原始内存）：
  *   BOOT_KV_KEY_STATE  : boot_state_t   启动状态（tries/crash/ota 标识）
  *   BOOT_KV_KEY_OTA    : uint32_t       OTA 拷贝进度（已写入 App 的字节数）
- *   BOOT_KV_KEY_CONFIG : 应用配置结构体（如 app_config_t）
+ *   BOOT_KV_KEY_CONFIG : 应用配置结构体（如 app_config_t，含平台连接参数）
  *
  * 所有接口在首次调用时自动初始化并挂载；
  * 若 KV 区未格式化或版本不符，会自动格式化（会清空已有 KV 数据）。
@@ -21,8 +21,8 @@
 
 #include <stdint.h>
 
-/* 单条 value 上限：需覆盖 boot_state_t 与应用配置结构体 */
-#define BOOT_KV_MAX_VALUE       64U
+/* 单条 value 上限：需覆盖 boot_state_t 与应用配置结构体（含平台连接参数） */
+#define BOOT_KV_MAX_VALUE       192U
 
 /* KV 键值（'BST1' / 'OTA1' / 'CFG1'） */
 #define BOOT_KV_KEY_STATE       0x42535431U

@@ -88,39 +88,16 @@ static int fan_set_duty(void *ctx, uint16_t duty)
         return (hal_pwm_stop(pwm) == HAL_OK) ? 0 : -1;
     }
     if (pwm->base.state == HAL_STATE_RESET) {
-        int rc;
-
         pwm->config.frequency = FAN_PWM_FREQ;
         pwm->config.duty = 0U;
-        rc = hal_pwm_init(pwm, &pwm->config);
-        if (rc != HAL_OK) {
-            ros_printf("fan dbg: init rc=%d state=%d id=%u ch=%u f=%u duty=%u\n",
-                       rc, (int)pwm->base.state, (unsigned)pwm->config.id,
-                       (unsigned)pwm->config.channel,
-                       (unsigned)pwm->config.frequency,
-                       (unsigned)pwm->config.duty);
+        if (hal_pwm_init(pwm, &pwm->config) != HAL_OK) {
             return -1;
         }
     }
-    {
-        int rc = hal_pwm_set_duty(pwm, (uint32_t)duty * 10U);
-
-        if (rc != HAL_OK) {
-            ros_printf("fan dbg: duty rc=%d state=%d\n",
-                       rc, (int)pwm->base.state);
-            return -1;
-        }
+    if (hal_pwm_set_duty(pwm, (uint32_t)duty * 10U) != HAL_OK) {
+        return -1;
     }
-    {
-        int rc = hal_pwm_start(pwm);
-
-        if (rc != HAL_OK) {
-            ros_printf("fan dbg: start rc=%d state=%d\n",
-                       rc, (int)pwm->base.state);
-            return -1;
-        }
-    }
-    return 0;
+    return (hal_pwm_start(pwm) == HAL_OK) ? 0 : -1;
 }
 
 static void app_fan_init(void)

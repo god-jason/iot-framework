@@ -13,7 +13,9 @@
 
 #include <string.h>
 #include <stdio.h>
+#if RS_MATH_ENABLE
 #include <math.h>
+#endif
 
 #include "hal_rtc.h"      /* time() / date() 时间源 */
 
@@ -48,9 +50,13 @@ static void rs_m_abs(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
         out->type = RS_VAL_INT;
         out->i = (v < 0) ? (int32_t)(-(int64_t)v) : v;
     } else {
-        rs_m_setf(out, fabsf(a[0].f));
+        float f = a[0].f;
+
+        rs_m_setf(out, (f < 0.0f) ? -f : f);    /* 不依赖 libm */
     }
 }
+
+#if RS_MATH_ENABLE
 
 static void rs_m_floor(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
@@ -143,6 +149,8 @@ static void rs_m_atan2(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
     rs_m_setf(out, atan2f(rs_m_fnum(&a[0]), rs_m_fnum(&a[1])));
 }
 
+#endif /* RS_MATH_ENABLE */
+
 static void rs_m_min(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 {
     (void)rs;
@@ -150,7 +158,10 @@ static void rs_m_min(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
         out->type = RS_VAL_INT;
         out->i = (a[0].i < a[1].i) ? a[0].i : a[1].i;
     } else {
-        rs_m_setf(out, fminf(rs_m_fnum(&a[0]), rs_m_fnum(&a[1])));
+        float x = rs_m_fnum(&a[0]);
+        float y = rs_m_fnum(&a[1]);
+
+        rs_m_setf(out, (x < y) ? x : y);        /* 不依赖 libm */
     }
 }
 
@@ -161,7 +172,10 @@ static void rs_m_max(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
         out->type = RS_VAL_INT;
         out->i = (a[0].i > a[1].i) ? a[0].i : a[1].i;
     } else {
-        rs_m_setf(out, fmaxf(rs_m_fnum(&a[0]), rs_m_fnum(&a[1])));
+        float x = rs_m_fnum(&a[0]);
+        float y = rs_m_fnum(&a[1]);
+
+        rs_m_setf(out, (x > y) ? x : y);        /* 不依赖 libm */
     }
 }
 
@@ -285,6 +299,7 @@ static void rs_f_empty(roshell_t *rs, const rs_value_t *a, rs_value_t *out)
 
 static const rs_func_t rs_funcs[] = {
     { "abs",    1U, true,  rs_m_abs    },
+#if RS_MATH_ENABLE
     { "floor",  1U, true,  rs_m_floor  },
     { "ceil",   1U, true,  rs_m_ceil   },
     { "round",  1U, true,  rs_m_round  },
@@ -300,6 +315,7 @@ static const rs_func_t rs_funcs[] = {
     { "log10",  1U, true,  rs_m_log10  },
     { "pow",    2U, true,  rs_m_pow    },
     { "atan2",  2U, true,  rs_m_atan2  },
+#endif
     { "min",    2U, true,  rs_m_min    },
     { "max",    2U, true,  rs_m_max    },
     { "tick",   0U, false, rs_f_tick   },

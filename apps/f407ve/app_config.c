@@ -14,24 +14,22 @@
 
 #include "boot_kv.h"
 #include "config.h"
+#include "config_cmd.h"
 #include "log.h"
 
 #include <string.h>
 
-#define APP_CONFIG_DEFAULT_THRESHOLD    25.0f
-
 static app_config_t s_cfg;
 static uint8_t s_ready;
 
+/* 空 var -> 所有字段取 APP_CONFIG_CFG 中的默认值 */
 static void app_cfg_defaults(void *data)
 {
     app_config_t *cfg = (app_config_t *)data;
+    var_t none = { VAR_NONE };
 
     memset(cfg, 0, sizeof(*cfg));
-    cfg->magic = APP_CONFIG_MAGIC;
-    cfg->device_id = 1U;
-    cfg->mode = 0U;
-    cfg->threshold = APP_CONFIG_DEFAULT_THRESHOLD;
+    CFG_FROM_VAR(app_config_t, cfg, &none);
 }
 
 /* 打印当前配置（浮点按千分位整数输出，避免依赖 %f） */
@@ -44,6 +42,9 @@ static void app_cfg_show(const void *data)
     LOG_I("cfg", "id=%u mode=%u thr=%d.%03d boot=%u",
           (unsigned)cfg->device_id, (unsigned)cfg->mode, whole, frac,
           (unsigned)cfg->boot_count);
+    LOG_I("cfg", "mqtt %s:%u id=%s model=%s",
+          cfg->mqtt_host, (unsigned)cfg->mqtt_port,
+          cfg->mqtt_device_id, cfg->mqtt_model_id);
 }
 
 int app_config_init(void)
@@ -78,6 +79,11 @@ int app_config_init(void)
 
     s_cfg.boot_count++;
     s_ready = 1U;
+
+    /* 注册为可 JSON 读写的配置项，并注册 cfg 命令 */
+    CFG_REGISTER(BOOT_KV_KEY_CONFIG, app_config_t);
+    (void)config_cmd_register();
+
     return app_config_save();
 }
 

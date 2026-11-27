@@ -7,6 +7,7 @@ if not is_plat("cross") then
         set_warnings("all")
         add_cflags("-Wextra", "-Wshadow", "-Wformat=2", { force = true })
         ros_host_defines()
+        add_defines("RS_MATH_ENABLE=1")   -- 与 ros-cmp-roshell 的主机配置一致
         add_files("app_main.c")
         -- 各目录的自测入口（目录目标默认排除 test，这里显式加入）
         add_files("../../src/*_test.c",

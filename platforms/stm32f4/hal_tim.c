@@ -103,6 +103,13 @@ static uint32_t stm32_tim_clock_division(uint8_t division)
     }
 }
 
+/*
+ * 通道映射失败时的哨兵值。
+ * 注意：Cube HAL 的 TIM_CHANNEL_1 等于 0，不能再用 0 表示“无效通道”，
+ * 否则通道 1 会被误判为非法参数。
+ */
+#define STM32_TIM_CH_INVALID  0xFFFFFFFFu
+
 static uint32_t stm32_tim_channel(uint32_t channel)
 {
     switch (channel) {
@@ -115,7 +122,7 @@ static uint32_t stm32_tim_channel(uint32_t channel)
     case 4U:
         return TIM_CHANNEL_4;
     default:
-        return 0U;
+        return STM32_TIM_CH_INVALID;
     }
 }
 
@@ -412,7 +419,7 @@ int hal_pwm_init(hal_pwm_t *handle,
     handle->base.instance = htim;
 
     channel = stm32_tim_channel(handle->config.channel);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
 
@@ -452,7 +459,7 @@ int hal_pwm_deinit(hal_pwm_t *handle)
     htim = (TIM_HandleTypeDef *)handle->base.instance;
     if (htim != NULL) {
         channel = stm32_tim_channel(handle->config.channel);
-        if (channel != 0U) {
+        if (channel != STM32_TIM_CH_INVALID) {
             (void)HAL_TIM_PWM_Stop(htim, channel);
         }
         (void)HAL_TIM_PWM_DeInit(htim);
@@ -475,8 +482,11 @@ int hal_pwm_start(hal_pwm_t *handle)
         return HAL_NOT_READY;
     }
     channel = stm32_tim_channel(handle->config.channel);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
+    }
+    if (handle->base.state == HAL_STATE_BUSY) {
+        return HAL_OK;                  /* 已在输出：重复启动视为成功 */
     }
     if (HAL_TIM_PWM_Start(htim, channel) == HAL_OK) {
         handle->base.state = HAL_STATE_BUSY;
@@ -498,7 +508,7 @@ int hal_pwm_stop(hal_pwm_t *handle)
         return HAL_NOT_READY;
     }
     channel = stm32_tim_channel(handle->config.channel);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
     (void)HAL_TIM_PWM_Stop(htim, channel);
@@ -524,7 +534,7 @@ int hal_pwm_set_frequency(hal_pwm_t *handle,
         return HAL_NOT_READY;
     }
     channel = stm32_tim_channel(handle->config.channel);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
 
@@ -573,7 +583,7 @@ int hal_pwm_set_duty(hal_pwm_t *handle, uint32_t duty)
         return HAL_NOT_READY;
     }
     channel = stm32_tim_channel(handle->config.channel);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
 
@@ -598,7 +608,7 @@ int hal_pwm_set_polarity(hal_pwm_t *handle,
         return HAL_NOT_READY;
     }
     channel = stm32_tim_channel(handle->config.channel);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
 
@@ -633,7 +643,7 @@ int hal_capture_init(hal_capture_t *handle,
         return HAL_NOT_READY;
     }
     channel = stm32_capture_channel(handle);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
 
@@ -690,7 +700,7 @@ int hal_capture_start(hal_capture_t *handle)
         return HAL_NOT_READY;
     }
     channel = stm32_capture_channel(handle);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
     if (HAL_TIM_IC_Start(htim, channel) == HAL_OK) {
@@ -713,7 +723,7 @@ int hal_capture_stop(hal_capture_t *handle)
         return HAL_NOT_READY;
     }
     channel = stm32_capture_channel(handle);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
     (void)HAL_TIM_IC_Stop_IT(htim, channel);
@@ -734,7 +744,7 @@ int hal_capture_start_it(hal_capture_t *handle)
         return HAL_NOT_READY;
     }
     channel = stm32_capture_channel(handle);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return HAL_INVALID_PARAM;
     }
     if (HAL_TIM_IC_Start_IT(htim, channel) == HAL_OK) {
@@ -754,7 +764,7 @@ uint32_t hal_capture_get_value(hal_capture_t *handle)
     }
     htim = (TIM_HandleTypeDef *)handle->base.instance;
     channel = stm32_capture_channel(handle);
-    if (channel == 0U) {
+    if (channel == STM32_TIM_CH_INVALID) {
         return 0U;
     }
     return HAL_TIM_ReadCapturedValue(htim, channel);
