@@ -13,13 +13,13 @@
         xmake f -p cross --stm32_family=f1 --cube_hal_dir="" ^
                 --sdk=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1 ^
                 --bin=C:\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin -c
-        xmake b ros-fw-f103cb
+        xmake b f103cb
 
         # F4 固件（需要 Cube HAL 源码）
         xmake f -p cross --stm32_family=f4 --stm32_chip=STM32F407xx ^
                 --cube_hal_dir=C:\path\to\STM32F4xx_HAL_Driver ^
                 --sdk=... --bin=... -c
-        xmake b ros-fw-f407ve
+        xmake b f407ve
 
     目录结构（每个子目录一个独立 target）：
         src/         -> ros-core
@@ -208,6 +208,8 @@ local function ros_cross_defines(extra)
     add_defines("ROS_PLATFORM_STM32", "ROS_STM32_" .. family:upper(), "ROS_MEM_PORT")
     if family == "f1" then
         add_defines("ROS_USE_TRACE=0")
+        -- F1 的 tickless 仍为 WFI 占位（未做 LPTIM 补偿），先关闭避免 tick 失真
+        add_defines("ROS_USE_TICKLESS=0")
         add_defines("ROS_MEM_HEAP_SIZE=10752")
         add_defines("ML307_NET_MAX_SOCKETS=1", "ML307_NET_RX_MAX=256")
         add_defines("NET_STREAM_TX_MAX=64", "NET_STREAM_RX_MAX=64")
@@ -317,7 +319,9 @@ function ros_fw_objcopy(opts)
             end
             for _, py in ipairs(pys) do
                 if not os.isfile(ota) then
-                    os.execv(py, argv, { try = true })
+                    -- 不使用 try=true：Python 报错必须让固件构建失败，
+                    -- 否则会产出一个没有 OTA 包的"成功"固件
+                    os.execv(py, argv)
                 end
             end
             if os.isfile(ota) then
@@ -507,17 +511,13 @@ if not is_plat("cross") then
         set_warnings("all")
         add_cflags("-Wextra", "-Wshadow", "-Wformat=2", { force = true })
         ros_host_defines()
-        add_files("src/**.c")
-        add_files("components/**.c")
-        add_files("vendor/**.c")
-        add_files("platforms/pc/**.c")
-        -- 静态库不包含平台 main（pc_main.c 由 board-pc 目标编入可执行文件）
-        remove_files("platforms/pc/pc_main.c")
-        remove_files("src/*_test.c", "src/**/*_test.c", "src/test_*.c", "src/**/test_*.c",
-                     "components/*_test.c", "components/**/*_test.c",
-                     "components/test_*.c", "components/**/test_*.c",
-                     "vendor/*_test.c", "vendor/**/*_test.c",
-                     "platforms/*_test.c", "platforms/**/*_test.c")
+        -- 与 ros-cmp-roshell 主机配置保持一致，避免同一份源码两套语义
+        add_defines("RS_MATH_ENABLE=1")
+        -- 复用子目录对象目标：各目标已用 ros_exclude_tests() 排除测试，
+        -- 且 ros-platform-pc 已排除 pc_main.c；避免同一批 .c 编译两遍。
+        for _, dep in ipairs(ROS_OBJ_HOST) do
+            add_deps(dep)
+        end
         add_includedirs(ROS_INCLUDEDIRS)
     target_end()
 
@@ -545,38 +545,12 @@ if is_plat("cross") then
         if ROS_HAL_ROOT ~= "" then
             add_defines("USE_HAL_DRIVER", chip, "ROS_TRACE_CLOCK_HZ=168000000")
         end
-        add_files("src/**.c")
-        add_files("components/**.c")
-        add_files("drivers/**.c")
-        -- 公共实现（platforms/stm32）与当前系列的外设实现（platforms/stm32<family>）
-        add_files("platforms/stm32/**.c")
-        add_files("platforms/stm32" .. family .. "/**.c")
-        -- 板级文件（启动/时钟/Flash/RTC）属于具体固件，不进入通用静态库
-        remove_files("platforms/stm32" .. family .. "/board.c",
-                     "platforms/stm32" .. family .. "/board_flash.c",
-                     "platforms/stm32" .. family .. "/board_rtc.c")
-        -- 依赖板级 partition.h 的共享实现由各 board 目标编译（静态库无板级头文件路径）
-        remove_files("platforms/stm32/bootloader/**.c",
-                     "platforms/stm32/stm32_ota.c",
-                     "platforms/stm32/stm32_main.c")
-        add_files("modules/**.c")
-        add_files("vendor/**.c")
-        remove_files("components/net/net_bsd.c",
-                     "components/http/http_client.c",
-                     "components/mqtt/mqtt.c")
-        remove_files("src/*_test.c", "src/**/*_test.c", "src/test_*.c", "src/**/test_*.c",
-                     "components/*_test.c", "components/**/*_test.c",
-                     "components/test_*.c", "components/**/test_*.c",
-                     "vendor/*_test.c", "vendor/**/*_test.c",
-                     "modules/*_test.c", "modules/**/*_test.c",
-                     "drivers/*_test.c", "drivers/**/*_test.c",
-                     "platforms/*_test.c", "platforms/**/*_test.c")
-        add_includedirs(ROS_INCLUDEDIRS)
-
-        if (get_config("cube_hal_dir") or "") == "" then
-            -- 无 Cube HAL：去掉依赖 HAL 的时基实现（F1 由板级/寄存器实现提供）
-            remove_files("platforms/stm32/stm32_os.c")
+        -- 复用子目录对象目标：net/http/mqtt 的平台裁剪、板级文件排除、
+        -- stm32_os.c 的 HAL 条件编译、测试排除均由各自 xmake.lua 负责。
+        for _, dep in ipairs(ROS_OBJ_CROSS) do
+            add_deps(dep)
         end
+        add_includedirs(ROS_INCLUDEDIRS)
 
         set_basename("ros-stm32-" .. family)
 

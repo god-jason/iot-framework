@@ -463,7 +463,7 @@ void app_resource_init(void)
 | rofs/dir-sub | 多级目录遍历、缺失目录 |
 | rofs/corrupt | Body CRC 损坏、魔数错误、END 错误、恢复挂载 |
 
-`ros-test` 结果：5085 项检查、0 失败。
+`ros-test` 结果以 CI 实际输出为准。
 
 Python 工具额外验证：
 

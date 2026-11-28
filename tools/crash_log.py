@@ -18,8 +18,8 @@
     # 2) 直接解析串口抓到的启动日志
     python tools/crash_log.py serial.txt
 
-    # 3) 指定 ELF（默认 build/cross/arm/release/ros-fw-f103cb.elf）
-    python tools/crash_log.py --elf build/cross/arm/release/ros-fw-f103cb.elf serial.txt
+    # 3) 指定 ELF（默认 build/cross/arm/release/f103cb.elf）
+    python tools/crash_log.py --elf build/cross/arm/release/f103cb.elf serial.txt
 
 依赖：arm-none-eabi-addr2line / arm-none-eabi-nm（自动探测 PATH 与 xpack 默认目录）
 """
@@ -126,8 +126,10 @@ def find_addr2line(explicit: str | None) -> str:
 
 
 def default_elf(slot: str | None) -> str:
-    _ = slot
-    return os.path.join(DEFAULT_BUILD_DIR, "ros-fw-f103cb.elf")
+    # 不同芯片的崩溃记录必须用对应 ELF 解析，否则地址全部错位
+    name = "f407ve.elf" if slot and "f4" in slot.lower() else "f103cb.elf"
+    print(f"[提示] 使用默认 ELF: {name}（非对应芯片请用 --elf 指定）")
+    return os.path.join(DEFAULT_BUILD_DIR, name)
 
 
 def bits_text(value: int, table) -> str:
@@ -141,7 +143,7 @@ def main() -> int:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ap.add_argument("text", nargs="?", help="日志文本文件；省略则读 stdin")
     ap.add_argument("--dump", help="日志区原始 Flash 转储（F4 0x0800C000 起 16KB；F1CB 无日志区）")
-    ap.add_argument("--elf", help="固件 ELF；默认 build/cross/arm/release/ros-fw-f103cb.elf")
+    ap.add_argument("--elf", help="固件 ELF；默认 build/cross/arm/release/f103cb.elf")
     ap.add_argument("--addr2line", help="arm-none-eabi-addr2line 路径")
     ap.add_argument("--code-range", default="0x08000000-0x10000000",
                     help="栈扫描的代码地址范围")

@@ -17,11 +17,11 @@
 
 典型用法：
     # 原始镜像（不压缩）
-    python tools/build_ota.py --bin build/cross/arm/release/ros-fw-f407ve.bin
+    python tools/build_ota.py --bin build/cross/arm/release/f407ve.bin
 
     # DEFLATE 压缩（Bootloader 需启用 FLASH_OTA_COMPRESS，当前 F407VE）
     python tools/build_ota.py --compress \
-        --bin build/cross/arm/release/ros-fw-f407ve.bin
+        --bin build/cross/arm/release/f407ve.bin
 
     # 指定输出文件
     python tools/build_ota.py -o fw.ota --bin xxx.bin
@@ -33,42 +33,9 @@ from __future__ import annotations
 
 import argparse
 import os
-import struct
 import sys
-import zlib
 
-# OTA 包头（与 components/fota/fota.h 一致，小端）
-FOTA_HDR_MAGIC = 0x41544F46
-FOTA_HDR_VERSION = 1
-FOTA_HDR_SIZE = 32
-FOTA_FLAG_DEFLATE = 0x0001
-
-
-def crc32(data: bytes) -> int:
-    """标准 CRC-32/IEEE（多项式 0xEDB88320），与 MCU 端逐位实现等价。"""
-    return zlib.crc32(data) & 0xFFFFFFFF
-
-
-def build_package(image: bytes, compress: bool) -> tuple[bytes, int, int]:
-    """按 components/fota/fota.h 打包：32B 包头 + 负载。
-
-    返回 (完整升级包, 镜像 CRC32, 压缩后负载长度)。
-    """
-    image_len = len(image)
-    image_crc = crc32(image)
-    if compress:
-        co = zlib.compressobj(9, zlib.DEFLATED, -15)
-        payload = co.compress(image) + co.flush()
-        flags = FOTA_FLAG_DEFLATE
-    else:
-        payload = image
-        flags = 0
-
-    data_crc = crc32(payload)
-    hdr = struct.pack("<IHHIIIIII", FOTA_HDR_MAGIC, FOTA_HDR_VERSION, flags,
-                      image_len, image_crc, len(payload), data_crc, 0, 0)
-    hdr = hdr[:28] + struct.pack("<I", crc32(hdr[:28]))
-    return hdr + payload, image_crc, len(payload)
+from ota import FOTA_FLAG_DEFLATE, FOTA_HDR_SIZE, build_package, crc32
 
 
 def default_output(bin_path: str) -> str:
@@ -112,10 +79,11 @@ def main() -> int:
         return 2
 
     payload = package[FOTA_HDR_SIZE:]
+    flags = FOTA_FLAG_DEFLATE if args.compress else 0
     print(f"固件: {args.bin}")
     print(f"镜像: {len(image)} 字节  CRC32: 0x{image_crc:08X}")
     print(f"格式: {'raw deflate' if args.compress else '原始镜像'}  "
-          f"flags=0x{0x0001 if args.compress else 0x0000:04X}")
+          f"flags=0x{flags:04X}")
     print(f"负载: {data_len} 字节  CRC32: 0x{crc32(payload):08X}")
     if args.compress and image:
         print(f"压缩率: {data_len * 100.0 / len(image):.2f}%")

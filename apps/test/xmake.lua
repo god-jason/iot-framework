@@ -11,7 +11,8 @@ if not is_plat("cross") then
         add_files("app_main.c")
         -- 各目录的自测入口（目录目标默认排除 test，这里显式加入）
         add_files("../../src/*_test.c",
-                  "../../components/**/*_test.c")
+                  "../../components/**/*_test.c",
+                  "../../platforms/pc/*_test.c")
         add_includedirs(ROS_INCLUDEDIRS)
         add_deps("board-pc")
         for _, dep in ipairs(ROS_OBJ_HOST) do

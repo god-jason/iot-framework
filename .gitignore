@@ -5,3 +5,13 @@
 __pycache__
 /.trae
 /*.img
+*.bin
+*.hex
+*.ota
+*.elf
+*.map
+*.exe
+*.o
+*.obj
+*.lib
+*.a

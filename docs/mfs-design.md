@@ -474,7 +474,7 @@ Flash 剩余约 29.5KB（131,072 - 101,572）。
 | mfs/bad-skip-gc | GC 不选中/不擦除坏块 |
 | mfs/bad-erase-fail | 格式化擦除失败自动标坏并继续 |
 
-回归结果：`xmake r ros-test` 共 4,957 项检查，0 失败。
+回归结果以 `xmake r ros-test` / CI 实际输出为准。
 
 ---
 

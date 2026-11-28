@@ -1,7 +1,7 @@
 -- vendor/littlefs/xmake.lua - littlefs v2.9.3（嵌入式裁剪配置）
--- 当前未通过 VFS 使用，scope=none 不参与默认构建，保留供后续接入。
+-- 参与默认构建，由内核堆后端提供分配器；未被 VFS 引用时链接期会被 gc-sections 丢弃。
 ros_object("ros-vendor-littlefs", {
-    scope = "none",
+    scope = "both",
     files = { "lfs.c", "lfs_util.c" },
     cflags = { "-include", "ros_mem.h" },
     defines = {

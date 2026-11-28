@@ -13,19 +13,18 @@
                    NAK(0x15) 失败（长度/包头/CRC/Flash 错误）
 
 应答使用不可打印控制字符，与 Bootloader 打印的 UART 日志（含 'K'/'E' 字母）
-互不干扰。OTA 包头与压缩由 tools/build_ota.py 生成（本脚本直接复用其
-build_package），也可先用 build_ota.py 生成 .ota 再分发。
+互不干扰。OTA 包头与打包由 tools/ota.py 提供（与 build_ota.py 共用）。
 
 典型用法：
     # 默认 COM3、自动用 ST-LINK 复位目标后进入 Bootloader 窗口
-    python tools/uart_ota.py --bin build/cross/arm/release/ros-fw-f103cb.bin
+    python tools/uart_ota.py --bin build/cross/arm/release/f103cb.bin
 
     # 指定串口 / 波特率
     python tools/uart_ota.py -p COM5 -b 115200 --bin xxx.bin
 
     # STM32F407VE：OTA 区 256KB；--compress 使用 raw deflate 压缩负载
     python tools/uart_ota.py --slot-size 0x40000 --compress \
-        --bin build/cross/arm/release/ros-fw-f407ve.bin
+        --bin build/cross/arm/release/f407ve.bin
 
     # 不用 ST-LINK（板子没接调试器）：脚本持续敲门，期间手动按复位键
     python tools/uart_ota.py --no-reset --bin xxx.bin
@@ -42,7 +41,7 @@ import subprocess
 import sys
 import time
 
-from build_ota import FOTA_HDR_SIZE, build_package, crc32
+from ota import FOTA_HDR_SIZE, build_package, crc32
 
 # 协议字符
 REQ = b"R"          # Host -> Boot：请求升级
