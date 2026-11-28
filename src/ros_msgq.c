@@ -108,6 +108,8 @@ int ros_msgq_send(ros_msgq_t *mq, const void *msg, uint32_t len,
     header = len;
 
     for (;;) {
+        int rc;
+
         ros_port_critical_enter();
         if (mq->size - mq->used >= need) {
             /* 头与负载整体写入；空间已提前校验，不会写半条 */
@@ -119,10 +121,12 @@ int ros_msgq_send(ros_msgq_t *mq, const void *msg, uint32_t len,
             ROS_TRACE_OBJ(ROS_EVT_MSGQ_SEND, (uint32_t)(uintptr_t)mq, len);
             return ROS_OK;
         }
-        ros_port_critical_exit();
 
-        if (ros_wait_retry(&mq->send_wait, deadline, timeout) != ROS_OK) {
-            return ROS_TIMEOUT;
+        /* 条件检查与入链同临界区，避免接收方唤醒落在两者之间 */
+        rc = ros_wait_retry_locked(&mq->send_wait, deadline, timeout);
+        if (rc != ROS_OK) {
+            ros_port_critical_exit();   /* 阻塞成功时临界区已由等待原语退出 */
+            return rc;
         }
     }
 }
@@ -147,6 +151,7 @@ int ros_msgq_recv(ros_msgq_t *mq, void *msg, uint32_t max_len,
 
     for (;;) {
         uint32_t len = 0U;
+        int rc;
 
         ros_port_critical_enter();
         if (mq->count > 0U && mq->used >= ROS_MSGQ_HDR_SIZE) {
@@ -174,10 +179,12 @@ int ros_msgq_recv(ros_msgq_t *mq, void *msg, uint32_t max_len,
             ROS_TRACE_OBJ(ROS_EVT_MSGQ_RECV, (uint32_t)(uintptr_t)mq, len);
             return ROS_OK;
         }
-        ros_port_critical_exit();
 
-        if (ros_wait_retry(&mq->recv_wait, deadline, timeout) != ROS_OK) {
-            return ROS_TIMEOUT;
+        /* 条件检查与入链同临界区，避免发送方唤醒落在两者之间 */
+        rc = ros_wait_retry_locked(&mq->recv_wait, deadline, timeout);
+        if (rc != ROS_OK) {
+            ros_port_critical_exit();   /* 阻塞成功时临界区已由等待原语退出 */
+            return rc;
         }
     }
 }
@@ -249,6 +256,13 @@ int ros_msgq_destroy(ros_msgq_t *mq)
 {
     if (!ROS_OBJ_VALID(mq)) {
         return ROS_INVALID_PARAM;
+    }
+
+    /* 与 ros_queue_destroy() 保持一致：仍有排队消息时不允许销毁 */
+    if (mq->count != 0U) {
+        LOG_W(ROS_TAG, "msgq_destroy: still has %u messages",
+                  (unsigned)mq->count);
+        return ROS_BUSY;
     }
 
     if (ros_obj_destroy_begin(&mq->initialized,

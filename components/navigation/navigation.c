@@ -169,13 +169,15 @@ static const nav_dir_t nav_dirs[8] = {
 static int nav_build_path(const navigation_grid_map_t *map, int32_t start, int32_t goal,
                           navigation_path_t *path)
 {
-    uint16_t temp[NAVIGATION_MAX_NODES];
     uint16_t len = 0;
     int32_t cur = goal;
+    uint16_t i;
     (void)map;
 
+    /* 直接写进调用方缓冲再原地翻转：原先的 uint16_t temp[NAVIGATION_MAX_NODES]
+     * 在 4096 节点时占 8KB 栈，任务栈稍小就会溢出。 */
     while (cur >= 0 && len < NAVIGATION_MAX_NODES) {
-        temp[len++] = (uint16_t)cur;    /* 从终点向起点倒序收集 */
+        path->nodes[len++] = (uint16_t)cur;    /* 从终点向起点倒序收集 */
         if (cur == start) {
             break;
         }
@@ -184,8 +186,11 @@ static int nav_build_path(const navigation_grid_map_t *map, int32_t start, int32
     if (cur != start) {
         return -1;                      /* 未回溯到起点：无有效路径 */
     }
-    for (uint16_t i = 0; i < len; i++) {
-        path->nodes[i] = temp[len - 1 - i];     /* 翻转为 起点→终点 */
+    for (i = 0; i < (uint16_t)(len / 2U); i++) {
+        uint16_t t = path->nodes[i];
+
+        path->nodes[i] = path->nodes[len - 1U - i];
+        path->nodes[len - 1U - i] = t;  /* 翻转为 起点→终点 */
     }
     path->len = len;
     return 0;

@@ -148,7 +148,7 @@ int ws2812b_show(ws2812b_handle_t *handle)
         return ret;
     }
 
-    /* 锁存复位：拉低 >50us */
-    ros_sleep_ms(1);
+    /* 锁存复位：拉低 >50us（用宏定义的微秒值，避免 1ms 的过度等待） */
+    hal_delay_us(WS2812B_RESET_DELAY_US);
     return HAL_OK;
 }

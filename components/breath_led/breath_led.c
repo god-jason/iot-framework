@@ -86,12 +86,14 @@ int breath_led_update(breath_led_t *led, uint32_t tick_ms)
         led->start_tick = tick_ms;
         led->started = true;
     }
-    /* 正弦呼吸：sin(0..π) 从 0 升到 1 再降回 0 */
-    phase = (float)(tick_ms - led->start_tick) / (float)led->period_ms;
+    /* 正弦呼吸：sin(0..π) 从 0 升到 1 再降回 0。
+     * 先在整数域对周期取模，避免 phase > 1 后 sinf 变负、
+     * 负浮点转 uint16_t 触发未定义行为（典型实现得到 6 万级占空比）。 */
+    phase = (float)((tick_ms - led->start_tick) % led->period_ms) /
+            (float)led->period_ms;
     duty = sinf(phase * (float)M_PI) * 1000.0f;
-    /* 注意：phase > 1 后 sine 为负，转 uint16_t 会得到很大的值，
-     * 因此调用者应在一个周期内重新 start() 或自行对相位取模 */
-    led->duty = (uint16_t)duty;
+    duty = fminf(fmaxf(duty, 0.0f), 1000.0f);
+    led->duty = (uint16_t)(duty + 0.5f);
     return led->ops->set_duty(led->ops->ctx, led->duty);
 }
 

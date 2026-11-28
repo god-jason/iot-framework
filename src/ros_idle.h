@@ -17,8 +17,8 @@ extern "C" {
 /* 内置空闲任务（idle.c 维护） */
 extern ros_task_t *ros_idle_task;
 
-/* 创建内置空闲任务 */
-void ros_idle_init(void);
+/* 创建内置空闲任务；返回非 0 表示移植层栈上下文构造失败 */
+int ros_idle_init(void);
 
 #ifdef __cplusplus
 }

@@ -40,6 +40,17 @@ void ros_task_module_init(void)
 #endif
 }
 
+/* 注册表挂链（调用者必须已持有临界区）。 */
+static void ros_task_register_locked(ros_task_t *task)
+{
+    list_node_init(&task->all_node);
+    task->tid = ++s_next_tid;
+    if (task->tid == 0U) {
+        task->tid = ++s_next_tid;       /* 回绕时跳过 0 */
+    }
+    list_add_tail(&s_all_tasks, &task->all_node);
+}
+
 /* 把任务 TCB 挂入全局注册表，供统计与遍历使用。 */
 void ros_task_register(ros_task_t *task)
 {
@@ -47,13 +58,8 @@ void ros_task_register(ros_task_t *task)
         return;
     }
 
-    list_node_init(&task->all_node);
     ros_port_critical_enter();
-    task->tid = ++s_next_tid;
-    if (task->tid == 0U) {
-        task->tid = ++s_next_tid;       /* 回绕时跳过 0 */
-    }
-    list_add_tail(&s_all_tasks, &task->all_node);
+    ros_task_register_locked(task);
     ros_port_critical_exit();
 }
 
@@ -166,6 +172,7 @@ static int ros_task_create_impl(ros_task_t *task, const char *name,
 #endif
 #if ROS_USE_PRIORITY_INHERIT
     task->wait_mutex = NULL;
+    list_init(&task->held_mutexes);
 #endif
 
 #if ROS_USE_STACK_CHECK
@@ -186,14 +193,15 @@ static int ros_task_create_impl(ros_task_t *task, const char *name,
         return rc;
     }
 
-    /* 加入就绪表与任务注册表 */
+    /* 加入就绪表与任务注册表：必须在同一临界区完成，
+     * 否则新任务可能在 tid 尚未分配时就运行，内存记账落到 tid==0。 */
     ros_port_critical_enter();
     ROS_TRACE(ROS_EVT_TASK_CREATE, (uint32_t)(uintptr_t)task, priority);
     ros_trace_name(task, ROS_TRACE_NAME_TASK, name);
 
+    ros_task_register_locked(task);
     ros_make_ready(task);
     ros_port_critical_exit();
-    ros_task_register(task);
 
     LOG_I(ROS_TAG, "task create: name=%s prio=%u stack=%u tcb=%08x mem=%08x",
               name != NULL ? name : "?", (unsigned)priority,
@@ -342,6 +350,13 @@ void ros_yield(void)
     ros_task_t *cur = ros_current_task;
     ros_task_t *next;
 
+    if (ros_in_isr()) {
+        /* 中断上下文不能就地切换栈：请求 PendSV 在异常退出时完成调度 */
+        LOG_W(ROS_TAG, "yield: forbidden in ISR, request PendSV instead");
+        ros_port_request_switch();
+        return;
+    }
+
     ros_port_critical_enter();
     if (cur != NULL && cur != ros_idle_task &&
         cur->state != ROS_TASK_TERMINATED) {
@@ -359,6 +374,11 @@ void ros_task_exit(void)
 {
     ros_task_t *cur = ros_current_task;
     ros_task_t *next;
+
+    if (ros_in_isr()) {
+        LOG_E(ROS_TAG, "task_exit: forbidden in ISR");
+        return;
+    }
 
     if (cur != NULL && cur == ros_idle_task) {
         /*
@@ -463,18 +483,30 @@ int ros_task_set_priority(ros_task_t *task, uint8_t priority)
 int ros_task_suspend(ros_task_t *task)
 {
     ros_task_t *cur = ros_current_task;
-    ros_task_t *next;
+    ros_task_t *next = NULL;
     int rc;
 
     if (task == NULL) {
         return ROS_INVALID_PARAM;
     }
+    if (ros_in_isr()) {
+        LOG_E(ROS_TAG, "task_suspend: forbidden in ISR");
+        return ROS_FORBIDDEN_IN_ISR;
+    }
 
-    /* 状态迁移与嵌套计数在同一临界区完成，避免与并发 resume 丢计数 */
+    /* 状态迁移、嵌套计数与「挂起自己后选下一个任务」在同一临界区完成：
+     * 否则中间窗口内 resume 会把已挂起的任务重新放回就绪表。 */
     ros_port_critical_enter();
-    rc = ros_sched_suspend(task);
-    if (rc == ROS_OK && task->suspend_count < 0xFFU) {
+    if (task->suspend_count == 0xFFU) {
+        ros_port_critical_exit();
+        return ROS_ERROR;
+    }
+    rc = ros_sched_suspend_locked(task);
+    if (rc == ROS_OK) {
         task->suspend_count++;
+        if (task == cur) {
+            next = ros_sched_pick();
+        }
     }
     ros_port_critical_exit();
     if (rc != ROS_OK) {
@@ -484,11 +516,8 @@ int ros_task_suspend(ros_task_t *task)
     ROS_TRACE(ROS_EVT_TASK_SUSPEND, (uint32_t)(uintptr_t)task,
               task->suspend_count);
 
-    /* 挂起自己：当前任务已不在就绪表，直接选下一个任务切走 */
+    /* 挂起自己：当前任务已不在就绪表，直接切走 */
     if (task == cur) {
-        ros_port_critical_enter();
-        next = ros_sched_pick();
-        ros_port_critical_exit();
         ros_sched_switch(next);
     }
 
@@ -497,13 +526,14 @@ int ros_task_suspend(ros_task_t *task)
 
 int ros_task_resume(ros_task_t *task)
 {
-    bool resume_now;
+    bool resume_now = false;
+    bool preempt = false;
 
     if (task == NULL) {
         return ROS_INVALID_PARAM;
     }
 
-    /* 计数递减与状态判断在同一临界区，ISR 与任务并发 resume 不会丢计数 */
+    /* 计数递减、状态迁回就绪表在同一临界区完成，避免嵌套挂起被少减一次 */
     ros_port_critical_enter();
     if ((task->suspend_count == 0U) ||
         (task->state != ROS_TASK_SUSPENDED)) {
@@ -511,21 +541,26 @@ int ros_task_resume(ros_task_t *task)
         return ROS_NOT_READY;
     }
     task->suspend_count--;
-    resume_now = (task->suspend_count == 0U);
+    if (task->suspend_count == 0U) {
+        (void)ros_sched_resume_locked(task);
+        resume_now = true;
+        preempt = ros_sched_preempt_needed();
+    }
     ros_port_critical_exit();
 
     if (!resume_now) {
         return ROS_OK;               /* 仍有嵌套挂起，保持挂起态 */
     }
 
-    (void)ros_sched_resume(task);
     ROS_TRACE(ROS_EVT_TASK_RESUME, (uint32_t)(uintptr_t)task, 0U);
 
     /* 恢复了更高优先级任务：ISR 中请求 PendSV，任务上下文主动让出 */
-    if (ros_in_isr()) {
-        ros_port_request_switch();
-    } else if (ros_sched_preempt_needed()) {
-        ros_yield();
+    if (preempt) {
+        if (ros_in_isr()) {
+            ros_port_request_switch();
+        } else {
+            ros_yield();
+        }
     }
 
     return ROS_OK;
@@ -577,39 +612,35 @@ int ros_task_notify(ros_task_t *task, uint32_t value)
 int ros_task_wait_notify(ros_task_t *task, uint32_t timeout, uint32_t *value)
 {
     int rc;
+    uint32_t deadline;
 
     if (task == NULL) {
         return ROS_INVALID_PARAM;
     }
+    if (!ros_wait_blockable(timeout)) {
+        return ROS_FORBIDDEN_IN_ISR;
+    }
 
-    ros_port_critical_enter();
-    if (task->notify_pending) {
-        task->notify_pending = false;
-        if (value != NULL) {
-            *value = task->notify_value;
+    deadline = ros_tick_get() + timeout;
+
+    for (;;) {
+        ros_port_critical_enter();
+        if (task->notify_pending) {
+            task->notify_pending = false;
+            if (value != NULL) {
+                *value = task->notify_value;
+            }
+            ros_port_critical_exit();
+            return ROS_OK;
         }
-        ros_port_critical_exit();
-        return ROS_OK;
-    }
-    ros_port_critical_exit();
 
-    if (timeout == ROS_TIMEOUT_NONE) {
-        return ROS_TIMEOUT;
+        /* 判空与入链同临界区：否则窗口内 notify 会找不到等待者而丢失 */
+        rc = ros_wait_retry_locked(&s_notify_wait, deadline, timeout);
+        if (rc != ROS_OK) {
+            ros_port_critical_exit();   /* 阻塞成功时临界区已由等待原语退出 */
+            return rc;
+        }
     }
-
-    rc = ros_block_current(&s_notify_wait, timeout);
-    if (rc != ROS_OK) {
-        return rc;
-    }
-
-    ros_port_critical_enter();
-    task->notify_pending = false;
-    if (value != NULL) {
-        *value = task->notify_value;
-    }
-    ros_port_critical_exit();
-
-    return ROS_OK;
 }
 
 /* 清除未消费的通知（丢弃通知值）。 */

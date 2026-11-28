@@ -12,8 +12,10 @@
 extern "C" {
 #endif
 
+/* 默认关闭：压测任务会持续占用 CPU 并刷日志，不能进发布固件；
+ * 需要时由构建参数（-DAPP_STRESS_ENABLE=1）或专用 stress 目标打开。 */
 #ifndef APP_STRESS_ENABLE
-#define APP_STRESS_ENABLE 1
+#define APP_STRESS_ENABLE 0
 #endif
 
 /* 创建 12 个压测任务并开始运行；重复调用无副作用 */

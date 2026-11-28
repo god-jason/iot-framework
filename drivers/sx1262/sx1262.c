@@ -164,14 +164,18 @@ int sx1262_send(sx1262_handle_t *h, const uint8_t *data, size_t len)
     if (sx1262_cmd(h, SX126X_SET_TX, p, 3U) != HAL_OK) { return (int)HAL_IO_ERROR; }
     start = hal_tick_get();
     for (;;) {
+        uint16_t status;
+
         if (sx1262_rd(h, SX126X_GET_IRQ_STATUS, irq, 2U) != HAL_OK) {
             return (int)HAL_IO_ERROR;
         }
-        if ((irq[0] & 0x01U) != 0U) {          /* TxDone */
+        /* GET_IRQ_STATUS 为 2 字节、高字节先出 */
+        status = (uint16_t)(((uint16_t)irq[0] << 8) | (uint16_t)irq[1]);
+        if ((status & SX126X_IRQ_TX_DONE) != 0U) {
             (void)sx1262_clear_irq(h);
             return HAL_OK;
         }
-        if ((irq[1] & 0x02U) != 0U) {          /* Timeout */
+        if ((status & SX126X_IRQ_TIMEOUT) != 0U) {
             (void)sx1262_clear_irq(h);
             return (int)HAL_TIMEOUT;
         }
@@ -186,17 +190,20 @@ int sx1262_poll(sx1262_handle_t *h, uint8_t *data, size_t len, size_t *received)
 {
     uint8_t irq[2] = { 0U, 0U };
     uint8_t st[2] = { 0U, 0U };
+    uint16_t status;
+
     SX126X_CHECK(h);
     if (data == NULL || len == 0U) { return (int)HAL_INVALID_PARAM; }
     if (sx1262_rd(h, SX126X_GET_IRQ_STATUS, irq, 2U) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    if ((irq[1] & 0x02U) != 0U) {              /* Timeout */
+    status = (uint16_t)(((uint16_t)irq[0] << 8) | (uint16_t)irq[1]);
+    if ((status & SX126X_IRQ_TIMEOUT) != 0U) {
         (void)sx1262_clear_irq(h);
         return (int)HAL_TIMEOUT;
     }
-    if ((irq[0] & 0x02U) == 0U) { return (int)HAL_NOT_READY; }
-    if ((irq[0] & 0x40U) != 0U) {              /* CrcErr */
+    if ((status & SX126X_IRQ_RX_DONE) == 0U) { return (int)HAL_NOT_READY; }
+    if ((status & SX126X_IRQ_CRC_ERR) != 0U) {
         (void)sx1262_clear_irq(h);
         return (int)HAL_CRC_ERROR;
     }

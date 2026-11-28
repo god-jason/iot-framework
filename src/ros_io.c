@@ -9,7 +9,7 @@
 #include "ros_io.h"
 #include "ros_task.h"
 #include "ros_sched.h"
-#include "strings.h"
+#include "strings.h"   /* components/common/strings.h（该目录在全局头文件搜索路径中） */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -245,6 +245,7 @@ int ros_scanf(const char *fmt, ...)
         if (*f == '%') {
             bool is_c;
             bool is_s;
+            long width = 0;
 
             f++;
             if (*f == '%') {
@@ -254,6 +255,14 @@ int ros_scanf(const char *fmt, ...)
                 p++;
                 f++;
                 continue;
+            }
+            /* 可选字段宽度：%32s / %c 前的数字 */
+            while (*f >= '0' && *f <= '9') {
+                width = width * 10L + (long)(*f - '0');
+                if (width > (long)(ROS_IO_LINE_MAX - 1)) {
+                    width = (long)(ROS_IO_LINE_MAX - 1);
+                }
+                f++;
             }
             is_c = (*f == 'c');
             is_s = (*f == 's');
@@ -271,9 +280,11 @@ int ros_scanf(const char *fmt, ...)
                 *(va_arg(ap, char *)) = *p++;
             } else if (is_s) {
                 char *dst = va_arg(ap, char *);
-                int n = 0;
+                long n = 0;
+                /* 未给宽度时按输入行缓冲上限截断，避免无界写入调用方缓冲 */
+                long limit = (width > 0) ? width : (long)(ROS_IO_LINE_MAX - 1);
 
-                while (*p != '\0' && *p != ' ' && *p != '\t') {
+                while (*p != '\0' && *p != ' ' && *p != '\t' && n < limit) {
                     dst[n++] = *p++;
                 }
                 dst[n] = '\0';

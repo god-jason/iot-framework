@@ -39,6 +39,34 @@ void hal_irq_disable(void)
     cli();
 }
 
+uint32_t hal_irq_save(void)
+{
+    uint8_t sreg = SREG;
+
+    SREG = (uint8_t)(sreg & (uint8_t)~_BV(SREG_I));   /* 关中断，但不影响其它标志 */
+    return (uint32_t)sreg;
+}
+
+void hal_irq_restore(uint32_t state)
+{
+    SREG = (uint8_t)state;                            /* 恢复进入前的中断使能状态 */
+}
+
+/*
+ * 微秒忙等：按 4 周期/次空循环估算（AVR 大多数指令 1-2 周期）。
+ * 仅用于单总线位时序，精度要求不高的场合；不依赖定时器中断。
+ */
+void hal_delay_us(uint32_t us)
+{
+    while (us-- > 0U) {
+        uint16_t n = (uint16_t)((F_CPU / 4000000UL) + 1UL);
+
+        while (n-- > 0U) {
+            __asm__ __volatile__ ("nop");
+        }
+    }
+}
+
 void hal_system_reset(void)
 {
     cli();

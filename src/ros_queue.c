@@ -41,6 +41,12 @@ int ros_queue_init(ros_queue_t *queue, void *buffer,
         LOG_E(ROS_TAG, "queue_init: invalid param");
         return ROS_INVALID_PARAM;
     }
+    /* 索引计算使用 32 位乘法（head * item_size），这里必须拒绝会回绕的组合，
+     * 否则越界索引会落到调用方缓冲之外。 */
+    if (depth > (0xFFFFFFFFUL / item_size)) {
+        LOG_E(ROS_TAG, "queue_init: depth*item_size overflow");
+        return ROS_INVALID_PARAM;
+    }
 
 #if ROS_QUEUE_REQUIRE_POW2
     if (!ros_queue_is_pow2(depth)) {

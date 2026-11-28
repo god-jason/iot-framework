@@ -7,28 +7,36 @@
 #define IR_CHECK(h) \
     do { if ((h) == NULL || !(h)->initialized) { return (int)HAL_INVALID_PARAM; } } while (0)
 
+/*
+ * 载波调制：period 为载波周期（38kHz → 约 26us），
+ * 高/低各半周期，用微秒忙等产生；整段关中断保证波形不被拉长。
+ */
 static void ir_mark(ir_remote_handle_t *h, uint32_t duration_us)
 {
-    uint32_t period = 1000U / h->carrier_khz;
+    uint32_t period = 1000000U / (uint32_t)h->carrier_khz;
     uint32_t half;
     uint32_t elapsed = 0U;
+    uint32_t state;
+
     if (period < 2U) { period = 2U; }
     half = period / 2U;
-    hal_irq_disable();
-    while (elapsed + period <= duration_us) {
+
+    state = hal_irq_save();
+    while (elapsed < duration_us) {
         (void)hal_gpio_write(h->tx_pin, HAL_GPIO_HIGH);
-        ros_sleep_ms(1);
+        hal_delay_us(half);
         (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-        ros_sleep_ms(1);
+        hal_delay_us(period - half);
         elapsed += period;
     }
-    hal_irq_enable();
+    hal_irq_restore(state);
 }
 
+/* 空闲段：保持低电平 duration_us（不调制载波） */
 static void ir_space(ir_remote_handle_t *h, uint32_t duration_us)
 {
     (void)hal_gpio_write(h->tx_pin, HAL_GPIO_LOW);
-    ros_sleep_ms(1);
+    hal_delay_us(duration_us);
 }
 
 int ir_remote_set_carrier(ir_remote_handle_t *h, uint16_t carrier_khz)
@@ -148,14 +156,14 @@ int ir_remote_recv(ir_remote_handle_t *h, uint16_t *timings, size_t max_timings,
         if ((uint32_t)(hal_tick_get() - start) > timeout_ms) {
             return (int)HAL_TIMEOUT;
         }
-        ros_sleep_ms(1);
+        hal_delay_us(IR_POLL_US);
     }
     /* 逐段测量电平持续时间，直到帧结束或缓冲满 */
     while (n < max_timings) {
         int current = level;
         uint32_t ticks = 0U;
         while (hal_gpio_read_level(h->rx_pin) == current) {
-            ros_sleep_ms(1);
+            hal_delay_us(IR_POLL_US);
             ticks++;
             if (ticks * IR_POLL_US > IR_MAX_SEGMENT_US) { break; }
         }

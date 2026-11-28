@@ -19,6 +19,9 @@ _estack = ORIGIN(RAM) + LENGTH(RAM);
 _Min_Heap_Size  = 0x400;
 _Min_Stack_Size = 0x800;
 
+/* newlib 堆上限：主栈预留区之下，_sbrk 不再越过栈 */
+PROVIDE ( __heap_limit = _estack - _Min_Stack_Size );
+
 SECTIONS
 {
     .isr_vector :

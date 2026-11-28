@@ -19,6 +19,12 @@ int ros_sem_init(ros_sem_t *sem, uint32_t initial_count)
         LOG_E(ROS_TAG, "sem_init: null sem");
         return ROS_INVALID_PARAM;
     }
+    /* 与 ros_sem_give() 的上限保持一致：初始计数超限会让后续 give 语义错乱 */
+    if (initial_count > ROS_SEM_MAX_COUNT) {
+        LOG_E(ROS_TAG, "sem_init: count %u exceeds max %u",
+                  (unsigned)initial_count, (unsigned)ROS_SEM_MAX_COUNT);
+        return ROS_INVALID_PARAM;
+    }
 
     sem->count = initial_count;
     ros_wait_queue_init(&sem->wait);

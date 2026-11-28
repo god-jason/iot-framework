@@ -79,6 +79,7 @@ struct behavior_bt_node {
 
     int32_t  counter;  /* repeat 剩余次数 / delay 起始 tick */
     uint32_t config;   /* repeat 次数 / delay ticks */
+    uint16_t running_index; /* sequence/selector 记忆的"下一个待执行子节点" */
 };
 
 /*

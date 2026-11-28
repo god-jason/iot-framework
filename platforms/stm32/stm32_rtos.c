@@ -287,7 +287,12 @@ __attribute__((naked)) void ros_port_switch(ros_task_t *from, ros_task_t *to)
 {
     (void)from;
     (void)to;
-    __asm volatile("svc #0" ::: "memory");
+    /*
+     * 任务被重新调度回来时从 svc 的下一条指令继续执行。必须显式 bx lr：
+     * LR 已由异常返回恢复为调用点返回地址，否则会"落"进紧随其后的函数，
+     * 完全依赖链接顺序（且会额外置一次 PendSV）。
+     */
+    __asm volatile("svc #0\n\tbx lr" ::: "memory");
 }
 
 void ros_port_return(void)

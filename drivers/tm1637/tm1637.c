@@ -3,9 +3,10 @@
 #include "ros.h"
 #include "common.h"
 
+/* TM1637 总线最高约 250kHz（4us/bit）：原来用 1ms 会让一次刷新耗时上百毫秒 */
 static void tm1637_delay(void)
 {
-    ros_sleep_ms(1);
+    hal_delay_us(5);
 }
 
 static int tm1637_dio(tm1637_handle_t *handle, hal_gpio_level_e level)

@@ -23,32 +23,37 @@ static int ds18b20_sample(ds18b20_handle_t *handle)
     return (level == HAL_GPIO_HIGH) ? 1 : 0;
 }
 
+/*
+ * 写位时序：拉低 2us → 写 1 时释放（整位 60us），写 0 时保持低 60us。
+ * 临界区从 3ms 降到约 62us，不再阻塞 tick。
+ */
 static void ds18b20_write_bit(ds18b20_handle_t *handle, uint8_t bit)
 {
-    hal_irq_disable();
+    uint32_t state = hal_irq_save();
+
     ds18b20_low(handle);
-    ros_sleep_ms(1);
+    hal_delay_us(2);
     if (bit != 0U) {
         ds18b20_release(handle);
     }
-    ros_sleep_ms(1);
+    hal_delay_us(60);
     ds18b20_release(handle);
-    ros_sleep_ms(1);
-    hal_irq_enable();
+    hal_irq_restore(state);
 }
 
+/* 读位时序：拉低 2us → 释放 → 10us 内采样（总线保持高电平 = 1） */
 static uint8_t ds18b20_read_bit(ds18b20_handle_t *handle)
 {
     uint8_t bit;
+    uint32_t state = hal_irq_save();
 
-    hal_irq_disable();
     ds18b20_low(handle);
-    ros_sleep_ms(1);
+    hal_delay_us(2);
     ds18b20_release(handle);
-    ros_sleep_ms(1);
+    hal_delay_us(10);
     bit = (uint8_t)ds18b20_sample(handle);
-    ros_sleep_ms(1);
-    hal_irq_enable();
+    hal_delay_us(50);           /* 补足 60us 位时隙 */
+    hal_irq_restore(state);
     return bit;
 }
 

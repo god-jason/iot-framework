@@ -183,6 +183,14 @@ int ros_timer_start(ros_timer_t *timer, uint32_t period_ms)
     if (timer->running) {
         list_remove(&timer->node);   /* 重启：先摘除旧节点 */
     }
+#if ROS_USE_TIMER_TASK
+    /* 已入待执行队列但回调尚未执行时重启：必须撤销旧的一次触发，
+     * 否则会先按旧周期回调一次、再按新周期到期一次。 */
+    if (timer->pending) {
+        list_remove(&timer->pending_node);
+        timer->pending = false;
+    }
+#endif
     timer->period = period_ms;
     timer->deadline = ros_tick_count + period_ms;
     timer->node.sort_key = timer->deadline;

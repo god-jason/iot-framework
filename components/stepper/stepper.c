@@ -531,8 +531,10 @@ int stepper_set_timer(stepper_t *st, hal_tim_t *tim, uint32_t tick_hz)
  */
 int stepper_move(stepper_t *st, int32_t steps)
 {
-    int32_t i;
+    uint32_t i;
+    uint32_t magnitude;
     uint8_t dir;
+    uint32_t period_us = 0U;
 
     if (st == NULL) {
         return -1;
@@ -542,23 +544,37 @@ int stepper_move(stepper_t *st, int32_t steps)
     if (stepper_set_direction(st, dir) != 0) {
         return -1;
     }
-    if (steps < 0) {
-        steps = -steps;   /* 注意：INT32_MIN 取反会溢出 */
-    }
-    if (st->max_speed != 0U && st->accel != 0U && steps > 1) {
+    /* 用 64 位取绝对值：INT32_MIN 直接取反是未定义行为 */
+    magnitude = (steps < 0) ? (uint32_t)(-(int64_t)steps) : (uint32_t)steps;
+
+    if (st->max_speed != 0U && st->accel != 0U && magnitude > 1U) {
         if (st->tim != NULL) {
             /* 硬件定时器：更新中断发脉冲并调整频率 */
-            return stepper_move_timed(st, (uint32_t)steps);
+            return stepper_move_timed(st, magnitude);
         }
-        return stepper_move_ramp(st, (uint32_t)steps, dir);
+        return stepper_move_ramp(st, magnitude, dir);
     }
-    for (i = 0; i < steps; i++) {
+
+    /* 不加/减速路径也必须遵守最大速度，否则脉冲背靠背输出，步进电机必然失步 */
+    if (st->max_speed != 0U) {
+        period_us = 1000000U / st->max_speed;
+    }
+
+    for (i = 0U; i < magnitude; i++) {
         if (st->ops->step(st->ops->ctx) != 0) {
             LOG_E("stepper", "step fail");   /* 步进脉冲输出失败 */
             return -1;
         }
         /* 正向加 1、反向减 1 维护软件位置 */
         st->position += (dir == 0) ? 1 : -1;
+
+        if ((i + 1U < magnitude) && (period_us > 0U)) {
+            if (st->ops->delay_us != NULL) {
+                st->ops->delay_us(st->ops->ctx, period_us);
+            } else {
+                hal_delay_us(period_us);
+            }
+        }
     }
     return 0;
 }

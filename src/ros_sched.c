@@ -156,7 +156,7 @@ int ros_sched_remove(ros_task_t *task, bool *was_ready)
  * 仅 READY / RUNNING / SUSPENDED 允许；BLOCKED / DELAYED / TERMINATED
  * 返回 ROS_BUSY（避免破坏等待队列与延时链表的节点归属）。
  */
-int ros_sched_suspend(ros_task_t *task)
+int ros_sched_suspend_locked(ros_task_t *task)
 {
     int rc = ROS_BUSY;
 
@@ -164,7 +164,6 @@ int ros_sched_suspend(ros_task_t *task)
         return ROS_INVALID_PARAM;
     }
 
-    ros_port_critical_enter();
     if (task->state == ROS_TASK_READY) {
         uint8_t prio = task->priority;
 
@@ -180,27 +179,46 @@ int ros_sched_suspend(ros_task_t *task)
         task->state = ROS_TASK_SUSPENDED;
         rc = ROS_OK;
     }
+
+    return rc;
+}
+
+int ros_sched_suspend(ros_task_t *task)
+{
+    int rc;
+
+    ros_port_critical_enter();
+    rc = ros_sched_suspend_locked(task);
     ros_port_critical_exit();
 
     return rc;
 }
 
 /* 把 SUSPENDED 任务放回就绪表；非挂起态为空操作 */
-int ros_sched_resume(ros_task_t *task)
+int ros_sched_resume_locked(ros_task_t *task)
 {
     if (task == NULL) {
         return ROS_INVALID_PARAM;
     }
 
-    ros_port_critical_enter();
     if (task->state == ROS_TASK_SUSPENDED) {
         /* ros_make_ready() 会拒绝 SUSPENDED 态，必须先切到 READY 再挂链 */
         task->state = ROS_TASK_READY;
         ros_make_ready(task);
     }
-    ros_port_critical_exit();
 
     return ROS_OK;
+}
+
+int ros_sched_resume(ros_task_t *task)
+{
+    int rc;
+
+    ros_port_critical_enter();
+    rc = ros_sched_resume_locked(task);
+    ros_port_critical_exit();
+
+    return rc;
 }
 
 /* ------------------------------ 优先级变更 ------------------------------ */
@@ -251,6 +269,12 @@ ros_task_t *ros_sched_pick(void)
     ros_task_t *next = ros_sched_select();
 
     next = (next != NULL) ? next : ros_idle_task;
+    if (next == NULL) {
+        /* 就绪表为空且空闲任务不存在：继续运行会让阻塞任务带着
+         * BLOCKED 状态回到调用点，状态机彻底错乱，只能停机保留现场。 */
+        LOG_E(ROS_TAG, "no ready task and idle task missing");
+        ros_port_fatal_halt();
+    }
 
     /*
      * 任务上下文：目标任务已从就绪表摘出，从此刻起直到真正切栈
@@ -436,6 +460,13 @@ void ros_sched(void)
 {
     ros_task_t *next;
 
+    if (ros_in_isr()) {
+        /* 中断上下文只允许请求延迟调度，不能就地保存/切换任务栈 */
+        LOG_W(ROS_TAG, "ros_sched: forbidden in ISR, request PendSV instead");
+        ros_port_request_switch();
+        return;
+    }
+
     ros_port_critical_enter();
     next = ros_sched_pick();
     ros_port_critical_exit();
@@ -475,6 +506,11 @@ ros_task_t *ros_sched_from_isr(void)
     ros_diag_record(2U, prev, next);
 
     if (next != prev) {
+#if ROS_USE_TIME_SLICING
+        /* 时间片在抢占路径同样要重置：否则切回的任务 slice_remaining 仍为 0，
+         * 下一个 tick 立刻再次"到期"，轮转退化为每 tick 一次。 */
+        next->slice_remaining = ROS_TIME_SLICE_TICKS;
+#endif
         ros_current_task = next;
         next->state = ROS_TASK_RUNNING;
 

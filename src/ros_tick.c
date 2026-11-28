@@ -194,13 +194,24 @@ uint32_t ros_idle_next_timeout(void)
     uint32_t now = ros_tick_count;
     uint32_t delayed = ros_delayed_next_deadline();
     uint32_t timer = ros_timer_next_deadline();
-    uint32_t next = (delayed < timer) ? delayed : timer;
+    uint32_t delayed_delta;
+    uint32_t timer_delta;
+    uint32_t next_delta;
 
-    if (next == UINT32_MAX) {
+    if (delayed == UINT32_MAX && timer == UINT32_MAX) {
         return UINT32_MAX;          /* 没有任何截止点 */
     }
-    if (ROS_TICK_AFTER(next, now)) {
-        return next - now;
+
+    /* 用相对差比较：两个绝对 tick 直接做无符号比较会在回绕窗口内选错 */
+    delayed_delta = (delayed == UINT32_MAX) ? UINT32_MAX : (delayed - now);
+    timer_delta = (timer == UINT32_MAX) ? UINT32_MAX : (timer - now);
+    next_delta = (delayed_delta < timer_delta) ? delayed_delta : timer_delta;
+
+    if (next_delta == UINT32_MAX) {
+        return UINT32_MAX;
+    }
+    if ((next_delta & 0x80000000UL) == 0U && next_delta > 0U) {
+        return next_delta;          /* 未到期，按最小差值休眠 */
     }
     return 1U;                      /* 已到期：推进 1 tick 触发处理 */
 }

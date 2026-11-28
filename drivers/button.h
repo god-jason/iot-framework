@@ -30,8 +30,9 @@ typedef struct {
     button_callback_fn callback;
     void *user;
 
-    uint8_t stable_state;
-    uint8_t last_state;
+    uint8_t stable_state;      /* 去抖后的稳定状态（1 = 按下） */
+    uint8_t raw_state;         /* 最近一次采样值，用于去抖计时 */
+    uint32_t last_change_ms;   /* 原始电平最近一次变化时刻 */
     uint32_t press_start;
     uint8_t press_reported;
 } button_t;
@@ -40,7 +41,11 @@ int button_init(button_t *btn, uint8_t pin, uint8_t active_level,
                     uint32_t debounce_ms, uint32_t long_press_ms,
                     button_callback_fn cb, void *user);
 
-/* 主循环周期性调用（如 10ms）去抖与检测沿 */
+/*
+ * 主循环周期性调用（建议 10ms）做去抖与事件检测。
+ * 事件顺序：按下沿 BUTTON_PRESSED；持续按住超长按阈值 BUTTON_LONG_PRESSED（一次）；
+ * 释放沿 BUTTON_RELEASED；若释放时未触发长按，再补一次 BUTTON_CLICKED。
+ */
 int button_process(button_t *btn, uint32_t tick_ms);
 
 #ifdef __cplusplus

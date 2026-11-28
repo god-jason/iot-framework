@@ -55,8 +55,8 @@ static void test_mutex_basic(void)
     TF_CHECK_INT(ros_mutex_lock(&s_mutex, ROS_TIMEOUT_NONE), ROS_OK);
     TF_CHECK(ros_current() == s_mutex.owner);
 
-    /* 非递归：持有者再次加锁立即超时 */
-    TF_CHECK_INT(ros_mutex_lock(&s_mutex, ROS_TIMEOUT_NONE), ROS_TIMEOUT);
+    /* 非递归：持有者再次加锁立即返回 ROS_BUSY（并未发生等待） */
+    TF_CHECK_INT(ros_mutex_lock(&s_mutex, ROS_TIMEOUT_NONE), ROS_BUSY);
 
     TF_CHECK_INT(ros_mutex_unlock(&s_mutex), ROS_OK);
     TF_CHECK(s_mutex.owner == NULL);

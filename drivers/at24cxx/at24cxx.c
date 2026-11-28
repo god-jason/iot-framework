@@ -80,6 +80,13 @@ static int at24cxx_wait_ready(at24cxx_handle_t *handle)
     }
 }
 
+/* 24C01~24C16（<=2KB）只有 1 字节字地址；更大的型号才用 2 字节地址。
+ * 若对小容量器件发 2 字节地址，第二字节会被器件当作数据首字节。 */
+static bool at24cxx_addr_is_8bit(const at24cxx_handle_t *handle)
+{
+    return handle->capacity <= 2048U;
+}
+
 int at24cxx_read(at24cxx_handle_t *handle, uint32_t address, uint8_t *data, size_t len)
 {
     if (handle == NULL || data == NULL || len == 0U || !handle->initialized) {
@@ -87,6 +94,9 @@ int at24cxx_read(at24cxx_handle_t *handle, uint32_t address, uint8_t *data, size
     }
     if (address >= handle->capacity || len > handle->capacity - address) {
         return (int)HAL_OVERFLOW;
+    }
+    if (at24cxx_addr_is_8bit(handle)) {
+        return hal_i2c_dev_read_reg(&handle->i2c, (uint8_t)address, data, len);
     }
     return hal_i2c_dev_read_reg16(&handle->i2c, (uint16_t)address, data, len);
 }
@@ -113,7 +123,13 @@ int at24cxx_write(at24cxx_handle_t *handle, uint32_t address,
             chunk = page_room;
         }
 
-        ret = hal_i2c_dev_write_reg16(&handle->i2c, (uint16_t)current, &data[written], chunk);
+        if (at24cxx_addr_is_8bit(handle)) {
+            ret = hal_i2c_dev_write_reg(&handle->i2c, (uint8_t)current,
+                                        &data[written], chunk);
+        } else {
+            ret = hal_i2c_dev_write_reg16(&handle->i2c, (uint16_t)current,
+                                          &data[written], chunk);
+        }
         if (ret != HAL_OK) {
             return ret;
         }

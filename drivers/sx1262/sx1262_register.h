@@ -58,7 +58,7 @@
 #define SX126X_REGULATOR_LDO           0x00U
 #define SX126X_REGULATOR_DC_DC         0x01U
 
-/* IRQ 位（2 字节，小端返回） */
+/* IRQ 状态（2 字节，MSB 先返回：irq = (byte0 << 8) | byte1） */
 #define SX126X_IRQ_TX_DONE             0x0001U
 #define SX126X_IRQ_RX_DONE             0x0002U
 #define SX126X_IRQ_PREAMBLE_DETECTED   0x0004U

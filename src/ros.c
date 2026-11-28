@@ -34,8 +34,12 @@ void ros_init(void)
     ros_timers_init();
     ros_task_module_init();    /* 任务注册表 + 通知等待队列 */
 
-    /* 3. 创建空闲任务（依赖移植层栈初始化） */
-    ros_idle_init();
+    /* 3. 创建空闲任务（依赖移植层栈初始化）；失败时调度器没有兜底任务，
+     *    必须在启动前停机，避免后续 ros_sched_pick() 返回 NULL 后带病运行。 */
+    if (ros_idle_init() != ROS_OK) {
+        LOG_E(ROS_TAG, "idle task init failed, halting");
+        ros_port_fatal_halt();
+    }
 
     LOG_I(ROS_TAG, "robotos initialized, max_priority=%d", ROS_MAX_PRIORITY);
 }

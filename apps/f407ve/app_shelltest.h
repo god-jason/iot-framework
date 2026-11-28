@@ -18,8 +18,9 @@
 extern "C" {
 #endif
 
+/* 默认关闭：仅调试目标开启 */
 #ifndef APP_SHELLTEST_ENABLE
-#define APP_SHELLTEST_ENABLE 1
+#define APP_SHELLTEST_ENABLE 0
 #endif
 
 /* 同步执行一次自检并打印 PASS/FAIL；重复调用无副作用 */

@@ -51,7 +51,7 @@
 
 /* 互斥量优先级继承（含阻塞链递归传播） */
 #ifndef ROS_USE_PRIORITY_INHERIT
-#define ROS_USE_PRIORITY_INHERIT 1
+#define ROS_USE_PRIORITY_INHERIT 0
 #endif
 
 /* 信号量计数上限，防止无界 give 溢出回绕 */
@@ -127,7 +127,28 @@
  * 置 0 则所有 ROS_TRACE_* 宏编译为空，零 RAM/ROM 开销。
  */
 #ifndef ROS_USE_TRACE
-#define ROS_USE_TRACE 1
+#define ROS_USE_TRACE 0
+#endif
+
+/* ------------------------------ 配置一致性 ------------------------------ */
+/*
+ * 这些不变式原先只写在注释里，裁剪配置时一旦违反会在运行期静默失败，
+ * 这里改为编译期直接报错。
+ */
+#if ROS_TICK_HZ != 1000U
+#error "内核所有 *_ms 参数直接按 tick 计数，ROS_TICK_HZ 必须为 1000"
+#endif
+
+#if ROS_MAX_PRIORITY < 2
+#error "ROS_MAX_PRIORITY 至少为 2（需要独立的最低优先级给空闲任务）"
+#endif
+
+#if ROS_USE_TIMER_TASK && (ROS_TIMER_TASK_PRIORITY >= (ROS_MAX_PRIORITY - 1))
+#error "ROS_TIMER_TASK_PRIORITY 必须小于空闲任务优先级（ROS_MAX_PRIORITY-1）"
+#endif
+
+#if ROS_USE_TIME_SLICING && (ROS_TIME_SLICE_TICKS == 0U)
+#error "ROS_TIME_SLICE_TICKS 必须大于 0"
 #endif
 
 #endif /* ROS_CONFIG_H */

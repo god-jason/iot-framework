@@ -49,10 +49,10 @@ void ut_pid(void)
 
     pid_init(&pid, 0.0f, 0.0f, 1.0f);
     TF_CHECK_NEAR(pid_update(&pid, 10.0f, 0.0f, 0.5f), 0.0f, 1e-4);
-    /* 误差从 10 变为 20：微分 = (20-10)/0.5 = 20 */
-    TF_CHECK_NEAR(pid_update(&pid, 20.0f, 0.0f, 0.5f), 20.0f, 1e-4);
-    /* 误差不变：微分为 0 */
+    /* 微分作用于测量值：设定值 10→20 阶跃、测量不变时不产生微分冲击 */
     TF_CHECK_NEAR(pid_update(&pid, 20.0f, 0.0f, 0.5f), 0.0f, 1e-4);
+    /* 测量值 0→5：微分 = -(5-0)/0.5 = -10 */
+    TF_CHECK_NEAR(pid_update(&pid, 20.0f, 5.0f, 0.5f), -10.0f, 1e-4);
 
     tf_end();
 

@@ -309,16 +309,34 @@ behavior_bt_node_t *behavior_bt_condition_create(bool (*fn)(behavior_bt_node_t *
 static int bt_tick_sequence(behavior_bt_node_t *n)
 {
     uint16_t i;
-    for (i = 0; i < n->child_count; i++) {
+
+    if (n->children == NULL || n->child_count == 0U) {
+        return BEHAVIOR_BT_SUCCESS;
+    }
+    /* 记住上次停在哪个子节点：否则已返回 SUCCESS 的子节点会被逐帧重复执行 */
+    if (n->running_index >= n->child_count) {
+        n->running_index = 0U;
+    }
+    for (i = n->running_index; i < n->child_count; i++) {
         behavior_bt_node_t *c = n->children[i];
-        int s = c->tick(c);
+        int s;
+
+        if (c == NULL || c->tick == NULL) {
+            n->running_index = 0U;
+            return BEHAVIOR_BT_FAILURE;
+        }
+        s = c->tick(c);
         if (s == BEHAVIOR_BT_FAILURE) {
+            n->running_index = 0U;
             return BEHAVIOR_BT_FAILURE;     /* 任一子节点失败：整条顺序失败 */
         }
         if (s == BEHAVIOR_BT_RUNNING) {
+            n->running_index = i;
             return BEHAVIOR_BT_RUNNING;     /* 当前子节点未完成：本帧到此为止 */
         }
+        n->running_index = (uint16_t)(i + 1U);   /* 已完成，下帧从这里继续 */
     }
+    n->running_index = 0U;
     return BEHAVIOR_BT_SUCCESS;             /* 所有子节点均成功 */
 }
 
@@ -326,16 +344,33 @@ static int bt_tick_sequence(behavior_bt_node_t *n)
 static int bt_tick_selector(behavior_bt_node_t *n)
 {
     uint16_t i;
-    for (i = 0; i < n->child_count; i++) {
+
+    if (n->children == NULL || n->child_count == 0U) {
+        return BEHAVIOR_BT_FAILURE;
+    }
+    if (n->running_index >= n->child_count) {
+        n->running_index = 0U;
+    }
+    for (i = n->running_index; i < n->child_count; i++) {
         behavior_bt_node_t *c = n->children[i];
-        int s = c->tick(c);
+        int s;
+
+        if (c == NULL || c->tick == NULL) {
+            n->running_index = 0U;
+            return BEHAVIOR_BT_FAILURE;
+        }
+        s = c->tick(c);
         if (s == BEHAVIOR_BT_SUCCESS) {
+            n->running_index = 0U;
             return BEHAVIOR_BT_SUCCESS;     /* 任一子节点成功：整个选择成功 */
         }
         if (s == BEHAVIOR_BT_RUNNING) {
+            n->running_index = i;
             return BEHAVIOR_BT_RUNNING;     /* 当前子节点未完成：本帧到此为止 */
         }
+        n->running_index = (uint16_t)(i + 1U);   /* 失败，尝试下一个 */
     }
+    n->running_index = 0U;
     return BEHAVIOR_BT_FAILURE;             /* 所有子节点均失败 */
 }
 

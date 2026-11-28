@@ -120,6 +120,24 @@ uint32_t hal_get_capabilities(hal_device_type_e type, uint8_t instance);
 uint32_t hal_tick_get(void);
 
 /*
+ * 微秒级忙等延时。
+ * 参数 : us 延时长度（微秒）。
+ * 说明 : 纯轮询实现，不依赖 tick 中断，可在关中断的临界区内调用；
+ *        用于单总线/位带类器件（DHT11/22、DS18B20、HC-SR04、IR）的位时序。
+ *        不得用它替代 ros_sleep_ms() 做长延时（会独占 CPU）。
+ * 注意 : 精度取决于平台时基（STM32 用 DWT 周期计数，AVR 用校准空循环，
+ *        PC 模拟端直接推进模拟 tick）。
+ */
+void hal_delay_us(uint32_t us);
+
+/* 保存并关闭全局中断，返回先前状态；与 hal_irq_restore() 成对使用。
+ * 相比 hal_irq_disable()/enable()，本接口支持嵌套（恢复进入前的状态）。 */
+uint32_t hal_irq_save(void);
+
+/* 恢复 hal_irq_save() 保存的中断状态。 */
+void hal_irq_restore(uint32_t state);
+
+/*
  * 使能全局中断。
  * 注意 : 与 hal_irq_disable() 成对使用，不支持嵌套计数。
  */

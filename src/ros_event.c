@@ -132,6 +132,8 @@ int ros_event_wait(ros_event_t *event, uint32_t bits, uint8_t options,
     }
 
     for (;;) {
+        int rc;
+
         ros_port_critical_enter();
         if (ros_event_match(event->flags, bits, options)) {
             if (out_flags != NULL) {
@@ -144,18 +146,16 @@ int ros_event_wait(ros_event_t *event, uint32_t bits, uint8_t options,
             ROS_TRACE_OBJ(ROS_EVT_EVENT_WAIT, (uint32_t)(uintptr_t)event, bits);
             return ROS_OK;
         }
-        ros_port_critical_exit();
 
+        /* 等待参数与入链在同一临界区，避免 set 落在两者之间导致丢唤醒 */
         cur->wait_bits = bits;
         cur->wait_opt = options;
 
-        /* 被唤醒后重查条件：可能已被其他等待者清位，按剩余时间续等 */
-        {
-            int rc = ros_wait_retry(&event->wait, deadline, timeout);
-
-            if (rc != ROS_OK) {
-                return rc;      /* ROS_TIMEOUT / ROS_FORBIDDEN_IN_ISR */
-            }
+        rc = ros_wait_retry_locked(&event->wait, deadline, timeout);
+        if (rc != ROS_OK) {
+            /* 未能入链阻塞，临界区仍由本函数持有 */
+            ros_port_critical_exit();
+            return rc;      /* ROS_TIMEOUT / ROS_FORBIDDEN_IN_ISR */
         }
     }
 }

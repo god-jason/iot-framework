@@ -17,20 +17,58 @@
 #include "ros_port.h"
 #include "ros_mem.h"
 
-/* 等待队列中的最高优先级（无等待者时返回 fallback），O(1) */
-static uint8_t ros_mutex_wait_top(const ros_mutex_t *mutex, uint8_t fallback)
-{
-    uint8_t top = ros_wait_queue_top_priority(&mutex->wait);
-
-    return (top < fallback) ? top : fallback;
-}
-
 #if ROS_USE_PRIORITY_INHERIT
 /*
- * 沿阻塞链提升优先级：owner 被提升到 prio；若 owner 自己也在等另一个
- * 互斥量，则继续提升那个互斥量的持有者。深度上限防止环状等待死循环。
+ * 计算任务应得的有效优先级：基准优先级与其持有的全部互斥量等待队列的最高
+ * 等待优先级取最小。这样解锁其中一个互斥量后，仍持有其它有等待者的互斥量
+ * 时不会错误地回落到 base_priority（原实现会留下"永久提升"的任务）。
  */
-static void ros_mutex_inherit_locked(ros_task_t *owner, uint8_t prio)
+static uint8_t ros_mutex_effective_priority_locked(const ros_task_t *task)
+{
+    uint8_t prio = task->base_priority;
+    const list_node_t *node;
+
+    for (node = task->held_mutexes.head.next;
+         node != &task->held_mutexes.head; node = node->next) {
+        const ros_mutex_t *m =
+            ROS_CONTAINER_OF(node, ros_mutex_t, held_node);
+        uint8_t top = ros_wait_queue_top_priority(&m->wait);
+
+        if (top < prio) {
+            prio = top;
+        }
+    }
+
+    return prio;
+}
+
+/*
+ * 沿阻塞链重算优先级：task 按其持有互斥量重算；若 task 自己也在等另一个
+ * 互斥量，则继续重算那个持有者。深度上限防止环状等待死循环。
+ */
+static void ros_mutex_recalc_chain_locked(ros_task_t *task)
+{
+    int depth = 0;
+
+    while (task != NULL && depth < 8) {
+        uint8_t prio = ros_mutex_effective_priority_locked(task);
+
+        if (prio == task->priority) {
+            break;              /* 已收敛，链上后续任务不会变化 */
+        }
+        ros_sched_change_priority_locked(task, prio);
+
+        task = (task->wait_mutex != NULL) ? task->wait_mutex->owner : NULL;
+        depth++;
+    }
+}
+
+/*
+ * 沿阻塞链提升优先级：等待者刚进入阻塞路径、尚未挂入等待队列，
+ * 因此无法用 ros_mutex_effective_priority_locked() 计算，这里直接按
+ * 等待者优先级逐级提升；解锁/超时后再按实际等待队列重算。
+ */
+static void ros_mutex_boost_chain_locked(ros_task_t *owner, uint8_t prio)
 {
     int depth = 0;
 
@@ -41,6 +79,15 @@ static void ros_mutex_inherit_locked(ros_task_t *owner, uint8_t prio)
         depth++;
     }
 }
+
+/* 记录所有权：mutex 挂入持有者的 held_mutexes 链。 */
+static void ros_mutex_set_owner_locked(ros_mutex_t *mutex, ros_task_t *task)
+{
+    mutex->owner = task;
+    list_remove(&mutex->held_node);            /* 游离节点安全 */
+    list_add_tail(&task->held_mutexes, &mutex->held_node);
+}
+
 #endif
 
 /* 初始化互斥量：持有者置空并初始化等待队列。 */
@@ -53,6 +100,9 @@ int ros_mutex_init(ros_mutex_t *mutex)
 
     mutex->owner = NULL;
     ros_wait_queue_init(&mutex->wait);
+#if ROS_USE_PRIORITY_INHERIT
+    list_node_init(&mutex->held_node);
+#endif
     mutex->initialized = true;
 
     LOG_D(ROS_TAG, "mutex init");
@@ -84,22 +134,26 @@ int ros_mutex_lock(ros_mutex_t *mutex, uint32_t timeout)
 
     owner = mutex->owner;
     if (owner == NULL) {
+#if ROS_USE_PRIORITY_INHERIT
+        ros_mutex_set_owner_locked(mutex, cur);
+#else
         mutex->owner = cur;
+#endif
         ros_port_critical_exit();
         ROS_TRACE_OBJ(ROS_EVT_MUTEX_LOCK, (uint32_t)(uintptr_t)mutex, 0U);
         return ROS_OK;
     }
 
     if (owner == cur) {
-        /* 非递归：同任务重复加锁立即返回超时，避免自死锁 */
+        /* 非递归：同任务重复加锁立即返回 ROS_BUSY（并未等待，不能报超时） */
         ros_port_critical_exit();
         LOG_W(ROS_TAG, "mutex_lock: non-recursive, already owned");
-        return ROS_TIMEOUT;
+        return ROS_BUSY;
     }
 
 #if ROS_USE_PRIORITY_INHERIT
-    /* 高优先级等待者提升持有者，抑制优先级反转 */
-    ros_mutex_inherit_locked(owner, cur->priority);
+    /* 高优先级等待者提升持有者，抑制优先级反转（沿阻塞链传播） */
+    ros_mutex_boost_chain_locked(owner, cur->priority);
 #endif
 
     if (timeout == ROS_TIMEOUT_NONE) {
@@ -124,9 +178,8 @@ int ros_mutex_lock(ros_mutex_t *mutex, uint32_t timeout)
 #endif
     if (rc != ROS_OK && mutex->owner != NULL) {
 #if ROS_USE_PRIORITY_INHERIT
-        uint8_t target = ros_mutex_wait_top(mutex, mutex->owner->base_priority);
-
-        ros_sched_change_priority_locked(mutex->owner, target);
+        /* 超时退出的等待者不再贡献提升：按剩余等待者与持有者持有的其它互斥量重算 */
+        ros_mutex_recalc_chain_locked(mutex->owner);
 #endif
     }
     ros_port_critical_exit();
@@ -159,23 +212,33 @@ int ros_mutex_unlock(ros_mutex_t *mutex)
     }
 
 #if ROS_USE_PRIORITY_INHERIT
-    /* 释放前恢复持有者原始优先级 */
-    if (mutex->owner->priority != mutex->owner->base_priority) {
-        ros_sched_change_priority_locked(mutex->owner, mutex->owner->base_priority);
-    }
+    /* 先从持有链上摘除，再按剩余持有量重算优先级：
+     * 本互斥量已不再需要提升，但其它仍持有且有等待者的互斥量继续有效。 */
+    ros_task_t *self = mutex->owner;
+
+    list_remove(&mutex->held_node);
+    mutex->owner = NULL;
+    ros_mutex_recalc_chain_locked(self);
+#else
+    mutex->owner = NULL;
 #endif
 
     task = ros_wait_queue_pop_highest(&mutex->wait);
     if (task != NULL) {
         /* 所有权直接转交给最高优先级等待者 */
+#if ROS_USE_PRIORITY_INHERIT
+        ros_mutex_set_owner_locked(mutex, task);
+        /* 新持有者可能面对比自己更高优先级的剩余等待者，需补一次提升 */
+        ros_mutex_recalc_chain_locked(task);
+#else
         mutex->owner = task;
+#endif
         ros_task_wake(task, ROS_OK);
         ros_port_critical_exit();
         LOG_D(ROS_TAG, "mutex unlock: handoff to %s",
                   task->name != NULL ? task->name : "?");
         ROS_TRACE_OBJ(ROS_EVT_MUTEX_UNLOCK, (uint32_t)(uintptr_t)mutex, 1U);
     } else {
-        mutex->owner = NULL;
         ros_port_critical_exit();
         LOG_D(ROS_TAG, "mutex unlock: released");
         ROS_TRACE_OBJ(ROS_EVT_MUTEX_UNLOCK, (uint32_t)(uintptr_t)mutex, 0U);

@@ -81,6 +81,10 @@ void ros_sched_change_priority(ros_task_t *task, uint8_t new_prio);
 int ros_sched_suspend(ros_task_t *task);
 int ros_sched_resume(ros_task_t *task);
 
+/* 临界区内版本：调用者必须已持有临界区（供任务挂起/恢复做原子状态迁移） */
+int ros_sched_suspend_locked(ros_task_t *task);
+int ros_sched_resume_locked(ros_task_t *task);
+
 #if ROS_USE_TIME_SLICING
 /* tick 内调用（临界区内）：按 delta 消耗当前任务时间片，耗尽时置切换标志 */
 void ros_sched_tick_slice(uint32_t delta);

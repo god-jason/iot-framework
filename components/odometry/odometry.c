@@ -86,9 +86,13 @@ int odometry_update_distance(odometry_t *odom, float left_m, float right_m,
         odom->pose.x += ds * cosf(theta + dth * 0.5f);
         odom->pose.y += ds * sinf(theta + dth * 0.5f);
     } else {
+        /* 用半角公式：r*(sin(θ+dθ)-sinθ) 在 dθ→0 时是两个相近数相减，
+         * float 下会损失大量有效位；2r*sin(dθ/2)*cos(θ+dθ/2) 数值稳定。 */
+        float half = dth * 0.5f;
+
         radius = ds / dth;
-        odom->pose.x += radius * (sinf(theta + dth) - sinf(theta));
-        odom->pose.y -= radius * (cosf(theta + dth) - cosf(theta));
+        odom->pose.x += 2.0f * radius * sinf(half) * cosf(theta + half);
+        odom->pose.y += 2.0f * radius * sinf(half) * sinf(theta + half);
     }
     odom->pose.theta = wrap_pi(theta + dth);
 

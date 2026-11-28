@@ -67,7 +67,9 @@ void fota_abort(void)
 
 int fota_begin(uint32_t image_size, uint32_t image_crc)
 {
-    if (s_busy || image_size == 0U) {
+    /* 上界由本层兜底：只依赖 port 校验时，换一个 port 就失去保护，
+     * 恶意/错误长度会直接写到分区之外。 */
+    if (s_busy || image_size == 0U || image_size > FOTA_IMAGE_MAX) {
         return FOTA_ERR;
     }
     if (port_ota_begin(image_size, image_crc) != FOTA_OK) {
@@ -103,7 +105,14 @@ int fota_finish(void)
     }
     rc = port_ota_finish();
     s_busy = false;
-    return (rc == FOTA_OK) ? FOTA_OK : FOTA_ERR;
+    s_size = 0U;
+    s_written = 0U;
+    if (rc != FOTA_OK) {
+        /* 校验/落盘失败：撤销本次升级，避免分区停留在半写入状态 */
+        port_ota_abort();
+        return FOTA_ERR;
+    }
+    return FOTA_OK;
 }
 
 int fota_get_state(fota_state_t *state)

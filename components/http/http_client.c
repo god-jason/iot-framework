@@ -198,22 +198,41 @@ static int http_request(const char *method, const char *url,
             break;
         }
     }
+    /* 头部未以空行结束说明超长或对端提前断开，剩余字节不能当作 body */
+    if (hlen < 4U || memcmp(&header[hlen - 4U], "\r\n\r\n", 4U) != 0) {
+        rc = NET_ERR_IO;
+        goto close_stream;
+    }
     header[hlen] = '\0';
     http_parse_headers(header, rsp);
 
     /* 流式读取响应体 */
-    for (;;) {
-        rc = net_stream_read(&stream, chunk, sizeof(chunk));
-        if (rc == NET_ERR_CLOSED) {
-            break;
+    {
+        uint32_t received = 0U;
+
+        for (;;) {
+            rc = net_stream_read(&stream, chunk, sizeof(chunk));
+            if (rc == NET_ERR_CLOSED) {
+                break;
+            }
+            if (rc < 0) {
+                goto close_stream;
+            }
+            if (rc == 0) {
+                /* 读超时不等于读完成：继续等待剩余数据，直到对端关闭或超时次数用尽 */
+                rc = NET_ERR_IO;
+                goto close_stream;
+            }
+            if (cb != NULL && cb(chunk, (uint32_t)rc, user) != 0) {
+                rc = NET_ERR_IO;
+                goto close_stream;
+            }
+            received += (uint32_t)rc;
         }
-        if (rc < 0) {
-            goto close_stream;
-        }
-        if (rc == 0) {
-            break;              /* 超时：结束本次读取 */
-        }
-        if (cb != NULL && cb(chunk, (uint32_t)rc, user) != 0) {
+
+        /* Content-Length 与实际收到字节数不符：按截断处理（FOTA 下载必须失败） */
+        if (rsp != NULL && rsp->content_length != 0U &&
+            received != rsp->content_length) {
             rc = NET_ERR_IO;
             goto close_stream;
         }

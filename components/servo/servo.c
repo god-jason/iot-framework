@@ -35,6 +35,10 @@ int servo_init(servo_t *servo, const servo_ops_t *ops,
     if (servo == NULL || ops == NULL || ops->set_pulse == NULL) {
         return -1;
     }
+    /* 行程必须单调递增：否则 set_angle 会整数除零/无符号下溢 */
+    if (max_angle <= min_angle || max_us <= min_us) {
+        return -1;
+    }
     servo->ops = ops;
     servo->min_pulse_us = min_us;
     servo->max_pulse_us = max_us;
@@ -66,14 +70,18 @@ int servo_set_angle(servo_t *servo, uint16_t angle)
     if (angle > servo->max_angle) {
         angle = servo->max_angle;
     }
-    /* 角度线性映射到脉宽（要求 max_angle > min_angle） */
-    range = (servo->max_pulse_us - servo->min_pulse_us);
+    /* 角度线性映射到脉宽（servo_init 已保证 max_angle > min_angle） */
+    if (servo->max_angle <= servo->min_angle ||
+        servo->max_pulse_us <= servo->min_pulse_us) {
+        return -1;
+    }
+    range = (uint32_t)(servo->max_pulse_us - servo->min_pulse_us);
     us = servo->min_pulse_us +
          (uint32_t)(angle - servo->min_angle) * range /
-         (servo->max_angle - servo->min_angle);
+         (uint32_t)(servo->max_angle - servo->min_angle);
 
     servo->angle = angle;
-    LOG_I("servo", "angle %u", (unsigned)angle);
+    /* 控制环内不打日志：每次设定角度都走串口会拖垮跟踪周期 */
     return servo->ops->set_pulse(servo->ops->ctx, (uint16_t)us);
 }
 

@@ -95,6 +95,7 @@ int ros_sbuf_write(ros_sbuf_t *sb, const void *data, uint32_t len,
     for (;;) {
         uint32_t space;
         uint32_t n;
+        int rc;
 
         ros_port_critical_enter();
         space = sb->size - sb->count;
@@ -106,10 +107,12 @@ int ros_sbuf_write(ros_sbuf_t *sb, const void *data, uint32_t len,
             ROS_TRACE_OBJ(ROS_EVT_SBUF_WRITE, (uint32_t)(uintptr_t)sb, n);
             return (int)n;
         }
-        ros_port_critical_exit();
 
-        if (ros_wait_retry(&sb->send_wait, deadline, timeout) != ROS_OK) {
-            return 0;
+        /* 空间检查与入链同临界区，避免读者唤醒落在两者之间 */
+        rc = ros_wait_retry_locked(&sb->send_wait, deadline, timeout);
+        if (rc != ROS_OK) {
+            ros_port_critical_exit();   /* 阻塞成功时临界区已由等待原语退出 */
+            return (rc == ROS_FORBIDDEN_IN_ISR) ? rc : 0;
         }
     }
 }
@@ -135,6 +138,7 @@ int ros_sbuf_read(ros_sbuf_t *sb, void *data, uint32_t len, uint32_t timeout)
     for (;;) {
         uint32_t avail;
         uint32_t n;
+        int rc;
 
         ros_port_critical_enter();
         avail = sb->count;
@@ -146,10 +150,12 @@ int ros_sbuf_read(ros_sbuf_t *sb, void *data, uint32_t len, uint32_t timeout)
             ROS_TRACE_OBJ(ROS_EVT_SBUF_READ, (uint32_t)(uintptr_t)sb, n);
             return (int)n;
         }
-        ros_port_critical_exit();
 
-        if (ros_wait_retry(&sb->recv_wait, deadline, timeout) != ROS_OK) {
-            return 0;
+        /* 数据检查与入链同临界区，避免写者唤醒落在两者之间 */
+        rc = ros_wait_retry_locked(&sb->recv_wait, deadline, timeout);
+        if (rc != ROS_OK) {
+            ros_port_critical_exit();   /* 阻塞成功时临界区已由等待原语退出 */
+            return (rc == ROS_FORBIDDEN_IN_ISR) ? rc : 0;
         }
     }
 }

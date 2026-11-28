@@ -650,13 +650,16 @@ int mfs_truncate(mfs_file_t *file, mfs_size_t size)
 /* 同步底层介质；未挂载时静默返回成功 */
 int mfs_fsync(mfs_file_t *file)
 {
+    int err = MFS_OK;
+
     if (file == NULL || file->used == 0u) {
         return MFS_ERR_BADF;
     }
     mfs_lock(file->fs);
     if (file->fs->mounted) {
-        (void)mfs_dev_sync(file->fs);
+        /* 写回失败（写保护/坏块/超时）必须上抛，否则上层会误认为数据已落盘 */
+        err = mfs_dev_sync(file->fs);
     }
     mfs_unlock(file->fs);
-    return MFS_OK;
+    return err;
 }

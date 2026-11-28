@@ -16,8 +16,9 @@
 extern "C" {
 #endif
 
+/* 默认关闭：仅调试目标开启 */
 #ifndef APP_TIMING_ENABLE
-#define APP_TIMING_ENABLE 1
+#define APP_TIMING_ENABLE 0
 #endif
 
 /* 同步执行一次延时精度测试并打印结果；重复调用无副作用 */

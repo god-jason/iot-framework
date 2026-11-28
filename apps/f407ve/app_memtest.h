@@ -18,8 +18,9 @@
 extern "C" {
 #endif
 
+/* 默认关闭：自检会临时占用堆与启动时间，仅调试目标开启 */
 #ifndef APP_MEMTEST_ENABLE
-#define APP_MEMTEST_ENABLE 1
+#define APP_MEMTEST_ENABLE 0
 #endif
 
 /* 同步执行一次泄漏自检并打印 PASS/FAIL；重复调用无副作用 */

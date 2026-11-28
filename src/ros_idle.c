@@ -46,7 +46,7 @@ static void idle_entry(void *arg)
  * 初始化内置空闲任务：优先级最低、栈静态分配，
  * 填充栈魔数并构造移植层上下文（不加入普通任务注册表）。
  */
-void ros_idle_init(void)
+int ros_idle_init(void)
 {
     int rc;
     uint32_t i;
@@ -67,6 +67,7 @@ void ros_idle_init(void)
 #endif
 #if ROS_USE_PRIORITY_INHERIT
     s_idle_tcb.wait_mutex = NULL;
+    list_init(&s_idle_tcb.held_mutexes);
 #endif
 #if ROS_USE_STACK_CHECK
     /* 整栈填充魔数，与用户任务保持一致的水位线语义 */
@@ -82,7 +83,7 @@ void ros_idle_init(void)
     rc = ros_port_stack_init(&s_idle_tcb);
     if (rc != ROS_OK) {
         LOG_E(ROS_TAG, "idle: port stack init failed: %d", rc);
-        return;
+        return rc;
     }
 
     ros_idle_task = &s_idle_tcb;
@@ -91,4 +92,5 @@ void ros_idle_init(void)
 
     LOG_I(ROS_TAG, "idle task created, stack=%u bytes",
               (unsigned)sizeof(s_idle_stack));
+    return ROS_OK;
 }

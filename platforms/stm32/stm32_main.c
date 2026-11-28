@@ -31,14 +31,17 @@ static uint8_t    s_app_stack[BOARD_APP_STACK_SIZE];
 
 int main(void)
 {
+    /*
+     * 向量表重定位必须是第一条语句：SystemInit 已经启动了 SysTick，
+     * 在 VTOR 仍指向 Bootloader 时发生中断会跳进 Bootloader 的处理函数。
+     */
+    SCB->VTOR = BOARD_APP_VECTOR_BASE;
+
     /* 板级早期初始化（时钟等） */
     board_init();
 
     ros_init();
     board_trace_start(115200U);   /* trace 经 USART1/PA9 输出，串口助手 115200 8N1 */
-
-    /* App 区固件：向量表重定位到 App 区基址 */
-    SCB->VTOR = BOARD_APP_VECTOR_BASE;
 
     /* roshell 绑定 UART1；printf 由 stm32_syscalls.c 的 _write 同样走 UART1 */
     (void)rs_platform_start(BOARD_NAME);

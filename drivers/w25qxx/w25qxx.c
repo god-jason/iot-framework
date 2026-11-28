@@ -119,7 +119,14 @@ int w25qxx_init(w25qxx_handle_t *handle, hal_spi_t *spi, uint16_t cs)
         return (int)HAL_NOT_FOUND;
     }
 
-    /* capacity_id 为 2 的幂次（字节） */
+    /* capacity_id 为 2 的幂次（字节）。命令地址固定 3 字节，
+     * 超过 16MB（capacity_id > 0x18）的器件需要 4 字节地址模式，
+     * 否则高位地址会被截断、边界检查反而放行非法访问。 */
+    if (handle->id.capacity_id > 0x18U) {
+        LOG_E("w25qxx", "capacity_id 0x%02X needs 4-byte addressing (unsupported)",
+              handle->id.capacity_id);
+        return (int)HAL_NOT_SUPPORTED;
+    }
     handle->capacity = (handle->id.capacity_id < 32U)
                            ? (1UL << handle->id.capacity_id)
                            : 0U;

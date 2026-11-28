@@ -37,7 +37,7 @@ static int dht11_wait_level(dht11_handle_t *handle, int level, uint32_t timeout_
         if (cur == level) {
             return HAL_OK;
         }
-        ros_sleep_ms(1);
+        hal_delay_us(1);
         elapsed++;
     }
     return (int)HAL_TIMEOUT;
@@ -66,7 +66,7 @@ static int dht11_read_byte(dht11_handle_t *handle, uint8_t *value)
             if (dht11_line(handle) != 1) {
                 break;
             }
-            ros_sleep_ms(1);
+            hal_delay_us(1);
             high_us++;
         }
 
@@ -89,13 +89,14 @@ int dht11_read_raw(dht11_handle_t *handle, uint8_t frame[5])
         return (int)HAL_INVALID_PARAM;
     }
 
-    /* 起始信号 + 40 位数据：全程关闭中断，避免位时序被拉长 */
-    hal_irq_disable();
-
+    /* 起始信号（18ms）在任务上下文完成：关中断会让 tick 停摆 */
     dht11_drive_low(handle);
     ros_sleep_ms(DHT11_START_LOW_MS);
     dht11_release(handle);
-    ros_sleep_ms(1);
+    hal_delay_us(30);
+
+    /* 只有位读取期间关中断，用微秒忙等判读高电平宽度 */
+    hal_irq_disable();
 
     /* 从机响应：低约 80us 再高约 80us */
     ret = dht11_wait_level(handle, 0, DHT11_TIMEOUT_US);

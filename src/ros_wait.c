@@ -283,6 +283,46 @@ int ros_wait_retry(ros_wait_queue_t *queue, uint32_t deadline, uint32_t timeout)
     return ros_block_current(queue, wait);
 }
 
+/*
+ * 临界区内版本的等待一步：调用者已持有临界区，条件检查与入链保持原子。
+ * 成功入链时由 ros_block_current_locked() 退出临界区并切走，
+ * 被唤醒后返回本次等待结果；若无法阻塞（ISR / 已到期），
+ * 临界区保持不变，由调用方退出并返回错误。
+ */
+int ros_wait_retry_locked(ros_wait_queue_t *queue, uint32_t deadline,
+                          uint32_t timeout)
+{
+    ros_task_t *cur;
+    uint32_t wait;
+
+    if (timeout == ROS_TIMEOUT_NONE) {
+        return ROS_TIMEOUT;
+    }
+    if (ros_in_isr()) {
+        LOG_E(ROS_TAG, "blocking API called in ISR, timeout=%u",
+                  (unsigned)timeout);
+        return ROS_FORBIDDEN_IN_ISR;
+    }
+    if (timeout == ROS_TIMEOUT_FOREVER) {
+        wait = ROS_TIMEOUT_FOREVER;
+    } else {
+        uint32_t now = ros_tick_get();
+
+        if (!ROS_TICK_AFTER(deadline, now)) {
+            return ROS_TIMEOUT;
+        }
+        wait = deadline - now;
+    }
+
+    cur = ros_current_task;
+    if (cur == NULL) {
+        return ROS_NOT_READY;
+    }
+
+    ros_block_current_locked(queue, wait);   /* 退出临界区并切走 */
+    return cur->wait_result;
+}
+
 /* 销毁对象前的统一收尾：等待者清空后标记失效。 */
 int ros_obj_destroy_begin(bool *initialized,
                           ros_wait_queue_t *wait1,

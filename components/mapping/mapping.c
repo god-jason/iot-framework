@@ -48,7 +48,8 @@ static int16_t og_clamp(int32_t v)
 int mapping_og_map_init(mapping_og_map_t *map, uint16_t width, uint16_t height,
                     float resolution, float origin_x, float origin_y, int16_t *cells)
 {
-    int i;
+    uint32_t i;
+    uint32_t total;
 
     if (map == NULL || cells == NULL || width == 0 || height == 0 || resolution <= 0.0f) {
         return -1;
@@ -60,7 +61,9 @@ int mapping_og_map_init(mapping_og_map_t *map, uint16_t width, uint16_t height,
     map->origin_y = origin_y;
     map->cells = cells;
 
-    for (i = 0; i < (int)width * height; i++) {
+    /* 用 uint32_t 计算总格数：uint16 尺寸下 (int)w*h 在 w*h > INT_MAX 时会溢出 */
+    total = (uint32_t)width * (uint32_t)height;
+    for (i = 0U; i < total; i++) {
         cells[i] = 0;   /* 未知 = 0（概率 0.5） */
     }
     return 0;
@@ -80,13 +83,20 @@ int mapping_world_to_cell(const mapping_og_map_t *map, float wx, float wy,
     if (map == NULL) {
         return -1;
     }
-    ix = (int)((wx - map->origin_x) / map->resolution);
-    iy = (int)((wy - map->origin_y) / map->resolution);
+    /* 用 floorf 而不是 (int)：截断是"向零取整"，负半轴会落到 0 号格，
+     * 正半轴也有半格系统偏置。 */
+    ix = (int)floorf((wx - map->origin_x) / map->resolution);
+    iy = (int)floorf((wy - map->origin_y) / map->resolution);
+    /* 即使越界也要写出钳位后的索引，调用方在单轴越界时仍能使用另一轴 */
+    if (cx != NULL) {
+        *cx = (int16_t)((ix < 0) ? 0 : ((ix >= map->width) ? (map->width - 1) : ix));
+    }
+    if (cy != NULL) {
+        *cy = (int16_t)((iy < 0) ? 0 : ((iy >= map->height) ? (map->height - 1) : iy));
+    }
     if (ix < 0 || iy < 0 || ix >= map->width || iy >= map->height) {
         return -1;
     }
-    *cx = (int16_t)ix;
-    *cy = (int16_t)iy;
     return 0;
 }
 
@@ -184,7 +194,7 @@ int mapping_og_map_update(mapping_og_map_t *map, const mapping_pose_t *pose,
         }
         og_ray(map, cx0, cy0, cx1, cy1, hit);
     }
-    LOG_I("ogmap", "scan %u pts updated", (unsigned)count);
+    /* 每帧扫描不打日志：串口输出会把建图周期拖到毫秒级 */
     return 0;
 }
 

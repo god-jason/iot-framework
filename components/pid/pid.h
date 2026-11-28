@@ -29,7 +29,8 @@ typedef struct {
     float output_max;       /* 输出上限 */
 
     float integral;         /* 误差积分累计量 ∫e dt */
-    float last_error;       /* 上一次误差 e[k-1]，用于后向差分求导 */
+    float last_error;       /* 上一次误差 e[k-1]（供观测） */
+    float measurement_prev; /* 上一次测量值，微分作用于测量值以抑制设定值冲击 */
 
     bool initialized;       /* 是否已完成首次更新（false 时跳过微分） */
 } pid_t;
@@ -46,7 +47,8 @@ int pid_init(pid_t *pid, float kp, float ki, float kd);
  * 参数：pid 控制器对象；target 目标值；measurement 测量值；
  *       dt 采样周期（秒，必须大于 0）。
  * 返回：限幅后的控制输出；pid 为空返回 0，dt <= 0 返回上次输出。
- * 注意：首次调用微分项为 0；输出限幅不会回写积分项。
+ * 注意：首次调用微分项为 0；微分作用于测量值；
+ *       输出限幅时会把积分项拉回到不产生超限的区间（抗积分饱和）。
  */
 float pid_update(pid_t *pid, float target, float measurement, float dt);
 

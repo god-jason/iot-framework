@@ -139,7 +139,14 @@ static int params_fmt_value(char *buf, uint32_t size, float v)
                                       10000U, 100000U, 1000000U };
     bool neg = (v < 0.0f);
     float a = neg ? -v : v;
-    uint32_t ip = (uint32_t)a;
+    uint32_t ip;
+
+    /* 防止 NaN/Inf/超大值转整数（C 标准未定义行为） */
+    if (!(a >= 0.0f) || a > 1e9f) {
+        a = 0.0f;
+        neg = false;
+    }
+    ip = (uint32_t)a;
     uint32_t decimals;
     uint32_t fp;
     char *dot;

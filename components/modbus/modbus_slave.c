@@ -66,7 +66,11 @@ static uint32_t slave_pdu(const modbus_slave_if_t *iface,
         }
         /* 请求 PDU 布局：[fc][addr(2)][qty(2)] */
         count = modbus_get_be16(&pdu[3]);
-        if (count == 0) {
+        /* 规范上限：线圈 2000 位 / 寄存器 125 个。缺这一步时
+         * bits[256]/regs[125] 会被远端报文直接写越界。 */
+        if (count == 0U ||
+            ((fc == MODBUS_FC_READ_COILS) || (fc == MODBUS_FC_READ_DISCRETE_INPUTS)
+                 ? (count > 2000U) : (count > 125U))) {
             return slave_exception(fc, MODBUS_EX_ILLEGAL_DATA_VALUE, out);
         }
 
@@ -201,8 +205,13 @@ static uint32_t slave_pdu(const modbus_slave_if_t *iface,
         n = qty2;
 
         if (fc == MODBUS_FC_WRITE_MULTI_COILS) {
-            if (iface->write_coils == NULL ||
-                byte_count != modbus_bits_to_bytes(qty2)) {
+            /* 1968 = 246 字节 * 8，保证与响应缓冲容量一致；同时校验实际帧长 */
+            if (qty2 == 0U || qty2 > 1968U ||
+                byte_count != modbus_bits_to_bytes(qty2) ||
+                pdu_len < 6U + (uint32_t)byte_count) {
+                return slave_exception(fc, MODBUS_EX_ILLEGAL_DATA_VALUE, out);
+            }
+            if (iface->write_coils == NULL) {
                 return slave_exception(fc, MODBUS_EX_ILLEGAL_FUNCTION, out);
             }
             ok = iface->write_coils(addr, vals, n, iface->user);
@@ -211,7 +220,13 @@ static uint32_t slave_pdu(const modbus_slave_if_t *iface,
             uint16_t count = (uint16_t)(byte_count / 2);
             uint32_t i;
 
-            if (iface->write_regs == NULL || count != qty2) {
+            /* 上限 123 与栈上 regs[] 容量一致；并校验 byte_count 与帧长 */
+            if (qty2 == 0U || qty2 > 123U || count != qty2 ||
+                (byte_count & 1U) != 0U ||
+                pdu_len < 6U + (uint32_t)byte_count) {
+                return slave_exception(fc, MODBUS_EX_ILLEGAL_DATA_VALUE, out);
+            }
+            if (iface->write_regs == NULL) {
                 return slave_exception(fc, MODBUS_EX_ILLEGAL_FUNCTION, out);
             }
             for (i = 0; i < count; i++) {

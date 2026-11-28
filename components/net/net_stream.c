@@ -32,7 +32,17 @@ int net_stream_flush(net_stream_t *st)
     }
     rc = net_send(st->sock, st->tx, st->tx_len);
     if (rc < 0) {
+        /* 失败时保留缓冲，由调用方决定重连；重复 flush 前需先确认后端
+         * 是否已部分写出，避免流里出现重复字节。 */
         return rc;
+    }
+    if ((uint32_t)rc < st->tx_len) {
+        /* 短写：把未发送部分前移，下次 flush 从未发送处继续 */
+        uint32_t rest = st->tx_len - (uint32_t)rc;
+
+        memmove(st->tx, st->tx + rc, rest);
+        st->tx_len = rest;
+        return NET_ERR_IO;
     }
     st->tx_len = 0U;
     return NET_OK;

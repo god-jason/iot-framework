@@ -126,12 +126,12 @@ int hx711_read_raw(hx711_handle_t *handle, int32_t *raw)
         return ret;
     }
 
-    /* 24 个时钟读出转换结果，高位在前 */
+    /* 24 个时钟读出转换结果，高位在前（SCK 高/低各 1us，规格要求 <60us） */
     for (i = 0U; i < HX711_DATA_BITS; i++) {
         int level;
 
         hx711_sck(handle, HAL_GPIO_HIGH);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
         level = hal_gpio_read_level(handle->dout);
         if (level < 0) {
             hx711_sck(handle, HAL_GPIO_LOW);
@@ -139,16 +139,16 @@ int hx711_read_raw(hx711_handle_t *handle, int32_t *raw)
         }
         value = (value << 1) | ((level != 0) ? 1UL : 0UL);
         hx711_sck(handle, HAL_GPIO_LOW);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
     }
 
     /* 附加 1~3 个脉冲，选择下一次转换的通道与增益 */
     pulses = (uint8_t)(hx711_gain_pulses(handle->gain) - HX711_DATA_BITS);
     for (i = 0U; i < pulses; i++) {
         hx711_sck(handle, HAL_GPIO_HIGH);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
         hx711_sck(handle, HAL_GPIO_LOW);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
     }
 
     /* 24 位补码扩展为 int32 */

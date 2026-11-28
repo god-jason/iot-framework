@@ -33,7 +33,7 @@ static int hc_sr04_wait_level(const hc_sr04_handle_t *handle, int level,
         if (waited >= timeout_us) {
             return (int)HAL_TIMEOUT;
         }
-        ros_sleep_ms(1);
+        hal_delay_us(1);          /* 1us 步进；用 ros_sleep_ms 会让距离放大 1000 倍 */
         waited++;
     }
 }
@@ -111,15 +111,15 @@ int hc_sr04_read_us(hc_sr04_handle_t *handle, uint32_t *echo_us)
         return (int)HAL_BUSY;
     }
 
-    /* 触发脉冲 */
+    /* 触发脉冲：低 2us + 高 10us（datasheet 要求 >=10us 高电平） */
     if (hal_gpio_write(handle->trig, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    ros_sleep_ms(1);
+    hal_delay_us(2);
     if (hal_gpio_write(handle->trig, HAL_GPIO_HIGH) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }
-    ros_sleep_ms(1);
+    hal_delay_us(10);
     if (hal_gpio_write(handle->trig, HAL_GPIO_LOW) != HAL_OK) {
         return (int)HAL_IO_ERROR;
     }

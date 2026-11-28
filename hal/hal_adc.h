@@ -89,6 +89,9 @@ int hal_adc_deinit(hal_adc_t *handle);
 int hal_adc_config_channel(hal_adc_t *handle,
                                       const hal_adc_channel_config_t *config);
 
+/* 单次读取的默认超时（毫秒）：timeout 传 0 表示"不等待"，几乎必然失败 */
+#define HAL_ADC_TIMEOUT_DEFAULT     10U
+
 /* 启动连续转换（软件触发模式下开始采样）；返回 HAL_OK / HAL_INVALID_PARAM / HAL_NOT_READY */
 int hal_adc_start(hal_adc_t *handle);
 

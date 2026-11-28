@@ -92,9 +92,11 @@ def find_nm(addr2line):
 
 def run(cmd):
     try:
+        # 显式 utf-8：中文 Windows 下 text 模式默认按 GBK 解码，
+        # addr2line 输出含 UTF-8 路径/符号时会抛 UnicodeDecodeError
         return subprocess.run(cmd, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              universal_newlines=True, check=True).stdout
+                              stderr=subprocess.PIPE, encoding="utf-8",
+                              errors="replace", check=True).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
         die("执行失败: %s\n%s" % (" ".join(cmd), exc))
 
@@ -103,8 +105,8 @@ def run_soft(cmd):
     """执行可选工具；失败时返回空串，不影响主流程。"""
     try:
         return subprocess.run(cmd, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              universal_newlines=True, check=True).stdout
+                              stderr=subprocess.PIPE, encoding="utf-8",
+                              errors="replace", check=True).stdout
     except (OSError, subprocess.CalledProcessError):
         return ""
 

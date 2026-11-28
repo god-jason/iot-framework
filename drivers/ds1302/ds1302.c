@@ -32,10 +32,10 @@ static void ds1302_write_byte(ds1302_handle_t *handle, uint8_t value)
         (void)hal_gpio_write(handle->io,
                                 ((value & (uint8_t)(1UL << (i))) != 0U) ? HAL_GPIO_HIGH
                                                                        : HAL_GPIO_LOW);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
         /* DS1302 在 SCLK 上升沿采样 */
         (void)hal_gpio_write(handle->sclk, HAL_GPIO_HIGH);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
     }
     (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
 }
@@ -48,13 +48,13 @@ static uint8_t ds1302_read_byte(ds1302_handle_t *handle)
     (void)hal_gpio_config_input(handle->io, HAL_GPIO_PULLUP);
     for (i = 0U; i < 8U; i++) {
         (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
-        ros_sleep_ms(1);
+        hal_delay_us(1);
         /* DS1302 在 SCLK 下降沿输出，此处采样 */
         (void)hal_gpio_write(handle->sclk, HAL_GPIO_HIGH);
         if (hal_gpio_read_level(handle->io) > 0) {
             value = (uint8_t)(value | (uint8_t)(1UL << (i)));
         }
-        ros_sleep_ms(1);
+        hal_delay_us(1);
     }
     (void)hal_gpio_write(handle->sclk, HAL_GPIO_LOW);
     (void)hal_gpio_config_output(handle->io, HAL_GPIO_HIGH);
@@ -65,29 +65,36 @@ static int ds1302_write_regs(ds1302_handle_t *handle, uint8_t cmd,
                              const uint8_t *data, size_t len)
 {
     size_t i;
+    uint32_t state;
 
+    /* 整个事务（CE 有效期间）必须原子：中途被任务切换会让位流错位 */
+    state = hal_irq_save();
     ds1302_ce(handle, HAL_GPIO_HIGH);
-    ros_sleep_ms(1);
+    hal_delay_us(1);
     ds1302_write_byte(handle, cmd);
     for (i = 0U; i < len; i++) {
         ds1302_write_byte(handle, data[i]);
     }
     ds1302_ce(handle, HAL_GPIO_LOW);
+    hal_irq_restore(state);
     return HAL_OK;
 }
 
 static int ds1302_read_regs(ds1302_handle_t *handle, uint8_t cmd, uint8_t *data, size_t len)
 {
     size_t i;
+    uint32_t state;
 
+    state = hal_irq_save();
     ds1302_ce(handle, HAL_GPIO_HIGH);
-    ros_sleep_ms(1);
+    hal_delay_us(1);
     /* 读命令 = 写命令 | 0x01 */
     ds1302_write_byte(handle, (uint8_t)(cmd | 0x01U));
     for (i = 0U; i < len; i++) {
         data[i] = ds1302_read_byte(handle);
     }
     ds1302_ce(handle, HAL_GPIO_LOW);
+    hal_irq_restore(state);
     return HAL_OK;
 }
 

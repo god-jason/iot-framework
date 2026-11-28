@@ -83,6 +83,12 @@ option("trace")
     set_description("编译期启用 trace；off 时所有 ROS_TRACE_* 宏为空、零 RAM/ROM 开销")
 option_end()
 
+option("log_level")
+    set_default("info")
+    set_values("none", "error", "warn", "info", "debug")
+    set_description("全局日志级别；必须作用于每个编译单元（不能只在 binary 目标上定义）")
+option_end()
+
 -- ============================================================================
 -- 工具链
 -- ============================================================================
@@ -219,6 +225,11 @@ local function ros_cross_defines(extra)
     elseif family == "f4" or family == "h7" then
         -- F4/H7 SRAM 充足：内核 TLSF 堆从默认 32KB 调到 64KB
         add_defines("ROS_MEM_HEAP_SIZE=65536")
+        if family == "h7" then
+            -- H7 板级 SYSCLK 480MHz；缺这个宏时 trace 时基按 72MHz 换算，
+            -- 所有时间戳/周期统计整体偏离，tickless 补偿也会失真
+            add_defines("ROS_TRACE_CLOCK_HZ=480000000", "ROS_USE_TICKLESS=0")
+        end
         if family == "f4" then
             -- SysTick/tickless 时基与板级 SYSCLK 一致（默认宏为 72MHz）
             add_defines("ROS_TRACE_CLOCK_HZ=168000000")
@@ -317,17 +328,21 @@ function ros_fw_objcopy(opts)
             if env_py and env_py ~= "" then
                 table.insert(pys, 1, env_py)
             end
+            -- 逐个候选尝试（python 可能是 Python 2 或缺失），但全部失败时必须
+            -- 让构建失败：否则会产出一个"没有 OTA 包"的成功固件。
+            local last_err = nil
             for _, py in ipairs(pys) do
                 if not os.isfile(ota) then
-                    -- 不使用 try=true：Python 报错必须让固件构建失败，
-                    -- 否则会产出一个没有 OTA 包的"成功"固件
-                    os.execv(py, argv)
+                    local ok, err = pcall(function () os.execv(py, argv) end)
+                    if not ok then
+                        last_err = err
+                    end
                 end
             end
             if os.isfile(ota) then
                 cprint("${green}[firmware] OTA: %s${clear}", ota)
             else
-                cprint("${yellow}[firmware] OTA 生成失败（需要 Python 3）: %s${clear}", ota)
+                raise("OTA 生成失败（需要 Python 3）：%s", tostring(last_err))
             end
         end
     end)
@@ -342,6 +357,9 @@ local function ros_target_common(opts)
     set_languages("c99")
     set_warnings("all")
     add_cflags("-Wextra", "-Wshadow", "-Wformat=2", { force = true })
+    -- 全局宏：写在二进制目标（ros_firmware）上的 add_defines 不会传递给任何 .c，
+    -- 因此日志级别在这里统一注入到每个目录/应用对象目标。
+    add_defines("LOG_LEVEL=LOG_LEVEL_" .. string.upper(get_config("log_level") or "info"))
     add_includedirs(ROS_INCLUDEDIRS)
     if opts and opts.includedirs then
         add_includedirs(opts.includedirs)

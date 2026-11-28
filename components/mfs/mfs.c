@@ -521,6 +521,7 @@ int mfs_mount(mfs_t *fs)
 int mfs_unmount(mfs_t *fs)
 {
     uint32_t i;
+    int err = MFS_OK;
 
     if (fs == NULL) {
         return MFS_ERR_PARAM;
@@ -528,7 +529,8 @@ int mfs_unmount(mfs_t *fs)
 
     mfs_lock(fs);
     if (fs->mounted) {
-        (void)mfs_dev_sync(fs);
+        /* 保留写回错误：卸载失败时调用方需要知道数据未落盘 */
+        err = mfs_dev_sync(fs);
     }
     for (i = 0; i < MFS_MAX_OPEN_FILES; i++) {
         fs->files[i].used = 0u;
@@ -538,7 +540,7 @@ int mfs_unmount(mfs_t *fs)
     }
     fs->mounted = 0u;
     mfs_unlock(fs);
-    return MFS_OK;
+    return err;
 }
 
 /* 同步底层介质；未挂载返回 MFS_ERR_STATE */

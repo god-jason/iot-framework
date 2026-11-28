@@ -99,6 +99,16 @@ void ros_block_current_locked(ros_wait_queue_t *wait_queue, uint32_t timeout);
  */
 int ros_wait_retry(ros_wait_queue_t *queue, uint32_t deadline, uint32_t timeout);
 
+/*
+ * 与 ros_wait_retry() 语义相同，但要求调用者已持有临界区，
+ * 并在「条件检查 + 入等待链 + 选任务」仍处于同一临界区内时完成阻塞。
+ * 这样可消除「检查后退出临界区、入链前被 ISR 唤醒」导致的丢失唤醒。
+ * 返回时临界区已由 ros_block_current_locked() 退出；若返回非 ROS_OK，
+ * 调用方仍需自行退出临界区并返回错误。
+ */
+int ros_wait_retry_locked(ros_wait_queue_t *queue, uint32_t deadline,
+                          uint32_t timeout);
+
 /* 唤醒任务：摘除等待/延时节点，写入结果并加入就绪表 */
 void ros_task_wake(ros_task_t *task, int result);
 

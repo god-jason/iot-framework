@@ -40,8 +40,8 @@ static int bme280_read_calib(bme280_handle_t *handle)
     c->p9 = hal_le16(&tp[22]);
     c->h1 = tp[24];
 
-    /* 0xE1..0xE7：H2(12 位) H3(u8) H4(12 位) H5(12 位) H6(i8) */
-    c->h2 = bme280_sign12((uint16_t)(((uint16_t)h[0] << 4) | ((uint16_t)h[1] >> 4)));
+    /* 0xE1..0xE7：H2(u16, 0xE1 为低字节) H3(u8) H4(12 位) H5(12 位) H6(i8) */
+    c->h2 = (int16_t)(((uint16_t)h[1] << 8) | (uint16_t)h[0]);
     c->h3 = h[2];
     c->h4 = bme280_sign12((uint16_t)(((uint16_t)h[3] << 4) | ((uint16_t)h[4] & 0x0FU)));
     c->h5 = bme280_sign12((uint16_t)(((uint16_t)h[5] << 4) | ((uint16_t)h[4] >> 4)));

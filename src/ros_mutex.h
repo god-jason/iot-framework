@@ -5,7 +5,8 @@
  * ros_mutex.h - 互斥量（ros_mutex.c）
  *
  * 非递归、带所有权校验；ROS_USE_PRIORITY_INHERIT 打开时实现优先级继承
- * （含沿阻塞链的递归传播），解锁时恢复持有者原始优先级。
+ * （含沿阻塞链的递归传播）。同任务重复 lock 返回 ROS_BUSY；解锁时按
+ * 「基准优先级 + 仍在持有的各互斥量等待队列最高优先级」重算有效优先级。
  */
 
 #include <stdbool.h>
@@ -23,6 +24,9 @@ struct ros_mutex {
     ros_task_t *owner;             /* 当前持有者，NULL 表示空闲 */
     ros_wait_queue_t wait;         /* 等待该互斥量的任务 */
     bool initialized;               /* 初始化标志 */
+#if ROS_USE_PRIORITY_INHERIT
+    list_node_t held_node;         /* 持有者的 held_mutexes 链节点 */
+#endif
 };
 
 int ros_mutex_init(ros_mutex_t *mutex);

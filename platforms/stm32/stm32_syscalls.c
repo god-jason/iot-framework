@@ -20,17 +20,19 @@
 extern char end[];        /* 链接脚本 PROVIDE(end)：.noinit 之后的堆起点 */
 extern char _estack[];
 
-/* 板级可选钩子：返回实际使用的 UART 句柄（Cube HAL 下必须是有效句柄） */
-extern hal_uart_t *board_shell_uart(void) __attribute__((weak));
+/* 链接脚本提供的堆上限（end + _Min_Heap_Size）；未提供时退回主栈预留估算 */
+extern char __heap_limit[] __attribute__((weak));
 
-/* 主栈预留 2KB，与链接脚本 _Min_Stack_Size 一致 */
+/* 兜底：主栈预留区。各系列 _Min_Stack_Size 不同，优先使用 __heap_limit */
 #define BOARD_STACK_RESERVE 0x800U
 
 void *_sbrk(ptrdiff_t incr)
 {
     static char *heap_cur;
     char *prev;
-    char *limit = (char *)((uintptr_t)_estack - BOARD_STACK_RESERVE);
+    char *limit = ((uintptr_t)__heap_limit != 0U)
+                      ? __heap_limit
+                      : (char *)((uintptr_t)_estack - BOARD_STACK_RESERVE);
 
     if (heap_cur == NULL) {
         /* 从 end 开始，避开 .noinit（崩溃记录必须跨复位保留） */

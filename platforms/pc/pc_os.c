@@ -12,6 +12,7 @@
 /* ============================== 系统状态 ============================== */
 
 static uint32_t s_tick;                 /* 毫秒时基 */
+static uint32_t s_tick_us;              /* 毫秒时基的小数部分（微秒） */
 static bool s_irq_enabled = true;       /* 全局中断开关状态 */
 static bool s_reset_called;             /* 是否调用过软件复位 */
 static bool s_sleep_called;             /* 是否进入过浅睡眠 */
@@ -34,6 +35,29 @@ void hal_irq_enable(void)
 void hal_irq_disable(void)
 {
     s_irq_enabled = false;
+}
+
+uint32_t hal_irq_save(void)
+{
+    uint32_t prev = s_irq_enabled ? 1U : 0U;
+
+    s_irq_enabled = false;
+    return prev;
+}
+
+void hal_irq_restore(uint32_t state)
+{
+    s_irq_enabled = (state != 0U);
+}
+
+/* 单线程模拟：推进模拟时基的微秒量，保证位带驱动的超时判断按真实时间走。 */
+void hal_delay_us(uint32_t us)
+{
+    s_tick_us += us;
+    while (s_tick_us >= 1000U) {
+        s_tick_us -= 1000U;
+        s_tick++;
+    }
 }
 
 void hal_system_reset(void)

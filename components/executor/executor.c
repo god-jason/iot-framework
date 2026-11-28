@@ -45,6 +45,20 @@ int executor_start(executor_t *executor, planner_plan_t *plan)
     if (executor == NULL || plan == NULL) {
         return -1;
     }
+    /* 幂等：已在运行/暂停时先取消当前 Action，否则旧动作会继续驱动电机，
+     * 与新计划争夺同一执行机构。 */
+    if (executor->running && executor->current_plan != NULL) {
+        action_t *cur = (executor->current_plan->current_action <
+                         executor->current_plan->action_count)
+                            ? executor->current_plan->actions[
+                                  executor->current_plan->current_action]
+                            : NULL;
+
+        if (cur != NULL) {
+            (void)action_cancel(cur);
+            (void)action_reset(cur);    /* 回到 IDLE，后续才能被重新启动 */
+        }
+    }
     executor->current_plan = plan;
     executor->running = true;
     executor->paused = false;
@@ -145,6 +159,17 @@ int executor_stop(executor_t *executor)
     executor->running = false;
     executor->paused = false;
     if (executor->current_plan != NULL) {
+        /* 仅置状态会让已启动的 Action 继续运行，必须显式取消 */
+        action_t *cur = (executor->current_plan->current_action <
+                         executor->current_plan->action_count)
+                            ? executor->current_plan->actions[
+                                  executor->current_plan->current_action]
+                            : NULL;
+
+        if (cur != NULL) {
+            (void)action_cancel(cur);
+            (void)action_reset(cur);
+        }
         executor->current_plan->state = PLANNER_PLAN_PENDING;
     }
     return 0;

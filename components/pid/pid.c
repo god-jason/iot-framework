@@ -52,6 +52,7 @@ void pid_reset(pid_t *pid)
     }
     pid->integral = 0.0f;
     pid->last_error = 0.0f;
+    pid->measurement_prev = 0.0f;
     pid->output = 0.0f;
     pid->initialized = false;
 }
@@ -81,7 +82,7 @@ void pid_set_limits(pid_t *pid, float min, float max)
  * 位置式 PID 单步计算。
  * 参数：pid 控制器；target 目标值；measurement 测量值；dt 采样周期（秒，需 > 0）。
  * 返回：限幅后的控制输出；pid 为空返回 0，dt <= 0 返回上次输出且不更新状态。
- * 注意：积分项按 error*dt 累加，输出限幅后不回写积分项；
+ * 注意：积分项按 error*dt 累加，输出限幅时按 ki 反算积分上下限（抗饱和）；
  *       若需抗积分饱和（clamping / back-calculation）需在上层另行处理。
  */
 float pid_update(pid_t *pid, float target, float measurement, float dt)
@@ -97,19 +98,33 @@ float pid_update(pid_t *pid, float target, float measurement, float dt)
     /* 误差 e = 目标值 - 测量值（正偏差驱动输出增大） */
     error = target - measurement;
     if (pid->initialized) {
-        /* 积分项累加 e*dt；微分项取后向差分 (e[k]-e[k-1])/dt */
+        /* 积分项累加 e*dt */
         pid->integral += error * dt;
-        derivative = (error - pid->last_error) / dt;
+        /* 微分作用于测量值（-Δmeasurement/dt），避免目标阶跃产生微分尖峰 */
+        derivative = -(measurement - pid->measurement_prev) / dt;
     } else {
-        /* 首次调用无历史误差，微分项置 0，避免冲击 */
+        /* 首次调用无历史测量值，微分项置 0，避免冲击 */
         derivative = 0.0f;
         pid->initialized = true;
     }
 
-    /* 三项求和并按输出限幅，随后保存本次误差供下次微分使用 */
+    /* 三项求和并按输出限幅，随后保存本次测量值供下次微分使用 */
     pid->output = pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
-    pid->output = clampf(pid->output, pid->output_min, pid->output_max);
+    {
+        float raw = pid->output;
+
+        pid->output = clampf(raw, pid->output_min, pid->output_max);
+
+        /* 抗积分饱和（clamping）：输出被限幅时把积分拉回到不产生超限的位置 */
+        if (pid->output != raw && pid->ki > 0.0f) {
+            float i_max = pid->output_max / pid->ki;
+            float i_min = pid->output_min / pid->ki;
+
+            pid->integral = clampf(pid->integral, i_min, i_max);
+        }
+    }
     pid->last_error = error;
+    pid->measurement_prev = measurement;
     return pid->output;
 }
 

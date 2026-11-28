@@ -327,9 +327,10 @@ bool str_parse_float(const char *s, float *out)
         v *= 0.1f;
         exp10++;
     }
-    if (v > FLT_MAX || v == 0.0f) {
+    if (v > FLT_MAX) {
         return false;
     }
+    /* 下溢到 0 是合法的极小值（如 1e-45），不是语法错误 */
     *out = neg ? -v : v;
     return true;
 }

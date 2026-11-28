@@ -52,6 +52,31 @@ static void mat3_mul(const float A[3][3], const float B[3][3], float C[3][3])
     }
 }
 
+/*
+ * 协方差矩阵后处理：强制对称并给对角加下限。
+ * P=(I-KH)P 的普通矩阵乘会让 float 舍入误差逐渐破坏对称性，
+ * 长时间运行后对角可能变负、卡尔曼增益符号翻转，最终发散或产生 NaN。
+ */
+static void mat3_symmetrize(float P[3][3])
+{
+    int i;
+    int j;
+
+    for (i = 0; i < 3; i++) {
+        for (j = i + 1; j < 3; j++) {
+            float avg = 0.5f * (P[i][j] + P[j][i]);
+
+            P[i][j] = avg;
+            P[j][i] = avg;
+        }
+    }
+    for (i = 0; i < 3; i++) {
+        if (!(P[i][i] >= 1e-6f)) {
+            P[i][i] = 1e-6f;
+        }
+    }
+}
+
 /* 求 3x3 逆矩阵；成功返回 0，奇异返回 -1 */
 static int mat3_inv(const float A[3][3], float out[3][3])
 {
@@ -60,8 +85,15 @@ static int mat3_inv(const float A[3][3], float out[3][3])
     float c02 = A[1][0] * A[2][1] - A[1][1] * A[2][0];
     float det = A[0][0] * c00 + A[0][1] * c01 + A[0][2] * c02;
     float inv_det;
+    float scale;
 
-    if (fabsf(det) < 1e-12f) {
+    /* 奇异判据必须按矩阵量级缩放：float 的机器精度约 1.2e-7，
+     * 固定 1e-12 的绝对阈值拦不住近奇异矩阵。 */
+    scale = fabsf(A[0][0]) + fabsf(A[1][1]) + fabsf(A[2][2]);
+    if (scale < 1e-6f) {
+        scale = 1.0f;
+    }
+    if (fabsf(det) < 1e-6f * scale * scale) {
         return -1;
     }
     inv_det = 1.0f / det;
@@ -172,6 +204,7 @@ int loc_ekf_predict(localization_ekf_t *ekf, float v, float w, float dt)
             ekf->P[i][j] = Pnew[i][j];
         }
     }
+    mat3_symmetrize(ekf->P);
     return 0;
 }
 
@@ -226,6 +259,7 @@ int loc_ekf_update_pose(localization_ekf_t *ekf, const pose2d_t *measurement)
                 ekf->P[i][j] = Pnew[i][j];
             }
         }
+        mat3_symmetrize(ekf->P);
     }
     return 0;
 }
@@ -265,6 +299,7 @@ int loc_ekf_update_yaw(localization_ekf_t *ekf, float yaw)
             ekf->P[i][j] -= K[i] * PHt[j];
         }
     }
+    mat3_symmetrize(ekf->P);
     return 0;
 }
 

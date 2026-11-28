@@ -332,6 +332,14 @@ void filter_kalman_init(filter_kalman_t *f, float q, float r, float initial_valu
     if (f == NULL) {
         return;
     }
+    /* q/r 必须为非负有限值：r == 0 会让 p/(p+r) 退化为 1，q == r == 0 时
+     * 直接出现 0/0 → NaN 并永久污染状态。非法输入按"只信任测量"降级。 */
+    if (!(q >= 0.0f) || q > 1e30f) {
+        q = 0.0f;
+    }
+    if (!(r > 0.0f) || r > 1e30f) {
+        r = 1.0f;
+    }
     f->q = q;
     f->r = r;
     f->x = initial_value;
@@ -355,9 +363,16 @@ float filter_kalman_update(filter_kalman_t *f, float measurement)
         return measurement;
     }
     f->p = f->p + f->q;
+    if (!(f->p + f->r > 1e-12f)) {
+        /* 分母退化（p/r 均为 0）：跳过本次校正，避免 0/0 产生 NaN */
+        return f->x;
+    }
     f->k = f->p / (f->p + f->r);
     f->x = f->x + f->k * (measurement - f->x);
     f->p = (1.0f - f->k) * f->p;
+    if (!(f->p >= 1e-9f)) {
+        f->p = 1e-9f;               /* 防止协方差下溢为 0 后永久失去校正能力 */
+    }
     return f->x;
 }
 

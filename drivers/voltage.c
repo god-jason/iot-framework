@@ -42,7 +42,8 @@ int voltage_read(voltage_t *s, uint16_t *mv)
     if (s == NULL || mv == NULL || !s_adc_ready) {
         return -1;
     }
-    if (hal_adc_read(&s_adc, s->adc_channel, &raw, 0) != HAL_OK) {
+    /* timeout=0 的语义是"不等待"，单次转换必然取不到结果 */
+    if (hal_adc_read(&s_adc, s->adc_channel, &raw, HAL_ADC_TIMEOUT_DEFAULT) != HAL_OK) {
         LOG_E("volt", "adc read fail");   /* adc read failed */
         return -1;
     }

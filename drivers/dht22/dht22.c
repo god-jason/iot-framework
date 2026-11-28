@@ -47,7 +47,7 @@ static int dht22_wait_level(dht22_handle_t *handle, int level, uint32_t timeout_
         if (cur == level) {
             return HAL_OK;
         }
-        ros_sleep_ms(1);
+        hal_delay_us(1);
     }
     return (int)HAL_TIMEOUT;
 }
@@ -77,7 +77,7 @@ static int dht22_read_byte(dht22_handle_t *handle, uint8_t *value)
             if (cur == 0) {
                 break;
             }
-            ros_sleep_ms(1);
+            hal_delay_us(1);
         }
         data = (uint8_t)(data << 1);
         if (high_us > (uint32_t)DHT22_BIT1_MIN_HIGH_US) {
@@ -103,12 +103,20 @@ int dht22_read_raw(dht22_handle_t *handle, uint8_t frame[5])
         (uint32_t)(now - handle->last_read_ms) < DHT22_MIN_INTERVAL_MS) {
         return (int)HAL_BUSY;
     }
-    /* 起始信号 + 40 位数据全程关中断，避免位时序被中断拉长 */
-    hal_irq_disable();
+    /*
+     * 起始信号在任务上下文完成，不关中断：
+     * 拉低 1.2ms 的窗口若关中断会丢掉 tick，导致所有睡眠任务延迟。
+     */
     (void)dht22_mode(handle, HAL_GPIO_MODE_OUTPUT);
-    ros_sleep_ms(1);
+    ros_sleep_ms(2);
     ret = dht22_mode(handle, HAL_GPIO_MODE_INPUT);
-    ros_sleep_ms(1);
+    hal_delay_us(30);
+
+    /*
+     * 只有 40 位数据的读取关中断（约 4ms），用微秒忙等保证位宽判读；
+     * 临界区内禁止调用任何会切走任务的 API。
+     */
+    hal_irq_disable();
     /* 从机响应：低约 80us -> 高约 80us -> 低，随后即第 1 位的低电平 */
     if (ret == HAL_OK) {
         ret = dht22_wait_level(handle, 0, DHT22_LEVEL_TIMEOUT_US);

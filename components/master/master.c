@@ -204,11 +204,16 @@ static void dispatch(const char *topic, const uint8_t *payload, uint32_t len)
         return;
     }
     plen = strlen(s_m.prefix);
-    if (strncmp(topic, s_m.prefix, plen) != 0 || topic[plen] != '/') {
+    /* topic 可能短于 prefix：必须先比较长度，否则 topic[plen] 会越界读 */
+    if (strlen(topic) <= plen ||
+        strncmp(topic, s_m.prefix, plen) != 0 || topic[plen] != '/') {
         return;
     }
     if (len >= sizeof(raw)) {
-        len = (uint32_t)sizeof(raw) - 1U;
+        /* 超长报文截断后必然不是合法 JSON，直接丢弃并计数，不要假装解析 */
+        LOG_W("master", "payload too long: %u >= %u",
+              (unsigned)len, (unsigned)sizeof(raw));
+        return;
     }
     memcpy(raw, payload, len);
     raw[len] = '\0';

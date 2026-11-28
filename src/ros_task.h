@@ -91,6 +91,7 @@ struct ros_task {
 
 #if ROS_USE_PRIORITY_INHERIT
     ros_mutex_t *wait_mutex;        /* 阻塞在哪个互斥量上（继承链传播用） */
+    list_t held_mutexes;            /* 当前持有的互斥量表（优先级重算用） */
 #endif
 
 #if ROS_USE_EVENT

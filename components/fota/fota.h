@@ -37,6 +37,12 @@ extern "C" {
 #define FOTA_OK     0
 #define FOTA_ERR    (-1)
 
+/* 单次升级镜像的硬上限（可由构建宏覆盖）：超出直接拒绝，
+ * 防止非法长度写到 OTA 分区之外。 */
+#ifndef FOTA_IMAGE_MAX
+#define FOTA_IMAGE_MAX (4U * 1024U * 1024U)
+#endif
+
 /* ==========================================================================
  * OTA 升级包格式（写入 OTA 区的完整内容，Bootloader 与上位机共用）
  *

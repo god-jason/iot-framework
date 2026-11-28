@@ -414,7 +414,9 @@ int mqtt_subscribe(mqtt_client_t *c, const char *topic, uint8_t qos)
     if (rc != NET_OK) {
         return rc;
     }
-    if (ack_len < 3U || ack[2] == 0x80U) {
+    /* 与 publish 一致：核对 packet id，避免把上一次残留/迟到的 SUBACK 当成功 */
+    if (ack_len < 3U || ack[2] == 0x80U ||
+        (uint16_t)(((uint16_t)ack[0] << 8) | ack[1]) != pid) {
         return NET_ERR_IO;
     }
     return NET_OK;

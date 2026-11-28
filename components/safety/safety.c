@@ -34,6 +34,11 @@ int safety_estop(safety_t *safety, bool active)
         safety->estop = true;
         safety->faults |= SAFETY_FAULT_ESTOP;
     } else {
+        /* 已锁存的急停必须经 safety_clear() 显式确认后才能解除，
+         * 否则"松开急停按钮"就能直接恢复运动，锁存语义形同虚设。 */
+        if ((safety->latched & SAFETY_FAULT_ESTOP) != 0U) {
+            return -1;
+        }
         safety->estop = false;
         safety->faults &= ~SAFETY_FAULT_ESTOP;
     }

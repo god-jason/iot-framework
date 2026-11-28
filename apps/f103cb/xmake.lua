@@ -25,7 +25,7 @@ if is_plat("cross") and ROS_FAMILY == "f1" then
     ros_firmware("f103cb", {
         deps = fw_deps,
         defines = { "ROS_PLATFORM_STM32", "ROS_STM32_F1", "STM32F10X_MD",
-                    "HSE_VALUE=8000000", "ROS_USE_TRACE=0", "LOG_LEVEL=LOG_LEVEL_NONE" },
+                    "HSE_VALUE=8000000" },
         includedirs = incs,
         ldflags = {
             "-nostartfiles",
