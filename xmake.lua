@@ -22,9 +22,10 @@
         xmake b f407ve
 
     目录结构（每个子目录一个独立 target）：
-        src/         -> ros-core
+        src/rtos/    -> ros-core（实时内核）
+        src/hal/     -> 硬件抽象接口（仅头文件，无独立目标）
+        src/<x>/     -> ros-cmp-<x>（业务/算法组件）
         vendor/<x>/  -> ros-vendor-<x>
-        components/<x>/ -> ros-cmp-<x>
         drivers/     -> ros-drivers（静态库，按需链接）
         modules/<x>/ -> ros-module-<x>
         platforms/<x>/ -> 库目标（ros-platform-<x> / 板级对象库）
@@ -164,11 +165,11 @@ if family == "f4" and ROS_HAL_DRV ~= "" then
     cmsis_dev_inc = path.join(ROS_HAL_DRV, "CMSIS", "Device", "ST", "STM32F4xx", "Include")
 end
 
--- 头文件搜索路径：src + vendor + components + modules + drivers + platforms
+-- 头文件搜索路径：src/rtos + src/hal + src/<组件> + vendor + modules + drivers + platforms
 -- 统一转成绝对路径：各子目录 xmake.lua 中的相对 include 会以该目录为基准解析
 do
     local function ap(p) return path.join(ROS_ROOT, p) end
-    local incs = { ap("src"), ap("hal"), ap("drivers"),
+    local incs = { ap("src/rtos"), ap("src/hal"), ap("drivers"),
                    ap("platforms"), ap("platforms/pc"),
                    ap("platforms/stm32"),
                    ap("platforms/stm32/bootloader") }
@@ -178,7 +179,12 @@ do
         incs[#incs + 1] = ap("platforms/stm32" .. family)
     end
     for _, d in ipairs(os.dirs("vendor/*")) do incs[#incs + 1] = ap(d) end
-    for _, d in ipairs(os.dirs("components/*")) do incs[#incs + 1] = ap(d) end
+    -- src/ 下同时存放内核（rtos）、HAL 头（hal）与组件：前两者已单独加入，这里跳过
+    for _, d in ipairs(os.dirs("src/*")) do
+        local name = path.basename(d)
+
+        if name ~= "rtos" and name ~= "hal" then incs[#incs + 1] = ap(d) end
+    end
     for _, d in ipairs(os.dirs("modules/*")) do incs[#incs + 1] = ap(d) end
     if is_plat("cross") then
         if ROS_HAL_INC ~= "" then incs[#incs + 1] = ROS_HAL_INC end
@@ -496,14 +502,19 @@ end
 -- 引入各目录（顺序：基础库 -> 组件 -> 模块 -> 平台 -> PC 板级 -> 应用 -> 固件板级）
 -- ============================================================================
 
-includes("src")
+includes("src/rtos")
 includes("drivers")
 
 for _, dir in ipairs(os.dirs("vendor/*")) do
     includes(dir)
 end
-for _, dir in ipairs(os.dirs("components/*")) do
-    includes(dir)
+for _, dir in ipairs(os.dirs("src/*")) do
+    local name = path.basename(dir)
+
+    -- rtos 已在上面单独引入；hal 只有头文件、没有独立目标
+    if name ~= "rtos" and name ~= "hal" then
+        includes(dir)          -- 重复 includes 同一目录会重复定义目标
+    end
 end
 for _, dir in ipairs(os.dirs("modules/*")) do
     includes(dir)

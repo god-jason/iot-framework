@@ -1,5 +1,5 @@
 /*
- * boot_kv.h - Bootloader/App 共享的 KV 存储（components/fkv）
+ * boot_kv.h - Bootloader/App 共享的 KV 存储（src/fkv）
  *
  * KV 分区（A/B 两个等大区）地址与大小见各板 partition.h：
  *   FLASH_KV_BASE0 / FLASH_KV_BASE1 / FLASH_KV_SIZE

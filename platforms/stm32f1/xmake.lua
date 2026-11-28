@@ -41,7 +41,7 @@ if is_plat("cross") and ROS_FAMILY == "f1" then
                   path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_kv.c"),
                   path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_meta.c"),
                   path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_mem.c"),
-                  path.join(ROS_ROOT, "components/crypto/crc32.c") },
+                  path.join(ROS_ROOT, "src/crypto/crc32.c") },
         defines = { "STM32F10X_MD", "HSE_VALUE=8000000" },
         includedirs = incs,
         cflags = { "-ffreestanding" },

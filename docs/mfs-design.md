@@ -1,7 +1,7 @@
 # MFS 设计文档
 
 版本：V1.1（MAJOR=1, MINOR=1）
-适用范围：`components/mfs`
+适用范围：`src/mfs`
 最后更新：2026-11-24
 
 ---
@@ -36,7 +36,7 @@ MFS（Record-Oriented File System）是一个面向 SPI NOR / 内部 Flash 的�
 | `mfs_blockdev.c` | 块设备回调封装（read / program / erase / sync）与错误映射 |
 | `mfs_block.c` | Block Header 读写、块分配（磨损均衡）、空闲判定、坏块标记 |
 | `mfs_record.c` | Record 写入/读取/CRC 校验、块扫描、DATA 定位 |
-| [crc32.c](../components/crypto/crc32.c) | CRC32（components/crypto 提供，record/block/sb 共用） |
+| [crc32.c](../src/crypto/crc32.c) | CRC32（src/crypto 提供，record/block/sb 共用） |
 | `mfs_inode.c` | Inode Payload 序列化/解析、最新版本查找、目录项查找、创建/更新/删除 |
 | `mfs_dir.c` | 路径解析、mkdir/rmdir/unlink/rename/stat、目录遍历 |
 | `mfs_file.c` | 文件打开/读写/seek/truncate，Chunk 读写策略 |
@@ -60,7 +60,7 @@ mfs.h (public)
          |      +-- mfs_file.c
          |      +-- mfs_gc.c
          |      +-- mfs_maint.c
-         +-- （CRC32 由 components/crypto/crc32.c 提供）
+         +-- （CRC32 由 src/crypto/crc32.c 提供）
 ```
 
 ---
@@ -448,7 +448,7 @@ Flash 剩余约 29.5KB（131,072 - 101,572）。
 
 ## 14. 测试矩阵
 
-`components/mfs/mfs_test.c` 使用 64KB RAM 块设备（16 x 4KB，NOR 1→0，
+`src/mfs/mfs_test.c` 使用 64KB RAM 块设备（16 x 4KB，NOR 1→0，
 支持擦除故障注入）覆盖以下 20 组：
 
 | 用例 | 覆盖点 |

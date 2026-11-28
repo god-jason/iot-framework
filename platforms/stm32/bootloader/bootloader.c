@@ -6,8 +6,8 @@
  *   - F407：单 App 槽，Boot 16K / KV 16K×2 / 错误日志 16K /
  *            App 192K / 升级包 256K。
  *
- * 启动状态只保存 tries/crash（KV 区，components/fkv）；OTA 信息不落盘：
- * OTA 区自带包头（components/fota/fota.h），Bootloader 每次启动直接检测
+ * 启动状态只保存 tries/crash（KV 区，src/fkv）；OTA 信息不落盘：
+ * OTA 区自带包头（src/fota/fota.h），Bootloader 每次启动直接检测
  * 包头的魔术字/头 CRC/长度，有效则升级。升级成功后擦除 OTA 区；升级中断
  * （掉电/复位）时包头仍在，下次启动重新升级——不需要进度/续传。
  *

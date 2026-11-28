@@ -1,5 +1,5 @@
 /*
- * ml307_ping.c - ML307R 的 ping 实现（AT+MPING），作为 components/net 后端
+ * ml307_ping.c - ML307R 的 ping 实现（AT+MPING），作为 src/net 后端
  *
  * 指令（TCP/IP 用户手册 V5.0.0）：
  *   AT+MPING="<host>"[,<timeout>[,<ping_num>[,<packet_len>]]]

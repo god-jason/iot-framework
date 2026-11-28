@@ -1,7 +1,7 @@
 # ROFS 1.0 只读文件系统设计文档
 
 版本：ROFS 1.0（格式版本 1）
-代码目录：`components/rofs`
+代码目录：`src/rofs`
 打包工具：`tools/make_rofs.py`
 最后更新：2026-11-24
 
@@ -51,13 +51,13 @@ ROFS 是面向 MCU 的**只读静态资源文件系统**：
 
 | 文件 | 职责 |
 | --- | --- |
-| [rofs.h](../components/rofs/rofs.h) | 公共 API、错误码、镜像常量、实例/句柄结构 |
-| [rofs_internal.h](../components/rofs/rofs_internal.h) | 字段偏移、小端解析、内部记录接口 |
-| [rofs.c](../components/rofs/rofs.c) | 挂载、卸载、镜像信息、完整校验 |
-| [rofs_file.c](../components/rofs/rofs_file.c) | 路径校验、顺序查找、open/read/seek/tell/size/eof/exists/stat |
-| [rofs_dir.c](../components/rofs/rofs_dir.c) | 基于路径前缀的 opendir/readdir/rewinddir/closedir |
-| [crc32.c](../components/crypto/crc32.c) | CRC-32/ISO-HDLC（与 `zlib.crc32` 一致） |
-| [rofs_test.c](../components/rofs/rofs_test.c) | RAM 镜像单元测试（仅 host `ros-test`） |
+| [rofs.h](../src/rofs/rofs.h) | 公共 API、错误码、镜像常量、实例/句柄结构 |
+| [rofs_internal.h](../src/rofs/rofs_internal.h) | 字段偏移、小端解析、内部记录接口 |
+| [rofs.c](../src/rofs/rofs.c) | 挂载、卸载、镜像信息、完整校验 |
+| [rofs_file.c](../src/rofs/rofs_file.c) | 路径校验、顺序查找、open/read/seek/tell/size/eof/exists/stat |
+| [rofs_dir.c](../src/rofs/rofs_dir.c) | 基于路径前缀的 opendir/readdir/rewinddir/closedir |
+| [crc32.c](../src/crypto/crc32.c) | CRC-32/ISO-HDLC（与 `zlib.crc32` 一致） |
+| [rofs_test.c](../src/rofs/rofs_test.c) | RAM 镜像单元测试（仅 host `ros-test`） |
 | [make_rofs.py](../tools/make_rofs.py) | 目录打包、镜像查看、提取与校验 |
 
 模块关系：
@@ -452,7 +452,7 @@ void app_resource_init(void)
 
 ## 9. 测试
 
-`components/rofs/rofs_test.c` 在 RAM 中构造镜像，覆盖 6 组：
+`src/rofs/rofs_test.c` 在 RAM 中构造镜像，覆盖 6 组：
 
 | 用例 | 覆盖点 |
 | --- | --- |
@@ -487,7 +487,7 @@ Python 工具额外验证：
 
 ## 11. 与 MFS / littlefs 的关系
 
-| 项目 | ROFS（本组件） | MFS（components/mfs） | littlefs（vendor） |
+| 项目 | ROFS（本组件） | MFS（src/mfs） | littlefs（vendor） |
 | --- | --- | --- | --- |
 | 读写 | 只读 | 可读写 | 可读写 |
 | 数据来源 | PC 工具生成镜像 | 运行期写入 | 运行期写入 |

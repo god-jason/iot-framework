@@ -1,8 +1,8 @@
 /*
- * ml307_net.c - ML307R 网络后端：实现 components/net 的原始接口
+ * ml307_net.c - ML307R 网络后端：实现 src/net 的原始接口
  *
  * 通过 MIP 系列 AT 指令提供 TCP/UDP 客户端连接、收发与 DNS 解析
- * （ping 见 ml307_ping.c），流式接口复用 components/net 的通用实现。
+ * （ping 见 ml307_ping.c），流式接口复用 src/net 的通用实现。
  *
  * 指令序列（ML307R，TCP/IP 用户手册 V5.0.0）：
  *   AT+MIPOPEN=<id>,"TCP"|"UDP","<host>",<port>   -> OK，连接结果异步上报
@@ -13,7 +13,7 @@
  *   +MIPURC: "disconn",<id>,<state>                连接断开
  *   AT+MDNSGIP="<host>"                           -> +MDNSGIP: "<host>","<ip>"
  *
- * 本文件仅在 ML307 目标参与编译（构建系统排除 components/net/net_bsd.c）。
+ * 本文件仅在 ML307 目标参与编译（构建系统排除 src/net/net_bsd.c）。
  */
 
 #include "net.h"

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """build_ota.py - 把原始固件打包成带 fota 包头的 OTA 文件
 
-包头格式与 components/fota/fota.h 完全一致（32 字节，小端）：
+包头格式与 src/fota/fota.h 完全一致（32 字节，小端）：
 
     magic(4) version(2) flags(2) image_len(4) image_crc(4)
     data_len(4) data_crc(4) reserved(4) hdr_crc(4)

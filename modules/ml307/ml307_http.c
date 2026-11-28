@@ -1,7 +1,7 @@
 /*
- * ml307_http.c - ML307R 原生 HTTP 实现（AT+MHTTP*），平替 components/http
+ * ml307_http.c - ML307R 原生 HTTP 实现（AT+MHTTP*），平替 src/http
  *
- * 启用方式：ML307 目标的构建系统编译本文件，并排除 components/http/http_client.c。
+ * 启用方式：ML307 目标的构建系统编译本文件，并排除 src/http/http_client.c。
  * 使用模组内置 HTTP 协议栈，不经过 net socket，节省 RAM 与交互次数。
  *
  * 指令序列（HTTP/HTTPS 用户手册 V6.0.7，实例 id 固定 0）：

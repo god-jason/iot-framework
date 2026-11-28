@@ -6,7 +6,7 @@
 
     Boot -> Host : ACK(0x06)                （就绪，可发长度/CRC）
     Host -> Boot : u32 len + u32 crc32(LE)  （len=整包长度，crc 覆盖后 len 字节）
-    Host -> Boot : 32 字节包头 fota_hdr_t   （格式见 components/fota/fota.h）
+    Host -> Boot : 32 字节包头 fota_hdr_t   （格式见 src/fota/fota.h）
     Boot -> Host : ACK                      （包头校验通过，OTA 区擦除完成）
     Host -> Boot : len-32 字节负载
     Boot -> Host : ACK 成功（MCU 复位；下次启动检测包头并升级到 APP 区）

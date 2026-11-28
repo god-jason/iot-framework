@@ -1,7 +1,7 @@
 /*
- * ml307_mqtt.c - ML307R 原生 MQTT 实现（AT+MQTT*），平替 components/mqtt
+ * ml307_mqtt.c - ML307R 原生 MQTT 实现（AT+MQTT*），平替 src/mqtt
  *
- * 启用方式：ML307 目标的构建系统编译本文件，并排除 components/mqtt/mqtt.c。
+ * 启用方式：ML307 目标的构建系统编译本文件，并排除 src/mqtt/mqtt.c。
  * 使用模组内置 MQTT 协议栈，避免在 MCU 上编解码报文。
  *
  * 指令序列（ML307R，connect_id 固定 0）：

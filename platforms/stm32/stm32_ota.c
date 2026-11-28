@@ -1,8 +1,8 @@
 /*
  * stm32_ota.c - STM32 FOTA 板级后端（F1/F4 共用）
  *
- * 实现 components/fota 的 port_ota_xxx：把 App 传入的原始固件写入 OTA 区，
- * OTA 区格式见 components/fota/fota.h：
+ * 实现 src/fota 的 port_ota_xxx：把 App 传入的原始固件写入 OTA 区，
+ * OTA 区格式见 src/fota/fota.h：
  *
  *   OTA 区 = fota_hdr_t（32B） + 原始镜像
  *

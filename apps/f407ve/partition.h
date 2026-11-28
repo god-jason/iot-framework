@@ -14,12 +14,12 @@
  * 5     APP 主程序        0x08010000      192KB     S4(64K) + S5(128K)
  * 6     OTA 升级包        0x08040000      256KB     S6 + S7
  *
- * KV 区由 components/fkv 使用（双区滚动日志、掉电安全）：
+ * KV 区由 src/fkv 使用（双区滚动日志、掉电安全）：
  *   - A/B 两区轮流追加，写满后把有效记录搬到另一区并擦除旧区；
  *   - 启动状态（tries/crash）、应用配置存放在 KV 中。
  *
  * 升级流程（无备份区）：
- *   1. 上位机把升级包写入 OTA 区，包格式见 components/fota/fota.h：
+ *   1. 上位机把升级包写入 OTA 区，包格式见 src/fota/fota.h：
  *      32B 包头（魔术字/版本/flags/镜像与负载长度、CRC）+ 负载；
  *   2. Bootloader 每次启动检测 OTA 区包头，有效则擦除 APP 区并写入镜像
  *      （负载为 DEFLATE 时流式解压，见 FLASH_OTA_COMPRESS）；
@@ -34,7 +34,7 @@
 #define FLASH_ROM_BASE               0x08000000U
 #define FLASH_ROM_SIZE               (16U * 1024U)
 
-/* KV 区：A/B 两个等大分区（components/fkv 使用） */
+/* KV 区：A/B 两个等大分区（src/fkv 使用） */
 #define FLASH_KV_BASE0           0x08004000U
 #define FLASH_KV_BASE1           0x08008000U
 #define FLASH_KV_SIZE            (16U * 1024U)

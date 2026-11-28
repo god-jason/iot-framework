@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """ota.py - OTA 文件格式基础代码（包头 + 打包）
 
-与 components/fota/fota.h 保持一致（32 字节，小端）：
+与 src/fota/fota.h 保持一致（32 字节，小端）：
 
     magic(4) version(2) flags(2) image_len(4) image_crc(4)
     data_len(4) data_crc(4) reserved(4) hdr_crc(4)
@@ -20,7 +20,7 @@ from __future__ import annotations
 import struct
 import zlib
 
-# OTA 包头（与 components/fota/fota.h 一致，小端）
+# OTA 包头（与 src/fota/fota.h 一致，小端）
 FOTA_HDR_MAGIC = 0x41544F46
 FOTA_HDR_VERSION = 1
 FOTA_HDR_SIZE = 32
@@ -33,7 +33,7 @@ def crc32(data: bytes) -> int:
 
 
 def build_package(image: bytes, compress: bool) -> tuple[bytes, int, int]:
-    """按 components/fota/fota.h 打包：32B 包头 + 负载。
+    """按 src/fota/fota.h 打包：32B 包头 + 负载。
 
     返回 (完整升级包, 镜像 CRC32, 压缩后负载长度)。
     """

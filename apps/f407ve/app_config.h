@@ -5,7 +5,7 @@
  * app_config.h - STM32F407VET6 应用配置持久化（内部 Flash）
  *
  * 配置结构体由 cfg.h 的 X 宏描述（字段与默认值同表维护），以原始内存
- * 形式存放在 KV 区（BOOT_KV_KEY_CONFIG），由 components/config 的
+ * 形式存放在 KV 区（BOOT_KV_KEY_CONFIG），由 src/config 的
  * config_* 接口读写，并注册为 "app_config_t"：
  *   cfg get app_config_t
  *   cfg set app_config_t {"threshold":30}

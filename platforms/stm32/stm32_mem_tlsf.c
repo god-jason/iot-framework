@@ -1,7 +1,7 @@
 /*
  * stm32_mem_tlsf.c - STM32 内存后端（TLSF 静态堆）
  *
- * 本文件只实现 port_mem_* 原语，供 src/ros_mem.c 的统一接口调用：
+ * 本文件只实现 port_mem_* 原语，供 src/rtos/ros_mem.c 的统一接口调用：
  *   ros_mem_malloc/free/realloc 负责任务统计与 calloc/边界处理，
  *   这里只做纯粹的块分配与堆容量上报。
  *

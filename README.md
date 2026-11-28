@@ -14,10 +14,10 @@
 | --- | --- |
 | 实时内核 | 固定优先级抢占 + 同优先级时间片；信号量、互斥量（优先级继承）、定长队列、流式缓冲、变长消息队列、事件组、任务通知、软件定时器（默认独立 timer 任务）、运行时统计 |
 | 默认零动态内存 | TCB、栈、队列缓冲、定时器可由调用者提供，启动后内存占用可静态核算；另有可选的动态创建接口 |
-| 硬件抽象 | 35 个外设接口头（GPIO/UART/SPI/I2C/CAN/ADC/DAC/PWM/编码器/DMA/Flash/RTC/USB/ETH…） |
+| 硬件抽象 | 30 个外设接口头（GPIO/UART/SPI/I2C/CAN/ADC/DAC/PWM/编码器/DMA/Flash/RTC/USB/ETH…） |
 | 多平台 | PC 模拟（Fiber/ucontext）、STM32F1/F4/H7、AVR |
 | 器件驱动 | 50 个传感器/显示/存储/无线/识别类驱动 |
-| 网络 | `components/net`（BSD/lwIP 原始接口 + 流式接口）、`components/http`、`components/mqtt`；模组后端 `modules/ml307` |
+| 网络 | `src/net`（BSD/lwIP 原始接口 + 流式接口）、`src/http`、`src/mqtt`；模组后端 `modules/ml307` |
 | 机器人控制 | 运动学、里程计、轨迹规划（梯形/S 曲线）、串级闭环、姿态融合、EKF 定位、栅格建图、A*/D* 导航、安全状态机 |
 | 运维 | 参数表、异步日志、Modbus、上位机/CAN 协议、Bootloader 与 FOTA |
 | 测试 | 与实现同目录的单元测试，断言数随构建配置变化，以 CI 输出为准 |
@@ -28,9 +28,10 @@
 
 ```
 robotos/
-├── src/            实时内核（ros_*），实现与测试同目录
-├── hal/            硬件抽象接口（hal_*）
-├── components/     业务/算法组件（含 net / http / mqtt 网络组件）
+├── src/
+│   ├── rtos/       实时内核（ros_*），实现与测试同目录
+│   ├── hal/        硬件抽象接口（hal_*，30 个头，仅头文件）
+│   └── <模块>/     业务/算法组件（net / http / mqtt / mfs 等 40+ 个）
 ├── drivers/        器件驱动（50 个）
 ├── modules/        模组后端（ml307：net 原始接口 + 原生 HTTP/MQTT）
 ├── platforms/      pc / stm32 / avr 平台实现
@@ -189,15 +190,15 @@ hal_gpio_write(HAL_PIN(0, 13), HAL_GPIO_HIGH);
 
 | 环节 | 组件 |
 | --- | --- |
-| 运动学 | `components/kinematics`（差速/阿克曼/两连杆臂） |
-| 里程计 | `components/odometry` |
-| 轨迹 | `components/trajectory`（梯形、S 曲线、多轴插补） |
-| 姿态 | `components/imu`（Mahony） |
-| 定位 | `components/localization`（EKF） |
-| 感知 | `components/perception` |
-| 建图/导航 | `components/mapping`、`components/navigation` |
-| 安全 | `components/safety` |
-| 任务编排 | `components/action`、`planner`、`executor`、`behavior` |
+| 运动学 | `src/kinematics`（差速/阿克曼/两连杆臂） |
+| 里程计 | `src/odometry` |
+| 轨迹 | `src/trajectory`（梯形、S 曲线、多轴插补） |
+| 姿态 | `src/imu`（Mahony） |
+| 定位 | `src/localization`（EKF） |
+| 感知 | `src/perception` |
+| 建图/导航 | `src/mapping`、`src/navigation` |
+| 安全 | `src/safety` |
+| 任务编排 | `src/action`、`planner`、`executor`、`behavior` |
 
 ---
 
@@ -232,7 +233,7 @@ xmake build ros-test && xmake run ros-test
 
 - 测试文件与实现同目录，命名 `*_test.c`，入口统一为 `void ut_xxx(void)`；
 - `ros-test` 汇总调用全部套件；
-- 断言宏在 `components/common/test.h`：`TF_CHECK` / `TF_CHECK_INT` / `TF_CHECK_STR` / `TF_CHECK_NEAR` / `TF_CHECK_MEM`。
+- 断言宏在 `src/common/test.h`：`TF_CHECK` / `TF_CHECK_INT` / `TF_CHECK_STR` / `TF_CHECK_NEAR` / `TF_CHECK_MEM`。
 
 ---
 
@@ -245,7 +246,7 @@ xmake build ros-test && xmake run ros-test
 | 命名前缀 | 内核 `ros_`、HAL `hal_`、组件用模块名前缀 |
 | tick 回绕 | 时间比较统一使用 `ROS_TICK_AFTER/BEFORE` |
 | ISR 限制 | 中断内禁止阻塞 API，只能使用 `*_from_isr` |
-| 裁剪 | 内核开关 `src/ros_config.h`；外设由平台按需实现，未实现返回 `HAL_NOT_SUPPORTED` |
+| 裁剪 | 内核开关 `src/rtos/ros_config.h`；外设由平台按需实现，未实现返回 `HAL_NOT_SUPPORTED` |
 
 ---
 

@@ -10,7 +10,7 @@
  *   停留在 Bootloader 等待串口 OTA。
  *
  * OTA 升级：
- *   OTA 区自描述（包头见 components/fota/fota.h），Bootloader 每次启动
+ *   OTA 区自描述（包头见 src/fota/fota.h），Bootloader 每次启动
  *   直接检测包头魔术字/头 CRC/长度，有效则升级；升级成功后擦除 OTA 区，
  *   中断则包头仍在，下次启动重新升级（无进度、无续传）。
  *

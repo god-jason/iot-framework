@@ -2,7 +2,7 @@
 #define APP_MASTER_H
 
 /*
- * app_master.h - F407VE 接入 IoT-DMP 平台（components/master）的演示命令
+ * app_master.h - F407VE 接入 IoT-DMP 平台（src/master）的演示命令
  *
  * 注册命令：
  *   master [host] [port] [seconds]
