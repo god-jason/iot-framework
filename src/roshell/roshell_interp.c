@@ -46,7 +46,8 @@ static void rs_if_advance(roshell_t *rs, uint16_t hdr)
         return;
     }
     for (i = (uint16_t)(hdr + 1U); i < f->end; i++) {
-        int kind = rs_line_kind(rs->prog->text + rs->prog->line_off[i]);
+        /* 扫描期已记录每行分类：按行源（文件）时无需再读原文 */
+        int kind = (int)rs->prog->line_kind[i];
         if (kind == K_IF || kind == K_FOR || kind == K_WHILE || kind == K_FUNCTION) {
             d++;
         } else if (kind == K_END) {
@@ -316,8 +317,14 @@ int rs_exec_unit(roshell_t *rs)
     int rc;
     while (!ctx->returned && ctx->pc < prog->line_count) {
         uint16_t ln = ctx->pc;
-        const char *line = prog->text + prog->line_off[ln];
-        int tn = rs_lex(line, &ctx->toks);
+        uint8_t depth = (rs->depth <= RS_CALL_DEPTH) ? rs->depth : RS_CALL_DEPTH;
+        const char *line = rs_prog_line(prog, ln, rs->lbuf[depth], RS_LINE_MAX);
+        int tn;
+        if (line == NULL) {
+            rs_err0(err, RS_ERR_NOT_FOUND, "read failed");
+            return RS_ERR_NOT_FOUND;
+        }
+        tn = rs_lex(line, &ctx->toks);
         const rs_tok_t *t = (const rs_tok_t *)vec_data(&ctx->toks);
         int kind;
         ctx->pc = (uint16_t)(ln + 1U);

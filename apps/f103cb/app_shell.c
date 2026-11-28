@@ -18,6 +18,7 @@
 #if defined(ROS_PLATFORM_STM32)
 
 #include "roshell.h"
+#include "roshell_repl.h"
 #include "ros.h"
 #include "common.h"
 #include "hal_uart.h"

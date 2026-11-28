@@ -7,6 +7,7 @@
 #include "ros.h"
 #include "common.h"
 #include "roshell.h"
+#include "roshell_repl.h"
 #include "led.h"
 #include "app.h"
 

@@ -17,6 +17,7 @@
 #include "ros.h"
 #include "common.h"
 #include "roshell.h"
+#include "roshell_repl.h"
 
 #include <stdio.h>
 #include <stdlib.h>

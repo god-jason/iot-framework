@@ -20,7 +20,10 @@
 #define RS_TOKEN_MAX     48U     /* 单行最多 token 数（含 EOF） */
 #endif
 #ifndef RS_SCRIPT_MAX
-#define RS_SCRIPT_MAX    4096U   /* 脚本源文本最大字节数 */
+#define RS_SCRIPT_MAX    4096U   /* 脚本源文本最大字节数（内存源） */
+#endif
+#ifndef RS_LINE_SRC_MAX
+#define RS_LINE_SRC_MAX  256U    /* 按行源（文件/流）最大行数 */
 #endif
 #ifndef RS_SHELL_RX_MAX
 #define RS_SHELL_RX_MAX  256U    /* 会话接收环形缓冲字节数 */

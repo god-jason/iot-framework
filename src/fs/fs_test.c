@@ -17,6 +17,8 @@
 #include "vfs.h"
 #include "fs_cmd.h"
 #include "roshell.h"
+#include "roshell_repl.h"
+#include "roshell_fs.h"
 
 #include <string.h>
 
@@ -572,6 +574,55 @@ void ut_fs(void)
             n = read_all("/a/gen2.txt", buf, sizeof(buf));
             TF_CHECK_INT(n, 3);
             TF_CHECK_STR(buf, "two");
+            rs_destroy(rs);
+        }
+
+        /* rs_exec_file：直接流式执行多行脚本（函数 + for + if），不整读文件 */
+        {
+            static const char s_loop_script[] =
+                "function twice($a)\n"
+                "return $a * 2\n"
+                "end\n"
+                "$i = 0\n"
+                "for $i = 1,2,3 do\n"
+                "$x = twice($i)\n"
+                "end\n"
+                "$v = 5\n"
+                "if $v > 10\n"
+                "$r = 1\n"
+                "elseif $v > 3\n"
+                "$r = 2\n"
+                "else\n"
+                "$r = 3\n"
+                "end\n";
+
+            memset(&f, 0, sizeof(f));
+            TF_CHECK_INT(vfs_open("/a/loop.txt",
+                                  FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &f),
+                         FS_OK);
+            TF_CHECK_INT(vfs_write(&f, s_loop_script,
+                                   (uint32_t)(sizeof(s_loop_script) - 1U)),
+                         (int32_t)(sizeof(s_loop_script) - 1U));
+            TF_CHECK_INT(vfs_close(&f), FS_OK);
+        }
+
+        rs = rs_create();
+        TF_CHECK(rs != NULL);
+        if (rs != NULL) {
+            int32_t v = 0;
+
+            memset(&err, 0, sizeof(err));
+            TF_CHECK_INT(rs_exec_file(rs, "/a/loop.txt", &err), RS_OK);
+            TF_CHECK_INT(rs_get_int(rs, "x", &v), RS_OK);
+            TF_CHECK_INT(v, 6);
+            TF_CHECK_INT(rs_get_int(rs, "i", &v), RS_OK);
+            TF_CHECK_INT(v, 3);
+            TF_CHECK_INT(rs_get_int(rs, "r", &v), RS_OK);
+            TF_CHECK_INT(v, 2);
+
+            /* 文件不存在：返回 NOT_FOUND，不崩溃 */
+            memset(&err, 0, sizeof(err));
+            TF_CHECK_INT(rs_exec_file(rs, "/a/none.rs", &err), RS_ERR_NOT_FOUND);
             rs_destroy(rs);
         }
     }

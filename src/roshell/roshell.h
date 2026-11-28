@@ -67,6 +67,14 @@ typedef struct {
     char     msg[48];
 } rs_err_t;
 
+/*
+ * 按行取源回调（流式执行用，见 roshell_fs.h）：
+ *   把第 idx 行（0 基）拷进 buf 并补 0，返回行长（0 = 空行）；
+ *   负值为错误：-1 读失败，-2 行超长。
+ * 实现需支持随机访问（解释器遇到 for/while 会回跳取行）。
+ */
+typedef int32_t (*rs_line_src_t)(void *ctx, uint16_t idx, char *buf, uint32_t cap);
+
 /* 无行号错误填充（code 为 RS_ERR_*，msg 拷贝进 e；e 可为 NULL） */
 void rs_err0(rs_err_t *e, int code, const char *msg);
 
@@ -101,11 +109,16 @@ struct roshell {
     rs_unit_t           *unit;            /* 当前执行单元：&top 或函数调用子单元 */
     uint8_t              depth;           /* 函数调用深度 */
     rs_err_t            *err;             /* 当前错误输出，可为 NULL */
+    /* 按行源（文件等）取行缓冲：按调用深度分开，函数嵌套时不互相覆盖 */
+    char                 lbuf[RS_CALL_DEPTH + 1U][RS_LINE_MAX];
 
-    /* -------------------- 交互会话（rs_shell_start 初始化） -------------------- */
+    /* -------------------- 交互会话（roshell_repl / roshell_io 初始化） -------------------- */
     struct ros_task     *task;            /* 会话输入任务 */
     const char          *version;         /* banner / ver 版本串 */
-    ringbuf_t            rx;              /* 接收环形缓冲 */
+    struct ros_io       *in;              /* 流式输入（roshell_io 绑定；NULL 表示手工投喂） */
+    struct ros_io       *out;             /* 流式输出（NULL 表示当前任务 stdio） */
+    bool                 eof;             /* 输入流已结束（EOF / 读错误） */
+    ringbuf_t            rx;              /* 接收环形缓冲（feed 模式） */
     uint8_t              rx_mem[RS_SHELL_RX_MAX];
     char                 line[RS_LINE_MAX];
     char                 cwd[RS_CWD_MAX]; /* 当前工作目录，默认 "/" */
@@ -233,55 +246,16 @@ int rs_cmd_dispatch(roshell_t *rs, const char *line);
  */
 void rs_cmd_install(roshell_t *rs);
 
-/* ============================== 交互会话 ============================== */
-
+/* ============================== 模块划分 ============================== */
 /*
- * 新建并启动一个会话：分配独立的会话上下文（接收缓冲 / 行编辑状态 / cwd）
- * 并创建输入任务（任务名 "roshell_io"），打印 banner 与提示符。每次调用
- * 产生一个独立会话，可同时存在多个；返回的实例即后续会话 API 的句柄。
- * version 仅用于 ver 命令显示，可为 NULL。内存不足返回 NULL。
+ * 本文件只声明“引擎本体”：实例生命周期、执行、顶层变量读取、执行上下文。
+ * 其余能力按用途拆到独立模块，按需包含：
+ *   roshell_repl.h  REPL 会话外壳 rs_shell_*（环形缓冲 + 输入任务 + cwd/exit）
+ *   roshell_io.h    基于 ros_io_t 的流式会话（rs_repl_open/poll/run）
+ *   roshell_fs.h    直接执行文件 / 按行源（流式，不整读）
+ *   roshell_cmd.h   命令表与分派（rs_cmd_register / rs_cmd_dispatch）
+ *   roshell_args.h  命令参数解析
  */
-roshell_t *rs_shell_start(const char *version);
-
-/* 投喂输入字节（串口 ISR / 轮询可调用）：追加到该会话的接收环形缓冲；
- * rs 为 NULL 或缓冲满时丢弃。 */
-void rs_shell_feed(roshell_t *rs, const char *data, uint32_t len);
-
-/* 消费接收缓冲中的全部字节：组行并分派，返回提交的行数（回车计数）。
- * 输入任务循环调用；测试或无任务平台可手动驱动。 */
-uint32_t rs_shell_process(roshell_t *rs);
-
-bool rs_shell_started(const roshell_t *rs);
-bool rs_shell_task_finished(const roshell_t *rs);
-
-/* 会话当前工作目录（默认 "/"，会话启动时重置）；用于 pwd/cd 等命令 */
-const char *rs_shell_cwd(const roshell_t *rs);
-int rs_shell_cwd_set(roshell_t *rs, const char *path);
-
-/* 请求关闭会话（exit 命令 / 平台输入 EOF）：输入任务在本轮后退出 */
-void rs_shell_request_exit(roshell_t *rs);
-
-/*
- * 回收会话：要求 rs_shell_task_finished(rs) 为真。
- * 销毁输入任务、会话上下文与 roshell 实例。返回 0 / -1。
- */
-int rs_shell_shutdown(roshell_t *rs);
-
-/* 当前编辑行已积累的字节数（未提交部分），供测试观察截断行为 */
-uint32_t rs_shell_line_pending(const roshell_t *rs);
-
-/* ============================== 平台默认绑定 ============================== */
-
-/*
- * 平台层弱默认实现（platforms/pc/pc_shell.c、platforms/stm32/stm32_shell.c），
- * 应用可提供强定义覆盖（如 apps/shell/app_shell.c、apps/f103cb/app_shell.c）：
- *   PC    : stdin 逐字节 feed 到会话；上电只跑监听任务，
- *           输入口令 "hello" 后才创建会话；exit 回收后回到监听；
- *           监听态 quit / 管道 EOF 停止内核。
- *   STM32 : UART1 轮询逐字节 feed；同样口令 "hello" 开启会话。
- * 返回 0 成功；平台不支持或资源不足返回 -1。
- */
-int rs_platform_start(const char *version);
 
 /* 参数解析见 roshell_args.h；命令定义与全局命令表见 roshell_cmd.h。 */
 

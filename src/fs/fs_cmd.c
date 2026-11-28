@@ -15,6 +15,8 @@
 
 #include "ros.h"
 #include "roshell.h"
+#include "roshell_repl.h"
+#include "roshell_fs.h"
 #include "vfs.h"
 
 #include <string.h>
@@ -477,20 +479,17 @@ static int cmd_format(roshell_t *rs, int argc, char **argv,
 
 /*
  * ================================ run <path> ================================
- * 从文件系统加载脚本，在独立任务里交给 roshell 逐行解释执行。
+ * 从文件系统加载脚本，在独立任务里交给 roshell 执行。
  *
  * 设计要点：
  *   · 命令只做校验与投递，立即返回，交互 shell 不会被长脚本阻塞；
  *   · 每个脚本一个动态任务（ros_task_create_dynamic）：TCB 与栈都来自内核堆，
  *     同时运行的脚本数量不受静态槽位限制，只受剩余堆大小约束；
  *   · 任务不能销毁自己：结束（退出）后由其它任务在下次提交时回收 TCB/栈；
- *   · 脚本缓冲按文件实际大小从内核堆分配，执行完立即释放，不占常驻 RAM；
- *   · 脚本长度受 FS_RUN_SCRIPT_MAX 限制（默认与 RS_SCRIPT_MAX 一致）。
+ *   · 脚本不整读：交给 roshell_fs 的 rs_exec_file() 流式执行（行索引 +
+ *     按行取源），堆开销只有 4B/行 的行偏移表，与文件字节数无关；
+ *   · 行数上限 RS_LINE_SRC_MAX（默认 256），单行长度上限 RS_LINE_MAX。
  */
-#ifndef FS_RUN_SCRIPT_MAX
-#define FS_RUN_SCRIPT_MAX   RS_SCRIPT_MAX   /* 单次可执行脚本的最大字节数 */
-#endif
-
 #ifndef FS_RUN_TASK_STACK
 #define FS_RUN_TASK_STACK   RS_SHELL_STACK  /* 每个执行任务的栈大小（动态分配） */
 #endif
@@ -505,52 +504,20 @@ typedef struct fs_run_job {
     ros_task_t        *task;                /* 动态创建的任务 */
     char               path[RS_CWD_MAX];    /* 脚本绝对路径 */
     char               cwd[RS_CWD_MAX];     /* 脚本工作目录（继承发起会话） */
-    uint32_t           size;                /* 已校验的字节数 */
+    uint32_t           size;                /* 已校验的字节数（作为源大小） */
 } fs_run_job_t;
 
 static fs_run_job_t *s_run_jobs;            /* 正在执行的脚本（s_run_lock 保护） */
 static ros_mutex_t   s_run_lock;
 static bool          s_run_ready;
 
-/* 执行任务主体：读文件 -> rs_exec -> 退出（自身资源由回收路径释放） */
+/* 执行任务主体：流式执行脚本文件（打开/读/关都在 roshell_fs 内） */
 static void fs_run_task_entry(void *arg)
 {
     fs_run_job_t *job = (fs_run_job_t *)arg;
     roshell_t *rs;
     rs_err_t err;
-    vfs_file_t f;
-    char *script;
-    uint32_t got = 0U;
-    int32_t n;
     int rc;
-
-    script = (char *)ros_mem_malloc(job->size + 1U);
-    if (script == NULL) {
-        ros_printf("run: %s: no memory for %u bytes\n",
-                   job->path, (unsigned)job->size);
-        goto out;
-    }
-
-    memset(&f, 0, sizeof(f));
-    rc = vfs_open(job->path, FS_O_RDONLY, &f);
-    if (rc != FS_OK) {
-        ros_printf("run: %s: %s\n", job->path, fs_strerror(rc));
-        goto out;
-    }
-    while (got < job->size) {
-        n = vfs_read(&f, &script[got], job->size - got);
-        if (n <= 0) {
-            break;                          /* 0=EOF，负值=后端错误 */
-        }
-        got += (uint32_t)n;
-    }
-    (void)vfs_close(&f);
-    if (got != job->size) {
-        ros_printf("run: %s: short read (%u/%u)\n", job->path,
-                   (unsigned)got, (unsigned)job->size);
-        goto out;
-    }
-    script[got] = '\0';
 
     rs = rs_create();
     if (rs == NULL) {
@@ -560,19 +527,18 @@ static void fs_run_task_entry(void *arg)
     rs_cmd_install(rs);                     /* 挂上全局命令表，脚本内可用所有命令 */
     (void)rs_shell_cwd_set(rs, job->cwd);
 
-    rc = rs_exec(rs, script, &err);
+    memset(&err, 0, sizeof(err));
+    rc = rs_exec_file(rs, job->path, &err);
     if (rc != RS_OK) {
         ros_printf("run: %s:%u: %s\n", job->path,
-                   (unsigned)((err.line != 0U) ? err.line : 1U), err.msg);
+                   (unsigned)((err.line != 0U) ? err.line : 1U),
+                   (err.msg[0] != '\0') ? err.msg : "exec failed");
     } else {
         ros_printf("run: %s: done\n", job->path);
     }
     rs_destroy(rs);
 
 out:
-    if (script != NULL) {
-        ros_mem_free(script);
-    }
     /* 任务不能销毁自己：退出后 TCB/栈由回收路径统一释放 */
     ros_task_exit();
 }
@@ -710,8 +676,8 @@ static int cmd_run(roshell_t *rs, int argc, char **argv,
 
     const char *path = NULL;
     char abs[RS_CWD_MAX];
-    fs_stat_t st;
-    int rc;
+    rs_err_t err;
+    uint32_t size = 0U;
 
     if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
         ros_puts("usage: run <script>");
@@ -719,27 +685,15 @@ static int cmd_run(roshell_t *rs, int argc, char **argv,
     }
     fs_path_abs(rs, path, abs, sizeof(abs));
 
-    /* 先做同步校验：错误在发起命令的上下文里立刻反馈，而不是丢到后台 */
-    memset(&st, 0, sizeof(st));
-    rc = vfs_stat(abs, &st);
-    if (rc != FS_OK) {
-        ros_printf("run: %s: %s\n", abs, fs_strerror(rc));
+    /* 校验交给 roshell_fs：存在 / 非目录 / 非空，错误在发起命令的上下文里
+     * 立刻反馈，而不是丢到后台任务里。没有字节数上限，执行侧是流式的。 */
+    memset(&err, 0, sizeof(err));
+    if (rs_file_check(abs, &size, &err) != RS_OK) {
+        ros_printf("run: %s: %s\n", abs,
+                   (err.msg[0] != '\0') ? err.msg : "cannot run");
         return -1;
     }
-    if (st.type == FS_TYPE_DIR) {
-        ros_printf("run: %s: is a directory\n", abs);
-        return -1;
-    }
-    if (st.size == 0U) {
-        ros_printf("run: %s: empty script\n", abs);
-        return -1;
-    }
-    if (st.size > (uint32_t)FS_RUN_SCRIPT_MAX) {
-        ros_printf("run: %s: too large (%u > %u)\n", abs,
-                   (unsigned)st.size, (unsigned)FS_RUN_SCRIPT_MAX);
-        return -1;
-    }
-    return fs_run_submit(rs, abs, st.size);
+    return fs_run_submit(rs, abs, size);
 }
 
 static const rs_args_t s_ls_args[] = {

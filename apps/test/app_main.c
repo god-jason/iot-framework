@@ -108,6 +108,7 @@ void ut_breath_led(void);
 void ut_fan(void);
 void ut_roshell(void);
 void ut_roshell_cmd(void);
+void ut_roshell_io(void);
 void ut_net(void);
 void ut_http(void);
 void ut_mqtt(void);
@@ -207,6 +208,7 @@ void app_main(void *arg)
     ut_fan();
     ut_roshell();
     ut_roshell_cmd();
+    ut_roshell_io();
     ut_net();
     ut_http();
     ut_mqtt();

@@ -39,6 +39,7 @@
  */
 
 #include "roshell.h"
+#include "roshell_repl.h"
 #include "gpio_cmd.h"
 #include "hal.h"
 #include "fan.h"
