@@ -5,8 +5,7 @@
  *   FLASH_KV_BASE0 / FLASH_KV_BASE1 / FLASH_KV_SIZE
  *
  * 存放内容（key 固定，value 为结构体原始内存）：
- *   BOOT_KV_KEY_STATE  : boot_state_t   启动状态（tries/crash/ota 标识）
- *   BOOT_KV_KEY_OTA    : uint32_t       OTA 拷贝进度（已写入 App 的字节数）
+ *   BOOT_KV_KEY_STATE  : boot_state_t   启动状态（tries/crash）
  *   BOOT_KV_KEY_CONFIG : 应用配置结构体（如 app_config_t，含平台连接参数）
  *
  * 所有接口在首次调用时自动初始化并挂载；
@@ -24,9 +23,8 @@
 /* 单条 value 上限：需覆盖 boot_state_t 与应用配置结构体（含平台连接参数） */
 #define BOOT_KV_MAX_VALUE       192U
 
-/* KV 键值（'BST1' / 'OTA1' / 'CFG1'） */
+/* KV 键值（'BST1' / 'CFG1'） */
 #define BOOT_KV_KEY_STATE       0x42535431U
-#define BOOT_KV_KEY_OTA         0x4F544131U
 #define BOOT_KV_KEY_CONFIG      0x43464731U
 
 /* 实例指针（供诊断/统计使用，boot_kv_init 之后有效） */

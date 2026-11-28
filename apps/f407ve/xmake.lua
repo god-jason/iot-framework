@@ -30,6 +30,8 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
 
     ros_firmware("f407ve", {
         deps = fw_deps,
+        -- 本板 partition.h 启用 FLASH_OTA_COMPRESS，.ota 用 raw deflate 打包
+        ota_compress = true,
         defines = { "ROS_PLATFORM_STM32", "ROS_STM32_F4", "USE_HAL_DRIVER", ROS_CHIP,
                     "HSE_VALUE=8000000",
                     "LOG_LEVEL=LOG_LEVEL_INFO" },

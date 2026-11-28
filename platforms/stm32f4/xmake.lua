@@ -79,9 +79,10 @@ if is_plat("cross") and ROS_FAMILY == "f4" then
                   path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_kv.c"),
                   path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_meta.c"),
                   path.join(ROS_ROOT, "platforms/stm32/bootloader/boot_mem.c"),
-                  path.join(ROS_ROOT, "components/crypto/crc32.c") },
+                  path.join(ROS_ROOT, "components/crypto/crc32.c"),
+                  path.join(ROS_ROOT, "components/compress/deflate.c") },
         defines = { ROS_CHIP, "HSE_VALUE=8000000" },
         includedirs = incs,
-        cflags = { "-ffreestanding", "-fno-optimize-crc" },
+        cflags = { "-ffreestanding" },
     })
 end

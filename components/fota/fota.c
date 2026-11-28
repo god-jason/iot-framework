@@ -3,9 +3,9 @@
  *
  * 只做参数校验与进度跟踪，Flash 操作全部转交板级 port OTA 实现：
  *   begin  -> port_ota_begin（擦除 OTA 区）
- *   write  -> port_ota_write（按偏移写入原始 bin）
- *   finish -> port_ota_finish（校验并更新启动状态）
- *   abort  -> port_ota_abort（清除未完成的 ota 标识）
+ *   write  -> port_ota_write（按偏移写入原始镜像，位于包头之后）
+ *   finish -> port_ota_finish（校验负载并写入包头，重启后由 Bootloader 升级）
+ *   abort  -> port_ota_abort（包头未写入，Bootloader 会忽略 OTA 区）
  */
 
 #include "fota.h"

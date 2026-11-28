@@ -13,15 +13,14 @@
  *
  * KV 区由 components/fkv 使用（双区滚动日志、掉电安全）：
  *   - A/B 两区轮流追加，写满后把有效记录搬到另一区并擦除旧区；
- *   - 启动状态（tries/crash/ota 标识）、OTA 进度、应用配置都存放在 KV 中。
+ *   - 启动状态（tries/crash）、应用配置存放在 KV 中。
  * 本板没有独立错误日志区：崩溃只累计 crash 计数（存 KV），不写文本日志。
  *
  * 升级流程：
- *   1. 串口 OTA 把新固件（按 App 区 0x08006000 链接）写入升级包区；
- *   2. 接收完成并校验 CRC 后，把 ota 标识/长度/CRC 写入 KV 状态，随后复位；
- *   3. Bootloader 下次启动擦除 App 区，按 1KB 分块把升级包拷入 App 区，
- *      每拷完一块把进度写入 KV（掉电后从最后进度继续）；
- *   4. 全部写完并整段 CRC 校验通过后清除 ota 标识，然后启动 App。
+ *   1. 串口 OTA 把升级包写入 OTA 区，包格式见 components/fota/fota.h：
+ *      32B 包头（魔术字/版本/flags/镜像与负载长度、CRC）+ 原始镜像；
+ *   2. Bootloader 每次启动检测 OTA 区包头，有效则擦除 APP 区并写入镜像；
+ *   3. 校验通过后擦除 OTA 区；升级中断则包头仍在，下次启动重新升级。
  *
  * 修改后需同步：
  *   - apps/f103cb/stm32f103cb.ld（App=0x08006000，52KB）/ bootloader.ld
@@ -49,6 +48,7 @@
 
 /* ---- Bootloader 板级参数（platforms/stm32/bootloader/bootloader.c） ---- */
 #define FLASH_BANNER             "f103cb single-slot OTA"
-#define FLASH_PROGRESS_STEP      (8U * 1024U)    /* 拷贝进度点间隔 */
+#define FLASH_PROGRESS_STEP      (8U * 1024U)    /* 写入进度点间隔 */
+#define FLASH_OTA_HDR_ERASE      (1U * 1024U)    /* 升级成功后擦 1 页即可去掉包头 */
 
 #endif /* BOARD_PARTITION_H */

@@ -5,7 +5,7 @@
  * fota.h - FOTA 升级会话接口
  *
  * fota_xxx 只做会话管理（开始 / 连续写入 / 完成 / 放弃），
- * OTA 区擦写与启动状态更新由端口层实现（STM32 见 platforms/stm32/stm32_ota.c）：
+ * OTA 区擦写与包头写入由端口层实现（STM32 见 platforms/stm32/stm32_ota.c）：
  *
  *   fota_begin  -> port_ota_begin
  *   fota_write  -> port_ota_write
@@ -16,7 +16,7 @@
  * 典型流程：
  *   fota_begin(size, crc32);
  *   while (...) fota_write(offset, data, n);
- *   fota_finish();        // 后端校验并置 ota 标识，重启后由 Bootloader 应用
+ *   fota_finish();        // 后端校验后写入 OTA 包头，重启后由 Bootloader 应用
  *
  * 约束：
  *   - 同一时刻只允许一个升级会话；
@@ -26,6 +26,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+
+#include "crc32.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,11 +37,90 @@ extern "C" {
 #define FOTA_OK     0
 #define FOTA_ERR    (-1)
 
-/* 当前启动状态（由板级实现从 Meta 区读取） */
+/* ==========================================================================
+ * OTA 升级包格式（写入 OTA 区的完整内容，Bootloader 与上位机共用）
+ *
+ *   +--------------------------+ 0x00
+ *   | fota_hdr_t（32 字节）     |
+ *   +--------------------------+ 0x20
+ *   | 负载：data_len 字节       |
+ *   +--------------------------+
+ *
+ * flags = 0       负载就是按 APP 区链接的原始镜像；
+ * flags = DEFLATE 负载为 RAW DEFLATE（RFC1951）数据，解压后为 image_len。
+ *
+ * 头里同时记录「镜像」和「负载」的长度/CRC：
+ *   - data_crc 校验 OTA 区里的实际字节，Bootloader 在擦除 APP 前先验证；
+ *   - image_crc 校验最终写入 APP 区的镜像，升级后再验证一次；
+ *   - hdr_crc 让包头自身可校验，magic/长度合法即表示 OTA 区存在待升级包。
+ * ========================================================================== */
+
+#define FOTA_HDR_MAGIC      0x41544F46U     /* 'FOTA'（小端字节：46 4F 54 41） */
+#define FOTA_HDR_VERSION    1U
+#define FOTA_HDR_SIZE       32U
+#define FOTA_FLAG_DEFLATE   0x0001U         /* 负载为 RAW DEFLATE 压缩数据 */
+
 typedef struct {
-    bool     ota_valid;     /* OTA 区存在完整升级包 */
-    uint32_t ota_len;       /* 升级包长度 */
-    uint32_t ota_crc;       /* 升级包 CRC32 */
+    uint32_t magic;         /* FOTA_HDR_MAGIC */
+    uint16_t version;       /* FOTA_HDR_VERSION */
+    uint16_t flags;         /* FOTA_FLAG_* */
+    uint32_t image_len;     /* 升级后镜像长度（压缩时为解压后长度） */
+    uint32_t image_crc;     /* 镜像 CRC32 */
+    uint32_t data_len;      /* 负载长度（压缩时为压缩数据长度） */
+    uint32_t data_crc;      /* 负载 CRC32 */
+    uint32_t reserved;      /* 保留（写 0） */
+    uint32_t hdr_crc;       /* 以上 28 字节的 CRC32 */
+} fota_hdr_t;
+
+typedef char fota_hdr_size_check[(sizeof(fota_hdr_t) == FOTA_HDR_SIZE) ? 1 : -1];
+
+static inline uint32_t fota_hdr_crc(const fota_hdr_t *h)
+{
+    return crc32(h, FOTA_HDR_SIZE - 4U);
+}
+
+/* 填好 magic/version 并计算头 CRC（flags 及长度/CRC 字段需调用前填好） */
+static inline void fota_hdr_seal(fota_hdr_t *h)
+{
+    h->magic = FOTA_HDR_MAGIC;
+    h->version = FOTA_HDR_VERSION;
+    h->reserved = 0U;
+    h->hdr_crc = fota_hdr_crc(h);
+}
+
+/*
+ * 包头结构校验（不访问负载，也不检查板级分区上限）：
+ * 魔术字/版本/头 CRC/flags 合法，长度非零，未压缩时 data_len == image_len。
+ */
+static inline bool fota_hdr_valid(const fota_hdr_t *h)
+{
+    if (h == NULL) {
+        return false;
+    }
+    if (h->magic != FOTA_HDR_MAGIC || h->version != FOTA_HDR_VERSION) {
+        return false;
+    }
+    if (h->hdr_crc != fota_hdr_crc(h)) {
+        return false;
+    }
+    if ((h->flags & (uint16_t)~FOTA_FLAG_DEFLATE) != 0U) {
+        return false;
+    }
+    if (h->image_len == 0U || h->data_len == 0U) {
+        return false;
+    }
+    if ((h->flags & FOTA_FLAG_DEFLATE) == 0U &&
+        h->data_len != h->image_len) {
+        return false;
+    }
+    return true;
+}
+
+/* 当前 OTA 区状态（由板级实现读取包头得到） */
+typedef struct {
+    bool     ota_valid;     /* OTA 区存在完整升级包（包头有效且负载校验通过） */
+    uint32_t ota_len;       /* 升级包镜像长度 */
+    uint32_t ota_crc;       /* 升级包镜像 CRC32 */
 } fota_state_t;
 
 /* ==========================================================================

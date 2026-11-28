@@ -5,14 +5,16 @@
 与 platforms/stm32/bootloader/bootloader.c 的升级协议保持一致：
 
     Boot -> Host : ACK(0x06)                （就绪，可发长度/CRC）
-    Host -> Boot : u32 len + u32 crc32(LE)  （crc32 覆盖后 len 字节）
-    Boot -> Host : ACK                      （目标槽擦除完成，可发负载）
-    Host -> Boot : len 字节镜像
-    Boot -> Host : ACK 成功（随后 MCU 复位进入新槽）
-                   NAK(0x15) 失败（长度/CRC/Flash 错误，回到旧槽启动）
+    Host -> Boot : u32 len + u32 crc32(LE)  （len=整包长度，crc 覆盖后 len 字节）
+    Host -> Boot : 32 字节包头 fota_hdr_t   （格式见 components/fota/fota.h）
+    Boot -> Host : ACK                      （包头校验通过，OTA 区擦除完成）
+    Host -> Boot : len-32 字节负载
+    Boot -> Host : ACK 成功（MCU 复位；下次启动检测包头并升级到 APP 区）
+                   NAK(0x15) 失败（长度/包头/CRC/Flash 错误）
 
 应答使用不可打印控制字符，与 Bootloader 打印的 UART 日志（含 'K'/'E' 字母）
-互不干扰。
+互不干扰。OTA 包头与压缩由 tools/build_ota.py 生成（本脚本直接复用其
+build_package），也可先用 build_ota.py 生成 .ota 再分发。
 
 典型用法：
     # 默认 COM3、自动用 ST-LINK 复位目标后进入 Bootloader 窗口
@@ -21,8 +23,9 @@
     # 指定串口 / 波特率
     python tools/uart_ota.py -p COM5 -b 115200 --bin xxx.bin
 
-    # STM32F407VE（APP/BACKUP/OTA）：镜像写入 OTA 区，需放大单槽容量
-    python tools/uart_ota.py --slot-size 131072 --bin build/cross/arm/release/ros-fw-f407ve.bin
+    # STM32F407VE：OTA 区 256KB；--compress 使用 raw deflate 压缩负载
+    python tools/uart_ota.py --slot-size 0x40000 --compress \
+        --bin build/cross/arm/release/ros-fw-f407ve.bin
 
     # 不用 ST-LINK（板子没接调试器）：脚本持续敲门，期间手动按复位键
     python tools/uart_ota.py --no-reset --bin xxx.bin
@@ -38,7 +41,8 @@ import struct
 import subprocess
 import sys
 import time
-import zlib
+
+from build_ota import FOTA_HDR_SIZE, build_package, crc32
 
 # 协议字符
 REQ = b"R"          # Host -> Boot：请求升级
@@ -69,11 +73,6 @@ def boost_timer_resolution() -> None:
         ctypes.windll.winmm.timeBeginPeriod(1)
     except Exception:  # noqa: BLE001 - 仅优化，失败不影响功能
         pass
-
-
-def crc32(data: bytes) -> int:
-    """标准 CRC-32/IEEE（多项式 0xEDB88320），与 MCU 端逐位实现等价。"""
-    return zlib.crc32(data) & 0xFFFFFFFF
 
 
 def knock(ser, timeout_s: float, log: bytearray) -> bool:
@@ -123,14 +122,17 @@ def dump_log(log: bytearray) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="robotos A/B Bootloader 串口 OTA 上位机",
+        description="robotos Bootloader 串口 OTA 上位机（OTA 区 + fota 包头）",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    ap.add_argument("--bin", required=True, help="待升级的固件 bin（按目标槽地址链接）")
+    ap.add_argument("--bin", required=True, help="待升级的固件 bin（按 APP 区地址链接）")
     ap.add_argument("-p", "--port", default="COM3", help="串口设备名")
     ap.add_argument("-b", "--baud", type=int, default=115200, help="波特率")
     ap.add_argument("--slot-size", type=lambda s: int(s, 0), default=DEFAULT_SLOT_SIZE,
-                    help="单槽容量（字节），用于长度合法性检查")
+                    help="OTA 区容量（字节，含 32B 包头），用于长度合法性检查")
+    ap.add_argument("--compress", action="store_true",
+                    help="用 raw deflate 压缩负载（需 Bootloader 启用 FLASH_OTA_COMPRESS，"
+                         "当前仅 F407VE）")
     ap.add_argument("--chunk", type=int, default=64,
                     help="发送分片大小（字节）；Bootloader 缓冲为 64B，且写 Flash 期间不接收，"
                          "分片不要超过 64")
@@ -169,13 +171,22 @@ def main() -> int:
     if not data:
         print("固件为空", file=sys.stderr)
         return 2
-    if len(data) > args.slot_size:
-        print(f"固件 {len(data)} 字节超过单槽容量 {args.slot_size} 字节", file=sys.stderr)
+
+    package, image_crc, data_len = build_package(data, args.compress)
+    total = len(package)
+    if total > args.slot_size:
+        print(f"升级包 {total} 字节超过 OTA 区容量 {args.slot_size} 字节", file=sys.stderr)
         return 2
 
-    crc = crc32(data)
+    crc = crc32(package)
     print(f"固件: {args.bin}")
-    print(f"大小: {len(data)} 字节  CRC32: 0x{crc:08X}")
+    print(f"镜像: {len(data)} 字节  CRC32: 0x{image_crc:08X}")
+    if args.compress:
+        ratio = data_len * 100.0 / len(data) if data else 0.0
+        print(f"压缩: 负载 {data_len} 字节（{ratio:.1f}%），升级包 {total} 字节")
+    else:
+        print(f"升级包: {total} 字节（32B 包头 + 负载）")
+    print(f"传输 CRC32: 0x{crc:08X}")
 
     # ---- 打开串口 ----
     try:
@@ -212,27 +223,26 @@ def main() -> int:
             print("未收到 Bootloader 就绪响应 'K'：确认固件包含新 Bootloader、串口接线正确、"
                   "复位时机是否落在 500ms 窗口内", file=sys.stderr)
             return 3
-        print("握手成功，发送长度与 CRC …")
+        print("握手成功，发送长度、CRC 与包头 …")
 
-        # ---- 2) 长度 + CRC ----
-        ser.write(struct.pack("<II", len(data), crc))
+        # ---- 2) 长度 + CRC + 包头（Bootloader 先校验包头再擦除） ----
+        ser.write(struct.pack("<II", total, crc) + package[:FOTA_HDR_SIZE])
         ser.flush()
 
         b = read_until(ser, ACK + ERR, args.erase_timeout, log)
         if b != ACK:
             dump_log(log)
-            print(f"目标槽擦除失败（响应 {b!r}）", file=sys.stderr)
+            print(f"包头校验/目标区擦除失败（响应 {b!r}）", file=sys.stderr)
             return 4
-        print("擦除完成，开始传输 …")
+        print("包头已校验、OTA 区已擦除，开始传输 …")
 
-        # ---- 3) 分片限速发送负载 ----
-        sent = 0
-        total = len(data)
+        # ---- 3) 分片限速发送剩余负载 ----
+        sent = FOTA_HDR_SIZE
         next_report = 10
         t0 = time.monotonic()
         while sent < total:
             n = min(args.chunk, total - sent)
-            ser.write(data[sent:sent + n])
+            ser.write(package[sent:sent + n])
             sent += n
             # Bootloader 中途出错会回 'E' 并退出升级；其余是进度点/日志
             if ser.in_waiting:

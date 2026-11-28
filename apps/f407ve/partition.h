@@ -16,12 +16,14 @@
  *
  * KV 区由 components/fkv 使用（双区滚动日志、掉电安全）：
  *   - A/B 两区轮流追加，写满后把有效记录搬到另一区并擦除旧区；
- *   - 启动状态（tries/crash/ota 标识）、OTA 进度、应用配置都存放在 KV 中。
+ *   - 启动状态（tries/crash）、应用配置存放在 KV 中。
  *
  * 升级流程（无备份区）：
- *   上位机把新固件（按 APP 区 0x08010000 链接）经串口 OTA 写入 OTA 区；
- *   Bootloader 启动时若发现 ota 标识：校验 OTA 区后擦除 APP 区并整段拷贝，
- *   每一步把进度写入 KV；校验通过后清除标识。升级失败时重新烧写即可。
+ *   1. 上位机把升级包写入 OTA 区，包格式见 components/fota/fota.h：
+ *      32B 包头（魔术字/版本/flags/镜像与负载长度、CRC）+ 负载；
+ *   2. Bootloader 每次启动检测 OTA 区包头，有效则擦除 APP 区并写入镜像
+ *      （负载为 DEFLATE 时流式解压，见 FLASH_OTA_COMPRESS）；
+ *   3. 校验通过后擦除 OTA 区；升级中断则包头仍在，下次启动重新升级。
  *
  * 修改后需同步：
  *   - apps/f407ve/stm32f407ve.ld（App=0x08010000，192KB）/ bootloader.ld
@@ -55,12 +57,17 @@
 #define FLASH_BANNER             "f407ve APP/OTA"
 
 /*
- * F4 按扇区擦除（最小 16KB），无法“只擦未确认尾部”，
- * 续传时只能整区重来（与无备份区策略一致）。
+ * F4 按扇区擦除（最小 16KB），OTA 区整块擦除；
+ * FLASH_PROGRESS_STEP 只用于 Bootloader 打印进度点。
  */
-#define FLASH_APP_ERASE_WHOLE
-
 #define FLASH_OTA_ERASE_FULL                     /* OTA 区按扇区整块擦除 */
-#define FLASH_PROGRESS_STEP      (16U * 1024U)   /* 拷贝进度点间隔 */
+#define FLASH_PROGRESS_STEP      (16U * 1024U)   /* 写入进度点间隔 */
+
+/*
+ * Bootloader 支持 DEFLATE 压缩升级包（负载为 raw deflate 时流式解压到
+ * APP 区）。解压需要 32KB 回退窗口 + Huffman 表，F407 的 128KB SRAM 足够；
+ * F103（20KB SRAM / 8KB Bootloader Flash）不启用。
+ */
+#define FLASH_OTA_COMPRESS
 
 #endif /* BOARD_PARTITION_H */

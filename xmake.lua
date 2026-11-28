@@ -271,7 +271,10 @@ function ros_enable_mapfile()
 end
 
 -- 固件构建后导出 hex/bin 并打印 map 路径
-function ros_fw_objcopy()
+-- 生成 hex/bin/elf/map；opts.ota = true 时再生成带 fota 包头的 .ota 文件
+function ros_fw_objcopy(opts)
+    opts = opts or {}
+    local ota_tool = path.join(ROS_ROOT, "tools", "build_ota.py")
     after_build(function (target)
         local elf = target:targetfile()
         if not os.isfile(elf) then
@@ -295,6 +298,33 @@ function ros_fw_objcopy()
             cprint("${green}[firmware] MAP: %s${clear}", map)
         else
             cprint("${yellow}[firmware] MAP 未生成: %s${clear}", map)
+        end
+
+        -- 固件 bin -> 带 OTA 包头的 .ota（工具见 tools/build_ota.py）
+        if opts.ota then
+            local ota = path.join(dir, target:basename() .. ".ota")
+            local argv = { ota_tool, "--bin", bin, "-o", ota }
+            if opts.ota_compress then
+                table.insert(argv, "--compress")
+            end
+            if os.isfile(ota) then
+                os.rm(ota)
+            end
+            local pys = { "python", "python3" }
+            local env_py = os.getenv("PYTHON")
+            if env_py and env_py ~= "" then
+                table.insert(pys, 1, env_py)
+            end
+            for _, py in ipairs(pys) do
+                if not os.isfile(ota) then
+                    os.execv(py, argv, { try = true })
+                end
+            end
+            if os.isfile(ota) then
+                cprint("${green}[firmware] OTA: %s${clear}", ota)
+            else
+                cprint("${yellow}[firmware] OTA 生成失败（需要 Python 3）: %s${clear}", ota)
+            end
         end
     end)
 end
@@ -409,7 +439,7 @@ function ros_firmware(name, opts)
         if opts.after_load then
             on_load(opts.after_load)
         end
-        ros_fw_objcopy()
+        ros_fw_objcopy({ ota = true, ota_compress = opts.ota_compress })
     target_end()
 end
 

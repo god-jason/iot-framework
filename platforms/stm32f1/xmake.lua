@@ -44,6 +44,6 @@ if is_plat("cross") and ROS_FAMILY == "f1" then
                   path.join(ROS_ROOT, "components/crypto/crc32.c") },
         defines = { "STM32F10X_MD", "HSE_VALUE=8000000" },
         includedirs = incs,
-        cflags = { "-ffreestanding", "-fno-optimize-crc" },
+        cflags = { "-ffreestanding" },
     })
 end
