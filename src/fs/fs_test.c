@@ -11,9 +11,12 @@
  */
 
 #include "test.h"
+#include "ros.h"
 #include "fs.h"
 #include "mfs.h"
 #include "vfs.h"
+#include "fs_cmd.h"
+#include "roshell.h"
 
 #include <string.h>
 
@@ -23,6 +26,8 @@
 
 static uint8_t s_disk[T_DISK_SIZE];
 static uint8_t s_disk_b[T_DISK_SIZE];
+
+static bool s_cmd_ready;        /* fs 命令是否已注册（全局命令表只允许注册一次） */
 
 /* ---------------- RAM 块设备 ---------------- */
 
@@ -517,6 +522,59 @@ void ut_fs(void)
     TF_CHECK_INT(vfs_exists("/a/dir/x.txt"), 0);
     TF_CHECK_INT(vfs_rename("/b/dir/x.txt", "/a/x.txt"),
                  FS_ERR_NOTSUP);
+    tf_end();
+
+    tf_begin("fs/run-script");
+    /* run：每个脚本一个动态任务；连续提交两个，验证并发与互不干扰 */
+    {
+        roshell_t *rs;
+        rs_err_t err;
+
+        if (!s_cmd_ready) {
+            TF_CHECK_INT(fs_cmd_register(), 0);
+            s_cmd_ready = true;
+        }
+        memset(&f, 0, sizeof(f));
+        TF_CHECK_INT(vfs_open("/a/run1.txt",
+                              FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &f), FS_OK);
+        TF_CHECK_INT(vfs_write(&f, "put gen1.txt one\n", 17), 17);
+        TF_CHECK_INT(vfs_close(&f), FS_OK);
+        memset(&f, 0, sizeof(f));
+        TF_CHECK_INT(vfs_open("/a/run2.txt",
+                              FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &f), FS_OK);
+        TF_CHECK_INT(vfs_write(&f, "put gen2.txt two\n", 17), 17);
+        TF_CHECK_INT(vfs_close(&f), FS_OK);
+
+        rs = rs_create();
+        TF_CHECK(rs != NULL);
+        if (rs != NULL) {
+            int i;
+
+            rs_cmd_install(rs);
+            TF_CHECK_INT(rs_shell_cwd_set(rs, "/a"), 0);
+            TF_CHECK_INT(rs_exec_line(rs, "run run1.txt", &err), RS_OK);
+            /* 第二个脚本必须能同时启动（不再是单例） */
+            TF_CHECK_INT(rs_exec_line(rs, "run run2.txt", &err), RS_OK);
+
+            /* 执行任务与测试任务共享协作调度器：让出 CPU 等两个脚本都跑完 */
+            for (i = 0; i < 200 &&
+                        (vfs_exists("/a/gen1.txt") != 1 ||
+                         vfs_exists("/a/gen2.txt") != 1); i++) {
+                ros_sleep_ms(5);
+            }
+            TF_CHECK_INT(vfs_exists("/a/gen1.txt"), 1);
+            TF_CHECK_INT(vfs_exists("/a/gen2.txt"), 1);
+            memset(buf, 0, sizeof(buf));
+            n = read_all("/a/gen1.txt", buf, sizeof(buf));
+            TF_CHECK_INT(n, 3);
+            TF_CHECK_STR(buf, "one");
+            memset(buf, 0, sizeof(buf));
+            n = read_all("/a/gen2.txt", buf, sizeof(buf));
+            TF_CHECK_INT(n, 3);
+            TF_CHECK_STR(buf, "two");
+            rs_destroy(rs);
+        }
+    }
     tf_end();
 
     tf_begin("fs/errors-remove");

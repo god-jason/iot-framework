@@ -2,8 +2,9 @@
  * fs_cmd.c - 通用文件系统 Shell 命令（基于 VFS）
  * ============================================================================
  *
- * 命令：pwd / cd / ls / cat / mkdir / rmdir / rm / stat / df / put / format
+ * 命令：pwd / cd / ls / cat / mkdir / rmdir / rm / stat / df / put / run / format
  * 不直接依赖具体后端，挂载点由 VFS 前缀分发决定。
+ * run 从文件系统加载脚本，在独立任务中执行（见下方 run 段落）。
  *
  * 当前目录（cwd）保存在 roshell 会话中，默认 "/"。
  * 除 format 外，所有路径参数都支持相对路径（相对 cwd），
@@ -393,43 +394,62 @@ static int cmd_df(roshell_t *rs, int argc, char **argv,
     return 0;
 }
 
-/* put <path> <text>：创建/覆盖文件（便于验证读写） */
+/*
+ * put <path> <text>...：创建/覆盖文件。
+ *
+ * 文本由第 2 个实参起的所有词组成，词间补一个空格——否则无法生成
+ * 带空格的内容，而脚本行（如 "sleep 500"、"ls /a"）几乎都需要空格。
+ * 因为要接收可变数量的实参，这里不使用参数表（parsed 为 NULL），
+ * 改为直接读 argv，避免多余实参被判为 RS_ARGS_ERR_EXTRA。
+ */
 static int cmd_put(roshell_t *rs, int argc, char **argv,
                     const rs_args_parsed_t *parsed, void *user)
 {
-    (void)argc;
-    (void)argv;
+    (void)parsed;
     (void)user;
     vfs_file_t f;
-    const char *path = NULL;
-    const char *text = NULL;
     char abs[RS_CWD_MAX];
-    uint32_t len;
+    uint32_t written = 0U;
+    int i;
     int rc;
 
-    if (!rs_args_get_str(parsed, 0U, &path) ||
-        !rs_args_get_str(parsed, 1U, &text) ||
-        path == NULL || text == NULL) {
-        ros_puts("usage: put <path> <text>");
+    if (argc < 3 || argv == NULL || argv[1] == NULL) {
+        ros_puts("usage: put <path> <text>...");
         return -1;
     }
-    fs_path_abs(rs, path, abs, sizeof(abs));
+    fs_path_abs(rs, argv[1], abs, sizeof(abs));
 
-    len = (uint32_t)strlen(text);
     memset(&f, 0, sizeof(f));
     rc = vfs_open(abs, FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &f);
     if (rc != FS_OK) {
         ros_printf("put: %s: %s\n", abs, fs_strerror(rc));
         return -1;
     }
-    rc = (int)vfs_write(&f, text, len);
-    (void)vfs_close(&f);
-    if (rc != (int)len) {
-        ros_printf("put: %s: write failed\n", abs);
-        return -1;
+    for (i = 2; i < argc; i++) {
+        uint32_t len;
+        int32_t n;
+
+        if (i > 2) {
+            if (vfs_write(&f, " ", 1U) != 1) {
+                goto write_fail;
+            }
+            written++;
+        }
+        len = (uint32_t)strlen(argv[i]);
+        n = vfs_write(&f, argv[i], len);
+        if (n != (int32_t)len) {
+            goto write_fail;
+        }
+        written += len;
     }
-    ros_printf("put: %u bytes -> %s\n", (unsigned)len, abs);
+    (void)vfs_close(&f);
+    ros_printf("put: %u bytes -> %s\n", (unsigned)written, abs);
     return 0;
+
+write_fail:
+    (void)vfs_close(&f);
+    ros_printf("put: %s: write failed\n", abs);
+    return -1;
 }
 
 /* format [path]：格式化挂载点（清空数据），默认根挂载点 */
@@ -455,6 +475,273 @@ static int cmd_format(roshell_t *rs, int argc, char **argv,
     return 0;
 }
 
+/*
+ * ================================ run <path> ================================
+ * 从文件系统加载脚本，在独立任务里交给 roshell 逐行解释执行。
+ *
+ * 设计要点：
+ *   · 命令只做校验与投递，立即返回，交互 shell 不会被长脚本阻塞；
+ *   · 每个脚本一个动态任务（ros_task_create_dynamic）：TCB 与栈都来自内核堆，
+ *     同时运行的脚本数量不受静态槽位限制，只受剩余堆大小约束；
+ *   · 任务不能销毁自己：结束（退出）后由其它任务在下次提交时回收 TCB/栈；
+ *   · 脚本缓冲按文件实际大小从内核堆分配，执行完立即释放，不占常驻 RAM；
+ *   · 脚本长度受 FS_RUN_SCRIPT_MAX 限制（默认与 RS_SCRIPT_MAX 一致）。
+ */
+#ifndef FS_RUN_SCRIPT_MAX
+#define FS_RUN_SCRIPT_MAX   RS_SCRIPT_MAX   /* 单次可执行脚本的最大字节数 */
+#endif
+
+#ifndef FS_RUN_TASK_STACK
+#define FS_RUN_TASK_STACK   RS_SHELL_STACK  /* 每个执行任务的栈大小（动态分配） */
+#endif
+
+#ifndef FS_RUN_TASK_PRIO
+#define FS_RUN_TASK_PRIO    RS_SHELL_PRIO   /* 与交互任务同优先级，避免抢占输入 */
+#endif
+
+/* 一次脚本执行：任务句柄 + 路径/工作目录，整体动态分配，退出后回收 */
+typedef struct fs_run_job {
+    struct fs_run_job *next;                /* 运行中任务链表 */
+    ros_task_t        *task;                /* 动态创建的任务 */
+    char               path[RS_CWD_MAX];    /* 脚本绝对路径 */
+    char               cwd[RS_CWD_MAX];     /* 脚本工作目录（继承发起会话） */
+    uint32_t           size;                /* 已校验的字节数 */
+} fs_run_job_t;
+
+static fs_run_job_t *s_run_jobs;            /* 正在执行的脚本（s_run_lock 保护） */
+static ros_mutex_t   s_run_lock;
+static bool          s_run_ready;
+
+/* 执行任务主体：读文件 -> rs_exec -> 退出（自身资源由回收路径释放） */
+static void fs_run_task_entry(void *arg)
+{
+    fs_run_job_t *job = (fs_run_job_t *)arg;
+    roshell_t *rs;
+    rs_err_t err;
+    vfs_file_t f;
+    char *script;
+    uint32_t got = 0U;
+    int32_t n;
+    int rc;
+
+    script = (char *)ros_mem_malloc(job->size + 1U);
+    if (script == NULL) {
+        ros_printf("run: %s: no memory for %u bytes\n",
+                   job->path, (unsigned)job->size);
+        goto out;
+    }
+
+    memset(&f, 0, sizeof(f));
+    rc = vfs_open(job->path, FS_O_RDONLY, &f);
+    if (rc != FS_OK) {
+        ros_printf("run: %s: %s\n", job->path, fs_strerror(rc));
+        goto out;
+    }
+    while (got < job->size) {
+        n = vfs_read(&f, &script[got], job->size - got);
+        if (n <= 0) {
+            break;                          /* 0=EOF，负值=后端错误 */
+        }
+        got += (uint32_t)n;
+    }
+    (void)vfs_close(&f);
+    if (got != job->size) {
+        ros_printf("run: %s: short read (%u/%u)\n", job->path,
+                   (unsigned)got, (unsigned)job->size);
+        goto out;
+    }
+    script[got] = '\0';
+
+    rs = rs_create();
+    if (rs == NULL) {
+        ros_printf("run: %s: no memory for shell context\n", job->path);
+        goto out;
+    }
+    rs_cmd_install(rs);                     /* 挂上全局命令表，脚本内可用所有命令 */
+    (void)rs_shell_cwd_set(rs, job->cwd);
+
+    rc = rs_exec(rs, script, &err);
+    if (rc != RS_OK) {
+        ros_printf("run: %s:%u: %s\n", job->path,
+                   (unsigned)((err.line != 0U) ? err.line : 1U), err.msg);
+    } else {
+        ros_printf("run: %s: done\n", job->path);
+    }
+    rs_destroy(rs);
+
+out:
+    if (script != NULL) {
+        ros_mem_free(script);
+    }
+    /* 任务不能销毁自己：退出后 TCB/栈由回收路径统一释放 */
+    ros_task_exit();
+}
+
+/* 懒初始化运行链表锁 */
+static int fs_run_init(void)
+{
+    int rc;
+
+    if (s_run_ready) {
+        return 0;
+    }
+    rc = ros_mutex_init(&s_run_lock);
+    if (rc != ROS_OK) {
+        ros_printf("run: mutex init failed (%d)\n", rc);
+        return -1;
+    }
+    s_run_ready = true;
+    return 0;
+}
+
+/*
+ * 回收已退出的脚本任务。
+ *
+ * 任务不能销毁自己（ros_task_destroy 对当前任务返回 ROS_BUSY），所以执行任务
+ * 结束时只调用 ros_task_exit()，TCB 与任务栈仍留在堆上；这里把已处于
+ * TERMINATED 的项摘下来，解锁后再 destroy（释放 TCB + 栈）并释放上下文。
+ * 这样做而不是在锁内销毁，避免长时间关中断/持锁。
+ */
+static void fs_run_reap(void)
+{
+    fs_run_job_t *dead = NULL;
+    fs_run_job_t **pp;
+    fs_run_job_t *job;
+
+    if (!s_run_ready) {
+        return;
+    }
+    if (ros_mutex_lock(&s_run_lock, ROS_TIMEOUT_NONE) != ROS_OK) {
+        return;                             /* 有其它调用在改链表，下次再收 */
+    }
+    pp = &s_run_jobs;
+    while (*pp != NULL) {
+        job = *pp;
+        if (job->task != NULL && job->task->state == ROS_TASK_TERMINATED) {
+            *pp = job->next;
+            job->next = dead;
+            dead = job;
+            continue;
+        }
+        pp = &job->next;
+    }
+    (void)ros_mutex_unlock(&s_run_lock);
+
+    while (dead != NULL) {
+        job = dead;
+        dead = dead->next;
+        (void)ros_task_destroy(job->task);  /* 释放动态 TCB 与任务栈 */
+        ros_mem_free(job);
+    }
+}
+
+/*
+ * 为脚本创建独立任务并投递（调用者已校验过路径与长度）。
+ * 并发数量不设静态上限：每份任务与上下文都来自内核堆，失败即报内存不足。
+ */
+static int fs_run_submit(const roshell_t *rs, const char *abs, uint32_t size)
+{
+    fs_run_job_t *job;
+    const char *cwd;
+    size_t len;
+
+    if (fs_run_init() != 0) {
+        return -1;
+    }
+    fs_run_reap();                          /* 先回收已结束的任务，腾出堆空间 */
+
+    job = (fs_run_job_t *)ros_mem_calloc(1U, sizeof(*job));
+    if (job == NULL) {
+        ros_puts("run: out of memory for job context");
+        return -1;
+    }
+
+    len = strlen(abs);
+    if (len >= sizeof(job->path)) {
+        len = sizeof(job->path) - 1U;
+    }
+    memcpy(job->path, abs, len);
+    job->path[len] = '\0';
+
+    cwd = rs_shell_cwd(rs);
+    len = strlen(cwd);
+    if (len >= sizeof(job->cwd)) {
+        len = sizeof(job->cwd) - 1U;
+    }
+    memcpy(job->cwd, cwd, len);
+    job->cwd[len] = '\0';
+    job->size = size;
+
+    job->task = ros_task_create_dynamic("fs_run", (uint8_t)FS_RUN_TASK_PRIO,
+                                        fs_run_task_entry, job,
+                                        (uint32_t)FS_RUN_TASK_STACK);
+    if (job->task == NULL) {
+        ros_mem_free(job);
+        ros_printf("run: %s: task create failed (out of memory)\n", abs);
+        return -1;
+    }
+
+    /* 挂入运行链表：任务已可能开始执行，但只有退出后才会被回收 */
+    if (ros_mutex_lock(&s_run_lock, ROS_TIMEOUT_FOREVER) == ROS_OK) {
+        job->next = s_run_jobs;
+        s_run_jobs = job;
+        (void)ros_mutex_unlock(&s_run_lock);
+    }
+
+    ros_printf("run: %s: started (%u bytes)\n", job->path, (unsigned)size);
+
+    /*
+     * 主动让出 CPU：执行任务与交互任务同优先级，在协作式/单核无抢占的
+     * 移植层（如 PC 模拟）里，若不让出，新建的执行任务会一直停在 READY，
+     * 表现为"started 之后没有下文"。让出后它立刻开始跑，脚本自己阻塞
+     * （sleep/等 IO）时再回到交互循环。
+     */
+    ros_yield();
+    return 0;
+}
+
+/* run <path>：校验脚本并创建动态任务执行（立即返回） */
+static int cmd_run(roshell_t *rs, int argc, char **argv,
+                    const rs_args_parsed_t *parsed, void *user)
+{
+    (void)argc;
+    (void)argv;
+    (void)user;
+
+    const char *path = NULL;
+    char abs[RS_CWD_MAX];
+    fs_stat_t st;
+    int rc;
+
+    if (!rs_args_get_str(parsed, 0U, &path) || path == NULL) {
+        ros_puts("usage: run <script>");
+        return -1;
+    }
+    fs_path_abs(rs, path, abs, sizeof(abs));
+
+    /* 先做同步校验：错误在发起命令的上下文里立刻反馈，而不是丢到后台 */
+    memset(&st, 0, sizeof(st));
+    rc = vfs_stat(abs, &st);
+    if (rc != FS_OK) {
+        ros_printf("run: %s: %s\n", abs, fs_strerror(rc));
+        return -1;
+    }
+    if (st.type == FS_TYPE_DIR) {
+        ros_printf("run: %s: is a directory\n", abs);
+        return -1;
+    }
+    if (st.size == 0U) {
+        ros_printf("run: %s: empty script\n", abs);
+        return -1;
+    }
+    if (st.size > (uint32_t)FS_RUN_SCRIPT_MAX) {
+        ros_printf("run: %s: too large (%u > %u)\n", abs,
+                   (unsigned)st.size, (unsigned)FS_RUN_SCRIPT_MAX);
+        return -1;
+    }
+    return fs_run_submit(rs, abs, st.size);
+}
+
 static const rs_args_t s_ls_args[] = {
     { "path", 0, RS_ARGS_TYPE_STR, true, false, NULL, "directory (default cwd)" }
 };
@@ -471,10 +758,8 @@ static const rs_args_t s_path_arg[] = {
     { "path", 0, RS_ARGS_TYPE_STR, true, true, NULL, "path" }
 };
 
-static const rs_args_t s_put_args[] = {
-    { "path", 0, RS_ARGS_TYPE_STR, true, true, NULL, "file path" },
-    { "text", 0, RS_ARGS_TYPE_STR, true, true, NULL, "text" }
-};
+/* put 的文本是可变数量实参（逐词拼接），因此不定义参数表：args=NULL 时
+ * 分发层跳过解析，直接以 argv 调用处理器，多余实参不会被判为 EXTRA。 */
 
 static const rs_cmd_t s_pwd_def = {
     "pwd", "print working directory", NULL, NULL,
@@ -522,8 +807,13 @@ static const rs_cmd_t s_df_def = {
 };
 
 static const rs_cmd_t s_put_def = {
-    "put", "create/overwrite file <path> <text>", NULL, NULL,
-    s_put_args, 2U, cmd_put, NULL, NULL, NULL, NULL
+    "put", "create/overwrite file", "put <path> <text>...", NULL,
+    NULL, 0U, cmd_put, NULL, NULL, NULL, NULL
+};
+
+static const rs_cmd_t s_run_def = {
+    "run", "run a script file in background <path>", NULL, NULL,
+    s_path_arg, 1U, cmd_run, NULL, NULL, NULL, NULL
 };
 
 static const rs_cmd_t s_format_def = {
@@ -545,6 +835,7 @@ int fs_cmd_register(void)
     rc |= rs_cmd_register(&s_stat_def);
     rc |= rs_cmd_register(&s_df_def);
     rc |= rs_cmd_register(&s_put_def);
+    rc |= rs_cmd_register(&s_run_def);
     rc |= rs_cmd_register(&s_format_def);
     return (rc == 0) ? 0 : -1;
 }

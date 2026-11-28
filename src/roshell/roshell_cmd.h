@@ -135,7 +135,7 @@ const rs_cmd_t *rs_cmd_find_command(const char *name);
 const rs_cmd_t *rs_cmd_first(void);
 const rs_cmd_t *rs_cmd_next(const rs_cmd_t *def);
 
-/* 解析参数并执行一条已找到的命令 */
+/* 解析参数并执行一条已找到的命令（argv 不含命令名，仅参数） */
 int rs_cmd_run_node(roshell_t *rs, const rs_cmd_t *def, int argc, char **argv);
 
 /*

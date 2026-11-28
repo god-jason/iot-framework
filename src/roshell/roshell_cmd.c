@@ -678,6 +678,36 @@ int rs_cmd_run_node(roshell_t *rs, const rs_cmd_t *def, int argc, char **argv)
     return rs_cmd_exec_node(rs, def, argc, argv, true);
 }
 
+/*
+ * 行分发入口（argv[0] 为命令名，参数表从 argv[1] 开始解析）。
+ *
+ * 之前扩展命令走 rs_cmd_exec_node(argc - 1, &argv[1])，处理函数拿到的是
+ * 纯参数数组；而内建命令经 rs_cmd_execute() 拿到的是"命令名在 [0]"的完整
+ * argv。同一个 rs_cmd_fn_t 两套约定，扩展命令里只要用 raw argv 就会错位
+ * （例如 put <path> <text> 会把第一个参数当命令名丢掉）。
+ * 这里统一按头文件契约传完整 argv，扩展命令与内建命令行为一致。
+ */
+static int rs_cmd_exec_with_name(roshell_t *rs, const rs_cmd_t *def, int argc,
+                                 char **argv, bool wait)
+{
+    rs_args_parsed_t parsed;
+    const rs_args_parsed_t *pparsed = NULL;
+    int rc;
+
+    if (def == NULL || argc < 1 || argv == NULL || argv[0] == NULL) {
+        return RS_ARGS_ERR_PARAM;
+    }
+    if (def->args != NULL) {
+        rc = rs_args_parse(def->args, def->arg_count, &argv[1], argc - 1,
+                           &parsed);
+        if (rc != RS_ARGS_OK) {
+            return rc;
+        }
+        pparsed = &parsed;
+    }
+    return rs_cmd_execute(rs, def, argc, argv, pparsed, NULL, wait);
+}
+
 int rs_builtin_dispatch(roshell_t *rs, int argc, char **argv)
 {
     const rs_cmd_t *def;
@@ -784,7 +814,7 @@ static int rs_cmd_hook(roshell_t *rs, const char *line, int *ret)
         if (rs_builtin_is(cmd)) {
             rc = rs_cmd_execute(rs, cmd, argc, argv, NULL, cmd->user, !bg);
         } else {
-            rc = rs_cmd_exec_node(rs, cmd, argc - 1, &argv[1], !bg);
+            rc = rs_cmd_exec_with_name(rs, cmd, argc, argv, !bg);
         }
         if (bg && rc == RS_CMD_RUNNING) {
             rc = 0;                     /* 已后台启动 */
@@ -839,7 +869,7 @@ int rs_cmd_dispatch(roshell_t *rs, const char *line)
         if (rs_builtin_is(cmd)) {
             rc = rs_cmd_execute(rs, cmd, argc, argv, NULL, cmd->user, !bg);
         } else {
-            rc = rs_cmd_exec_node(rs, cmd, argc - 1, &argv[1], !bg);
+            rc = rs_cmd_exec_with_name(rs, cmd, argc, argv, !bg);
             if (rc < 0) {
                 rs_error(rc, "command '%s' failed", argv[0]);
             }
